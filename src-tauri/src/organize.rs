@@ -513,6 +513,8 @@ pub enum BulkOp {
     Move { category: String, collection: Option<i64> },
     SetYear { year: Option<i64> },
     SetSeries { series: Option<String> },
+    /// `ltr` or `rtl`: how comics and manga turn their pages.
+    SetDirection { direction: String },
 }
 
 /// Applies `ops` to every item in `ids`, all or nothing.
@@ -582,6 +584,14 @@ pub fn apply_bulk(conn: &mut Connection, ids: &[i64], ops: &[BulkOp]) -> AppResu
                     tx.execute(&touch, [id])?;
                 }
                 searchable = true;
+            }
+            BulkOp::SetDirection { direction } => {
+                if direction != "ltr" && direction != "rtl" {
+                    return Err(AppError::msg("Reading direction is either left to right or right to left."));
+                }
+                for id in ids {
+                    tx.execute("UPDATE items SET metadata = json_set(metadata, '$.readingDirection', ?2) WHERE id = ?1", params![id, direction])?;
+                }
             }
         }
     }

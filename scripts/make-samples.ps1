@@ -167,16 +167,20 @@ Add-ZipEntry $zip 'OEBPS/images/cover.jpg' ([IO.File]::ReadAllBytes($bookCover))
 $zip.Dispose()
 
 # A one-page PDF with an info dictionary, written by hand (offsets computed for the xref table).
-function New-SimplePdf([string]$Path, [string]$Title, [string]$Body) {
-    $content = "BT /F1 26 Tf 72 760 Td ($Title) Tj ET BT /F1 12 Tf 72 720 Td ($Body) Tj ET"
-    $objects = @(
-        '<< /Type /Catalog /Pages 2 0 R >>',
-        '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-        '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
-        "<< /Length $($content.Length) >>`nstream`n$content`nendstream",
-        '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-        "<< /Title ($Title) /Author (Digitify Test Suite) >>"
-    )
+# A minimal PDF: one heading and one line of text per page, plus a title and author.
+function New-SimplePdf([string]$Path, [string]$Title, [string]$Body, [int]$Pages = 1) {
+    $objects = [System.Collections.Generic.List[string]]::new()
+    $objects.Add('<< /Type /Catalog /Pages 2 0 R >>')
+    $kids = (0..($Pages - 1) | ForEach-Object { "$(4 + $_ * 2) 0 R" }) -join ' '
+    $objects.Add("<< /Type /Pages /Kids [$kids] /Count $Pages >>")
+    $objects.Add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
+    for ($n = 1; $n -le $Pages; $n++) {
+        $heading = if ($n -eq 1) { $Title } else { "$Title, page $n" }
+        $content = "BT /F1 26 Tf 72 760 Td ($heading) Tj ET BT /F1 12 Tf 72 720 Td ($Body) Tj ET"
+        $objects.Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents $(5 + ($n - 1) * 2) 0 R /Resources << /Font << /F1 3 0 R >> >> >>")
+        $objects.Add("<< /Length $($content.Length) >>`nstream`n$content`nendstream")
+    }
+    $objects.Add("<< /Title ($Title) /Author (Digitify Test Suite) >>")
     $pdf = New-Object System.Text.StringBuilder
     [void]$pdf.Append("%PDF-1.4`n")
     $offsets = @()
@@ -186,11 +190,12 @@ function New-SimplePdf([string]$Path, [string]$Title, [string]$Body) {
     }
     $xref = $pdf.Length
     [void]$pdf.Append("xref`n0 $($objects.Count + 1)`n0000000000 65535 f `n")
-    foreach ($offset in $offsets) { [void]$pdf.Append(('{0:D10} 00000 n `n' -f $offset)) }
-    [void]$pdf.Append("trailer`n<< /Size $($objects.Count + 1) /Root 1 0 R /Info 6 0 R >>`nstartxref`n$xref`n%%EOF`n")
+    # Each cross-reference entry is exactly 20 bytes: offset, generation, "n", space, newline.
+    foreach ($offset in $offsets) { [void]$pdf.Append(("{0:D10} 00000 n `n" -f $offset)) }
+    [void]$pdf.Append("trailer`n<< /Size $($objects.Count + 1) /Root 1 0 R /Info $($objects.Count) 0 R >>`nstartxref`n$xref`n%%EOF`n")
     [IO.File]::WriteAllText($Path, $pdf.ToString(), [Text.Encoding]::ASCII)
 }
-New-SimplePdf (Join-Path $books 'The Cartographer''s Notebook (1998).pdf') "The Cartographer's Notebook" 'A sample PDF generated for testing Digitify.'
+New-SimplePdf (Join-Path $books 'The Cartographer''s Notebook (1998).pdf') "The Cartographer's Notebook" 'A sample PDF generated for testing Digitify.' -Pages 3
 
 # Comic archives: a manga volume with ComicInfo.xml (right-to-left), and a plain comic without metadata.
 function New-Cbz([string]$Path, [string]$ComicInfo) {
@@ -215,6 +220,84 @@ New-Cbz (Join-Path $comics 'Starfall Academy v03.cbz') @'
 </ComicInfo>
 '@
 New-Cbz (Join-Path $comics 'Night Market Tales 01.cbz') $null
+
+# The same pages as the other comic archive formats (D-017). No free tool creates RAR files, so the
+# CBR is written here as a RAR 4 archive of stored (uncompressed) files, which the format allows.
+Add-Type -TypeDefinition @'
+public static class SampleCrc32 {
+    public static uint Of(byte[] data) {
+        uint crc = 0xFFFFFFFF;
+        foreach (byte b in data) {
+            crc ^= b;
+            for (int k = 0; k < 8; k++) crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320u : crc >> 1;
+        }
+        return ~crc;
+    }
+}
+'@
+
+function New-RarBlock([byte]$Type, [uint16]$Flags, [byte[]]$Body) {
+    $header = [IO.MemoryStream]::new()
+    $header.WriteByte($Type)
+    $header.Write([BitConverter]::GetBytes($Flags), 0, 2)
+    $header.Write([BitConverter]::GetBytes([uint16]($Body.Length + 7)), 0, 2)
+    $header.Write($Body, 0, $Body.Length)
+    $bytes = $header.ToArray()
+    $crc = [uint16]([SampleCrc32]::Of($bytes) -band 0xFFFF)
+    return [byte[]]([BitConverter]::GetBytes($crc) + $bytes)
+}
+
+function New-StoredRar([string]$Path, [string[]]$Files) {
+    $rar = [IO.MemoryStream]::new()
+    $marker = [byte[]](0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00)
+    $rar.Write($marker, 0, $marker.Length)
+    $main = New-RarBlock 0x73 0 ([byte[]]::new(6))
+    $rar.Write($main, 0, $main.Length)
+    foreach ($file in $Files) {
+        $data = [IO.File]::ReadAllBytes($file)
+        $name = [Text.Encoding]::ASCII.GetBytes((Split-Path $file -Leaf))
+        $body = [IO.MemoryStream]::new()
+        foreach ($field in @(
+                [BitConverter]::GetBytes([uint32]$data.Length),          # packed size
+                [BitConverter]::GetBytes([uint32]$data.Length),          # unpacked size
+                [byte[]](2),                                             # host: Windows
+                [BitConverter]::GetBytes([SampleCrc32]::Of($data)),
+                [BitConverter]::GetBytes([uint32]1545666560),            # 2026-01-01 as a DOS date
+                [byte[]](20, 0x30),                                      # version 2.0, method: store
+                [BitConverter]::GetBytes([uint16]$name.Length),
+                [BitConverter]::GetBytes([uint32]0x20),                  # archive attribute
+                $name)) {
+            $body.Write($field, 0, $field.Length)
+        }
+        $block = New-RarBlock 0x74 32768 $body.ToArray()
+        $rar.Write($block, 0, $block.Length)
+        $rar.Write($data, 0, $data.Length)
+    }
+    $end = New-RarBlock 0x7B 16384 ([byte[]]::new(0))
+    $rar.Write($end, 0, $end.Length)
+    [IO.File]::WriteAllBytes($Path, $rar.ToArray())
+}
+
+$archivePages = Join-Path $work 'archive-pages'
+New-Item -ItemType Directory -Force $archivePages | Out-Null
+Get-ChildItem $comicPages -Filter *.jpg | Copy-Item -Destination $archivePages
+[IO.File]::WriteAllBytes((Join-Path $archivePages 'ComicInfo.xml'), (Get-Utf8 @'
+<?xml version="1.0" encoding="utf-8"?>
+<ComicInfo>
+  <Series>Harbor Lights</Series>
+  <Number>2</Number>
+  <Title>The Lighthouse Keeper's Cat</Title>
+  <Writer>Digitify Test Suite</Writer>
+  <Year>2024</Year>
+</ComicInfo>
+'@))
+$pageNames = @(Get-ChildItem $archivePages -Filter *.jpg | Sort-Object Name | ForEach-Object Name)
+New-StoredRar (Join-Path $comics 'Harbor Lights 02.cbr') @(($pageNames + 'ComicInfo.xml') | ForEach-Object { Join-Path $archivePages $_ })
+# Windows' own tar (bsdtar) writes 7z and TAR.
+tar --format 7zip -cf (Join-Path $comics 'Sky Garden 01.cb7') -C $archivePages @pageNames
+if ($LASTEXITCODE -ne 0) { throw 'Could not create the CB7 sample' }
+tar --format ustar -cf (Join-Path $comics 'Paper Lanterns 01.cbt') -C $archivePages @pageNames
+if ($LASTEXITCODE -ne 0) { throw 'Could not create the CBT sample' }
 
 # A three-track FLAC album with tags; its cover sits next to the tracks as cover.jpg.
 $tracks = @(@{ n = 1; f = 330; t = 'Low Tone' }, @{ n = 2; f = 440; t = 'Middle Tone' }, @{ n = 3; f = 550; t = 'High Tone' })

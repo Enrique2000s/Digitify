@@ -16,7 +16,9 @@ export function Root() {
   const status = useAppStatus();
   const devMode = useQuery({ queryKey: ["dev-mode"], queryFn: api.devMode, staleTime: Infinity });
   const navigate = useNavigate();
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  // Decided from the route being rendered rather than the address: while a navigation is in
+  // progress the address already changed, and deciding from it would mount the old page again.
+  const fullWindow = useRouterState({ select: (state) => state.matches.some((match) => match.routeId === "/lab" || match.routeId === "/read/$id") });
   const [catalogOpen, setCatalogOpen] = useState(false);
   useLibraryEvents();
 
@@ -32,7 +34,8 @@ export function Root() {
   return (
     <PreferencesProvider initial={status.data.preferences}>
       <AmbientProvider>
-        {pathname === "/lab" ? (
+        {fullWindow ? (
+          // The video lab and the reader take the whole window.
           <Outlet />
         ) : (
           <ImporterProvider enabled={libraryOpen}>

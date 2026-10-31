@@ -3,6 +3,7 @@ import { HomePage } from "../features/home/HomePage";
 import { ItemPage } from "../features/item/ItemPage";
 import { LibraryPage, SearchPage } from "../features/library/LibraryPage";
 import { ShelfPage, ShelvesPage, TagPage, TagsPage } from "../features/organize/pages";
+import { ReaderPage } from "../features/reader/ReaderPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { VideoPoc } from "../poc/VideoPoc";
 import { api } from "../lib/api";
@@ -49,6 +50,7 @@ const routeTree = rootRoute.addChildren([
     component: SearchPage,
   }),
   createRoute({ getParentRoute: () => rootRoute, path: "/item/$id", component: ItemPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/read/$id", component: ReaderPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/settings", component: SettingsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/lab", component: Lab }),
 ]);

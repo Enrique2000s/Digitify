@@ -2392,6 +2392,197 @@ input[type="checkbox"] {
   grid-column: 1 / -1;
 }
 
+/* ---------------------------------------------------------------- reader (Phase 2) */
+
+/* Pages sit on a dark backdrop in both themes; the controls use Breeze's night tokens. */
+.reader {
+  color-scheme: dark;
+  --panel: #18222e;
+  --raised: #1d2835;
+  --surface: rgba(27, 38, 51, 0.86);
+  --field: #16202b;
+  --frame: linear-gradient(180deg, #2a3a4d 0%, #1f2b39 100%);
+  --gloss: linear-gradient(180deg, #243345 0%, #1c2837 47%, #17212d 53%, #1d2835 100%);
+  --line: #2e3d4f;
+  --line-strong: #41546a;
+  --track: #26364a;
+  --text: #eaf2f8;
+  --muted: #a9b7c4;
+  --raise: 0 8px 20px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --raise-sm: 0 4px 10px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --inset-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.35);
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 35%, #1b2533 0%, #0b1017 78%);
+  color: var(--text);
+  user-select: none;
+}
+.reader-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  overflow: auto;
+}
+.reader.calm .reader-stage {
+  cursor: none;
+}
+.reader-stage::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.22);
+}
+.reader-view {
+  display: flex;
+  align-items: center;
+  margin: auto;
+}
+.reader-page {
+  display: block;
+  background: #1d2633;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+.reader-strip {
+  position: relative;
+  width: 100%;
+  flex: 0 0 auto;
+}
+.reader-strip .reader-page {
+  position: absolute;
+  left: 50%;
+}
+
+.reader-view.enter-slide-forward {
+  animation: page-forward 260ms var(--ease);
+}
+.reader-view.enter-slide-back {
+  animation: page-back 260ms var(--ease);
+}
+.reader-view.enter-fade-forward,
+.reader-view.enter-fade-back {
+  animation: fade-in 220ms var(--ease);
+}
+@keyframes page-forward {
+  from {
+    opacity: 0;
+    transform: translateX(56px);
+  }
+}
+@keyframes page-back {
+  from {
+    opacity: 0;
+    transform: translateX(-56px);
+  }
+}
+
+.reader-bar {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--pill);
+  background: rgba(18, 26, 36, 0.84);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(14px);
+  transition: opacity 220ms var(--ease), transform 220ms var(--ease);
+}
+.reader-bar.top {
+  top: 12px;
+  left: 16px;
+  right: 16px;
+}
+.reader-bar.bottom {
+  bottom: 14px;
+  left: 50%;
+  width: min(760px, calc(100% - 32px));
+  transform: translateX(-50%);
+}
+.reader-bar.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.reader-bar.top.hidden {
+  transform: translateY(-12px);
+}
+.reader-bar.bottom.hidden {
+  transform: translate(-50%, 12px);
+}
+.reader-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-width: 320px;
+  padding: 0 4px;
+  line-height: 1.2;
+}
+.reader-title strong,
+.reader-title span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.reader-title strong {
+  font-weight: 900;
+}
+.reader-title span {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.reader-zoom {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--pill);
+  background: var(--field);
+  box-shadow: var(--inset-shadow);
+}
+.reader-zoom-value {
+  min-width: 52px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-weight: 800;
+  cursor: pointer;
+}
+.reader-slider {
+  flex: 1;
+}
+input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
+  background: linear-gradient(270deg, var(--accent-bright) var(--fill, 0%), var(--track) var(--fill, 0%));
+}
+.reader-message {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  padding: 40px;
+  text-align: center;
+}
+.reader-message p {
+  max-width: 520px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+@media (max-width: 1300px) {
+  .reader-bar .label {
+    display: none;
+  }
+}
+:root[data-motion="reduced"] .reader-view,
+:root[data-motion="off"] .reader-view {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .reader-view {
+    animation: none;
+  }
+}
+
 /* ---------------------------------------------------------------- Phase 0 video lab */
 
 .player {

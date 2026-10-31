@@ -44,6 +44,8 @@
     "externalBin": ["binaries/mpv"],
     "resources": {
       "binaries/vulkan-1.dll": "vulkan-1.dll",
+      "binaries/pdfium.dll": "pdfium.dll",
+      "binaries/licenses/pdfium/*": "licenses/pdfium/",
       "../tools/ffmpeg/*": "ffmpeg/",
       "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
     },

@@ -12,19 +12,13 @@ use roxmltree::{Document, Node, ParsingOptions};
 use serde_json::{json, Value};
 use zip::ZipArchive;
 
-use crate::files::natural_cmp;
-use crate::tools;
+use crate::{archives, tools};
 
 const MAX_ENTRY: u64 = 64 * 1024 * 1024;
 
 /// Some EPUB 2 packages still carry a DOCTYPE.
 fn parse_xml(text: &str) -> Option<Document<'_>> {
     Document::parse_with_options(text, ParsingOptions { allow_dtd: true, ..ParsingOptions::default() }).ok()
-}
-
-fn is_image_name(name: &str) -> bool {
-    let lower = name.to_ascii_lowercase();
-    [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"].iter().any(|ext| lower.ends_with(ext))
 }
 
 fn read_entry(zip: &mut ZipArchive<File>, name: &str) -> Option<Vec<u8>> {
@@ -201,20 +195,17 @@ pub struct ComicArchive {
     pub pages: usize,
 }
 
-/// Reads a CBZ: its ComicInfo.xml (the ComicRack metadata standard) and its first page.
-pub fn read_cbz(path: &Path) -> Option<ComicArchive> {
-    let mut zip = ZipArchive::new(File::open(path).ok()?).ok()?;
-    let names: Vec<String> = zip.file_names().filter_map(Result::ok).map(|name| name.into_owned()).collect();
-    let mut pages: Vec<&String> = names
-        .iter()
-        .filter(|n| is_image_name(n) && !n.starts_with("__MACOSX/") && !n.rsplit('/').next().unwrap_or("").starts_with('.'))
-        .collect();
-    pages.sort_by(|a, b| natural_cmp(a, b));
-    let cover = pages.first().and_then(|name| read_entry(&mut zip, name));
+/// Reads a comic archive (CBZ, CBR, CB7 or CBT): its ComicInfo.xml (the ComicRack metadata
+/// standard), its page count and its first page as the cover.
+pub fn read_comic(path: &Path) -> Option<ComicArchive> {
+    let format = archives::detect(path).ok()?;
+    let names = archives::entries(path, format).ok()?;
+    let pages = archives::pages(&names);
+    let cover = pages.first().and_then(|name| archives::read(path, format, name).ok());
     let info = names
         .iter()
         .find(|n| n.to_ascii_lowercase().ends_with("comicinfo.xml"))
-        .and_then(|name| read_entry(&mut zip, name))
+        .and_then(|name| archives::read(path, format, name).ok())
         .and_then(|bytes| String::from_utf8(bytes).ok())
         .and_then(|xml| parse_comic_info(&xml));
     Some(ComicArchive { info, cover, pages: pages.len() })

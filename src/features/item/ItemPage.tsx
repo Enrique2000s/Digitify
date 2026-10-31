@@ -2,12 +2,13 @@ import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { open } from "@tauri-apps/plugin-dialog";
-import { FilePlus, FolderOpen, HardDrive, ImagePlus, Package, Pencil, Plus, Star, Trash } from "lucide-react";
+import { BookOpen, FilePlus, FolderOpen, HardDrive, ImagePlus, Package, Pencil, Plus, Star, Trash } from "lucide-react";
 import { api, artworkUrl, errorText, type FieldDef, type ItemDetail, type VersionInfo } from "../../lib/api";
 import { bytes, date, duration, formatLabel, longDuration, ROLE_LABELS } from "../../lib/format";
 import { libraryChanged, useCategories, useItem } from "../../lib/queries";
 import { aspectFor, Cover } from "../../components/common";
 import { HomePath, OrganizePanel } from "../organize/OrganizePanel";
+import { canRead } from "../reader/ReaderPage";
 import { customValues, formatCustom } from "./customFields";
 import { AttachFilesDialog, EditItemDialog, PhysicalCopyDialog, RemoveItemDialog } from "./forms";
 
@@ -199,6 +200,7 @@ export function ItemPage() {
     }, {}),
   );
   const formats = [...new Set(item.versions.map((v) => v.format).filter(Boolean))] as string[];
+  const readable = canRead(item);
   const physical = item.versions.filter((v) => v.kind === "physical");
   const digital = item.versions.filter((v) => v.kind === "digital");
 
@@ -233,7 +235,18 @@ export function ItemPage() {
             </div>
           )}
           <div className="hero-actions">
-            <button type="button" className="btn btn-primary" aria-pressed={item.isFavorite} onClick={() => void run(() => api.itemSetFavorite(item.id, !item.isFavorite))}>
+            {readable && (
+              <Link to="/read/$id" params={{ id: String(item.id) }} className="btn btn-primary">
+                <BookOpen size={16} />
+                {item.progress != null && item.progress > 0 && item.progress < 1 ? `Continue reading · ${Math.round(item.progress * 100)}%` : "Read"}
+              </Link>
+            )}
+            <button
+              type="button"
+              className={readable ? "btn" : "btn btn-primary"}
+              aria-pressed={item.isFavorite}
+              onClick={() => void run(() => api.itemSetFavorite(item.id, !item.isFavorite))}
+            >
               <Star size={16} fill={item.isFavorite ? "currentColor" : "none"} />
               {item.isFavorite ? "Favorite" : "Add to favorites"}
             </button>

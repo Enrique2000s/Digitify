@@ -213,6 +213,9 @@ export function SoundSettings() {
           <output>{music.volume}%</output>
         </div>
       </Setting>
+      <Setting title="Pause while reading" text="The reader stays quiet; the music picks up again when you close it.">
+        <Switch checked={music.pauseWhileReading} onChange={(pauseWhileReading) => updateMusic({ pauseWhileReading })} label="Pause while reading" />
+      </Setting>
       <Setting title="Pause when minimized" text="The music picks up again when you come back to Digitify.">
         <Switch checked={music.pauseWhenMinimized} onChange={(pauseWhenMinimized) => updateMusic({ pauseWhenMinimized })} label="Pause when minimized" />
       </Setting>

@@ -8,6 +8,7 @@
 
     mpv 0.41.0 (official build)  -> src-tauri\binaries\  bundled with the app as a helper program
     FFmpeg 9.0.2 (LGPL build)    -> tools\ffmpeg\         development tools (test media, probing)
+    PDFium chromium/7881         -> src-tauri\binaries\  bundled with the app; renders PDF pages (D-013)
 
   BtbN removes old FFmpeg autobuilds after a while. If that URL stops working, pick a newer
   "autobuild-*" release of the same branch and update both its URL and hash below.
@@ -46,6 +47,18 @@ $deps = @(
             'bin\*.dll'       = 'tools\ffmpeg\'
             'bin\ffmpeg.exe'  = 'tools\ffmpeg\ffmpeg.exe'
             'bin\ffprobe.exe' = 'tools\ffmpeg\ffprobe.exe'
+        }
+    },
+    @{
+        # The PDFium API version must match pdfium-render's `pdfium_latest` feature (see Cargo.toml).
+        Name       = 'PDFium chromium/7881 (bblanchon/pdfium-binaries)'
+        Url        = 'https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/7881/pdfium-win-x64.tgz'
+        Sha256     = '73cc0de638ac2095e7445bf56a38200a5b7c7ca0e9f4ba144598f2457377ac08'
+        Marker     = 'src-tauri\binaries\pdfium.dll'
+        LicenseDir = 'src-tauri\binaries\licenses\pdfium'
+        Files      = [ordered]@{
+            'bin\pdfium.dll' = 'src-tauri\binaries\pdfium.dll'
+            'licenses\*'     = 'src-tauri\binaries\licenses\pdfium\'
         }
     }
 )

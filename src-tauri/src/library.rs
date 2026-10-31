@@ -400,6 +400,7 @@ pub struct Dashboard {
     pub featured: Option<ItemCard>,
     pub continue_items: Vec<ItemCard>,
     pub recent: Vec<ItemCard>,
+    pub recently_opened: Vec<ItemCard>,
     pub favorites: Vec<ItemCard>,
     pub categories: Vec<Category>,
     pub totals: Totals,
@@ -457,6 +458,11 @@ pub async fn dashboard_get(state: State<'_, AppState>) -> AppResult<Dashboard> {
                 &[],
             )?;
             let recent_ids = ids(conn, "SELECT id FROM items ORDER BY added_at DESC, id DESC LIMIT 18", &[])?;
+            let opened_ids = ids(
+                conn,
+                "SELECT id FROM items WHERE last_opened_at IS NOT NULL ORDER BY last_opened_at DESC, id DESC LIMIT 18",
+                &[],
+            )?;
             let favorite_ids =
                 ids(conn, "SELECT id FROM items WHERE is_favorite = 1 ORDER BY updated_at DESC LIMIT 18", &[])?;
             let count = |sql: &str| conn.query_row(sql, [], |row| row.get::<_, i64>(0));
@@ -464,6 +470,7 @@ pub async fn dashboard_get(state: State<'_, AppState>) -> AppResult<Dashboard> {
                 featured: cards_by_ids(conn, &featured_id)?.into_iter().next(),
                 continue_items: cards_by_ids(conn, &continue_ids)?,
                 recent: cards_by_ids(conn, &recent_ids)?,
+                recently_opened: cards_by_ids(conn, &opened_ids)?,
                 favorites: cards_by_ids(conn, &favorite_ids)?,
                 categories: categories(conn)?,
                 totals: Totals {

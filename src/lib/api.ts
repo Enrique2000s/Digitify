@@ -93,6 +93,7 @@ export interface Dashboard {
   featured: ItemCard | null;
   continueItems: ItemCard[];
   recent: ItemCard[];
+  recentlyOpened: ItemCard[];
   favorites: ItemCard[];
   categories: Category[];
   totals: { items: number; physical: number; digital: number; missingFiles: number };
@@ -111,6 +112,18 @@ export interface AmbientPlaylist {
   tracks: { id: number; title: string; artist: string | null }[];
   unavailable: number;
   truncated: boolean;
+}
+
+/** A page-based item opened for reading (comic archives, folders of images, PDFs). */
+export interface ReaderBook {
+  itemId: number;
+  versionId: number;
+  title: string;
+  direction: "ltr" | "rtl";
+  /** Pixel sizes (points for PDFs): the reader lays pages out before they load. */
+  pages: { width: number; height: number }[];
+  /** Where reading stopped last time. */
+  position: number;
 }
 
 export interface TrackDetails {
@@ -225,7 +238,8 @@ export type BulkOp =
   | { op: "removeFromShelf"; shelf: number }
   | { op: "move"; category: string; collection: number | null }
   | { op: "setYear"; year: number | null }
-  | { op: "setSeries"; series: string | null };
+  | { op: "setSeries"; series: string | null }
+  | { op: "setDirection"; direction: "ltr" | "rtl" };
 
 export interface FieldInput {
   key?: string | null;
@@ -342,6 +356,8 @@ export const api = {
   collectionMove: (id: number, parent: number | null) => invoke<void>("collection_move", { id, parent }),
   collectionDelete: (id: number) => invoke<void>("collection_delete", { id }),
   itemsBulk: (ids: number[], ops: BulkOp[]) => invoke<number>("items_bulk", { ids, ops }),
+  readerOpen: (id: number) => invoke<ReaderBook>("reader_open", { id }),
+  progressSave: (id: number, page: number, pages: number) => invoke<void>("progress_save", { id, page, pages }),
   categoryCreate: (category: CategoryInput) => invoke<string>("category_create", { category }),
   categoryUpdate: (key: string, category: CategoryInput) => invoke<void>("category_update", { key, category }),
   categoryDelete: (key: string, moveTo: string | null) => invoke<void>("category_delete", { key, moveTo }),
@@ -378,6 +394,11 @@ export const api = {
 /** Artwork served by the core's private `digitify` scheme (Windows form of the URL). */
 export function artworkUrl(key: string, size: "thumb" | "cover" = "thumb"): string {
   return `http://digitify.localhost/${size}/${key}`;
+}
+
+/** A page of an open book, at least `width` device pixels wide (the core rounds widths up). */
+export function pageUrl(versionId: number, index: number, width: number): string {
+  return `http://digitify.localhost/page/${versionId}/${index}?w=${Math.round(width)}`;
 }
 
 /** A track of the current ambient playlist (only files the user chose are served). */

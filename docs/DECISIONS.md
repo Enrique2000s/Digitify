@@ -96,6 +96,16 @@ Every product or architecture decision is recorded here with its reason. Anythin
 - **Date:** 2026-10-30 · **Approved by:** project owner (part of the approved stack)
 - **Decision:** foliate-js (MIT, vendored at a pinned commit) handles EPUB, MOBI, AZW3 and FB2.
 
+### D-017 · Comic archives: RAR through the UnRAR library
+- **Date:** 2026-10-31 · **Approved by:** project owner (chose "unrar" over 7-Zip as a separate program)
+- **Decision:**
+  - **CBR (RAR):** RARLAB's official UnRAR source, compiled into Digitify through the `unrar` crate. It reads every RAR version.
+  - **CB7 (7z):** `sevenz-rust2`, pure Rust (Apache-2.0), built for reading only.
+  - **CBT (TAR):** the `tar` crate.
+  - Archives are recognized by their contents, so a RAR named `.cbz` (or the reverse) still opens.
+- **License:** the UnRAR license is free, commercial use included. Its only restriction is that the code may not be used to create RAR archives. That fits D-003 (no GPL code linked, nothing limited to non-commercial use). The license text ships in the third-party notices.
+- **Alternative considered:** 7-Zip as a separate helper program. It would cover RAR, 7z and TAR with one program, but it is heavier and slower page by page.
+
 ### D-016 · Visual identity: Breeze, with ambient music (replaces D-015)
 - **Date:** 2026-10-30 · **Approved by:** project owner (requested a Wii-era console-menu style; chose concept "D · Breeze" on the visual concepts canvas to **replace** Cinematic)
 - **Look:** an *original* style inspired by mid-2000s console menus:

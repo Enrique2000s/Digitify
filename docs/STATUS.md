@@ -30,7 +30,7 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 | Import: drag and drop | 🟡 | Wired to Tauri's native drop events; can't be automated, so please try it |
 | Format detection | ✅ | EPUB, PDF, MOBI, AZW3, FB2, CBZ, CBR, CB7, folders of page images, video and audio (see ARCHITECTURE.md) |
 | Embedded metadata | ✅ | EPUB (title, authors, publisher, date, description, language, cover); ComicInfo.xml (series, volume, number, writer, artist, summary, manga → right-to-left); audio tags grouped into albums with track parts; video via ffprobe (duration, resolution, codecs, audio/subtitle tracks, chapters, frame as artwork) |
-| PDF metadata and covers | ⬜ | Phase 2, with PDFium. PDFs import with their file-name title for now. |
+| PDF metadata and covers | ✅ | Since Phase 2, with PDFium: title (placeholder titles such as "Microsoft Word - …" are ignored), author, year, page count, and a cover from the first page. PDFs imported earlier get their cover and page count once, in the background. |
 | Artwork cache | ✅ | Full-size and grid sizes, stored once per image by content hash, with an average color for spines and tints |
 | Duplicate detection | ✅ | Size plus a sampled BLAKE3 fingerprint. A second import of the same files added 0 and copied nothing. |
 | Missing-file detection | ✅ | Checked in the background at startup. Missing files are flagged on cards, the item page and Home. |
@@ -110,11 +110,53 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 - **PoC 1:** mpv video shows through the transparent WebView with translucent React controls. Tested at 1280×800, 960×600 and fullscreen. Hardware decoding (d3d11va) was active, and mpv always exits with the app. The video host window must not use `WS_CLIPSIBLINGS`.
 - **PoC 2:** 50,000 synthetic items scrolled at 144 fps with 0 dropped frames, both steady and fast. Jumping anywhere settled in 35–42 ms, a page of 200 cards loaded in about 4 ms of SQLite time, and search took 11 ms or less. Peak memory was 39 MB for the app process and 586 MB with WebView2.
 
+## Phase 2: readers (in progress)
+| Feature | Status | Notes |
+|---|---|---|
+| Page reader | ✅ | Opens comic archives (CBZ, CBR, CB7, CBT), folders of page images and PDFs. Modes: one page, two pages and a continuous scroll. In two-page mode the cover stands alone and wide pages stand alone. |
+| Reading direction | ✅ | Right to left for manga (from the item or its category). It can be switched in the reader and is remembered for the item. |
+| Fit, zoom and pan | ✅ | Fit page or fit width, zoom from 100% to 400% (buttons, + and −, or Ctrl+wheel), and drag to pan. |
+| Turning pages | ✅ | Arrow keys (they follow the reading direction), Page Up/Down, Space, Home/End, the mouse wheel, clicking either side, or the page slider. |
+| Page transitions | 🟡 | Slide and fade (none with reduced motion). The 3D turn and page curl are still to come. |
+| Progress and resume | ✅ | Saved as you read and when you close the reader; just opening a book doesn't change it. Shown as "Continue reading · 83%" on the item, on cards, and in "Pick up where you left off". |
+| Recently opened | ✅ | A row on Home. |
+| Page serving | ✅ | `/page/<copy>/<page>?w=<width>`: large pages are scaled down to the width shown (in 400 px steps) and the latest 128 MB are cached. PDF pages are rendered by PDFium. |
+| Full screen and window | ✅ | Full screen (F or the button). The reader's controls hide after a moment and come back when the mouse moves. |
+| Music while reading | ✅ | Ambient music pauses while the reader is open ("Pause while reading" in Settings › Sound, on by default). |
+| EPUB, MOBI, AZW3, FB2 | ⬜ | The reader explains that ebooks come next (foliate-js, D-014). |
+| CBR, CB7, CBT | ✅ | D-017: RAR through RARLAB's UnRAR code, 7z read-only, TAR. Archives are recognized by their contents, so a RAR named `.cbz` still opens. At import they get a cover from their first page, a page count and their ComicInfo.xml, like CBZ. |
+| Bookmarks, night mode, brightness, backgrounds | ⬜ | |
+| Series navigation, image-set book builder | ⬜ | |
+
+### How comic archives were tested (2026-10-31)
+- `cargo test`: 23 unit tests pass. The new ones:
+  - a RAR archive written in the test (stored files, as the format allows) is detected even when named `.cbz`, then listed in natural page order and read through UnRAR
+  - a TAR archive is listed and read
+  - a file that isn't an archive is refused
+- `scripts\make-samples.ps1` now also writes `Harbor Lights 02.cbr` (a hand-written RAR 4 with a ComicInfo.xml), `Sky Garden 01.cb7` and `Paper Lanterns 01.cbt` (both made with Windows' own `tar`).
+- End-to-end run on a fresh library:
+  - All three import with a cover and 6 pages. The CBR's ComicInfo gives "Harbor Lights #2", its subtitle and its series.
+  - Each opens in the reader and turns to page 2 with the pages drawn.
+
+### How Phase 2 (so far) was tested (2026-10-31)
+- `cargo test`: 20 unit tests pass, adding page-width buckets, copy classification (PDF, images, ebooks and CBR refused with a reason) and PDF placeholder titles.
+- End-to-end run of the release build on a fresh library:
+  1. Import: the PDF arrives with its title, its author "Digitify Test Suite", 3 pages and a cover rendered from page 1.
+  2. The right-to-left manga opens from its page with **Read**. ← turns forward. Two-page mode shows pages 2–3 with page 2 on the right. Scroll mode shows a continuous strip. End goes to page 6. The controls hide after 2.6 s.
+  3. Closing leads back to the item, which offers "Continue reading · 83%". Opening again resumes at page 5.
+  4. A folder of scans and the PDF open; PDF pages are drawn by PDFium. A page requested at 300 px wide is scaled down (38 KB → 12 KB).
+  5. Home lists "Pick up where you left off" and "Recently opened".
+  6. An EPUB is refused with an explanation.
+  7. A PDF imported before PDFium was added got its cover and page count from the background task.
+- **Found and fixed while testing:**
+  - The sample PDF generator wrote a broken cross-reference table.
+  - Closing the reader could remount it for a moment and save page 1 over your progress. Two fixes: the full-window decision now follows the route being shown, not the address, and the reader no longer saves progress unless you moved.
+
 ## Product features by phase
 | Area | Status |
 |---|---|
 | Core library (Phase 1) | 🔄 See above |
-| PDF, image and comic reader | ⬜ Phase 2 |
+| PDF, image and comic reader | 🔄 Phase 2: page reader done (CBZ, CBR, CB7, CBT, images, PDF); transitions and tools to come |
 | EPUB reader | ⬜ Phase 2 |
 | Video player | ⬜ Phase 3 (embedding proven) |
 | Music player and playlists | ⬜ Phase 3 |
@@ -125,8 +167,10 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 ## Known limitations
 - **Protected discs:** most commercial DVDs (CSS) and virtually all commercial Blu-rays (AACS/BD+) can be detected and cataloged but not played or imported (D-007).
 - **Disc playback engine:** the bundled mpv has no disc modules, so Phase 4 will use Digitify's own disc layer (see ARCHITECTURE.md).
-- **PDF covers and metadata:** not until Phase 2 (PDFium). Until then PDFs use a title tile.
-- **Other ebook formats:** CBR/CB7 archives import without a cover, and MOBI/AZW3/FB2 without embedded metadata. Both arrive with the Phase 2 readers.
+- **Password-protected PDFs:** they can't be opened; the reader says so.
+- **Other ebook formats:** MOBI/AZW3/FB2 import without embedded metadata and can't be read yet; they arrive with the ebook reader later in Phase 2.
+- **Encrypted comic archives:** password-protected RAR, 7z or ZIP archives can't be opened.
+- **Solid RAR and 7z archives:** reading page by page means unpacking the pages before it, so late pages of large solid archives take longer. Most CBR files aren't solid.
 - **Partial album imports:** importing an album whose tracks are partly in the library adds the new tracks as a separate item. Merging into the existing album is not built yet.
 - **Window snap layouts:** with the custom title bar, the Windows 11 snap-layout flyout on the maximize button is not available. Win+Z and dragging to screen edges still work.
 - **Page curl:** realistic page curl will be limited to fixed-layout pages (Phase 2).

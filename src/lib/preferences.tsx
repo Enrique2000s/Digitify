@@ -18,6 +18,19 @@ export interface MusicPreferences {
   sources: MusicSource[];
   shuffle: boolean;
   pauseWhenMinimized: boolean;
+  /** The reader is a quiet place by default. */
+  pauseWhileReading: boolean;
+}
+
+/** How page-based items are shown (comics, manga, scans, PDFs). */
+export interface ReaderPreferences {
+  /** One page, two facing pages, or every page in one scrolling strip. */
+  mode: "single" | "spread" | "scroll";
+  /** Whole page on screen, or pages as wide as the window. */
+  fit: "page" | "width";
+  /** In two-page mode, the first page (usually the cover) stands alone. */
+  coverAlone: boolean;
+  transition: "slide" | "fade" | "none";
 }
 
 export interface Preferences {
@@ -35,6 +48,7 @@ export interface Preferences {
   music: MusicPreferences;
   /** Soft tones when pointing at and pressing things. */
   interfaceSounds: boolean;
+  reader: ReaderPreferences;
 }
 
 export const DEFAULT_MUSIC: MusicPreferences = {
@@ -45,7 +59,10 @@ export const DEFAULT_MUSIC: MusicPreferences = {
   sources: [],
   shuffle: true,
   pauseWhenMinimized: true,
+  pauseWhileReading: true,
 };
+
+export const DEFAULT_READER: ReaderPreferences = { mode: "single", fit: "page", coverAlone: true, transition: "slide" };
 
 export const DEFAULT_PREFERENCES: Preferences = {
   style: "breeze",
@@ -58,6 +75,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   importMode: "ask",
   music: DEFAULT_MUSIC,
   interfaceSounds: true,
+  reader: DEFAULT_READER,
 };
 
 type Raw<T> = { [K in keyof T]?: unknown };
@@ -87,6 +105,17 @@ function sanitizeMusic(raw: unknown): MusicPreferences {
     sources: pick("sources", Array.isArray).filter(isMusicSource),
     shuffle: pick("shuffle", isBoolean),
     pauseWhenMinimized: pick("pauseWhenMinimized", isBoolean),
+    pauseWhileReading: pick("pauseWhileReading", isBoolean),
+  };
+}
+
+function sanitizeReader(raw: unknown): ReaderPreferences {
+  const pick = picker(raw, DEFAULT_READER);
+  return {
+    mode: pick("mode", (v) => v === "single" || v === "spread" || v === "scroll"),
+    fit: pick("fit", (v) => v === "page" || v === "width"),
+    coverAlone: pick("coverAlone", isBoolean),
+    transition: pick("transition", (v) => v === "slide" || v === "fade" || v === "none"),
   };
 }
 
@@ -106,6 +135,7 @@ function sanitize(raw: unknown): Preferences {
     importMode: pick("importMode", (v) => v === "ask" || v === "reference" || v === "copy"),
     music: sanitizeMusic((raw as Raw<Preferences>)?.music),
     interfaceSounds: pick("interfaceSounds", isBoolean),
+    reader: sanitizeReader((raw as Raw<Preferences>)?.reader),
   };
 }
 

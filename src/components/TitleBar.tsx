@@ -7,16 +7,9 @@ import { MusicPill } from "./MusicPill";
 
 const appWindow = getCurrentWindow();
 
-/** The header capsule: brand (home), history, library search, ambient music, settings and window controls. */
-export function TitleBar({ searchEnabled }: { searchEnabled: boolean }) {
+/** Minimize, maximize/restore and close, as round gel buttons (the window has no system frame). */
+export function WindowButtons() {
   const [maximized, setMaximized] = useState(false);
-  const navigate = useNavigate();
-  const location = useRouterState({ select: (state) => state.location });
-  const urlQuery = location.pathname === "/search" ? String((location.search as { q?: string }).q ?? "") : "";
-  const [query, setQuery] = useState(urlQuery);
-  const input = useRef<HTMLInputElement>(null);
-  const timer = useRef(0);
-
   useEffect(() => {
     const update = () => void appWindow.isMaximized().then(setMaximized);
     update();
@@ -25,6 +18,41 @@ export function TitleBar({ searchEnabled }: { searchEnabled: boolean }) {
       void unlisten.then((stop) => stop());
     };
   }, []);
+  return (
+    <div className="window-buttons">
+      <button type="button" className="round-btn" aria-label="Minimize" title="Minimize" onClick={() => void appWindow.minimize()}>
+        <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round">
+          <path d="M6 12h12" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        className="round-btn"
+        aria-label={maximized ? "Restore" : "Maximize"}
+        title={maximized ? "Restore" : "Maximize"}
+        onClick={() => void appWindow.toggleMaximize()}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden fill="none" stroke="currentColor" strokeWidth="3" strokeLinejoin="round">
+          {maximized ? <path d="M9 4h11v11M4 9h11v11H4z" /> : <path d="M6 6h12v12H6z" />}
+        </svg>
+      </button>
+      <button type="button" className="round-btn close" aria-label="Close" title="Close" onClick={() => void appWindow.close()}>
+        <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round">
+          <path d="M7 7l10 10M17 7 7 17" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+/** The header capsule: brand (home), history, library search, ambient music, settings and window controls. */
+export function TitleBar({ searchEnabled }: { searchEnabled: boolean }) {
+  const navigate = useNavigate();
+  const location = useRouterState({ select: (state) => state.location });
+  const urlQuery = location.pathname === "/search" ? String((location.search as { q?: string }).q ?? "") : "";
+  const [query, setQuery] = useState(urlQuery);
+  const input = useRef<HTMLInputElement>(null);
+  const timer = useRef(0);
 
   useEffect(() => setQuery(urlQuery), [urlQuery]);
 
@@ -89,29 +117,7 @@ export function TitleBar({ searchEnabled }: { searchEnabled: boolean }) {
             <Settings size={18} strokeWidth={2.4} />
           </Link>
         )}
-        <div className="window-buttons">
-          <button type="button" className="round-btn" aria-label="Minimize" title="Minimize" onClick={() => void appWindow.minimize()}>
-            <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round">
-              <path d="M6 12h12" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className="round-btn"
-            aria-label={maximized ? "Restore" : "Maximize"}
-            title={maximized ? "Restore" : "Maximize"}
-            onClick={() => void appWindow.toggleMaximize()}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden fill="none" stroke="currentColor" strokeWidth="3" strokeLinejoin="round">
-              {maximized ? <path d="M9 4h11v11M4 9h11v11H4z" /> : <path d="M6 6h12v12H6z" />}
-            </svg>
-          </button>
-          <button type="button" className="round-btn close" aria-label="Close" title="Close" onClick={() => void appWindow.close()}>
-            <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round">
-              <path d="M7 7l10 10M17 7 7 17" />
-            </svg>
-          </button>
-        </div>
+        <WindowButtons />
       </div>
     </header>
   );

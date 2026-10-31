@@ -42,19 +42,27 @@ Each phase ends with a runnable build and updated docs. No dates are given; each
 
 **Exit criteria:** the owner's real files import and browse end to end, and an installer build works.
 
-## Phase 2 — Readers
-1. **Page engine** (PDF via PDFium, images, CBZ/CBR/CB7, numbered-page folders):
-   - single page, two-page spreads and continuous vertical
-   - left-to-right and right-to-left
-   - fit modes, zoom/pan and preloading
-2. **Page transitions:** slide, fade, 3D turn and realistic curl, with reduced motion.
-3. **EPUB/MOBI/AZW3/FB2** via foliate-js: typography, themes and table of contents.
+## Phase 2 — Readers (current)
+1. **Page engine:**
+   - ✅ PDF (PDFium), CBZ, folders of page images and single images
+   - ✅ CBR, CB7 and CBT archives (D-017), recognized by content whatever their extension
+   - ✅ single page, two-page spreads (cover alone, wide pages alone) and a continuous vertical strip
+   - ✅ left-to-right and right-to-left
+   - ✅ fit page or width, zoom (up to 400%) and drag to pan, preloading
+2. **Page transitions:**
+   - ✅ slide and fade, off with reduced motion
+   - ⬜ 3D turn and realistic curl
+3. ⬜ **EPUB/MOBI/AZW3/FB2** via foliate-js: typography, themes and table of contents.
 4. **Reading tools:**
-   - progress and resume, bookmarks
-   - night mode, brightness, backgrounds and fullscreen
-   - an image-set book builder that orders photos into one item
-5. **Series navigation:** series, volumes and chapters, plus "continue reading".
-6. **Recently opened** on Home, once items can be opened.
+   - ✅ progress and resume, full screen
+   - ⬜ bookmarks
+   - ⬜ night mode, brightness and backgrounds (pages already sit on a dark backdrop)
+   - ⬜ an image-set book builder that orders photos into one item
+5. **Series navigation:**
+   - ✅ "Pick up where you left off"
+   - ⬜ series, volumes and chapters
+6. ✅ **Recently opened** on Home.
+7. ✅ **PDF details at import** (title, author, year, page count and a cover from the first page). PDFs imported earlier get their cover and page count in the background.
 
 ## Phase 3 — Media playback
 1. **Video player:** controls, subtitles (embedded and external), audio tracks, chapters, speed, resume, watched state and fullscreen.

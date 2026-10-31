@@ -39,16 +39,19 @@ Digitify.exe (Tauri 2)
 | `organize` | Nested collections (tree queries with recursive CTEs, moving without cycles, deleting by moving contents up), shelves, tags (merge on rename, pruned when unused), and bulk edits applied in one transaction |
 | `categories` | The user's own categories and custom fields (`field_definitions`; values in `metadata.custom`), category order and visibility |
 | `import` | Background import jobs: scan, then in parallel fingerprint, skip duplicates and extract metadata, then save. Also attaches files to existing items. |
-| `formats` | Embedded metadata readers: EPUB OPF, ComicInfo.xml, audio tags (lofty), ffprobe |
+| `formats` | Embedded metadata readers: EPUB OPF, ComicInfo.xml in any comic archive, audio tags (lofty), ffprobe |
 | `artwork` | Artwork cache: cover (≤1400 px) and thumb (400 px wide) JPEGs keyed by content hash, plus average color |
 | `files` | Fingerprints, volume serials, safe names, natural ordering, reveal in Explorer, missing-file check, relinking moved files by content |
 | `tools` | Locating helper programs (mpv, ffmpeg, ffprobe) and running them without console windows |
 | `media_protocol` | The `digitify` URI scheme: artwork, ambient tracks (range requests); files and pages later |
 | `ambient` | Ambient music from the user's files, folders and library albums (D-016) |
+| `pages` | The page engine: a digital copy as numbered pages (CBZ entries in natural order, image files, PDF pages), page sizes for layout, pages served scaled to the reader's width with a 128 MB cache, `reader_open` and `progress_save` |
+| `archives` | Comic archives (D-017): ZIP, RAR (UnRAR), 7z and TAR recognized by their first bytes; listing, reading one entry, and one pass over all entries (fast for solid archives) |
+| `pdf` | PDFium, loaded from `pdfium.dll` on first use (D-013): page sizes, page rendering, and title, author, year, page count and cover at import |
 | `player` | mpv process lifecycle, IPC, video host window (PoC 1; becomes the Phase 3 player) |
 | `dev` | Phase 0 video lab harness (Settings › Developer) |
 
-Planned modules: `archives` (CBR/CB7, page serving), `pdf` (PDFium), `optical`, `ripper`, `backup`.
+Planned modules: `optical`, `ripper`.
 
 ### Import pipeline
 1. **Scan** the picked or dropped paths into candidates:
@@ -71,6 +74,7 @@ React + TypeScript via Vite, organized by feature:
 |---|---|
 | `app/` | Router (hash history) and root layout |
 | `components/` | Header capsule with the music capsule, category strip, "Add to library" menu, cards, covers, dialogs, switch |
+| `features/reader/` | The page reader: layout (views, spreads, strip widths) and the reader screen at `/read/$id` |
 | `features/` | Home (category tiles, your shelves), library views (virtualized grid/list/shelf with multi-select and the bulk bar), organize (collections, shelves, tags, move dialogs), item page and forms (with custom fields), import UI, onboarding, settings (Categories, Sound) |
 | `lib/` | Typed API, TanStack Query hooks, paged item cache, preferences (theme/accent/motion/music), accent contrast math, formatting |
 | `lib/ambient/` | Ambient music and interface sounds: the "Morning Lounge" composition and synth, the playback engine, and its React provider |
@@ -114,7 +118,7 @@ On Windows, the UI loads library resources from `http://digitify.localhost/<rout
 - `/thumb/<key>` and `/cover/<key>`: cached artwork
 - `/ambient/<generation>/<index>`: a track of the current ambient playlist (only files the user chose), served in 1 MiB HTTP range slices
 - `/file/<id>`: a library file, with HTTP Range support (Phase 2, for readers and players)
-- `/page/<file>/<n>`: a page from an archive or PDF (Phase 2)
+- `/page/<copy>/<n>?w=<width>`: a page of a book for the reader, scaled down to the width asked for (rounded up to 400 px steps)
 
 Only resources registered in the library are served. Paths never come straight from the UI.
 

@@ -1,6 +1,7 @@
 //! Digitify core: the Rust side of the desktop app.
 
 mod ambient;
+mod archives;
 mod artwork;
 mod backup;
 mod categories;
@@ -15,6 +16,8 @@ mod library;
 mod library_folder;
 mod media_protocol;
 mod organize;
+mod pages;
+mod pdf;
 mod player;
 mod setup;
 mod tools;
@@ -86,6 +89,7 @@ pub fn run() {
             app.manage(state);
             app.manage(player::PlayerState::default());
             app.manage(ambient::AmbientState::default());
+            app.manage(pages::PageEngine::default());
             dev::configure_window(app)?;
             setup::spawn_maintenance(app.handle().clone());
             Ok(())
@@ -133,6 +137,8 @@ pub fn run() {
             organize::collection_move,
             organize::collection_delete,
             organize::items_bulk,
+            pages::reader_open,
+            pages::progress_save,
             categories::category_create,
             categories::category_update,
             categories::category_delete,

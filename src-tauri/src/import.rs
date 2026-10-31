@@ -23,7 +23,7 @@ use crate::error::{AppError, AppResult};
 use crate::files::{self, natural_cmp};
 use crate::formats::{self, year_of};
 use crate::library::{reindex, sort_key, upsert_person};
-use crate::{artwork, AppState, Library};
+use crate::{artwork, pdf, AppState, Library};
 
 #[derive(Default)]
 pub struct ImportManager {
@@ -427,11 +427,26 @@ fn describe_single(kind: Kind, path: &Path, files: Vec<FileDraft>) -> Draft {
             }
             d
         }
-        Kind::Pdf => draft("books", name_title, name_year, "pdf".into(), files),
+        Kind::Pdf => {
+            let mut d = draft("books", name_title, name_year, "pdf".into(), files);
+            match pdf::read_info(path, 900) {
+                Ok(info) => {
+                    if let Some(title) = info.title {
+                        d.title = title;
+                    }
+                    d.year = d.year.or(info.year);
+                    d.people.extend(info.author.map(|author| (author, "author")));
+                    d.metadata.insert("pageCount".into(), json!(info.pages));
+                    d.artwork = info.cover;
+                }
+                Err(e) => log::warn!("could not read PDF details from {}: {e}", path.display()),
+            }
+            d
+        }
         Kind::ComicArchive => {
             let mut d = draft("comics", name_title, name_year, ext.clone(), files);
-            if ext == "cbz" {
-                if let Some(archive) = formats::read_cbz(path) {
+            {
+                if let Some(archive) = formats::read_comic(path) {
                     d.artwork = archive.cover;
                     d.metadata.insert("pageCount".into(), json!(archive.pages));
                     if let Some(info) = archive.info {

@@ -31,6 +31,14 @@ roxmltree = "0.21"
 blake3 = "1"
 rayon = "1"
 trash = "5"
+imagesize = "0.15"
+# Comic archives besides ZIP (D-017): RAR via RARLAB's UnRAR source, 7z read-only, TAR.
+unrar = "0.5.8"
+sevenz-rust2 = { version = "0.24.2", default-features = false, features = ["bzip2", "deflate", "ppmd"] }
+tar = "0.4.46"
+# PDF rendering through PDFium (D-013), loaded from pdfium.dll at runtime. `pdfium_latest` is the
+# PDFium API version scripts/fetch-deps.ps1 pins (chromium/7881).
+pdfium-render = { version = "0.9.4", default-features = false, features = ["pdfium_latest", "image_latest", "thread_safe"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

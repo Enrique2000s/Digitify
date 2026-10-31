@@ -102,7 +102,7 @@ function Tiles({ categories, covers, total }: { categories: Category[]; covers: 
 function ContinueCard({ item }: { item: ItemCard }) {
   const percent = Math.round((item.progress ?? 0) * 100);
   return (
-    <Link to="/item/$id" params={{ id: String(item.id) }} className="continue-card" data-blip>
+    <Link to="/read/$id" params={{ id: String(item.id) }} className="continue-card" data-blip>
       <div className="continue-thumb" style={{ aspectRatio: aspectFor(item.handler) }}>
         <Cover item={item} />
       </div>
@@ -242,6 +242,7 @@ export function HomePage({ onCatalog }: { onCatalog: () => void }) {
           </div>
         </section>
       )}
+      <Row title="Recently opened" items={data.recentlyOpened} />
       <Row title="Recently added" items={data.recent} more={{ scope: "all" }} />
       <Row title="Favorites" items={data.favorites} more={{ scope: "favorites" }} />
       {data.totals.items > 0 && (

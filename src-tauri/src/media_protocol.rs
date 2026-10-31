@@ -9,6 +9,7 @@ use tauri::http::{header, Request, Response, StatusCode};
 use tauri::{AppHandle, Manager, Runtime, UriSchemeContext, UriSchemeResponder};
 
 use crate::ambient::{self, AmbientState};
+use crate::pages::PageEngine;
 use crate::AppState;
 
 type Routed = Result<Response<Vec<u8>>, (StatusCode, String)>;
@@ -36,6 +37,7 @@ fn route<R: Runtime>(app: &AppHandle<R>, request: &Request<Vec<u8>>) -> Routed {
         (Some("thumb"), Some(key)) => artwork(app, key, false),
         (Some("cover"), Some(key)) => artwork(app, key, true),
         (Some("ambient"), Some(track)) => ambient_track(app, track, request),
+        (Some("page"), Some(page)) => book_page(app, page, request),
         _ => Err((StatusCode::NOT_FOUND, format!("unknown resource {path}"))),
     }
 }
@@ -73,6 +75,34 @@ fn ambient_track<R: Runtime>(app: &AppHandle<R>, track: &str, request: &Request<
         .track(generation, index)
         .ok_or_else(|| (StatusCode::NOT_FOUND, format!("no ambient track {track}")))?;
     stream(&path, ambient::mime_type(&path), request)
+}
+
+/// A page of a book, `page/<version>/<index>?w=<width>` (see pages.rs).
+fn book_page<R: Runtime>(app: &AppHandle<R>, page: &str, request: &Request<Vec<u8>>) -> Routed {
+    let bad = || (StatusCode::BAD_REQUEST, "invalid page".to_string());
+    let (version, index) = page.split_once('/').ok_or_else(bad)?;
+    let version: i64 = version.parse().map_err(|_| bad())?;
+    let index: usize = index.parse().map_err(|_| bad())?;
+    let width = request
+        .uri()
+        .query()
+        .and_then(|query| query.split('&').find_map(|pair| pair.strip_prefix("w=")))
+        .and_then(|w| w.parse::<u32>().ok());
+    let library = app
+        .state::<AppState>()
+        .library()
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+    let page = app
+        .state::<PageEngine>()
+        .page(&library, version, index, width)
+        .map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?;
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, page.mime)
+        .header(header::CACHE_CONTROL, "private, max-age=3600")
+        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+        .body(page.bytes.clone())
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
 /// Serves a file in slices, the way media elements expect (HTTP range requests), so a long track
