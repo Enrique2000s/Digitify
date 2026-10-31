@@ -667,6 +667,7 @@ export function LibraryView({
   description,
   actions,
   prelude,
+  beforeItems,
   square,
   handler,
   smart,
@@ -680,8 +681,10 @@ export function LibraryView({
   description?: string | null;
   /** Extra buttons next to "Add" (shelf, tag or collection actions). */
   actions?: ReactNode;
-  /** Shown between the header and the toolbar (sub-collections). */
+  /** Shown between the header and the toolbar (music tabs). */
   prelude?: ReactNode;
+  /** Shown under the toolbar, above the items (a category's collections). */
+  beforeItems?: ReactNode;
   square?: boolean;
   /** The kind of media of a category's view, for its usual cover shape. */
   handler?: string;
@@ -838,6 +841,7 @@ export function LibraryView({
             )}
           </div>
         </div>
+        {beforeItems && <div className="before-items">{beforeItems}</div>}
         {error && <div className="notice danger" style={{ margin: "0 40px" }}>{error}</div>}
         {total === 0 ? (
           <div style={{ padding: "8px 40px" }}>{empty}</div>

@@ -23,6 +23,7 @@ import {
 import { api, type ItemCard } from "../../lib/api";
 import { exitBigPicture, focusFirst, moveFocus } from "../../lib/bigpicture";
 import { controllerKind, onControllerChange, usePad, useSticks, type PadAction } from "../../lib/gamepad";
+import { Cursor } from "./Cursor";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { useCoverShape, usePreferences } from "../../lib/preferences";
 import { libraryChanged, useCategories, useDashboard } from "../../lib/queries";
@@ -390,53 +391,12 @@ function Menu({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** The pointer for cursor mode: the left stick moves it, the right stick scrolls, A clicks. */
-function Cursor({ speed }: { speed: number }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const position = useRef({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-  // Lets automated tests put the cursor somewhere without a controller.
-  useEffect(() => {
-    const w = window as unknown as { __digitifyCursor?: (x: number, y: number) => void };
-    w.__digitifyCursor = (x, y) => {
-      position.current = { x, y };
-      if (ref.current) ref.current.style.transform = `translate(${x}px, ${y}px)`;
-    };
-    return () => void delete w.__digitifyCursor;
-  }, []);
-  useSticks((sticks, dt) => {
-    const p = position.current;
-    p.x = Math.max(0, Math.min(window.innerWidth - 2, p.x + sticks.lx * speed * dt));
-    p.y = Math.max(0, Math.min(window.innerHeight - 2, p.y + sticks.ly * speed * dt));
-    if (ref.current) ref.current.style.transform = `translate(${p.x}px, ${p.y}px)`;
-    if (sticks.rx || sticks.ry) {
-      let element = document.elementFromPoint(p.x, p.y) as HTMLElement | null;
-      while (element && !(element.scrollHeight > element.clientHeight + 2 || element.scrollWidth > element.clientWidth + 2)) element = element.parentElement;
-      element?.scrollBy(sticks.rx * 900 * dt, sticks.ry * 900 * dt);
-    }
-    const under = document.elementFromPoint(p.x, p.y)?.closest<HTMLElement>("[data-bp-focus]");
-    if (under && document.activeElement !== under) under.focus({ preventScroll: true });
-  });
-  usePad((action) => {
-    if (action !== "accept") return;
-    const p = position.current;
-    const under = document.elementFromPoint(p.x, p.y);
-    const target = under?.closest<HTMLElement>("button, a, input, [data-bp-focus], [role=button], [role=tab]");
-    if (target) {
-      target.focus({ preventScroll: true });
-      target.click();
-    } else {
-      under?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y }));
-    }
-    return true;
-  });
-  return <div ref={ref} className="bp-cursor" aria-hidden style={{ transform: `translate(${position.current.x}px, ${position.current.y}px)` }} />;
-}
-
+/** The music playing, in the top bar next to Search. */
 function NowPlaying() {
   const music = useMusic();
   if (!music.active || !music.current) return null;
   return (
-    <div className="bp-now">
+    <div className="bp-now" role="group" aria-label="Music">
       <div className="bp-now-art">
         <Cover item={{ title: music.current.album, coverKey: music.current.coverKey, handler: "audio" }} />
       </div>
@@ -474,9 +434,49 @@ export function BigPicturePage() {
   const key = `${screen}:${search.scope ?? ""}:${search.id ?? ""}`;
   useEffect(() => {
     if (cursor) return;
-    const timer = window.setTimeout(() => main.current && focusFirst(main.current), 250);
+    const timer = window.setTimeout(() => {
+      // Picking Home, Library or Search (or a category tab) keeps the selection where it is.
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active !== document.body && shell.current?.contains(active)) return;
+      if (main.current) focusFirst(main.current);
+    }, 250);
     return () => window.clearTimeout(timer);
   }, [key, cursor]);
+
+  // The selection never disappears: it's drawn with a class (not :focus, which goes when the window
+  // loses focus), and if the selected element goes away, the selection comes back nearby.
+  const selected = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const onIn = (event: FocusEvent) => {
+      const target = event.target as HTMLElement;
+      if (!shell.current?.contains(target) || !target.matches("[data-bp-focus]")) return;
+      selected.current?.classList.remove("bp-selected");
+      target.classList.add("bp-selected");
+      selected.current = target;
+    };
+    const onOut = () =>
+      window.setTimeout(() => {
+        if (cursor || menu || !shell.current) return;
+        const active = document.activeElement;
+        if (active && active !== document.body && shell.current.contains(active)) return;
+        const last = selected.current;
+        if (last?.isConnected && last.getBoundingClientRect().width > 0) last.focus({ preventScroll: true });
+        else if (main.current) focusFirst(main.current);
+      }, 0);
+    document.addEventListener("focusin", onIn);
+    document.addEventListener("focusout", onOut);
+    return () => {
+      document.removeEventListener("focusin", onIn);
+      document.removeEventListener("focusout", onOut);
+    };
+  }, [cursor, menu]);
+
+  // The right stick scrolls, quickly: up and down the page, and sideways along the selected row.
+  useSticks((sticks, dt) => {
+    if (cursor || menu) return;
+    if (sticks.ry && main.current) main.current.scrollBy({ top: sticks.ry * 1800 * dt, behavior: "instant" });
+    if (sticks.rx) selected.current?.closest(".bp-row-items")?.scrollBy({ left: sticks.rx * 1800 * dt, behavior: "instant" });
+  });
 
   const back = () => (screen === "home" ? setMenu(true) : window.history.back());
   usePad((action: PadAction) => {
@@ -547,6 +547,7 @@ export function BigPicturePage() {
           {nav({ screen: "library", scope: search.scope ?? "all" }, "Library", <LibraryBig size={24} />, screen === "library")}
           {nav({ screen: "search" }, "Search", <Search size={24} />, screen === "search")}
         </nav>
+        <NowPlaying />
         <span className="bp-status">
           <Gamepad2 size={22} /> {buttons.kind === "playstation" ? "PlayStation controller" : buttons.kind ? "Xbox controller" : "No controller"}
         </span>
@@ -565,7 +566,6 @@ export function BigPicturePage() {
         {screen === "item" && search.id != null && <ItemScreen id={search.id} />}
         {screen === "search" && <SearchScreen />}
       </main>
-      <NowPlaying />
       <footer className="bp-hints">
         <span>
           <b>{buttons.a}</b> Select

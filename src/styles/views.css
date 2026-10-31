@@ -1438,3 +1438,11 @@ html.reordering * {
   box-shadow: 0 4px 12px rgba(232, 135, 58, 0.35);
   letter-spacing: 0.06em;
 }
+
+/* A category's collections, between the toolbar and its items. */
+.before-items {
+  padding: 0 40px 6px;
+}
+.before-items:empty {
+  display: none;
+}

@@ -42,12 +42,8 @@ function CategoryView({ category, collection }: { category: Category; collection
       square={category.handler === "audio"}
       handler={category.handler}
       actions={<CollectionActions category={category} path={current ? path : []} />}
-      prelude={
-        <>
-          {category.handler === "audio" && collection == null && <MusicTabs category={category} tab="albums" />}
-          <CollectionRow category={category.key} parent={collection} />
-        </>
-      }
+      prelude={category.handler === "audio" && collection == null ? <MusicTabs category={category} tab="albums" /> : undefined}
+      beforeItems={<CollectionRow category={category.key} parent={collection} />}
       empty={
         current ? (
           <div className="empty">

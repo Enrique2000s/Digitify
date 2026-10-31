@@ -267,6 +267,9 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 - **Featured today** has its own badge (an award ribbon), no longer the smart shelves' sparkle.
 - **Title bar:** Home and Library (the search box is next to them, so no separate Search button).
 - **Big Picture Home:** "Continue" sits under the categories, with smaller covers (190 px) than the other rows; the first category is selected on arrival.
+- **Collections** of a category sit under the toolbar, above its items.
+- **Big Picture, steadier:** the selection is drawn with a class (it no longer vanishes when the window loses focus) and comes back if the selected element goes away; picking Home, Library or Search (or a category tab) keeps the selection there; the right stick scrolls the page (and the selected row sideways) quickly; the music playing sits in the top bar next to Search.
+- **Big Picture cursor:** the mouse moves the round cursor (the system pointer is hidden inside the window); readers and the player opened from Big Picture always show it: the left stick points, A clicks, the D-pad and bumpers turn pages or seek, X plays or pauses, Y subtitles, View mutes, B closes.
 - **Big Picture cursor mode** is cursor only: the D-pad and stick don't move a selection, nothing is selected for you, and A clicks what the cursor points at (in the menu too).
 - **Tested** (`e2e-bigpicture`): up from the content reaches "Home", right reaches "Exit Big Picture", left "Menu", down returns to the content; the cursor over "Movies & Series" plus A opens it; a selected tile is 180 wide with 180×270 art; "Start over" sits 38 px above the controls; CDs on a shelf measure 123×123; a layout change names the 8 covers in view of 17, draws the grid at once and clears the names after; the title bar's Library opens Everything and Search focuses the search box; a coral cover color shows on an album without art; the credit is in Settings.
 

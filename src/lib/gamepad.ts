@@ -95,11 +95,13 @@ function poll(now: number) {
     sticks.rx += deadZone(rx);
     sticks.ry += deadZone(ry);
   }
-  // The left stick also moves the selection, like the D-pad.
-  if (sticks.lx < -0.6) pressed.add("left");
-  if (sticks.lx > 0.6) pressed.add("right");
-  if (sticks.ly < -0.6) pressed.add("up");
-  if (sticks.ly > 0.6) pressed.add("down");
+  // The left stick also moves the selection, like the D-pad, unless it's moving a cursor.
+  if (!cursorClaims) {
+    if (sticks.lx < -0.6) pressed.add("left");
+    if (sticks.lx > 0.6) pressed.add("right");
+    if (sticks.ly < -0.6) pressed.add("up");
+    if (sticks.ly > 0.6) pressed.add("down");
+  }
   // Start + Select together stand in for the Xbox button, which Windows may keep for its Game Bar.
   if (pressed.has("start") && pressed.has("select")) {
     if (!comboUsed) emit("guide");
@@ -148,6 +150,13 @@ if (typeof window !== "undefined") {
     connectionListeners.forEach((l) => l());
     stop();
   });
+}
+
+let cursorClaims = 0;
+/** While a cursor is shown, the left stick moves only the cursor. Returns the release. */
+export function claimSticksForCursor(): () => void {
+  cursorClaims++;
+  return () => void cursorClaims--;
 }
 
 /** Acts as if a controller button was pressed (for automated tests). */

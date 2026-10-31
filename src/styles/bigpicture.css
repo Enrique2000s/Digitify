@@ -29,7 +29,7 @@
   outline: none;
   transition: transform 160ms var(--ease), box-shadow 160ms var(--ease), background 160ms var(--ease);
 }
-.bp [data-bp-focus]:focus {
+.bp [data-bp-focus].bp-selected {
   box-shadow: 0 0 0 4px var(--bp-ring), 0 0 36px color-mix(in srgb, var(--bp-ring) 55%, transparent);
 }
 
@@ -166,11 +166,11 @@
   cursor: pointer;
 }
 /* Selected: a ring and a small lift; the art itself keeps its size. */
-.bp .bp-tile:focus {
+.bp .bp-tile.bp-selected {
   box-shadow: none;
   transform: translateY(-6px);
 }
-.bp-tile:focus .bp-tile-art {
+.bp-tile.bp-selected .bp-tile-art {
   box-shadow: 0 0 0 4px var(--bp-ring), 0 0 36px color-mix(in srgb, var(--bp-ring) 55%, transparent), 0 16px 34px rgba(0, 0, 0, 0.5);
 }
 .bp-tile-art {
@@ -233,7 +233,7 @@
   color: var(--bp-muted);
   font-weight: 700;
 }
-.bp-category:focus {
+.bp-category.bp-selected {
   transform: scale(1.05);
 }
 .bp-tabs {
@@ -283,7 +283,7 @@
   background: var(--accent);
   color: var(--accent-ink);
 }
-.bp-button:focus {
+.bp-button.bp-selected {
   transform: scale(1.04);
 }
 .bp-more {
@@ -439,28 +439,30 @@
   background: var(--accent);
   color: var(--accent-ink);
 }
-.bp-key:focus {
+.bp-key.bp-selected {
   transform: scale(1.06);
 }
 
 /* ---------------------------------------------------------------- music, the menu and the cursor */
 
 .bp-now {
-  position: absolute;
-  left: 48px;
-  bottom: 70px;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 12px 16px 12px 12px;
-  border-radius: 22px;
-  background: rgba(15, 20, 30, 0.88);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(16px);
+  gap: 8px;
+  min-width: 0;
+  margin-left: 12px;
+  padding: 6px 8px 6px 6px;
+  border-radius: 999px;
+  background: var(--bp-panel);
+}
+.bp-now .bp-round {
+  width: 44px;
+  height: 44px;
 }
 .bp-now-art {
-  width: 64px;
-  height: 64px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50% !important;
   overflow: hidden;
   border-radius: 12px;
 }
@@ -472,8 +474,10 @@
 .bp-now-text {
   display: flex;
   flex-direction: column;
-  max-width: 340px;
-  margin-right: 10px;
+  max-width: 260px;
+  min-width: 0;
+  margin-right: 4px;
+  font-size: 16px;
 }
 .bp-now-text strong,
 .bp-now-text span {
@@ -533,4 +537,11 @@
   background: color-mix(in srgb, var(--accent-bright) 55%, transparent);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(0, 0, 0, 0.35);
   pointer-events: none;
+}
+
+/* With the cursor on (and over readers and the player from Big Picture), the round cursor replaces
+   the system pointer inside the window. */
+html.bp-cursor-on,
+html.bp-cursor-on * {
+  cursor: none !important;
 }

@@ -16,7 +16,7 @@ import { BookBuilderDialog } from "../features/builder/BookBuilder";
 import { Onboarding } from "../features/onboarding/Onboarding";
 import { BuilderContext, CatalogContext } from "./catalog";
 import { AppShortcuts } from "./AppShortcuts";
-import { BigPictureLauncher } from "../features/bigpicture/Launcher";
+import { BigPictureCursor, BigPictureLauncher } from "../features/bigpicture/Launcher";
 
 export function Root() {
   const status = useAppStatus();
@@ -25,6 +25,7 @@ export function Root() {
   // Decided from the route being rendered rather than the address: while a navigation is in
   // progress the address already changed, and deciding from it would mount the old page again.
   const fullWindow = useRouterState({ select: (state) => state.matches.some((match) => match.routeId === "/lab" || match.routeId === "/read/$id" || match.routeId === "/watch/$id" || match.routeId === "/disc/$letter/$title" || match.routeId === "/bp") });
+  const bigPictureRoute = useRouterState({ select: (state) => state.matches.some((match) => match.routeId === "/bp") });
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [builderOpen, setBuilderOpen] = useState(false);
   useLibraryEvents();
@@ -47,7 +48,11 @@ export function Root() {
         <BigPictureLauncher />
         {fullWindow ? (
           // The video lab and the reader take the whole window.
-          <Outlet />
+          <>
+            <Outlet />
+            {/* From Big Picture, readers and the player are used with its cursor. */}
+            {!bigPictureRoute && <BigPictureCursor />}
+          </>
         ) : (
           <ImporterProvider enabled={libraryOpen}>
             <CatalogContext.Provider value={() => setCatalogOpen(true)}>

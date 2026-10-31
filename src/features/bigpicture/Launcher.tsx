@@ -1,5 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { enterBigPicture, useBigPicture } from "../../lib/bigpicture";
+import { usePreferences } from "../../lib/preferences";
+import { Cursor } from "./Cursor";
 import { pressShortcut, simulatePad, usePad, type PadAction } from "../../lib/gamepad";
 import type { ShortcutId } from "../../lib/shortcuts";
 
@@ -33,6 +35,7 @@ export function useControllerShortcuts(map: Partial<Record<PadAction, ShortcutId
   }, active);
 }
 
+/** In a reader the cursor does the pointing (left stick, A); the D-pad and bumpers turn pages. */
 export const READER_PAD: Partial<Record<PadAction, ShortcutId>> = {
   left: "readers.left",
   right: "readers.right",
@@ -46,16 +49,24 @@ export const READER_PAD: Partial<Record<PadAction, ShortcutId>> = {
   back: "readers.close",
 };
 
+/** In the player A clicks with the cursor; X plays or pauses, the D-pad seeks and changes the volume. */
 export const VIDEO_PAD: Partial<Record<PadAction, ShortcutId>> = {
-  accept: "video.playPause",
+  x: "video.playPause",
   left: "video.back",
   right: "video.forward",
   lb: "video.backLong",
   rb: "video.forwardLong",
   up: "video.volumeUp",
   down: "video.volumeDown",
-  x: "video.subtitles",
-  y: "video.mute",
+  y: "video.subtitles",
+  select: "video.mute",
   rt: "video.nextEpisode",
   back: "video.close",
 };
+
+/** Big Picture's round cursor over a reader or the player opened from it. */
+export function BigPictureCursor() {
+  const active = useBigPicture();
+  const { preferences } = usePreferences();
+  return active ? <Cursor speed={preferences.bigPicture.cursorSpeed} /> : null;
+}
