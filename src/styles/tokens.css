@@ -1,0 +1,129 @@
+/* Breeze design tokens (decision D-016): bright, rounded and glossy, an original style inspired by
+   mid-2000s console menus. Light is the default; dark ("night") keeps the same structure.
+   The accent is user-configurable and set at runtime by the preferences provider:
+   --accent, --accent-ink, --accent-soft, --accent-text, --accent-bright, --accent-glow, --accent-ring. */
+:root {
+  --font-ui: "Nunito Variable", "Nunito", "Segoe UI", system-ui, sans-serif;
+
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+  --radius-cover: 10px;
+  --pill: 999px;
+
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --duration: 180ms;
+
+  --accent: #127cb1;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(21, 146, 208, 0.14);
+  --accent-text: #106e9c;
+  --accent-bright: #1592d0;
+  --accent-glow: rgba(21, 146, 208, 0.32);
+  --accent-ring: rgba(21, 146, 208, 0.35);
+
+  /* Gel shading derived from the accent. */
+  --accent-hi: color-mix(in srgb, var(--accent) 58%, white);
+  --accent-lo: color-mix(in srgb, var(--accent) 84%, black);
+  --accent-edge: color-mix(in srgb, var(--accent) 76%, black);
+  --gel: linear-gradient(180deg, var(--accent-hi) 0%, var(--accent) 46%, var(--accent) 62%, var(--accent-lo) 100%);
+  --bar: linear-gradient(180deg, color-mix(in srgb, var(--accent-bright) 45%, white) 0%, var(--accent-bright) 55%, var(--accent) 100%);
+  --glow: 0 0 0 3px var(--accent-bright), 0 12px 28px var(--accent-glow);
+  --glow-sm: 0 0 0 2px var(--accent-bright), 0 6px 14px var(--accent-glow);
+}
+
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #edf1f5;
+  --stripe: rgba(255, 255, 255, 0.6);
+  --panel: #ffffff;
+  --raised: #f4f7fa;
+  --surface: rgba(255, 255, 255, 0.82);
+  --surface-hover: #f3f7fa;
+  --field: #f5f8fa;
+  --frame: linear-gradient(180deg, #ffffff 0%, #f5f7fa 100%);
+  --gloss: linear-gradient(180deg, #ffffff 0%, #f8fafc 47%, #eef2f6 53%, #fafbfc 100%);
+  --line: #d3dbe4;
+  --line-strong: #bccad7;
+  --track: #dce4eb;
+  --text: #33404d;
+  --muted: #5b6774;
+  --faint: #5f6b78;
+  --danger: #c4323a;
+  --danger-soft: rgba(196, 50, 58, 0.1);
+  --success: #1f8a4c;
+  --warning: #8a5a00;
+  --warning-soft: rgba(242, 180, 40, 0.18);
+  --raise: 0 6px 16px rgba(50, 85, 120, 0.13), inset 0 1px 0 #ffffff;
+  --raise-sm: 0 3px 8px rgba(50, 85, 120, 0.12), inset 0 1px 0 #ffffff;
+  --raise-lg: 0 16px 36px rgba(50, 85, 120, 0.2), inset 0 1px 0 #ffffff;
+  --inset-shadow: inset 0 2px 4px rgba(50, 85, 120, 0.1);
+  --pop-shadow: 0 24px 60px rgba(40, 70, 105, 0.25);
+  --cover-shadow: 0 6px 14px rgba(20, 40, 70, 0.22);
+  --scrim: rgba(40, 60, 85, 0.3);
+  --screen-gloss: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.06));
+  --screen-0: #fde8cc;
+  --screen-1: #ffd9e1;
+  --screen-2: #e5dcff;
+  --screen-3: #d2e8ff;
+  --screen-4: #d7f4e3;
+  --screen-5: #eef5fb;
+  --screen-6: #fff1c2;
+  --screen-7: #d9f0f6;
+  --shelf-wall: rgba(255, 255, 255, 0.55);
+  --plank: linear-gradient(180deg, #ffffff 0%, #eaf0f5 55%, #d8e1e9 100%);
+  --plank-top: #ffffff;
+  --plank-shadow: 0 10px 18px rgba(50, 85, 120, 0.18);
+  --hero-wash: linear-gradient(90deg, rgba(255, 255, 255, 0.88) 0%, rgba(255, 255, 255, 0.76) 60%, rgba(255, 255, 255, 0.64) 100%);
+  --hero-backdrop-opacity: 0.6;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1620;
+  --stripe: rgba(255, 255, 255, 0.025);
+  --panel: #18222e;
+  --raised: #1d2835;
+  --surface: rgba(27, 38, 51, 0.86);
+  --surface-hover: #223040;
+  --field: #16202b;
+  --frame: linear-gradient(180deg, #2a3a4d 0%, #1f2b39 100%);
+  --gloss: linear-gradient(180deg, #243345 0%, #1c2837 47%, #17212d 53%, #1d2835 100%);
+  --line: #2e3d4f;
+  --line-strong: #41546a;
+  --track: #26364a;
+  --text: #eaf2f8;
+  --muted: #a9b7c4;
+  --faint: #93a2b0;
+  --danger: #f2777a;
+  --danger-soft: rgba(242, 119, 122, 0.14);
+  --success: #6bcb8b;
+  --warning: #f2c94c;
+  --warning-soft: rgba(242, 201, 76, 0.14);
+  --raise: 0 8px 20px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --raise-sm: 0 4px 10px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --raise-lg: 0 18px 40px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --inset-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.35);
+  --pop-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  --cover-shadow: 0 8px 18px rgba(0, 0, 0, 0.5);
+  --scrim: rgba(4, 8, 14, 0.6);
+  --screen-gloss: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0));
+  --screen-0: #3a3122;
+  --screen-1: #3b2329;
+  --screen-2: #2b2742;
+  --screen-3: #1e3042;
+  --screen-4: #1f3629;
+  --screen-5: #1a2633;
+  --screen-6: #3a3420;
+  --screen-7: #17323a;
+  --shelf-wall: rgba(255, 255, 255, 0.03);
+  --plank: linear-gradient(180deg, #2f4155 0%, #223142 60%, #1a2633 100%);
+  --plank-top: #44596f;
+  --plank-shadow: 0 12px 22px rgba(0, 0, 0, 0.55);
+  --hero-wash: linear-gradient(90deg, rgba(15, 22, 32, 0.9) 0%, rgba(15, 22, 32, 0.78) 60%, rgba(15, 22, 32, 0.64) 100%);
+  --hero-backdrop-opacity: 0.55;
+}

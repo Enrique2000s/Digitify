@@ -1,0 +1,21 @@
+# Dependencies and build output
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# Helper engines and tools fetched by scripts/fetch-deps.ps1 (pinned + hash-verified, never committed)
+src-tauri/binaries/
+tools/
+.cache/
+
+# Generated test media (scripts/make-samples.ps1)
+samples/
+
+# Logs and local editor state
+*.log
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,157 @@
+# Architecture
+
+This page describes the approved direction (decisions D-001 to D-014). It is updated as each subsystem is built.
+
+## Overview
+
+```
+Digitify.exe (Tauri 2)
+├─ UI · React + TypeScript, rendered by WebView2
+│    Dashboard · library views (grid/shelf/list/detail, virtualized)
+│    Page reader (PDF/images/comics) · EPUB reader · player controls
+│        ▲ typed commands & events · private digitify:// media protocol
+│        ▼
+└─ Core · Rust
+     Library DB (SQLite + full-text search) · import & job queue
+     Metadata extractors · thumbnail cache · archives · PDF renderer
+     Relinker · backups · player controller · optical service · CD ripper
+        │ JSON IPC (named pipe)            │ pipes
+        ▼                                  ▼
+     mpv.exe: video, music, discs       ffmpeg / ffprobe: probing, thumbnails, encoding, remux
+```
+
+## Processes
+| Process | Role |
+|---|---|
+| `digitify.exe` | Tauri host: the Rust core and the WebView2 UI |
+| `mpv.exe` | One instance per active player. Controlled over JSON IPC on a named pipe. For video, it draws into a child "video host" window kept underneath the transparent web UI. |
+| `ffmpeg.exe` / `ffprobe.exe` | Short-lived helpers for probing, thumbnails, encoding and remuxing |
+
+## Rust core (`src-tauri/src`)
+| Module | Responsibility |
+|---|---|
+| `setup` | App status, choosing or opening the library folder, preferences, background maintenance (missing-file check) |
+| `config` | Machine-specific `config.json` (library path, interface preferences) in `%LOCALAPPDATA%\com.digitify.desktop`, or `DIGITIFY_CONFIG_DIR` |
+| `library_folder` | Library folder layout and cloud-sync detection |
+| `db` | SQLite connection, WAL mode, migrations tracked by `PRAGMA user_version` (with a snapshot before upgrading an existing library), snapshots, and swapping in a restored database |
+| `backup` | Library backups in `backups\` (`library-YYYYMMDD-HHMMSS-<kind>.db`); validate and restore, keeping the current state as a backup first |
+| `library` | Catalog queries (views, dashboard, details, full-text search, "select all" ids) and edits (items, people, physical copies, favorites, artwork, removal) |
+| `organize` | Nested collections (tree queries with recursive CTEs, moving without cycles, deleting by moving contents up), shelves, tags (merge on rename, pruned when unused), and bulk edits applied in one transaction |
+| `categories` | The user's own categories and custom fields (`field_definitions`; values in `metadata.custom`), category order and visibility |
+| `import` | Background import jobs: scan, then in parallel fingerprint, skip duplicates and extract metadata, then save. Also attaches files to existing items. |
+| `formats` | Embedded metadata readers: EPUB OPF, ComicInfo.xml, audio tags (lofty), ffprobe |
+| `artwork` | Artwork cache: cover (≤1400 px) and thumb (400 px wide) JPEGs keyed by content hash, plus average color |
+| `files` | Fingerprints, volume serials, safe names, natural ordering, reveal in Explorer, missing-file check, relinking moved files by content |
+| `tools` | Locating helper programs (mpv, ffmpeg, ffprobe) and running them without console windows |
+| `media_protocol` | The `digitify` URI scheme: artwork, ambient tracks (range requests); files and pages later |
+| `ambient` | Ambient music from the user's files, folders and library albums (D-016) |
+| `player` | mpv process lifecycle, IPC, video host window (PoC 1; becomes the Phase 3 player) |
+| `dev` | Phase 0 video lab harness (Settings › Developer) |
+
+Planned modules: `archives` (CBR/CB7, page serving), `pdf` (PDFium), `optical`, `ripper`, `backup`.
+
+### Import pipeline
+1. **Scan** the picked or dropped paths into candidates:
+   - one per ebook, PDF, comic archive or video
+   - one per folder of images, unless that folder also holds audio or video (then the images are artwork)
+   - one per album, grouping tracks by album artist + album tag, or folder + album when there is no album artist
+2. **Prepare** each candidate in parallel (rayon, 8 at a time):
+   - fingerprint each file (size + sampled BLAKE3) and drop files already in the library
+   - read embedded metadata and artwork
+3. **Save** each one:
+   - copy into `media\<Category>\[<Item>\]` in Copy mode
+   - store the artwork
+   - insert the item, people, parts and a digital version with its files, then reindex for search
+   - progress is reported through `import-progress` events, and `library-changed` tells views to refresh
+
+## UI (`src`)
+React + TypeScript via Vite, organized by feature:
+
+| Path | Contents |
+|---|---|
+| `app/` | Router (hash history) and root layout |
+| `components/` | Header capsule with the music capsule, category strip, "Add to library" menu, cards, covers, dialogs, switch |
+| `features/` | Home (category tiles, your shelves), library views (virtualized grid/list/shelf with multi-select and the bulk bar), organize (collections, shelves, tags, move dialogs), item page and forms (with custom fields), import UI, onboarding, settings (Categories, Sound) |
+| `lib/` | Typed API, TanStack Query hooks, paged item cache, preferences (theme/accent/motion/music), accent contrast math, formatting |
+| `lib/ambient/` | Ambient music and interface sounds: the "Morning Lounge" composition and synth, the playback engine, and its React provider |
+| `styles/` | Breeze tokens and app styles (D-016); the Nunito font is bundled via Fontsource, never loaded online |
+| `poc/` | Video lab |
+
+### Ambient music and interface sounds (D-016)
+- **One engine per session** (`lib/ambient/engine.ts`), driven by the provider from preferences. It keeps playing across screens, including the video lab.
+- **"Morning Lounge"** (`lounge.ts`), Digitify's own theme, is synthesized live with Web Audio:
+  - a small additive synth, with a noise shaker and a convolution reverb
+  - notes scheduled 250 ms ahead of the audio clock from a 40 ms timer; after a stall, missed steps are skipped rather than played at once
+  - every other 8-bar pass plays the fixed theme; the passes in between improvise from chord tones
+  - each voice disconnects its nodes when it ends, so long sessions don't accumulate audio nodes
+- **Interface sounds** use the same audio context through their own gain:
+  - hover blips on elements marked `data-blip` (tiles, covers, category pills), at most one every 70 ms
+  - a press tone on buttons, links, menu items and switches (mouse, Enter or Space)
+- **The user's own music** plays through an `<audio>` element:
+  - `ambient_playlist` (Rust) resolves the chosen files, folders (walked in natural order) and library albums (the primary digital copy's files) into a playlist of up to 10,000 playable files
+  - it remembers those files under a new generation number; the UI streams them from `/ambient/<generation>/<index>`, so older URLs stop working when the list changes
+  - track titles come from tags (`ambient_track_info`); an unplayable file is skipped, and playback stops only if every file fails
+  - volume follows a squared curve for recorded music, and fades are applied on play, pause and source changes
+- **Pausing:** music pauses while the window is minimized (unless turned off) and while anything holds it (`useAmbientHold`: the video lab now, every player from Phase 3).
+- **Idle:** the audio context is suspended after 5 s with nothing synthesized playing, and resumes on the next sound.
+- **Autoplay:** WebView2 starts audio without a click because wry passes `--autoplay-policy=no-user-gesture-required` by default. If audio is ever blocked, the engine starts on the first click or key press, and the capsule says so.
+
+## Data model
+```
+Category       Books · Comics · Manga · Movies & Series · Music · your own…
+ │               icon, custom fields, default reader/player, layouts, sorting
+ └ Collection    any depth: series, franchise, plain folder (Manga ▸ One Piece)
+    └ Item       the work: "One Piece Vol. 01", "Blade Runner", "Abbey Road"
+       ├ Versions  physical: hardcover, DVD, 4K Blu-ray, CD (edition, condition, location)
+       │           digital: CBZ, MKV, FLAC (files, referenced or copied)
+       └ Parts     optional: chapters, episodes, tracks, each with its own progress
+Shelves & tags: cross-cutting groups; one item can sit on many shelves
+```
+The schema lives in `src-tauri/migrations/`. Tables: `categories`, `field_definitions`, `collections`, `items`, `people`, `item_people`, `parts`, `versions`, `files`, `progress`, `bookmarks`, `shelves`, `shelf_items`, `tags`, `item_tags`, `settings` and `items_fts` (full-text index).
+
+## Media serving
+On Windows, the UI loads library resources from `http://digitify.localhost/<route>`:
+- `/thumb/<key>` and `/cover/<key>`: cached artwork
+- `/ambient/<generation>/<index>`: a track of the current ambient playlist (only files the user chose), served in 1 MiB HTTP range slices
+- `/file/<id>`: a library file, with HTTP Range support (Phase 2, for readers and players)
+- `/page/<file>/<n>`: a page from an archive or PDF (Phase 2)
+
+Only resources registered in the library are served. Paths never come straight from the UI.
+
+## Security
+- The UI only gets `core:default`, logging and Digitify's own commands (Tauri capabilities).
+- The production Content Security Policy only allows scripts from the app bundle.
+- Media files are treated as untrusted input:
+  - EPUB content runs in sandboxed frames with scripts disabled (Phase 2).
+  - Archive entries are validated against path traversal and size limits.
+- Core features make no network calls (D-008).
+
+## Storage
+| Location | Contents |
+|---|---|
+| Library folder (chosen at first run) | `library.db`, `cache\covers\`, `cache\thumbs\`, `media\` (copies made by Copy imports), `backups\` |
+| `%LOCALAPPDATA%\com.digitify.desktop\` | `config.json` (library path, preferences), WebView2 profile, `logs\` |
+
+## Helper engines
+`scripts/fetch-deps.ps1` downloads pinned builds, verifies their SHA-256 hashes and refuses any build that contains DVD/Blu-ray decryption code (D-007). Binaries live in `src-tauri/binaries/` (git-ignored) and are copied next to the app at build time.
+
+| Engine | Pinned build | Notes |
+|---|---|---|
+| mpv | 0.41.0, official x86_64 MSVC release (`mpv.exe` + `vulkan-1.dll`, ~56 MB) | Plays every file format we need. It contains no CSS/AACS decryption code and no `dvd://`, `bd://` or `cdda://` modules. |
+| FFmpeg | 9.0.2, BtbN LGPL shared build | Development tool for now (test media). Probing and thumbnails come in Phase 1. |
+
+Because the bundled mpv has no disc modules, Phase 4 plans to play unprotected discs through Digitify's own disc layer:
+- Rust reads the disc structure (DVD IFO files, Blu-ray MPLS playlists).
+- mpv plays the unencrypted VOB/M2TS streams directly.
+- Audio CDs are read sector by sector by the ripper.
+
+This avoids GPL disc libraries and any decryption code. It will be confirmed with the project owner at the start of Phase 4.
+
+### Embedding mpv video under the web UI
+Proven in PoC 1; see STATUS.md.
+
+1. The core creates a child window (`DigitifyVideoHost`) at the bottom of the z-order, below the WebView2 child window. The host must **not** have `WS_CLIPSIBLINGS`: with it, Windows clips the video away under the WebView.
+2. mpv is started with `--wid` pointing at that host, so it renders inside it.
+3. While a video is open, the page background is transparent and the React controls float above the picture.
+4. The UI reports the video area in physical pixels (`player_set_rect`).
+5. The core moves the host window and stretches mpv's window to fill it.

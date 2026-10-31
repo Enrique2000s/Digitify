@@ -1,0 +1,46 @@
+[package]
+name = "digitify"
+version = "0.1.0"
+description = "Digitify: your physical collection, digitally preserved and beautifully organized"
+authors = ["Digitify contributors"]
+edition = "2021"
+publish = false
+
+[lib]
+name = "digitify_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-log = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+thiserror = "2"
+rusqlite = { version = "0.41", features = ["bundled"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "bmp", "tiff"] }
+tokio = { version = "1", features = ["net", "io-util", "sync", "time"] }
+walkdir = "2"
+lofty = "0.25"
+zip = "9"
+roxmltree = "0.21"
+blake3 = "1"
+rayon = "1"
+trash = "5"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Storage_FileSystem",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+# Optimize dependencies even in debug builds: SQLite, image decoding and hashing are slow unoptimized.
+[profile.dev.package."*"]
+opt-level = 2
