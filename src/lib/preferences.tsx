@@ -33,6 +33,22 @@ export interface ReaderPreferences {
   transition: "slide" | "fade" | "none";
 }
 
+/** How reflowable ebooks are laid out (EPUB, MOBI, AZW3, FB2). */
+export interface EbookPreferences {
+  /** One column, two facing columns when the window is wide enough, or one long scroll. */
+  layout: "single" | "spread" | "scroll";
+  theme: "paper" | "sepia" | "night";
+  /** The book's own fonts, or one font throughout. */
+  font: "book" | "serif" | "sans";
+  /** Text size, percent. */
+  size: number;
+  /** Line spacing. */
+  spacing: number;
+  /** How wide a column of text may grow. */
+  width: "narrow" | "medium" | "wide";
+  justify: boolean;
+}
+
 export interface Preferences {
   /** The visual identity the appearance settings belong to. */
   style: "breeze";
@@ -49,6 +65,7 @@ export interface Preferences {
   /** Soft tones when pointing at and pressing things. */
   interfaceSounds: boolean;
   reader: ReaderPreferences;
+  ebook: EbookPreferences;
 }
 
 export const DEFAULT_MUSIC: MusicPreferences = {
@@ -64,6 +81,19 @@ export const DEFAULT_MUSIC: MusicPreferences = {
 
 export const DEFAULT_READER: ReaderPreferences = { mode: "single", fit: "page", coverAlone: true, transition: "slide" };
 
+export const EBOOK_SIZES = [70, 80, 90, 100, 110, 120, 135, 150, 175, 200];
+export const EBOOK_SPACINGS = [1.3, 1.5, 1.8];
+
+export const DEFAULT_EBOOK: EbookPreferences = {
+  layout: "spread",
+  theme: "paper",
+  font: "book",
+  size: 100,
+  spacing: 1.5,
+  width: "medium",
+  justify: true,
+};
+
 export const DEFAULT_PREFERENCES: Preferences = {
   style: "breeze",
   theme: "light",
@@ -76,6 +106,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   music: DEFAULT_MUSIC,
   interfaceSounds: true,
   reader: DEFAULT_READER,
+  ebook: DEFAULT_EBOOK,
 };
 
 type Raw<T> = { [K in keyof T]?: unknown };
@@ -119,6 +150,19 @@ function sanitizeReader(raw: unknown): ReaderPreferences {
   };
 }
 
+function sanitizeEbook(raw: unknown): EbookPreferences {
+  const pick = picker(raw, DEFAULT_EBOOK);
+  return {
+    layout: pick("layout", (v) => v === "single" || v === "spread" || v === "scroll"),
+    theme: pick("theme", (v) => v === "paper" || v === "sepia" || v === "night"),
+    font: pick("font", (v) => v === "book" || v === "serif" || v === "sans"),
+    size: pick("size", (v) => EBOOK_SIZES.includes(v as number)),
+    spacing: pick("spacing", (v) => EBOOK_SPACINGS.includes(v as number)),
+    width: pick("width", (v) => v === "narrow" || v === "medium" || v === "wide"),
+    justify: pick("justify", isBoolean),
+  };
+}
+
 function sanitize(raw: unknown): Preferences {
   const pick = picker(raw, DEFAULT_PREFERENCES);
   // Settings saved under the earlier Cinematic identity (D-015) start from Breeze's own theme and
@@ -136,6 +180,7 @@ function sanitize(raw: unknown): Preferences {
     music: sanitizeMusic((raw as Raw<Preferences>)?.music),
     interfaceSounds: pick("interfaceSounds", isBoolean),
     reader: sanitizeReader((raw as Raw<Preferences>)?.reader),
+    ebook: sanitizeEbook((raw as Raw<Preferences>)?.ebook),
   };
 }
 

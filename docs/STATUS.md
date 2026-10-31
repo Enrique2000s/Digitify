@@ -123,10 +123,34 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 | Page serving | ✅ | `/page/<copy>/<page>?w=<width>`: large pages are scaled down to the width shown (in 400 px steps) and the latest 128 MB are cached. PDF pages are rendered by PDFium. |
 | Full screen and window | ✅ | Full screen (F or the button). The reader's controls hide after a moment and come back when the mouse moves. |
 | Music while reading | ✅ | Ambient music pauses while the reader is open ("Pause while reading" in Settings › Sound, on by default). |
-| EPUB, MOBI, AZW3, FB2 | ⬜ | The reader explains that ebooks come next (foliate-js, D-014). |
+| EPUB, MOBI, AZW3, FB2 | ✅ | The ebook reader (foliate-js, D-014). One page, two facing pages when the window is wide enough, or a continuous scroll. Fixed-layout EPUBs keep the publisher's layout. |
+| Text and themes | ✅ | Text size (70–200%, also + and − or Ctrl+wheel), font (the book's own, Serif or Sans), line spacing, page width and justification. Paper, Sepia and Night themes; Night repaints the book's own colors so text stays readable. Remembered for all books. |
+| Contents and position | ✅ | The book's table of contents with the current chapter marked, a position slider, and the chapter and percentage in the title. Turning pages: arrow keys (they follow the book's direction), Page Up/Down, Space, the wheel, or clicking either side. |
+| Ebook progress | ✅ | Saved as a CFI as you read and resumed on the next open; feeds "Continue reading" and "Pick up where you left off" like the page reader. |
+| Ebook safety | ✅ | Scripts and inline handlers in books never run. Website links show their address with "Copy address" instead of opening. Copy-protected books (Adobe, Readium LCP, Apple, Kindle) are refused with an explanation; Digitify doesn't remove DRM. |
 | CBR, CB7, CBT | ✅ | D-017: RAR through RARLAB's UnRAR code, 7z read-only, TAR. Archives are recognized by their contents, so a RAR named `.cbz` still opens. At import they get a cover from their first page, a page count and their ComicInfo.xml, like CBZ. |
 | Bookmarks, night mode, brightness, backgrounds | ⬜ | |
 | Series navigation, image-set book builder | ⬜ | |
+
+### How the ebook reader was tested (2026-10-31)
+- `cargo test`: 25 unit tests pass. The new ones:
+  - copy protection: an EPUB with only font obfuscation opens; one that encrypts a chapter with AES is refused; a MOBI header declaring encryption is refused; a missing file isn't mistaken for a protected one
+  - ebook files and their types are recognized
+- `scripts\make-samples.ps1`:
+  - the sample EPUB now has three chapters long enough to turn pages
+  - chapter 1 carries a script and an inline handler that must never run, and chapter 2 links to a website
+  - new: `The Night Ferry.mobi` (a hand-written Mobipocket 6 file with a table of contents) and `The Clockmaker's Garden.fb2`
+- End-to-end run of the release build on a fresh library (with a stand-in protected EPUB added):
+  1. The EPUB's item page offers **Read**. It opens in two pages at 17%. The book's script and inline handler did not run, and the console shows them blocked by the Content Security Policy. The policy sent with the page has no nonce on `style-src`, so book styles still apply.
+  2. Two page turns reach chapter 2 (51%). Contents lists the three chapters with chapter 2 marked, and picking one goes there.
+  3. Clicking the website link shows its address and opens nothing.
+  4. Night theme and 120% text: the book's background becomes `rgb(19, 24, 30)`, its text `rgb(205, 213, 221)`, and paragraphs 19.2 px.
+  5. Scroll and one-page layouts keep the place. Closing saves 42%, and opening again resumes in chapter 2 at 42%.
+  6. The MOBI opens; its contents list both chapters and lead to chapter 2. The FB2 opens, turns pages, and lists its sections.
+  7. The protected EPUB is refused with the copy-protection message.
+  8. The page reader and comic-archive tests still pass after their controls moved to shared code.
+- **Not covered yet:** AZW3 (KF8) files, which are much harder to write by hand than MOBI, and real-world books with complex styling. Both need the owner's own DRM-free books.
+- **Found and fixed while testing:** the selected option in the reader's dark controls used the light theme's accent text and was hard to read; both readers now use the dark theme's accent.
 
 ### How comic archives were tested (2026-10-31)
 - `cargo test`: 23 unit tests pass. The new ones:
@@ -146,7 +170,7 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
   3. Closing leads back to the item, which offers "Continue reading · 83%". Opening again resumes at page 5.
   4. A folder of scans and the PDF open; PDF pages are drawn by PDFium. A page requested at 300 px wide is scaled down (38 KB → 12 KB).
   5. Home lists "Pick up where you left off" and "Recently opened".
-  6. An EPUB is refused with an explanation.
+  6. An EPUB was refused with an explanation (before the ebook reader existed).
   7. A PDF imported before PDFium was added got its cover and page count from the background task.
 - **Found and fixed while testing:**
   - The sample PDF generator wrote a broken cross-reference table.
@@ -157,7 +181,7 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 |---|---|
 | Core library (Phase 1) | 🔄 See above |
 | PDF, image and comic reader | 🔄 Phase 2: page reader done (CBZ, CBR, CB7, CBT, images, PDF); transitions and tools to come |
-| EPUB reader | ⬜ Phase 2 |
+| EPUB reader | ✅ Phase 2: EPUB, MOBI, AZW3 and FB2 |
 | Video player | ⬜ Phase 3 (embedding proven) |
 | Music player and playlists | ⬜ Phase 3 |
 | Optical drives, audio CD, DVD/Blu-ray | ⬜ Phase 4 |
@@ -168,13 +192,15 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 - **Protected discs:** most commercial DVDs (CSS) and virtually all commercial Blu-rays (AACS/BD+) can be detected and cataloged but not played or imported (D-007).
 - **Disc playback engine:** the bundled mpv has no disc modules, so Phase 4 will use Digitify's own disc layer (see ARCHITECTURE.md).
 - **Password-protected PDFs:** they can't be opened; the reader says so.
-- **Other ebook formats:** MOBI/AZW3/FB2 import without embedded metadata and can't be read yet; they arrive with the ebook reader later in Phase 2.
+- **MOBI/AZW3/FB2 details at import:** they import with the title from the file name and no cover; their own title, author and cover show only inside the reader.
+- **Ebook fonts:** "Serif" and "Sans" use Windows' own Georgia and Segoe UI. Fixed-layout EPUBs ignore text settings.
+- **Website links in books:** Digitify doesn't open them (no network use, D-008); it shows the address to copy.
 - **Encrypted comic archives:** password-protected RAR, 7z or ZIP archives can't be opened.
 - **Solid RAR and 7z archives:** reading page by page means unpacking the pages before it, so late pages of large solid archives take longer. Most CBR files aren't solid.
 - **Partial album imports:** importing an album whose tracks are partly in the library adds the new tracks as a separate item. Merging into the existing album is not built yet.
 - **Window snap layouts:** with the custom title bar, the Windows 11 snap-layout flyout on the maximize button is not available. Win+Z and dragging to screen edges still work.
 - **Page curl:** realistic page curl will be limited to fixed-layout pages (Phase 2).
-- **DRM-protected ebooks:** Kindle and Adobe DRM ebooks cannot be opened.
+- **DRM-protected ebooks:** Kindle, Adobe, Readium LCP and Apple DRM ebooks can't be opened; the reader says why (D-007).
 - **HEIC photos:** need Microsoft's HEIF extension, or conversion at import.
 - **Disc testing:** the development PC has no optical drive yet.
 - **Windows 10:** best effort only.

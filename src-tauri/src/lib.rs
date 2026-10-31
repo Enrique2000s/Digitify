@@ -8,6 +8,7 @@ mod categories;
 mod config;
 mod db;
 mod dev;
+mod ebooks;
 mod error;
 mod files;
 mod formats;
@@ -139,6 +140,7 @@ pub fn run() {
             organize::items_bulk,
             pages::reader_open,
             pages::progress_save,
+            ebooks::ebook_progress_save,
             categories::category_create,
             categories::category_update,
             categories::category_delete,

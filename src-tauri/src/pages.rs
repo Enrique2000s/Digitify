@@ -18,11 +18,14 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::error::{AppError, AppResult};
 use crate::library::{blocking, with_library};
-use crate::{archives, pdf, AppState, Library};
+use crate::{archives, ebooks, pdf, AppState, Library};
 
 const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp", "gif", "bmp", "tif", "tiff"];
 const BOOKS_KEPT: usize = 4;
 const RENDERED_BYTES: usize = 128 * 1024 * 1024;
+
+pub(crate) const MISSING_FILES: &str =
+    "Some of this item's files can't be found. If they're on a drive that isn't connected, connect it; if they moved, use “Find moved files…” on Home.";
 
 #[derive(Debug)]
 pub enum Source {
@@ -62,7 +65,7 @@ fn extension(path: &Path) -> String {
 fn unsupported(paths: &[PathBuf]) -> AppError {
     let ext = paths.first().map(|p| extension(p)).unwrap_or_default();
     AppError::msg(match ext.as_str() {
-        "epub" | "mobi" | "azw" | "azw3" | "fb2" => "Ebooks (EPUB, MOBI, AZW3, FB2) get their own reader in the next part of Phase 2.",
+        "epub" | "mobi" | "azw" | "azw3" | "fb2" => "Ebooks open in the ebook reader, not page by page.",
         _ => "This copy isn't something Digitify can show page by page yet.",
     })
 }
@@ -192,9 +195,7 @@ impl PageEngine {
             return Ok(book);
         }
         if rows.iter().zip(&paths).any(|((_, _, status), path)| status != "ok" || !path.exists()) {
-            return Err(AppError::msg(
-                "Some of this item's files can't be found. If they're on a drive that isn't connected, connect it; if they moved, use “Find moved files…” on Home.",
-            ));
+            return Err(AppError::msg(MISSING_FILES));
         }
         let source = classify(&paths)?;
         let book = Arc::new(Book { signature, sizes: sizes(&source)?, source });
@@ -246,9 +247,17 @@ pub struct ReaderBook {
     pub position: usize,
 }
 
-/// Opens an item for reading: its first digital copy that can be shown page by page.
+/// What `reader_open` found: pages for the page reader, or an ebook for the ebook reader.
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Opened {
+    Pages(ReaderBook),
+    Ebook(ebooks::Ebook),
+}
+
+/// Opens an item for reading: its first digital copy that is an ebook or can be shown page by page.
 #[tauri::command]
-pub async fn reader_open(app: AppHandle, id: i64) -> AppResult<ReaderBook> {
+pub async fn reader_open(app: AppHandle, id: i64) -> AppResult<Opened> {
     blocking(move || {
         let library = app.state::<AppState>().library()?;
         let engine = app.state::<PageEngine>();
@@ -257,7 +266,7 @@ pub async fn reader_open(app: AppHandle, id: i64) -> AppResult<ReaderBook> {
     .await
 }
 
-fn open_book(library: &Library, engine: &PageEngine, id: i64) -> AppResult<ReaderBook> {
+fn open_book(library: &Library, engine: &PageEngine, id: i64) -> AppResult<Opened> {
     let (title, direction, versions, locator) = library.db.with(|conn| {
         let (title, metadata, settings): (String, String, String) = conn
             .query_row(
@@ -287,35 +296,42 @@ fn open_book(library: &Library, engine: &PageEngine, id: i64) -> AppResult<Reade
     if versions.is_empty() {
         return Err(AppError::msg("There are no digital files to read yet. Use “Files” under Your copies to add a scan, an ebook or a PDF."));
     }
+    let locator = locator.and_then(|locator| serde_json::from_str::<Value>(&locator).ok());
     let mut failure = None;
     let mut opened = None;
     for version in versions {
-        match engine.book(library, version) {
+        let found = ebooks::file(library, version).and_then(|ebook| match ebook {
+            Some(path) => ebooks::open(id, version, title.clone(), &path, locator.as_ref()).map(Opened::Ebook),
+            None => engine.book(library, version).map(|book| {
+                let position = locator
+                    .as_ref()
+                    .and_then(|locator| locator.get("page").and_then(Value::as_u64))
+                    .map(|page| (page as usize).min(book.sizes.len().saturating_sub(1)))
+                    .unwrap_or(0);
+                Opened::Pages(ReaderBook {
+                    item_id: id,
+                    version_id: version,
+                    title: title.clone(),
+                    direction: direction.clone(),
+                    pages: book.sizes.iter().map(|&(width, height)| PageSize { width, height }).collect(),
+                    position,
+                })
+            }),
+        });
+        match found {
             Ok(book) => {
-                opened = Some((version, book));
+                opened = Some(book);
                 break;
             }
             Err(e) => failure = failure.or(Some(e)),
         }
     }
-    let (version, book) = opened.ok_or_else(|| failure.unwrap_or_else(|| AppError::msg("Nothing to read.")))?;
-    let position = locator
-        .and_then(|locator| serde_json::from_str::<Value>(&locator).ok())
-        .and_then(|locator| locator.get("page").and_then(Value::as_u64))
-        .map(|page| (page as usize).min(book.sizes.len().saturating_sub(1)))
-        .unwrap_or(0);
+    let opened = opened.ok_or_else(|| failure.unwrap_or_else(|| AppError::msg("Nothing to read.")))?;
     library.db.with(|conn| {
         conn.execute("UPDATE items SET last_opened_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1", [id])?;
         Ok(())
     })?;
-    Ok(ReaderBook {
-        item_id: id,
-        version_id: version,
-        title,
-        direction,
-        pages: book.sizes.iter().map(|&(width, height)| PageSize { width, height }).collect(),
-        position,
-    })
+    Ok(opened)
 }
 
 /// Remembers the page reached; the last page counts as finished.
@@ -355,7 +371,7 @@ mod tests {
         let p = |s: &str| PathBuf::from(s);
         assert!(matches!(classify(&[p("a.pdf")]), Ok(Source::Pdf(_))));
         assert!(matches!(classify(&[p("1.jpg"), p("2.PNG")]), Ok(Source::Images(_))));
-        assert!(classify(&[p("a.epub")]).unwrap_err().to_string().contains("Ebooks"));
+        assert!(classify(&[p("a.epub")]).unwrap_err().to_string().contains("ebook reader"));
         assert!(classify(&[p("1.jpg"), p("notes.txt")]).is_err());
     }
 }

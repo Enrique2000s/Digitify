@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ArrowLeft, ArrowLeftRight, ChevronLeft, ChevronRight, Columns2, Expand, RectangleVertical, Rows3, Shrink, ZoomIn, ZoomOut } from "lucide-react";
 import { api, pageUrl, type ReaderBook } from "../../lib/api";
 import { useAmbient, useAmbientHold } from "../../lib/ambient/AmbientProvider";
+import { accentVariables } from "../../lib/color";
 import { usePreferences, type ReaderPreferences } from "../../lib/preferences";
 import { libraryChanged } from "../../lib/queries";
 import { WindowButtons } from "../../components/TitleBar";
+import { useAutoHide, useFullscreen } from "./chrome";
 import { buildViews, stripWidth, viewHeight, viewOf, type Box } from "./layout";
 
-const appWindow = getCurrentWindow();
 const ZOOMS = [1, 1.25, 1.5, 2, 2.5, 3, 4];
 const STRIP_GAP = 8;
 
@@ -66,8 +66,8 @@ export function PageReader({ book, onClose }: { book: ReaderBook; onClose: () =>
   const [page, setPage] = useState(Math.min(book.position, total - 1));
   const [direction, setDirection] = useState(book.direction);
   const [zoom, setZoom] = useState(1);
-  const [chrome, setChrome] = useState(true);
-  const [fullscreen, setFullscreen] = useState(false);
+  const { shown: chrome, setShown: setChrome, poke, barProps } = useAutoHide();
+  const [fullscreen, toggleFullscreen] = useFullscreen();
   const [motion, setMotion] = useState<"next" | "prev" | null>(null);
   const stage = useRef<HTMLDivElement>(null);
   const box = useBox(stage);
@@ -129,42 +129,6 @@ export function PageReader({ book, onClose }: { book: ReaderBook; onClose: () =>
       return ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, (index < 0 ? 0 : index) + step))];
     });
   }, []);
-
-  const toggleFullscreen = useCallback(async () => {
-    const next = !(await appWindow.isFullscreen());
-    await appWindow.setFullscreen(next);
-    setFullscreen(next);
-  }, []);
-  // Leaving the reader leaves full screen too.
-  useEffect(
-    () => () => {
-      void appWindow.isFullscreen().then((on) => {
-        if (on) void appWindow.setFullscreen(false);
-      });
-    },
-    [],
-  );
-
-  const hideTimer = useRef(0);
-  const holdChrome = useRef(false);
-  const poke = useCallback(() => {
-    setChrome(true);
-    window.clearTimeout(hideTimer.current);
-    hideTimer.current = window.setTimeout(() => !holdChrome.current && setChrome(false), 2600);
-  }, []);
-  useEffect(() => {
-    poke();
-    return () => window.clearTimeout(hideTimer.current);
-  }, [poke]);
-  const barProps = {
-    onMouseEnter: () => {
-      holdChrome.current = true;
-    },
-    onMouseLeave: () => {
-      holdChrome.current = false;
-      poke();
-    },
-  };
 
   const toggleDirection = () => {
     const next = rtl ? "ltr" : "rtl";
@@ -315,7 +279,7 @@ export function PageReader({ book, onClose }: { book: ReaderBook; onClose: () =>
   const sliderFill = total > 1 ? (page / (total - 1)) * 100 : 100;
 
   return (
-    <div className={`reader${chrome ? "" : " calm"}`} onMouseMove={poke}>
+    <div className={`reader${chrome ? "" : " calm"}`} style={accentVariables(preferences.accent, "dark") as CSSProperties} onMouseMove={poke}>
       <div
         ref={stage}
         className={`reader-stage${scroll ? " strip" : ""}`}

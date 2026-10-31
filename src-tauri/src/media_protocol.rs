@@ -10,7 +10,7 @@ use tauri::{AppHandle, Manager, Runtime, UriSchemeContext, UriSchemeResponder};
 
 use crate::ambient::{self, AmbientState};
 use crate::pages::PageEngine;
-use crate::AppState;
+use crate::{ebooks, AppState};
 
 type Routed = Result<Response<Vec<u8>>, (StatusCode, String)>;
 
@@ -38,6 +38,7 @@ fn route<R: Runtime>(app: &AppHandle<R>, request: &Request<Vec<u8>>) -> Routed {
         (Some("cover"), Some(key)) => artwork(app, key, true),
         (Some("ambient"), Some(track)) => ambient_track(app, track, request),
         (Some("page"), Some(page)) => book_page(app, page, request),
+        (Some("book"), Some(version)) => ebook_file(app, version, request),
         _ => Err((StatusCode::NOT_FOUND, format!("unknown resource {path}"))),
     }
 }
@@ -103,6 +104,19 @@ fn book_page<R: Runtime>(app: &AppHandle<R>, page: &str, request: &Request<Vec<u
         .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
         .body(page.bytes.clone())
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+/// The ebook file of a digital copy, `book/<version>`, for the ebook reader (see ebooks.rs).
+fn ebook_file<R: Runtime>(app: &AppHandle<R>, version: &str, request: &Request<Vec<u8>>) -> Routed {
+    let version: i64 = version.parse().map_err(|_| (StatusCode::BAD_REQUEST, "invalid copy".to_string()))?;
+    let library = app
+        .state::<AppState>()
+        .library()
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+    let path = ebooks::file(&library, version)
+        .map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?
+        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("copy {version} isn't an ebook")))?;
+    stream(&path, ebooks::mime_type(&path), request)
 }
 
 /// Serves a file in slices, the way media elements expect (HTTP range requests), so a long track

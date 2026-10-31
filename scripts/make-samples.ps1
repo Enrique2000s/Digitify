@@ -5,7 +5,7 @@
 .DESCRIPTION
   samples\sample-1080p.mkv   60 s 1080p test pattern, two audio tracks (English and Spanish test
                              tones), English SRT subtitles and three chapters.
-  samples\import-test\       A small library to import: an EPUB with cover and description, a PDF,
+  samples\import-test\       A small library to import: an EPUB with cover, description and chapters, a PDF,
                              a folder of "photographed" pages, a manga CBZ with ComicInfo.xml, a
                              plain comic CBZ, a three-track FLAC album with cover art, and the video.
   samples\attach-test\       A PDF "scan" for testing "add files to an existing item".
@@ -121,7 +121,34 @@ $comicPages = Join-Path $work 'comic'
 New-Item -ItemType Directory -Force $comicPages | Out-Null
 Invoke-FFmpeg @('-f', 'lavfi', '-i', 'testsrc=size=800x1200:rate=1:duration=6', '-q:v', '4', (Join-Path $comicPages 'p%02d.jpg'))
 
-# EPUB 3 with metadata, a description and a cover image.
+# Filler paragraphs for the ebooks, as <p> elements: four sentences each, shuffled by a seed.
+function Get-Paragraphs([string[]]$Sentences, [int]$Count, [int]$Seed) {
+    foreach ($i in 1..$Count) {
+        '<p>' + ((0..3 | ForEach-Object { $Sentences[($i + $_ * 3 + $Seed) % $Sentences.Count] }) -join ' ') + '</p>'
+    }
+}
+
+# EPUB 3 with metadata, a description, a cover image and three chapters long enough to turn pages.
+# Chapter 1 carries a script and an inline handler that must never run (the reader blocks book
+# scripts); chapter 2 links to a website, which the reader shows instead of opening.
+$lighthouse = @(
+    'The keeper climbed the spiral stairs before dawn and wiped the salt from the great lens.',
+    'Every ship that passed went into the ledger: its name, its flag, the hour and the weather.',
+    'Some nights the fog was so thick that the beam seemed to stop an arm''s length from the glass.',
+    'Gulls argued on the railing while the kettle hissed in the little room below the lamp.',
+    'In winter the storms came in from the west, and the whole tower hummed like a struck bell.',
+    'The ledger grew to a shelf of volumes, each one bound in blue cloth and labeled by year.',
+    'Children from the village asked to see the lamp, and the keeper let them count the steps.'
+)
+function New-Chapter([int]$Number, [string]$Title, [string]$Extra) {
+    return Get-Utf8 (@"
+<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>$Title</title></head>
+<body><h1>$Title</h1>
+$Extra
+"@ + ((Get-Paragraphs $lighthouse 16 $Number) -join "`n") + "`n</body></html>`n")
+}
+
 $epub = Join-Path $books 'Digitify Sample Book.epub'
 $zip = [IO.Compression.ZipFile]::Open($epub, 'Create')
 Add-ZipEntry $zip 'mimetype' (Get-Utf8 'application/epub+zip') -Store
@@ -147,24 +174,140 @@ Add-ZipEntry $zip 'OEBPS/content.opf' (Get-Utf8 @'
   </metadata>
   <manifest>
     <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
-    <item id="ch1" href="text/chapter1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch1" href="text/chapter1.xhtml" media-type="application/xhtml+xml" properties="scripted"/>
+    <item id="ch2" href="text/chapter2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch3" href="text/chapter3.xhtml" media-type="application/xhtml+xml"/>
     <item id="cover-img" href="images/cover.jpg" media-type="image/jpeg" properties="cover-image"/>
   </manifest>
-  <spine><itemref idref="ch1"/></spine>
+  <spine><itemref idref="ch1"/><itemref idref="ch2"/><itemref idref="ch3"/></spine>
 </package>
 '@)
 Add-ZipEntry $zip 'OEBPS/nav.xhtml' (Get-Utf8 @'
 <?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head>
-<body><nav epub:type="toc"><ol><li><a href="text/chapter1.xhtml">Chapter 1</a></li></ol></nav></body></html>
+<body><nav epub:type="toc"><ol>
+<li><a href="text/chapter1.xhtml">Chapter 1: The Lamp</a></li>
+<li><a href="text/chapter2.xhtml">Chapter 2: The Ledger</a></li>
+<li><a href="text/chapter3.xhtml">Chapter 3: The Storm</a></li>
+</ol></nav></body></html>
 '@)
-Add-ZipEntry $zip 'OEBPS/text/chapter1.xhtml' (Get-Utf8 @'
-<?xml version="1.0" encoding="UTF-8"?>
-<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Chapter 1</title></head>
-<body><h1>Chapter 1</h1><p>The keeper wrote down every ship. This text exists only to test Digitify.</p></body></html>
+Add-ZipEntry $zip 'OEBPS/text/chapter1.xhtml' (New-Chapter 1 'Chapter 1: The Lamp' @'
+<script>document.documentElement.setAttribute('data-book-script', 'ran');</script>
+<p>This book exists only to test Digitify.<img src="missing.png" alt="" onerror="this.setAttribute('data-book-handler', 'ran')"/></p>
 '@)
+Add-ZipEntry $zip 'OEBPS/text/chapter2.xhtml' (New-Chapter 2 'Chapter 2: The Ledger' @'
+<p>The keeper kept a copy of <a href="https://example.com/brightwater">the harbor records</a>, and a note to read <a href="chapter3.xhtml">about the storm</a>.</p>
+'@)
+Add-ZipEntry $zip 'OEBPS/text/chapter3.xhtml' (New-Chapter 3 'Chapter 3: The Storm' '')
 Add-ZipEntry $zip 'OEBPS/images/cover.jpg' ([IO.File]::ReadAllBytes($bookCover))
 $zip.Dispose()
+
+# A MOBI (Mobipocket 6) book written by hand: a Palm database whose first record holds the PalmDOC
+# and MOBI headers, followed by the book's HTML, uncompressed, in records of up to 4096 bytes.
+function Get-BigEndian([uint64]$Value, [int]$Size) {
+    $bytes = [BitConverter]::GetBytes($Value)[0..($Size - 1)]
+    [Array]::Reverse($bytes)
+    return , ([byte[]]$bytes)
+}
+
+function New-SimpleMobi([string]$Path, [string]$Title, [string]$Html) {
+    $text = [byte[]](Get-Utf8 $Html)
+    $records = [Collections.Generic.List[byte[]]]::new()
+    for ($at = 0; $at -lt $text.Length; $at += 4096) {
+        $records.Add([byte[]]$text[$at..([Math]::Min($at + 4096, $text.Length) - 1)])
+    }
+    $count = $records.Count
+    $titleBytes = [byte[]](Get-Utf8 $Title)
+    $first = [byte[]]::new(248 + $titleBytes.Length + 4)
+    $fields = @{
+        0   = Get-BigEndian 1 2              # compression: none
+        4   = Get-BigEndian $text.Length 4
+        8   = Get-BigEndian $count 2         # text records
+        10  = Get-BigEndian 4096 2
+        16  = [Text.Encoding]::ASCII.GetBytes('MOBI')
+        20  = Get-BigEndian 232 4            # MOBI header length
+        24  = Get-BigEndian 2 4              # a book
+        28  = Get-BigEndian 65001 4          # UTF-8
+        32  = Get-BigEndian 20261031 4       # unique id
+        36  = Get-BigEndian 6 4              # format version
+        80  = Get-BigEndian ($count + 1) 4   # first record after the text
+        84  = Get-BigEndian 248 4            # title offset
+        88  = Get-BigEndian $titleBytes.Length 4
+        92  = Get-BigEndian 9 4              # locale: English
+        104 = Get-BigEndian 6 4
+        108 = Get-BigEndian ($count + 1) 4   # first image: there are none
+        168 = Get-BigEndian ([uint32]::MaxValue) 4     # no DRM
+        244 = Get-BigEndian ([uint32]::MaxValue) 4     # no index
+    }
+    for ($offset = 40; $offset -lt 80; $offset += 4) { $fields[$offset] = Get-BigEndian ([uint32]::MaxValue) 4 } # no dictionary indexes
+    foreach ($field in $fields.GetEnumerator()) { [Array]::Copy($field.Value, 0, $first, [int]$field.Key, $field.Value.Length) }
+    [Array]::Copy($titleBytes, 0, $first, 248, $titleBytes.Length)
+    $records.Insert(0, $first)
+
+    $pdb = [IO.MemoryStream]::new()
+    $name = [byte[]]::new(32)
+    $nameBytes = [Text.Encoding]::ASCII.GetBytes(($Title -replace '[^A-Za-z0-9]', '_'))
+    [Array]::Copy($nameBytes, 0, $name, 0, [Math]::Min(31, $nameBytes.Length))
+    $pdb.Write($name, 0, 32)
+    $pdb.Write([byte[]]::new(28), 0, 28)                                  # attributes, dates, app info
+    foreach ($part in @([Text.Encoding]::ASCII.GetBytes('BOOKMOBI'), (Get-BigEndian 0 4), (Get-BigEndian 0 4), (Get-BigEndian $records.Count 2))) {
+        $pdb.Write($part, 0, $part.Length)
+    }
+    $offset = 78 + 8 * $records.Count + 2
+    for ($i = 0; $i -lt $records.Count; $i++) {
+        $entry = [byte[]]((Get-BigEndian $offset 4) + (Get-BigEndian (2 * $i) 4))   # offset, then attributes and id
+        $pdb.Write($entry, 0, 8)
+        $offset += $records[$i].Length
+    }
+    $pdb.Write([byte[]]::new(2), 0, 2)
+    foreach ($record in $records) { $pdb.Write($record, 0, $record.Length) }
+    [IO.File]::WriteAllBytes($Path, $pdb.ToArray())
+}
+
+# MOBI links are byte offsets ("filepos") into the text; placeholders of the same width are filled in
+# once the offsets are known.
+$ferry = @(
+    'The ferry left the north pier at midnight with its lamps swinging over the black water.',
+    'Passengers dozed on the benches while the engine thumped somewhere far below the deck.',
+    'A boy counted the buoys aloud until the mist swallowed the last of them.',
+    'The captain kept a thermos of tea and a radio that only ever played old waltzes.',
+    'Halfway across, the lights of the town behind them blinked out one window at a time.',
+    'Rope creaked against the rails, and the gulls followed the wake as if it were a road.'
+)
+$mobiHtml = '<html><head><guide><reference type="toc" title="Contents" filepos="@@@@TOC@@@"/></guide></head><body>' +
+    '<h1>The Night Ferry</h1><p>A short book generated to test Digitify''s MOBI support.</p>' +
+    '<mbp:pagebreak/><h2>Contents</h2><p><a filepos="@@@@CH1@@@">Chapter 1: Departure</a></p><p><a filepos="@@@@CH2@@@">Chapter 2: Crossing</a></p>' +
+    '<mbp:pagebreak/><h2>Chapter 1: Departure</h2>' + ((Get-Paragraphs $ferry 12 1) -join '') +
+    '<mbp:pagebreak/><h2>Chapter 2: Crossing</h2>' + ((Get-Paragraphs $ferry 12 2) -join '') + '</body></html>'
+foreach ($target in @(@('@@@@TOC@@@', '<h2>Contents'), @('@@@@CH1@@@', '<h2>Chapter 1'), @('@@@@CH2@@@', '<h2>Chapter 2'))) {
+    $mobiHtml = $mobiHtml.Replace($target[0], ('{0:D10}' -f $mobiHtml.IndexOf($target[1])))
+}
+New-SimpleMobi (Join-Path $books 'The Night Ferry.mobi') 'The Night Ferry' $mobiHtml
+
+# FictionBook 2: one XML file with its own description block and sections.
+$garden = @(
+    'Every clock in the shop was wound on Sundays, and the garden behind it was watered on Mondays.',
+    'The clockmaker grew roses between the brass gears she could not bear to throw away.',
+    'Bees found the oiled springs as interesting as the flowers, which annoyed nobody.',
+    'At noon the whole shop chimed at once and the cat left the room in protest.',
+    'Customers came for repairs and left with cuttings wrapped in yesterday''s newspaper.'
+)
+[IO.File]::WriteAllBytes((Join-Path $books 'The Clockmaker''s Garden.fb2'), (Get-Utf8 (@"
+<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0" xmlns:l="http://www.w3.org/1999/xlink">
+<description><title-info><genre>prose</genre><author><first-name>Digitify</first-name><last-name>Test Suite</last-name></author>
+<book-title>The Clockmaker's Garden</book-title><lang>en</lang></title-info>
+<document-info><author><nickname>digitify</nickname></author><date>2026-10-31</date><id>digitify-sample-fb2</id><version>1.0</version></document-info></description>
+<body><title><p>The Clockmaker's Garden</p></title>
+<section><title><p>Chapter 1: The Gears</p></title>
+"@ + ((Get-Paragraphs $garden 10 1) -join "`n") + @"
+
+</section>
+<section><title><p>Chapter 2: The Roses</p></title>
+"@ + ((Get-Paragraphs $garden 10 2) -join "`n") + @"
+
+</section></body></FictionBook>
+"@)))
 
 # A one-page PDF with an info dictionary, written by hand (offsets computed for the xref table).
 # A minimal PDF: one heading and one line of text per page, plus a title and author.

@@ -3,18 +3,22 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { api, errorText, type ItemDetail } from "../../lib/api";
 import { WindowButtons } from "../../components/TitleBar";
+import { EbookReader } from "./EbookReader";
 import { PageReader } from "./PageReader";
 
 const PAGE_FILES = /\.(cbz|cbr|cb7|cbt|zip|rar|7z|tar|pdf|jpe?g|png|webp|gif|bmp|tiff?)$/i;
+const EBOOK_FILES = /\.(epub|mobi|azw3?|fb2)$/i;
 const IMAGE_FILES = /\.(jpe?g|png|webp|gif|bmp|tiff?)$/i;
 
-/** Whether the page reader can open this item: a comic archive, a PDF, or a folder of images. */
+/** Whether a reader can open this item: an ebook, a comic archive, a PDF, or a folder of images. */
 export function canRead(item: ItemDetail): boolean {
   return item.versions.some(
     (version) =>
       version.kind === "digital" &&
       version.files.length > 0 &&
-      (version.files.length === 1 ? PAGE_FILES.test(version.files[0].path) : version.files.every((file) => IMAGE_FILES.test(file.path))),
+      (version.files.length === 1
+        ? PAGE_FILES.test(version.files[0].path) || EBOOK_FILES.test(version.files[0].path)
+        : version.files.every((file) => IMAGE_FILES.test(file.path))),
   );
 }
 
@@ -28,6 +32,7 @@ export function ReaderPage() {
     else void navigate({ to: "/item/$id", params: { id } });
   };
 
+  if (book.data?.kind === "ebook") return <EbookReader book={book.data} onClose={close} />;
   if (book.data) return <PageReader book={book.data} onClose={close} />;
   return (
     <div className="reader">

@@ -17,11 +17,11 @@ use crate::{archives, tools};
 const MAX_ENTRY: u64 = 64 * 1024 * 1024;
 
 /// Some EPUB 2 packages still carry a DOCTYPE.
-fn parse_xml(text: &str) -> Option<Document<'_>> {
+pub(crate) fn parse_xml(text: &str) -> Option<Document<'_>> {
     Document::parse_with_options(text, ParsingOptions { allow_dtd: true, ..ParsingOptions::default() }).ok()
 }
 
-fn read_entry(zip: &mut ZipArchive<File>, name: &str) -> Option<Vec<u8>> {
+pub(crate) fn read_entry(zip: &mut ZipArchive<File>, name: &str) -> Option<Vec<u8>> {
     let entry = zip.by_name(name).ok()?;
     if entry.size() > MAX_ENTRY {
         return None; // refuse oversized entries (zip bombs)

@@ -116,6 +116,7 @@ export interface AmbientPlaylist {
 
 /** A page-based item opened for reading (comic archives, folders of images, PDFs). */
 export interface ReaderBook {
+  kind: "pages";
   itemId: number;
   versionId: number;
   title: string;
@@ -125,6 +126,19 @@ export interface ReaderBook {
   /** Where reading stopped last time. */
   position: number;
 }
+
+/** An ebook opened for reading (EPUB, MOBI, AZW3, FB2), laid out by foliate-js. */
+export interface Ebook {
+  kind: "ebook";
+  itemId: number;
+  versionId: number;
+  title: string;
+  fileName: string;
+  /** Where reading stopped last time (an EPUB CFI). */
+  position: string | null;
+}
+
+export type Opened = ReaderBook | Ebook;
 
 export interface TrackDetails {
   title: string | null;
@@ -356,7 +370,9 @@ export const api = {
   collectionMove: (id: number, parent: number | null) => invoke<void>("collection_move", { id, parent }),
   collectionDelete: (id: number) => invoke<void>("collection_delete", { id }),
   itemsBulk: (ids: number[], ops: BulkOp[]) => invoke<number>("items_bulk", { ids, ops }),
-  readerOpen: (id: number) => invoke<ReaderBook>("reader_open", { id }),
+  readerOpen: (id: number) => invoke<Opened>("reader_open", { id }),
+  ebookProgressSave: (id: number, cfi: string, fraction: number, finished: boolean) =>
+    invoke<void>("ebook_progress_save", { id, cfi, fraction, finished }),
   progressSave: (id: number, page: number, pages: number) => invoke<void>("progress_save", { id, page, pages }),
   categoryCreate: (category: CategoryInput) => invoke<string>("category_create", { category }),
   categoryUpdate: (key: string, category: CategoryInput) => invoke<void>("category_update", { key, category }),
@@ -397,6 +413,11 @@ export function artworkUrl(key: string, size: "thumb" | "cover" = "thumb"): stri
 }
 
 /** A page of an open book, at least `width` device pixels wide (the core rounds widths up). */
+/** The ebook file of a digital copy, for the ebook reader. */
+export function bookUrl(versionId: number): string {
+  return `http://digitify.localhost/book/${versionId}`;
+}
+
 export function pageUrl(versionId: number, index: number, width: number): string {
   return `http://digitify.localhost/page/${versionId}/${index}?w=${Math.round(width)}`;
 }

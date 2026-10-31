@@ -1,6 +1,6 @@
 # Architecture
 
-This page describes the approved direction (decisions D-001 to D-014). It is updated as each subsystem is built.
+This page describes the approved direction (decisions D-001 to D-017). It is updated as each subsystem is built.
 
 ## Overview
 
@@ -43,9 +43,10 @@ Digitify.exe (Tauri 2)
 | `artwork` | Artwork cache: cover (≤1400 px) and thumb (400 px wide) JPEGs keyed by content hash, plus average color |
 | `files` | Fingerprints, volume serials, safe names, natural ordering, reveal in Explorer, missing-file check, relinking moved files by content |
 | `tools` | Locating helper programs (mpv, ffmpeg, ffprobe) and running them without console windows |
-| `media_protocol` | The `digitify` URI scheme: artwork, ambient tracks (range requests); files and pages later |
+| `media_protocol` | The `digitify` URI scheme: artwork, ambient tracks (range requests), book pages and ebook files |
 | `ambient` | Ambient music from the user's files, folders and library albums (D-016) |
-| `pages` | The page engine: a digital copy as numbered pages (CBZ entries in natural order, image files, PDF pages), page sizes for layout, pages served scaled to the reader's width with a 128 MB cache, `reader_open` and `progress_save` |
+| `pages` | The page engine: a digital copy as numbered pages (CBZ entries in natural order, image files, PDF pages), page sizes for layout, pages served scaled to the reader's width with a 128 MB cache, `progress_save`, and `reader_open`, which picks the page reader or the ebook reader for an item |
+| `ebooks` | Ebooks (D-014): finds a copy's EPUB, MOBI, AZW3 or FB2 file, refuses copy-protected books (checks only, never decrypts), and `ebook_progress_save` (a CFI and a fraction) |
 | `archives` | Comic archives (D-017): ZIP, RAR (UnRAR), 7z and TAR recognized by their first bytes; listing, reading one entry, and one pass over all entries (fast for solid archives) |
 | `pdf` | PDFium, loaded from `pdfium.dll` on first use (D-013): page sizes, page rendering, and title, author, year, page count and cover at import |
 | `player` | mpv process lifecycle, IPC, video host window (PoC 1; becomes the Phase 3 player) |
@@ -74,7 +75,8 @@ React + TypeScript via Vite, organized by feature:
 |---|---|
 | `app/` | Router (hash history) and root layout |
 | `components/` | Header capsule with the music capsule, category strip, "Add to library" menu, cards, covers, dialogs, switch |
-| `features/reader/` | The page reader: layout (views, spreads, strip widths) and the reader screen at `/read/$id` |
+| `features/reader/` | The reader screen at `/read/$id`: the page reader (layout of views, spreads and strips), the ebook reader around foliate-js, and their shared controls (full screen, controls that hide) |
+| `vendor/foliate-js/` | foliate-js at a pinned commit (D-014; see its README), loaded only when an ebook opens |
 | `features/` | Home (category tiles, your shelves), library views (virtualized grid/list/shelf with multi-select and the bulk bar), organize (collections, shelves, tags, move dialogs), item page and forms (with custom fields), import UI, onboarding, settings (Categories, Sound) |
 | `lib/` | Typed API, TanStack Query hooks, paged item cache, preferences (theme/accent/motion/music), accent contrast math, formatting |
 | `lib/ambient/` | Ambient music and interface sounds: the "Morning Lounge" composition and synth, the playback engine, and its React provider |
@@ -119,14 +121,16 @@ On Windows, the UI loads library resources from `http://digitify.localhost/<rout
 - `/ambient/<generation>/<index>`: a track of the current ambient playlist (only files the user chose), served in 1 MiB HTTP range slices
 - `/file/<id>`: a library file, with HTTP Range support (Phase 2, for readers and players)
 - `/page/<copy>/<n>?w=<width>`: a page of a book for the reader, scaled down to the width asked for (rounded up to 400 px steps)
+- `/book/<copy>`: the ebook file of a digital copy, which foliate-js lays out in the WebView
 
 Only resources registered in the library are served. Paths never come straight from the UI.
 
 ## Security
 - The UI only gets `core:default`, logging and Digitify's own commands (Tauri capabilities).
-- The production Content Security Policy only allows scripts from the app bundle.
+- The production Content Security Policy only allows scripts from the app bundle. Frames, styles and fonts may also come from `blob:` URLs (ebook chapters and their resources), and forms can't be submitted anywhere (`form-action 'none'`).
 - Media files are treated as untrusted input:
-  - EPUB content runs in sandboxed frames with scripts disabled (Phase 2).
+  - Ebook chapters load in frames that inherit the Content Security Policy, so their scripts and inline handlers never run, and they can't load anything from the internet. Website links in books are shown, not opened.
+  - Copy-protected ebooks are refused before they are read (D-007).
   - Archive entries are validated against path traversal and size limits.
 - Core features make no network calls (D-008).
 

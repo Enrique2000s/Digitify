@@ -52,11 +52,15 @@ Each phase ends with a runnable build and updated docs. No dates are given; each
 2. **Page transitions:**
    - ✅ slide and fade, off with reduced motion
    - ⬜ 3D turn and realistic curl
-3. ⬜ **EPUB/MOBI/AZW3/FB2** via foliate-js: typography, themes and table of contents.
+3. ✅ **EPUB/MOBI/AZW3/FB2** via foliate-js (D-014):
+   - one page, two facing pages or a continuous scroll
+   - text size, font, line spacing, page width and justification; Paper, Sepia and Night themes
+   - table of contents, a position slider, progress and resume
+   - book scripts blocked, website links shown instead of opened, copy-protected books refused
 4. **Reading tools:**
    - ✅ progress and resume, full screen
    - ⬜ bookmarks
-   - ⬜ night mode, brightness and backgrounds (pages already sit on a dark backdrop)
+   - ⬜ night mode, brightness and backgrounds for the page reader (pages sit on a dark backdrop; ebooks already have a Night theme)
    - ⬜ an image-set book builder that orders photos into one item
 5. **Series navigation:**
    - ✅ "Pick up where you left off"

@@ -95,6 +95,10 @@ Every product or architecture decision is recorded here with its reason. Anythin
 ### D-014 · Reflowable ebooks
 - **Date:** 2026-10-30 · **Approved by:** project owner (part of the approved stack)
 - **Decision:** foliate-js (MIT, vendored at a pinned commit) handles EPUB, MOBI, AZW3 and FB2.
+- **Built (2026-10-31):**
+  - Vendored from commit `78914aef4466eb960965702401634c2cb348e9b1` into `src/vendor/foliate-js/`, with its `pdf.js` replaced by a stand-in so PDF.js (about 10 MB) isn't bundled. PDFs stay with PDFium (D-013).
+  - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
+  - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
 ### D-017 · Comic archives: RAR through the UnRAR library
 - **Date:** 2026-10-31 · **Approved by:** project owner (chose "unrar" over 7-Zip as a separate program)
