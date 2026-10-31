@@ -102,30 +102,33 @@ export function moveFocus(root: HTMLElement, direction: "up" | "down" | "left" |
     const r = candidate.getBoundingClientRect();
     const x = r.left + r.width / 2;
     const y = r.top + r.height / 2;
+    // How far ahead the candidate is, and how far off the line of travel (0 when they overlap).
+    const overlapY = Math.min(from.bottom, r.bottom) - Math.max(from.top, r.top) > 0;
+    const overlapX = Math.min(from.right, r.right) - Math.max(from.left, r.left) > 0;
     let along: number;
     let across: number;
     switch (direction) {
       case "right":
-        along = r.left - from.right + (x - cx) * 0.01;
-        across = Math.max(0, Math.max(from.top, r.top) - Math.min(from.bottom, r.bottom)) > 0 ? Math.abs(y - cy) : 0;
         if (x <= cx + 2) continue;
+        along = Math.max(0, r.left - from.right);
+        across = overlapY ? 0 : Math.abs(y - cy);
         break;
       case "left":
-        along = from.left - r.right + (cx - x) * 0.01;
-        across = Math.max(0, Math.max(from.top, r.top) - Math.min(from.bottom, r.bottom)) > 0 ? Math.abs(y - cy) : 0;
         if (x >= cx - 2) continue;
+        along = Math.max(0, from.left - r.right);
+        across = overlapY ? 0 : Math.abs(y - cy);
         break;
       case "down":
-        along = r.top - from.bottom + (y - cy) * 0.01;
-        across = Math.abs(x - cx);
         if (y <= cy + 2) continue;
+        along = Math.max(0, r.top - from.bottom);
+        across = overlapX ? 0 : Math.min(Math.abs(r.left - from.left), Math.abs(x - cx));
         break;
       default:
-        along = from.top - r.bottom + (cy - y) * 0.01;
-        across = Math.abs(x - cx);
         if (y >= cy - 2) continue;
+        along = Math.max(0, from.top - r.bottom);
+        across = overlapX ? 0 : Math.min(Math.abs(r.left - from.left), Math.abs(x - cx));
     }
-    const score = Math.max(0, along) + across * 2;
+    const score = along + across * 2.5;
     if (score < bestScore) {
       bestScore = score;
       best = candidate;

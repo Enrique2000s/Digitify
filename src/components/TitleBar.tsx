@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ChevronLeft, ChevronRight, Disc3, Gamepad2, Search, Settings } from "lucide-react";
+import { ChevronLeft, ChevronRight, Disc3, Gamepad2, House, LibraryBig, Search, Settings } from "lucide-react";
 import { enterBigPicture } from "../lib/bigpicture";
 import { Logo } from "./common";
 import { MiniPlayer } from "./MiniPlayer";
@@ -103,6 +103,22 @@ export function TitleBar({ searchEnabled }: { searchEnabled: boolean }) {
             <ChevronRight size={19} strokeWidth={2.6} />
           </button>
         </div>
+        {searchEnabled && (
+          // Home and Library, as in Big Picture (the search box is right next to them).
+          <nav className="appbar-nav" aria-label="Go to">
+            <Link to="/" className="appbar-nav-item" aria-current={location.pathname === "/" ? "page" : undefined}>
+              <House size={16} strokeWidth={2.5} aria-hidden /> <span className="appbar-nav-label">Home</span>
+            </Link>
+            <Link
+              to="/library/$scope"
+              params={{ scope: "all" }}
+              className="appbar-nav-item"
+              aria-current={/^\/(library|shelves|shelf|tags|tag|item)\b/.test(location.pathname) ? "page" : undefined}
+            >
+              <LibraryBig size={16} strokeWidth={2.5} aria-hidden /> <span className="appbar-nav-label">Library</span>
+            </Link>
+          </nav>
+        )}
         {searchEnabled && (
           <label className="search-pill">
             <Search size={17} strokeWidth={2.6} aria-hidden />

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { BookOpen, Info, Play, Sparkles } from "lucide-react";
+import { Award, BookOpen, Info, Play } from "lucide-react";
 import { api, type ItemCard } from "../../lib/api";
 import { Cover } from "../../components/common";
 import { useCoverShape } from "../../lib/preferences";
@@ -25,7 +25,7 @@ export function Featured({ item }: { item: ItemCard }) {
       </Link>
       <div className="featured-body">
         <span className="featured-eyebrow">
-          <Sparkles size={15} strokeWidth={2.6} aria-hidden /> Featured today
+          <Award size={16} strokeWidth={2.6} aria-hidden /> Featured today
         </span>
         <h2 className="display featured-title">{item.title}</h2>
         {(item.subtitle || item.year) && <p className="featured-sub">{[item.subtitle, item.year].filter(Boolean).join(" · ")}</p>}

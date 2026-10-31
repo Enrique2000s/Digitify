@@ -100,6 +100,14 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-026 · Title bar navigation, cover colors, credit
+- **Date:** 2026-10-31 · **Approved by:** project owner (asked for each)
+- The title bar has Home and Library, as Big Picture does (the labels give way to icons in narrow windows); the search box sits next to them.
+- Home has a "Discs" section so disc features are visible without a drive; "Featured today" has its own badge.
+- In Big Picture's cursor mode only the cursor selects.
+- A cover without artwork can be given a color on the item's page (stored as the item's cover color until it gets artwork); CDs stay round everywhere.
+- Settings end with "Digitify is free and open source."
+
 ### D-025 · Big Picture: a TV interface for controllers
 - **Date:** 2026-10-31 · **Approved by:** project owner (chose each option)
 - **Interface:** its own full-screen interface for the TV, like Steam's Big Picture: Home (continue, categories, recently added, favorites), the library by category (LB/RB to switch), an item's page (Read, Play, Play album with its tracks, favorite), search, and a menu. Always dark, big type, a ring around the selection.

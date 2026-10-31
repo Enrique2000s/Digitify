@@ -489,7 +489,8 @@ export type BulkOp =
   | { op: "setYear"; year: number | null }
   | { op: "setSeries"; series: string | null }
   | { op: "setDirection"; direction: "ltr" | "rtl" }
-  | { op: "setCoverShape"; shape: CoverShape | null };
+  | { op: "setCoverShape"; shape: CoverShape | null }
+  | { op: "setCoverColor"; color: string | null };
 
 export interface FieldInput {
   key?: string | null;

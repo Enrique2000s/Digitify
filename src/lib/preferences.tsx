@@ -24,6 +24,7 @@ export const HOME_SECTIONS = [
   "recentlyOpened",
   "recentlyAdded",
   "favorites",
+  "discs",
   "stats",
 ] as const;
 export type HomeSection = (typeof HOME_SECTIONS)[number];

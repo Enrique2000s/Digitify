@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { DropdownMenu } from "radix-ui";
-import { BookImage, FilePlus, FolderPlus, Package } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { BookImage, Disc3, FilePlus, FolderPlus, Package } from "lucide-react";
 import { useOpenBuilder, useOpenCatalog } from "../app/catalog";
 import { useImporter } from "../lib/importer";
 
@@ -9,6 +10,7 @@ export function AddMenu({ children, align = "start" }: { children: ReactNode; al
   const importer = useImporter();
   const openCatalog = useOpenCatalog();
   const openBuilder = useOpenBuilder();
+  const navigate = useNavigate();
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>{children}</DropdownMenu.Trigger>
@@ -22,6 +24,9 @@ export function AddMenu({ children, align = "start" }: { children: ReactNode; al
           </DropdownMenu.Item>
           <DropdownMenu.Item className="menu-item" onSelect={openBuilder}>
             <BookImage size={17} /> Book from images…
+          </DropdownMenu.Item>
+          <DropdownMenu.Item className="menu-item" onSelect={() => void navigate({ to: "/discs" })}>
+            <Disc3 size={17} /> From a disc (CD, DVD, Blu-ray)…
           </DropdownMenu.Item>
           <DropdownMenu.Separator className="menu-separator" />
           <DropdownMenu.Item className="menu-item" onSelect={openCatalog}>

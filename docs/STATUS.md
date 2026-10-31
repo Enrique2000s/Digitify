@@ -255,6 +255,21 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 | Smart shelves | ✅ | "New smart shelf" on the Shelves page: rules on category, kind of media, tags, year, creator, title, format, progress, favorite, copies, when added or last opened; match all or any; an order and "only the first N". A live count shows how many items match, and a rule that doesn't make sense says why. Smart shelves show a sparkle, fill and order themselves, aren't offered in "Add to shelf", and their menu has "Edit rules…". |
 | Keyboard shortcuts | ✅ | Settings › Keyboard lists every shortcut by where it works (Everywhere, Library views, Readers, Video player). "+" records a new key (Esc cancels); a key already in use asks "Use it here instead?"; keys can be removed, and one action or all reset. Buttons' tooltips and the search box show the current keys. New everywhere: Alt+Home (Home), Ctrl+, (Settings), Ctrl+P (music play/pause), Ctrl+Shift+→/← (next/previous track). |
 
+### Fixes and additions after Big Picture (D-026, 2026-10-31)
+- **Big Picture:** the selection reaches everything on screen, the top bar's corner included (it used to jump back to the content); in cursor mode A clicks the control under the cursor (it clicked nothing, or the icon inside a button). Tiles are exactly as wide as their cover, so the art is never stretched or cropped differently from the rest of the app, and selecting one only adds a ring and a small lift. Item pages show the cover whole in its own shape.
+- **"Resumed at… Start over"** sits above the player's controls instead of on them.
+- **CDs stay round:** shelf covers are sized by width, so a crowded shelf shrinks them whole.
+- **Cover colors:** an item without artwork gets a "Cover color" choice on its page.
+- **Layout transitions:** the new layout draws complete in its first frame (it used to appear a moment late, so covers popped in), and only the covers in view move (ones scrolled out of sight flew over the toolbar); the old and new pictures blend while each cover moves.
+- **Title bar:** Home, Library and Search.
+- **Settings:** "Digitify is free and open source." at the end.
+- **Discs on Home:** a "Discs" section (it can be moved or hidden like the others) says what a disc drive can do even when none is connected, and which drives are ready or have a disc when there are some; "Add" also has "From a disc (CD, DVD, Blu-ray)…".
+- **Featured today** has its own badge (an award ribbon), no longer the smart shelves' sparkle.
+- **Title bar:** Home and Library (the search box is next to them, so no separate Search button).
+- **Big Picture Home:** "Continue" sits under the categories, with smaller covers (190 px) than the other rows; the first category is selected on arrival.
+- **Big Picture cursor mode** is cursor only: the D-pad and stick don't move a selection, nothing is selected for you, and A clicks what the cursor points at (in the menu too).
+- **Tested** (`e2e-bigpicture`): up from the content reaches "Home", right reaches "Exit Big Picture", left "Menu", down returns to the content; the cursor over "Movies & Series" plus A opens it; a selected tile is 180 wide with 180×270 art; "Start over" sits 38 px above the controls; CDs on a shelf measure 123×123; a layout change names the 8 covers in view of 17, draws the grid at once and clears the names after; the title bar's Library opens Everything and Search focuses the search box; a coral cover color shows on an album without art; the credit is in Settings.
+
 ### Big Picture and this round's requests (D-025, 2026-10-31)
 | Feature | Status | Notes |
 |---|---|---|

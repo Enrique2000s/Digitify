@@ -37,6 +37,7 @@ import { MediaCard } from "../../components/MediaCard";
 import { ShelfCard } from "../organize/pages";
 import { useRelink } from "../settings/LibraryTools";
 import { Featured } from "./Featured";
+import { DiscsBanner } from "./DiscsBanner";
 import { StatsPanel } from "./Stats";
 
 const SECTION_NAMES: Record<HomeSection, string> = {
@@ -48,6 +49,7 @@ const SECTION_NAMES: Record<HomeSection, string> = {
   recentlyOpened: "Recently opened",
   recentlyAdded: "Recently added",
   favorites: "Favorites",
+  discs: "Discs",
   stats: "Statistics",
 };
 
@@ -287,6 +289,11 @@ export function HomePage({ onCatalog }: { onCatalog: () => void }) {
     recentlyOpened: data.recentlyOpened.length > 0 && <Row title="Recently opened" items={data.recentlyOpened} />,
     recentlyAdded: data.recent.length > 0 && <Row title="Recently added" items={data.recent} more={{ scope: "all" }} />,
     favorites: data.favorites.length > 0 && <Row title="Favorites" items={data.favorites} more={{ scope: "favorites" }} />,
+    discs: (
+      <section className="section">
+        <DiscsBanner />
+      </section>
+    ),
     stats: hasItems && (
       <section className="section">
         <div className="section-head">

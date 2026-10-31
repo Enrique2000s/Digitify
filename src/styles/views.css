@@ -1260,12 +1260,22 @@ html.reordering * {
 
 /* Changing layouts: covers glide from their old places to their new ones, the rest cross-fades. */
 ::view-transition-group(*) {
-  animation-duration: 420ms;
-  animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
+  animation-duration: 460ms;
+  animation-timing-function: cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+/* A cover's old and new pictures blend while it moves, filling its box the whole way. */
+::view-transition-old(*),
+::view-transition-new(*) {
+  height: 100%;
+  object-fit: cover;
+  animation-duration: 460ms;
+  animation-timing-function: cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 ::view-transition-old(root),
 ::view-transition-new(root) {
-  animation-duration: 260ms;
+  height: auto;
+  object-fit: none;
+  animation-duration: 320ms;
 }
 
 /* Settings sit in the middle of the window, with their title above them. */
@@ -1276,4 +1286,155 @@ html.reordering * {
   max-width: 860px;
   margin-left: auto;
   margin-right: auto;
+}
+
+.settings-credit {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+}
+
+/* "Resumed at…" sits above the player's controls, not on them. */
+.ebook-link.watch-note {
+  bottom: 150px;
+}
+
+/* The title bar's Home / Library / Search. */
+.appbar-nav {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--pill);
+  background: var(--field);
+  box-shadow: var(--inset-shadow);
+}
+.appbar-nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: var(--pill);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
+}
+.appbar-nav-item:hover {
+  color: var(--text);
+}
+.appbar-nav-item[aria-current="page"] {
+  background: var(--gloss);
+  color: var(--accent-text);
+  box-shadow: var(--raise-sm);
+}
+/* Narrower windows: the search box gives way first, then the labels, so every button stays visible. */
+.appbar-pill .search-pill {
+  flex: 1 1 140px;
+  min-width: 120px;
+}
+@media (max-width: 1500px) {
+  .brand span {
+    display: none;
+  }
+}
+@media (max-width: 1360px) {
+  .appbar-nav-label {
+    display: none;
+  }
+  .appbar-nav-item {
+    padding: 0 10px;
+  }
+}
+
+/* A cover without art in a picked color. */
+.cover-fallback[style*="--fallback-ink"] span {
+  color: var(--fallback-ink);
+}
+.cover-color-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.cover-color-row .swatch {
+  width: 28px;
+  height: 28px;
+}
+
+/* Home's "Discs" section. */
+.discs-banner {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 0% 50%, color-mix(in srgb, var(--accent-bright) 14%, transparent), transparent 55%),
+    var(--surface);
+  box-shadow: var(--raise-sm);
+  color: inherit;
+  text-decoration: none;
+  transition: box-shadow var(--duration) var(--ease), transform 200ms var(--ease);
+}
+.discs-banner:hover,
+.discs-banner:focus-visible {
+  box-shadow: var(--glow-sm);
+  transform: translateY(-2px);
+}
+.discs-banner-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: var(--gloss);
+  box-shadow: var(--raise-sm);
+  color: var(--accent-bright);
+}
+.discs-banner:hover .discs-banner-icon,
+.discs-banner-icon.spinning {
+  animation: disc-spin 2.4s linear infinite;
+}
+@keyframes disc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.discs-banner-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.discs-banner-text strong {
+  font-size: 17px;
+  font-weight: 900;
+}
+.discs-banner-text span {
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+/* "Featured today" wears its own badge. */
+.featured-eyebrow {
+  align-self: flex-start;
+  padding: 5px 12px 5px 9px;
+  border-radius: var(--pill);
+  background: linear-gradient(135deg, #f6c453, #e8873a);
+  color: #3a2208;
+  box-shadow: 0 4px 12px rgba(232, 135, 58, 0.35);
+  letter-spacing: 0.06em;
 }

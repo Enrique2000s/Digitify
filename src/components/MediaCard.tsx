@@ -15,14 +15,14 @@ export function caseBand(item: ItemCard): "bluray" | "dvd" | null {
 }
 
 /** A cover card. In a library view (`index` given) it also takes part in multi-select. */
-export const MediaCard = memo(function MediaCard({ item, width, index, transitionName }: { item: ItemCard; width?: number; index?: number; transitionName?: string }) {
+export const MediaCard = memo(function MediaCard({ item, width, index, transitionId }: { item: ItemCard; width?: number; index?: number; transitionId?: number }) {
   const band = caseBand(item);
   const subtitle = [item.subtitle, item.year].filter(Boolean).join(" · ");
   const { selecting, checked, props } = useSelectable(item.id, index);
   const { shape, aspect } = useCoverShape()(item);
   return (
     <Link to="/item/$id" params={{ id: String(item.id) }} className="card" style={width ? { width } : undefined} data-blip {...props}>
-      <div className="card-art" data-shape={shape} style={{ aspectRatio: aspect, ...(transitionName ? { viewTransitionName: transitionName } : {}) }}>
+      <div className="card-art" data-shape={shape} data-vt={transitionId} style={{ aspectRatio: aspect }}>
         <Cover item={item} />
         {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
         {(item.isFavorite || item.missing) && (

@@ -29,6 +29,12 @@ function useSize(ref: React.RefObject<HTMLElement | null>): { width: number; hei
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
+    // Measured at once (not only when the observer first reports), so a new layout draws complete
+    // in its first frame, which is what a view transition captures.
+    const style = getComputedStyle(el);
+    const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    setSize({ width: el.clientWidth - padX, height: el.clientHeight - padY });
     const observer = new ResizeObserver(([entry]) => setSize({ width: entry.contentRect.width, height: entry.contentRect.height }));
     observer.observe(el);
     return () => observer.disconnect();
@@ -58,9 +64,23 @@ interface ViewProps {
   params: Omit<QueryParams, "offset" | "limit">;
 }
 
-/** Each cover is named after its item, so a view transition can move it between layouts. */
-function coverTransition(id: number): CSSProperties {
-  return { viewTransitionName: `cover-${id}` } as CSSProperties;
+/** Marks a cover with its item, so a layout change can move it from its old place to its new one. */
+const vt = (id: number) => ({ "data-vt": id });
+
+/**
+ * Names the covers that are in view (and only those: ones scrolled out of sight would fly in over
+ * the toolbar). Called before and after a layout change; the names are cleared once it's done.
+ */
+function nameCovers() {
+  const area = document.querySelector<HTMLElement>(".library-view .view-scroll, .library-view .carousel-stage")?.getBoundingClientRect();
+  document.querySelectorAll<HTMLElement>("[data-vt]").forEach((element) => {
+    const r = element.getBoundingClientRect();
+    const inView = !!area && r.width > 0 && r.bottom > area.top && r.top < area.bottom && r.right > area.left && r.left < area.right;
+    element.style.viewTransitionName = inView ? `cover-${element.dataset.vt}` : "";
+  });
+}
+function clearCoverNames() {
+  document.querySelectorAll<HTMLElement>("[data-vt]").forEach((element) => (element.style.viewTransitionName = ""));
 }
 
 const SHAPE_CODES: Record<string, CoverShape> = { s: "square", d: "disc", p: "poster", l: "landscape" };
@@ -127,7 +147,7 @@ function GridView({ cache, total, shape, params }: ViewProps) {
                   const item = cache.get(index);
                   const w = layout.widths[index];
                   return item ? (
-                    <MediaCard key={index} item={item} index={index} width={w} transitionName={`cover-${item.id}`} />
+                    <MediaCard key={index} item={item} index={index} width={w} transitionId={item.id} />
                   ) : (
                     <CardSkeleton key={index} width={w} aspect={w / artHeight} />
                   );
@@ -179,7 +199,7 @@ function ListRow({ item, index, top }: { item: ItemCard; index: number; top: num
                 style={{ top, height: 54 }}
                 {...props}
               >
-                <span className="thumb" data-shape={shapeOf(item).shape} style={coverTransition(item.id)}>
+                <span className="thumb" data-shape={shapeOf(item).shape} {...vt(item.id)}>
                   {selecting ? (
                     <span className={`row-check${checked ? " on" : ""}`} aria-hidden>
                       {checked && <Check size={16} strokeWidth={3.2} />}
@@ -234,7 +254,7 @@ function ShelfItem({ item, index, height, spines }: { item: ItemCard; index: num
     const spineHeight = Math.round(height * (0.86 + jitter(item.id, 2) * 0.14));
     return (
       <Link to="/item/$id" params={{ id: String(item.id) }} className="shelf-item" title={item.title} data-blip {...props}>
-        <div className="spine" style={{ width, height: spineHeight, ...colors, ...coverTransition(item.id) }}>
+        <div className="spine" style={{ width, height: spineHeight, ...colors }} {...vt(item.id)}>
           <span>{item.title}</span>
         </div>
         {check}
@@ -243,7 +263,8 @@ function ShelfItem({ item, index, height, spines }: { item: ItemCard; index: num
   }
   return (
     <Link to="/item/$id" params={{ id: String(item.id) }} className="shelf-item" title={item.title} data-blip {...props}>
-      <div className="shelf-cover" data-shape={shape} style={{ height: shelfBox(shape, height).height, aspectRatio: aspect, position: "relative", ...coverTransition(item.id) }}>
+      {/* Sized by width: if a full shelf narrows its covers, they shrink whole and keep their shape. */}
+      <div className="shelf-cover" data-shape={shape} style={{ width: shelfBox(shape, height).width, aspectRatio: aspect, position: "relative" }} {...vt(item.id)}>
         <Cover item={item} />
         {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
       </div>
@@ -331,7 +352,7 @@ function DetailedRow({ item, index, top, height, blurb }: { item: ItemCard; inde
   const ownership = item.hasPhysical && item.hasDigital ? "On the shelf and digital" : item.hasPhysical ? "On the shelf" : "Digital";
   return (
     <Link to="/item/$id" params={{ id: String(item.id) }} className="detail-row" style={{ top, height }} data-blip {...props}>
-      <div className="detail-cover" data-shape={shape} style={{ height: height - 26, aspectRatio: aspect, ...coverTransition(item.id) }}>
+      <div className="detail-cover" data-shape={shape} style={{ height: height - 26, aspectRatio: aspect }} {...vt(item.id)}>
         <Cover item={item} />
         {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
         {selecting && (
@@ -566,7 +587,8 @@ function CarouselCover({ item, index, front, shape, style, onPick }: { item: Ite
       params={{ id: String(item.id) }}
       className={`carousel-item${front ? " front" : ""}`}
       data-shape={shape}
-      style={{ ...style, ...coverTransition(item.id) }}
+      style={style}
+      {...vt(item.id)}
       title={item.title}
       draggable={false}
       tabIndex={front ? 0 : -1}
@@ -706,7 +728,12 @@ export function LibraryView({
   const setLayout = (next: Layout) => {
     const apply = () => update((current) => ({ layouts: { ...current.layouts, [shared]: next } }));
     if (next === layout || !document.startViewTransition || !motionAllowed()) return apply();
-    document.startViewTransition(() => flushSync(apply));
+    nameCovers();
+    const transition = document.startViewTransition(() => {
+      flushSync(apply);
+      nameCovers();
+    });
+    void transition.finished.finally(clearCoverNames);
   };
   const setOwnership = (next: Ownership | "") => update((current) => ({ ownership: { ...current.ownership, [shared]: next } }));
   const [materials, setMaterials] = useState(false);

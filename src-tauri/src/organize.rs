@@ -577,6 +577,8 @@ pub enum BulkOp {
     SetDirection { direction: String },
     /// `square` or `disc` (music), `poster` or `landscape` (video); none goes back to the default.
     SetCoverShape { shape: Option<String> },
+    /// The color of a cover without artwork (`#rrggbb`); none goes back to the neutral one.
+    SetCoverColor { color: Option<String> },
 }
 
 /// Applies `ops` to every item in `ids`, all or nothing.
@@ -668,6 +670,17 @@ pub fn apply_bulk(conn: &mut Connection, ids: &[i64], ops: &[BulkOp]) -> AppResu
                 }
                 Some(_) => return Err(AppError::msg("That isn't a cover shape.")),
             },
+            BulkOp::SetCoverColor { color } => {
+                if let Some(color) = color {
+                    if color.len() != 7 || !color.starts_with('#') || !color[1..].chars().all(|c| c.is_ascii_hexdigit()) {
+                        return Err(AppError::msg("That isn't a color."));
+                    }
+                }
+                // Only covers without artwork use it; artwork brings its own color.
+                for id in ids {
+                    tx.execute("UPDATE items SET cover_color = ?2 WHERE id = ?1 AND cover_key IS NULL", params![id, color])?;
+                }
+            }
         }
     }
     if searchable {

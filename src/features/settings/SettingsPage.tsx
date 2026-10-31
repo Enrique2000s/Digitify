@@ -245,6 +245,7 @@ export function SettingsPage() {
             </Link>
           </Setting>
         </section>
+        <p className="settings-credit">Digitify is free and open source.</p>
       </div>
     </div>
   );

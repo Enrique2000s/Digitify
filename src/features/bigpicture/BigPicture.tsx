@@ -52,19 +52,24 @@ function Clock() {
   return <span className="bp-clock">{now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</span>;
 }
 
-/** A cover tile; selecting it opens the item. */
-function Tile({ item, autofocus }: { item: ItemCard; autofocus?: boolean }) {
+/**
+ * A cover tile; selecting it opens the item. It's exactly as wide as its cover's shape at `height`,
+ * so the art is never stretched or cropped differently from the rest of the app.
+ */
+function Tile({ item, autofocus, height = 300 }: { item: ItemCard; autofocus?: boolean; height?: number }) {
   const navigate = useNavigate();
   const { shape, aspect } = useCoverShape()(item);
+  const width = Math.round(height * aspect);
   return (
     <button
       type="button"
       className="bp-tile"
+      style={{ width }}
       data-bp-focus
       data-bp-autofocus={autofocus || undefined}
       onClick={() => void navigate({ to: "/bp", search: { screen: "item", id: item.id } })}
     >
-      <span className="bp-tile-art" data-shape={shape} style={{ aspectRatio: aspect }}>
+      <span className="bp-tile-art" data-shape={shape} style={{ width, height }}>
         <Cover item={item} size="cover" />
         {item.progress != null && item.progress > 0 && item.progress < 1 && (
           <span className="bp-tile-progress">
@@ -77,14 +82,14 @@ function Tile({ item, autofocus }: { item: ItemCard; autofocus?: boolean }) {
   );
 }
 
-function Row({ title, items, first }: { title: string; items: ItemCard[]; first?: boolean }) {
+function Row({ title, items, first, height }: { title: string; items: ItemCard[]; first?: boolean; height?: number }) {
   if (!items.length) return null;
   return (
     <section className="bp-row">
       <h2>{title}</h2>
       <div className="bp-row-items">
         {items.map((item, index) => (
-          <Tile key={item.id} item={item} autofocus={first && index === 0} />
+          <Tile key={item.id} item={item} height={height} autofocus={first && index === 0} />
         ))}
       </div>
     </section>
@@ -100,7 +105,6 @@ function HomeScreen() {
   const going = [...data.continueWatching, ...data.continueItems];
   return (
     <>
-      <Row title="Continue" items={going} first />
       <section className="bp-row">
         <h2>Library</h2>
         <div className="bp-row-items">
@@ -112,7 +116,7 @@ function HomeScreen() {
                 type="button"
                 className="bp-category"
                 data-bp-focus
-                data-bp-autofocus={!going.length && index === 0 ? true : undefined}
+                data-bp-autofocus={index === 0 ? true : undefined}
                 onClick={() => void navigate({ to: "/bp", search: { screen: "library", scope: category.key } })}
               >
                 <CategoryIcon icon={category.icon} size={46} />
@@ -126,6 +130,8 @@ function HomeScreen() {
           </button>
         </div>
       </section>
+      {/* Under the categories, and smaller than the other rows. */}
+      <Row title="Continue" items={going} height={190} />
       <Row title="Recently added" items={data.recent} />
       <Row title="Favorites" items={data.favorites} />
     </>
@@ -172,7 +178,7 @@ function LibraryScreen({ scope }: { scope: string }) {
         <span className="bp-hint-key">RB</span>
       </div>
       <div className="bp-grid">
-        {items.data?.items.map((item, index) => <Tile key={item.id} item={item} autofocus={index === 0} />)}
+        {items.data?.items.map((item, index) => <Tile key={item.id} item={item} height={270} autofocus={index === 0} />)}
       </div>
       {items.data && items.data.total > items.data.items.length && (
         <button type="button" className="bp-button bp-more" data-bp-focus onClick={() => setLimit((n) => Math.min(500, n + 120))}>
@@ -205,7 +211,7 @@ function ItemScreen({ id }: { id: number }) {
   };
   return (
     <div className="bp-item">
-      <div className="bp-item-art" data-shape={shape} style={{ aspectRatio: aspect }}>
+      <div className="bp-item-art" data-shape={shape} style={{ ["--a" as string]: aspect }}>
         <Cover item={data} size="cover" />
       </div>
       <div className="bp-item-body">
@@ -318,7 +324,7 @@ function SearchScreen() {
       </div>
       <OnScreenKeyboard onChange={setText} />
       <div className="bp-grid">
-        {results.data?.items.map((item) => <Tile key={item.id} item={item} />)}
+        {results.data?.items.map((item) => <Tile key={item.id} item={item} height={270} />)}
       </div>
       {query && results.data?.total === 0 && <p className="bp-empty">No matches for “{query}”.</p>}
     </div>
@@ -332,12 +338,18 @@ function Menu({ onClose }: { onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const bp = preferences.bigPicture;
   useEffect(() => {
-    if (ref.current) focusFirst(ref.current);
+    if (ref.current && bp.navigation !== "cursor") focusFirst(ref.current);
   }, []);
+  const cursor = bp.navigation === "cursor";
   usePad((action) => {
     if (action === "back" || action === "start" || action === "guide") onClose();
-    else if (action === "up" || action === "down" || action === "left" || action === "right") ref.current && moveFocus(ref.current, action);
-    else if (action === "accept") (document.activeElement as HTMLElement | null)?.click();
+    else if (action === "up" || action === "down" || action === "left" || action === "right") {
+      if (!cursor && ref.current) moveFocus(ref.current, action);
+    } else if (action === "accept") {
+      // In cursor mode A goes on to the cursor, which clicks what it points at.
+      if (cursor) return;
+      (document.activeElement as HTMLElement | null)?.click();
+    }
     return true;
   });
   return (
@@ -382,6 +394,15 @@ function Menu({ onClose }: { onClose: () => void }) {
 function Cursor({ speed }: { speed: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const position = useRef({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+  // Lets automated tests put the cursor somewhere without a controller.
+  useEffect(() => {
+    const w = window as unknown as { __digitifyCursor?: (x: number, y: number) => void };
+    w.__digitifyCursor = (x, y) => {
+      position.current = { x, y };
+      if (ref.current) ref.current.style.transform = `translate(${x}px, ${y}px)`;
+    };
+    return () => void delete w.__digitifyCursor;
+  }, []);
   useSticks((sticks, dt) => {
     const p = position.current;
     p.x = Math.max(0, Math.min(window.innerWidth - 2, p.x + sticks.lx * speed * dt));
@@ -398,7 +419,14 @@ function Cursor({ speed }: { speed: number }) {
   usePad((action) => {
     if (action !== "accept") return;
     const p = position.current;
-    (document.elementFromPoint(p.x, p.y) as HTMLElement | null)?.click();
+    const under = document.elementFromPoint(p.x, p.y);
+    const target = under?.closest<HTMLElement>("button, a, input, [data-bp-focus], [role=button], [role=tab]");
+    if (target) {
+      target.focus({ preventScroll: true });
+      target.click();
+    } else {
+      under?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y }));
+    }
     return true;
   });
   return <div ref={ref} className="bp-cursor" aria-hidden style={{ transform: `translate(${position.current.x}px, ${position.current.y}px)` }} />;
@@ -438,15 +466,17 @@ export function BigPicturePage() {
   const { preferences } = usePreferences();
   const buttons = useButtons();
   const main = useRef<HTMLDivElement>(null);
+  const shell = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState(false);
   const cursor = preferences.bigPicture.navigation === "cursor";
 
   // A new screen selects its first (or marked) element once it has drawn.
   const key = `${screen}:${search.scope ?? ""}:${search.id ?? ""}`;
   useEffect(() => {
+    if (cursor) return;
     const timer = window.setTimeout(() => main.current && focusFirst(main.current), 250);
     return () => window.clearTimeout(timer);
-  }, [key]);
+  }, [key, cursor]);
 
   const back = () => (screen === "home" ? setMenu(true) : window.history.back());
   usePad((action: PadAction) => {
@@ -456,13 +486,15 @@ export function BigPicturePage() {
       case "down":
       case "left":
       case "right":
-        if (main.current && !moveFocus(main.current, action)) {
-          // Past the content's edge: the top bar or the music.
-          moveFocus(document.querySelector(".bp") as HTMLElement, action);
-        }
+        // With the cursor on, only the cursor selects (the stick moves it; the D-pad does nothing).
+        if (cursor) return true;
+        // Everything on screen is reachable: the top bar, the content and the music.
+        if (shell.current) moveFocus(shell.current, action);
         break;
       case "accept":
-        if (!cursor) (document.activeElement as HTMLElement | null)?.click();
+        // In cursor mode A clicks where the cursor is (the cursor handles it).
+        if (cursor) return;
+        (document.activeElement as HTMLElement | null)?.click();
         break;
       case "back":
         back();
@@ -505,7 +537,7 @@ export function BigPicturePage() {
   const title = useMemo(() => ({ home: "Home", library: "Library", item: "", search: "Search" })[screen], [screen]);
 
   return (
-    <div className={`bp${cursor ? " bp-cursor-mode" : ""}`}>
+    <div ref={shell} className={`bp${cursor ? " bp-cursor-mode" : ""}`}>
       <header className="bp-top">
         <span className="bp-brand">
           <Gamepad2 size={30} /> Digitify

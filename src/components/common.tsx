@@ -1,3 +1,4 @@
+import { spineColors } from "../lib/color";
 import { useState, type ComponentType, type CSSProperties, type ReactNode } from "react";
 import { Dialog as RadixDialog } from "radix-ui";
 import {
@@ -109,6 +110,14 @@ interface CoverSource {
   title: string;
   coverKey: string | null;
   handler: Handler;
+  /** Without artwork: the color picked for the cover, if any. */
+  coverColor?: string | null;
+}
+
+/** A picked color for a cover without art, with readable text and icon on it. */
+function fallbackColors(color: string): CSSProperties {
+  const { background, color: ink } = spineColors(color);
+  return { background: `linear-gradient(160deg, ${color}, ${background})`, color: ink, ["--fallback-ink" as string]: ink };
 }
 
 /** Artwork, or a neutral tile with the title when there is none. */
@@ -117,7 +126,7 @@ export function Cover({ item, size = "thumb" }: { item: CoverSource; size?: "thu
   if (!item.coverKey || failed) {
     const Icon = HANDLER_ICONS[item.handler] ?? Folder;
     return (
-      <div className="cover-fallback">
+      <div className="cover-fallback" style={!item.coverKey && item.coverColor ? fallbackColors(item.coverColor) : undefined}>
         <Icon size={22} strokeWidth={2} aria-hidden />
         <span>{item.title}</span>
       </div>

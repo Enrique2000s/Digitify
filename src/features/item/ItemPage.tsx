@@ -164,6 +164,9 @@ function CopyCard({ item, version, onEdit }: { item: ItemDetail; version: Versio
   );
 }
 
+/** Colors offered for a cover without artwork. */
+const COVER_COLORS = ["#1592d0", "#3fae49", "#f2a516", "#ef5f4f", "#d94f8c", "#8a63d2", "#2b3442", "#c9ced6"];
+
 export function ItemPage() {
   const { id } = useParams({ from: "/item/$id" });
   const queryClient = useQueryClient();
@@ -298,6 +301,31 @@ export function ItemPage() {
               <Trash size={16} /> Remove
             </button>
           </div>
+          {!item.coverKey && (
+            <div className="cover-color-row" role="group" aria-label="Cover color">
+              <span className="eyebrow">Cover color</span>
+              {COVER_COLORS.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  className="swatch"
+                  style={{ background: color }}
+                  aria-label={color}
+                  aria-pressed={item.coverColor === color}
+                  onClick={() => void run(() => api.itemsBulk([item.id], [{ op: "setCoverColor", color }]))}
+                />
+              ))}
+              <label className="swatch swatch-custom" title="Another color" style={{ background: "conic-gradient(red, yellow, lime, aqua, blue, magenta, red)" }}>
+                <span className="sr-only">Another color</span>
+                <input type="color" value={item.coverColor ?? "#5b7290"} onChange={(event) => void run(() => api.itemsBulk([item.id], [{ op: "setCoverColor", color: event.target.value }]))} />
+              </label>
+              {item.coverColor && (
+                <button type="button" className="btn btn-sm" onClick={() => void run(() => api.itemsBulk([item.id], [{ op: "setCoverColor", color: null }]))}>
+                  Plain
+                </button>
+              )}
+            </div>
+          )}
           {(item.handler === "audio" || item.handler === "video") && (
             <div className="cover-shape-row">
               <span className="eyebrow">Cover</span>
