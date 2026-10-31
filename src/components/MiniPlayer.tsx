@@ -6,6 +6,7 @@ import { api } from "../lib/api";
 import { useMusic } from "../lib/music/MusicProvider";
 import { Cover } from "./common";
 import { Marquee } from "./Marquee";
+import { SeekBar } from "./SeekBar";
 
 function clock(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
@@ -18,7 +19,6 @@ function NowPlaying() {
   const queryClient = useQueryClient();
   const track = music.current;
   if (!track) return null;
-  const fill = music.duration > 0 ? (music.time / music.duration) * 100 : 0;
   const favorite = async () => {
     await api.musicSetFavorite(track.id, !track.favorite);
     music.updateTrack({ ...track, favorite: !track.favorite });
@@ -39,18 +39,7 @@ function NowPlaying() {
         </div>
       </div>
       <div className="now-seek">
-        <span>{clock(music.time)}</span>
-        <input
-          type="range"
-          aria-label="Position"
-          min={0}
-          max={music.duration || 0}
-          step={0.5}
-          value={Math.min(music.time, music.duration || 0)}
-          style={{ "--fill": `${fill}%` } as CSSProperties}
-          onChange={(event) => music.seek(Number(event.target.value))}
-        />
-        <span>{clock(music.duration)}</span>
+        <SeekBar time={music.time} duration={music.duration} clock={clock} onSeek={(seconds) => music.seek(seconds)} />
       </div>
       <div className="now-controls">
         <button type="button" className="icon-btn" aria-pressed={music.shuffled} aria-label="Shuffle" title="Shuffle" onClick={music.toggleShuffle}>

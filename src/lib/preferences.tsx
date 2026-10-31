@@ -1,10 +1,36 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, type ImportMode, type MusicSource } from "./api";
 import { accentVariables } from "./color";
+import { sanitizeShortcuts, setCustomShortcuts, type ShortcutMap } from "./shortcuts";
 
 export type ThemeChoice = "dark" | "light" | "system";
 export type MotionChoice = "system" | "full" | "reduced" | "off";
-export type Layout = "grid" | "list" | "shelf";
+export type Layout = "grid" | "list" | "shelf" | "detailed" | "carousel";
+export const LAYOUTS: Layout[] = ["grid", "shelf", "list", "detailed", "carousel"];
+/** The overall style (D-016, D-023): Breeze, or Cinematic as an option. */
+export type Look = "breeze" | "cinematic";
+/** Breeze's color variants (D-023). Midnight is always dark. */
+export type Palette = "breeze" | "sunset" | "midnight" | "contrast";
+/** What the shelves in the shelf view are made of (D-023). */
+export type ShelfLook = "breeze" | "wood" | "glass" | "metal";
+
+/** Home's sections (D-023), in their default order. */
+export const HOME_SECTIONS = [
+  "tiles",
+  "featured",
+  "continueWatching",
+  "continueReading",
+  "shelves",
+  "recentlyOpened",
+  "recentlyAdded",
+  "favorites",
+  "stats",
+] as const;
+export type HomeSection = (typeof HOME_SECTIONS)[number];
+export interface HomeLayout {
+  order: HomeSection[];
+  hidden: HomeSection[];
+}
 
 /** Ambient music (decision D-016). */
 export interface MusicPreferences {
@@ -59,8 +85,10 @@ export interface EbookPreferences {
 }
 
 export interface Preferences {
-  /** The visual identity the appearance settings belong to. */
+  /** The visual identity the appearance settings belong to (a marker for settings saved before D-016). */
   style: "breeze";
+  look: Look;
+  palette: Palette;
   theme: ThemeChoice;
   accent: string;
   motion: MotionChoice;
@@ -69,6 +97,7 @@ export interface Preferences {
   /** Last layout used per view (all, favorites, a category key, search). */
   layouts: Record<string, Layout>;
   shelfStyle: "covers" | "spines";
+  shelfLook: ShelfLook;
   importMode: "ask" | ImportMode;
   music: MusicPreferences;
   /** Soft tones when pointing at and pressing things. */
@@ -77,7 +106,25 @@ export interface Preferences {
   ebook: EbookPreferences;
   /** Where the video and music players' volume was left (0–100), so they start there. */
   volumes: { video: number; music: number };
+  /** Keys the user changed in Settings › Keyboard; everything else keeps its default. */
+  shortcuts: ShortcutMap;
+  /** Home's sections: their order, and the ones hidden. */
+  home: HomeLayout;
 }
+
+/** The page color under each look and palette, for accent text contrast. */
+const PAGE_BACKGROUNDS: Record<Palette | "cinematic", { light: string; dark: string }> = {
+  breeze: { light: "#edf1f5", dark: "#0f1620" },
+  sunset: { light: "#f6ede4", dark: "#1c1320" },
+  midnight: { light: "#000000", dark: "#000000" },
+  contrast: { light: "#ffffff", dark: "#000000" },
+  cinematic: { light: "#f3f1ed", dark: "#0c0d10" },
+};
+
+/** Each look's own default accent: Breeze's sky blue, Cinematic's amber (D-015). */
+export const LOOK_ACCENTS: Record<Look, string> = { breeze: "#1592d0", cinematic: "#e0a43a" };
+/** Breeze palettes' own accents: Sunset is coral, the others keep sky blue. */
+export const PALETTE_ACCENTS: Record<Palette, string> = { breeze: "#1592d0", sunset: "#ef5f4f", midnight: "#1592d0", contrast: "#1592d0" };
 
 export const DEFAULT_MUSIC: MusicPreferences = {
   enabled: true,
@@ -117,18 +164,23 @@ export const DEFAULT_EBOOK: EbookPreferences = {
 
 export const DEFAULT_PREFERENCES: Preferences = {
   style: "breeze",
+  look: "breeze",
+  palette: "breeze",
   theme: "light",
   accent: "#1592d0",
   motion: "system",
   cardSize: 160,
   layouts: {},
   shelfStyle: "covers",
+  shelfLook: "breeze",
   importMode: "ask",
   music: DEFAULT_MUSIC,
   interfaceSounds: true,
   reader: DEFAULT_READER,
   ebook: DEFAULT_EBOOK,
   volumes: { video: 35, music: 35 },
+  shortcuts: {},
+  home: { order: [...HOME_SECTIONS], hidden: [] },
 };
 
 type Raw<T> = { [K in keyof T]?: unknown };
@@ -196,6 +248,19 @@ function sanitizeVolumes(raw: unknown): Preferences["volumes"] {
   return { video: Math.round(pick("video", isVolume)), music: Math.round(pick("music", isVolume)) };
 }
 
+const isHomeSection = (v: unknown): v is HomeSection => HOME_SECTIONS.includes(v as HomeSection);
+
+function sanitizeHome(raw: unknown): HomeLayout {
+  const value = (raw && typeof raw === "object" ? raw : {}) as Raw<HomeLayout>;
+  const order = Array.isArray(value.order) ? [...new Set(value.order.filter(isHomeSection))] : [];
+  // Sections added in later versions join at their default place.
+  for (const [index, section] of HOME_SECTIONS.entries()) {
+    if (!order.includes(section)) order.splice(Math.min(index, order.length), 0, section);
+  }
+  const hidden = Array.isArray(value.hidden) ? [...new Set(value.hidden.filter(isHomeSection))] : [];
+  return { order, hidden };
+}
+
 function sanitize(raw: unknown): Preferences {
   const pick = picker(raw, DEFAULT_PREFERENCES);
   // Settings saved under the earlier Cinematic identity (D-015) start from Breeze's own theme and
@@ -203,18 +268,23 @@ function sanitize(raw: unknown): Preferences {
   const breeze = (raw as Raw<Preferences> | null)?.style === "breeze";
   return {
     style: "breeze",
+    look: pick("look", (v) => v === "breeze" || v === "cinematic"),
+    palette: pick("palette", (v) => ["breeze", "sunset", "midnight", "contrast"].includes(v as string)),
     theme: breeze ? pick("theme", (v) => v === "dark" || v === "light" || v === "system") : DEFAULT_PREFERENCES.theme,
     accent: breeze ? pick("accent", (v) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v)) : DEFAULT_PREFERENCES.accent,
     motion: pick("motion", (v) => ["system", "full", "reduced", "off"].includes(v as string)),
     cardSize: pick("cardSize", (v) => typeof v === "number" && v >= 110 && v <= 260),
     layouts: pick("layouts", (v) => !!v && typeof v === "object"),
     shelfStyle: pick("shelfStyle", (v) => v === "covers" || v === "spines"),
+    shelfLook: pick("shelfLook", (v) => ["breeze", "wood", "glass", "metal"].includes(v as string)),
     importMode: pick("importMode", (v) => v === "ask" || v === "reference" || v === "copy"),
     music: sanitizeMusic((raw as Raw<Preferences>)?.music),
     interfaceSounds: pick("interfaceSounds", isBoolean),
     reader: sanitizeReader((raw as Raw<Preferences>)?.reader),
     ebook: sanitizeEbook((raw as Raw<Preferences>)?.ebook),
     volumes: sanitizeVolumes((raw as Raw<Preferences>)?.volumes),
+    shortcuts: sanitizeShortcuts((raw as Raw<Preferences>)?.shortcuts),
+    home: sanitizeHome((raw as Raw<Preferences>)?.home),
   };
 }
 
@@ -242,17 +312,26 @@ function useSystemDark(): boolean {
 export function PreferencesProvider({ initial, children }: { initial: unknown; children: ReactNode }) {
   const [preferences, setPreferences] = useState(() => sanitize(initial));
   const systemDark = useSystemDark();
-  const resolvedTheme = preferences.theme === "system" ? (systemDark ? "dark" : "light") : preferences.theme;
+  // Midnight is a dark palette whatever the theme says.
+  const breezePalette = preferences.look === "breeze" ? preferences.palette : "breeze";
+  const resolvedTheme =
+    breezePalette === "midnight" ? "dark" : preferences.theme === "system" ? (systemDark ? "dark" : "light") : preferences.theme;
   const saveTimer = useRef(0);
+  // Handlers read the shortcuts outside React, so they're current before any key is pressed.
+  setCustomShortcuts(preferences.shortcuts);
 
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.theme = resolvedTheme;
+    root.dataset.look = preferences.look;
+    root.dataset.palette = breezePalette;
     root.dataset.motion = preferences.motion === "system" ? "" : preferences.motion;
-    for (const [name, value] of Object.entries(accentVariables(preferences.accent, resolvedTheme))) {
+    const page = PAGE_BACKGROUNDS[preferences.look === "cinematic" ? "cinematic" : breezePalette][resolvedTheme];
+    const ratio = breezePalette === "contrast" ? 7 : 4.5;
+    for (const [name, value] of Object.entries(accentVariables(preferences.accent, resolvedTheme, page, ratio))) {
       root.style.setProperty(name, value);
     }
-  }, [resolvedTheme, preferences.motion, preferences.accent]);
+  }, [resolvedTheme, preferences.look, breezePalette, preferences.motion, preferences.accent]);
 
   const update = useCallback((change: Change) => {
     setPreferences((current) => {

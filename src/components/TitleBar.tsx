@@ -7,6 +7,8 @@ import { MiniPlayer } from "./MiniPlayer";
 import { MusicPill } from "./MusicPill";
 import { useMusic } from "../lib/music/MusicProvider";
 import { useDiscs } from "../lib/discs";
+import { usePreferences } from "../lib/preferences";
+import { comboLabel, keysFor } from "../lib/shortcuts";
 
 const appWindow = getCurrentWindow();
 
@@ -52,6 +54,8 @@ export function WindowButtons() {
 export function TitleBar({ searchEnabled }: { searchEnabled: boolean }) {
   const navigate = useNavigate();
   const music = useMusic();
+  const { preferences } = usePreferences();
+  const searchKey = keysFor("app.search", preferences.shortcuts)[0];
   const { drives } = useDiscs();
   const discIn = drives.some((drive) => drive.media);
   const location = useRouterState({ select: (state) => state.location });
@@ -62,17 +66,14 @@ export function TitleBar({ searchEnabled }: { searchEnabled: boolean }) {
 
   useEffect(() => setQuery(urlQuery), [urlQuery]);
 
-  // Ctrl+F focuses the library search.
+  // The "Search the library" shortcut (Ctrl+F unless changed) focuses the search.
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.key.toLowerCase() === "f") {
-        event.preventDefault();
-        input.current?.focus();
-        input.current?.select();
-      }
+    const focus = () => {
+      input.current?.focus();
+      input.current?.select();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("digitify:search", focus);
+    return () => window.removeEventListener("digitify:search", focus);
   }, []);
 
   const search = (text: string, immediate = false) => {
@@ -113,7 +114,7 @@ export function TitleBar({ searchEnabled }: { searchEnabled: boolean }) {
               onChange={(event) => search(event.target.value)}
               onKeyDown={(event) => event.key === "Enter" && search(query, true)}
             />
-            <kbd>Ctrl F</kbd>
+            {searchKey && <kbd>{comboLabel(searchKey).replace(/ \+ /g, " ")}</kbd>}
           </label>
         )}
         <div className="appbar-drag" data-tauri-drag-region />

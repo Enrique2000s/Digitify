@@ -8,11 +8,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader};
 use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient};
 use tokio::sync::{mpsc, oneshot};
 
@@ -21,8 +21,11 @@ use crate::error::{AppError, AppResult};
 /// mpv properties mirrored to the UI as `property-change` events.
 const OBSERVED: &[&str] = &[
     "time-pos", "duration", "pause", "volume", "mute", "eof-reached", "media-title",
-    "track-list", "chapter-list", "chapter", "speed", "sid", "aid",
+    "track-list", "chapter-list", "chapter", "speed", "sid", "aid", "seeking", "paused-for-cache",
 ];
+
+/// `time-pos` changes with every frame; the UI gets it at most this often (and on every jump).
+const TIME_EVERY: Duration = Duration::from_millis(100);
 
 const SUBTITLE_EXTENSIONS: &[&str] = &["srt", "ass", "ssa", "vtt", "sub", "sup", "idx"];
 
@@ -97,6 +100,11 @@ pub async fn start_with(
             "--load-scripts=no".into(),
             "--ytdl=no".into(),
             "--hwdec=auto-safe".into(),
+            // Keep what was just played and a little ahead in memory, so jumping back and forth
+            // nearby doesn't have to go back to the disk.
+            "--cache=yes".into(),
+            "--demuxer-max-bytes=150MiB".into(),
+            "--demuxer-max-back-bytes=100MiB".into(),
             "--sub-auto=fuzzy".into(),
             format!("--volume={}", volume.clamp(0.0, 100.0).round()),
             "--terminal=no".into(),
@@ -131,19 +139,7 @@ pub async fn start_with(
         }
     });
 
-    let events = app.clone();
-    tauri::async_runtime::spawn(async move {
-        let mut lines = BufReader::new(reader).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            match serde_json::from_str::<Value>(&line) {
-                Ok(message) => {
-                    let _ = events.emit("player-event", message);
-                }
-                Err(e) => log::warn!("unreadable message from mpv: {e}"),
-            }
-        }
-        let _ = events.emit("player-event", json!({ "event": "closed" }));
-    });
+    tauri::async_runtime::spawn(forward(reader, app.clone(), "player-event"));
 
     for (index, name) in OBSERVED.iter().enumerate() {
         send(&commands, json!({ "command": ["observe_property", index + 1, name] }));
@@ -232,6 +228,54 @@ fn stop(app: &AppHandle, state: &PlayerState) {
 
 fn destroy_host(app: &AppHandle, host: isize) {
     let _ = app.run_on_main_thread(move || video_host::destroy(host));
+}
+
+/// Forwards every message mpv sends to the UI as `event`, except that `time-pos` goes at most every
+/// `TIME_EVERY` (a jump goes at once, and the latest value follows once things settle), which keeps
+/// the UI from redrawing on every frame.
+pub(crate) async fn forward(reader: impl AsyncRead + Unpin, app: AppHandle, event: &'static str) {
+    let mut lines = BufReader::new(reader).lines();
+    let mut last_time: Option<(Instant, f64)> = None;
+    let mut held: Option<(f64, Value)> = None;
+    loop {
+        let next = if held.is_some() {
+            match tokio::time::timeout(TIME_EVERY, lines.next_line()).await {
+                Ok(next) => next,
+                Err(_) => {
+                    if let Some((time, message)) = held.take() {
+                        last_time = Some((Instant::now(), time));
+                        let _ = app.emit(event, message);
+                    }
+                    continue;
+                }
+            }
+        } else {
+            lines.next_line().await
+        };
+        let Ok(Some(line)) = next else { break };
+        let message = match serde_json::from_str::<Value>(&line) {
+            Ok(message) => message,
+            Err(e) => {
+                log::warn!("unreadable message from mpv: {e}");
+                continue;
+            }
+        };
+        if message["event"] == "property-change" && message["name"] == "time-pos" {
+            if let Some(time) = message["data"].as_f64() {
+                let due = last_time.map_or(true, |(at, last)| at.elapsed() >= TIME_EVERY || (time - last).abs() > 1.0);
+                if due {
+                    held = None;
+                    last_time = Some((Instant::now(), time));
+                    let _ = app.emit(event, message);
+                } else {
+                    held = Some((time, message));
+                }
+                continue;
+            }
+        }
+        let _ = app.emit(event, message);
+    }
+    let _ = app.emit(event, json!({ "event": "closed" }));
 }
 
 pub(crate) fn send(commands: &mpsc::UnboundedSender<String>, message: Value) {

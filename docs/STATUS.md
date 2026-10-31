@@ -1,6 +1,6 @@
 # Feature status
 
-**Updated:** 2026-10-31 · **Current phase:** 1 (core library), feature-complete; waiting for the owner's check with real files
+**Updated:** 2026-10-31 · **Current phase:** all five phases built; waiting for the owner's check with real files and a real optical drive
 
 Legend: ✅ done and tested · 🟡 implemented, needs manual testing · 🧪 proof-of-concept only · 🔄 in progress · ⬜ not started · ⛔ won't do (see the linked decision)
 
@@ -195,7 +195,7 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 ## Phase 3: media playback (done; waiting for the owner's check with real files)
 | Feature | Status | Notes |
 |---|---|---|
-| Video player | ✅ | mpv draws under the window (as proven in PoC 1); Digitify's own controls float over it and hide while watching. Play/pause, seek with chapter marks, volume, previous/next episode, full screen. Keys: Space, ←/→ (5 s, Shift for 30 s), ↑/↓ volume, M, C (subtitles), F, Shift+N (next episode), Esc. Library music pauses for a video, as ambient music does. |
+| Video player | ✅ | mpv draws under the window (as proven in PoC 1); Digitify's own controls float over it and hide while watching. Play/pause, seek with chapter marks (exact, with a preview while dragging; see Phase 5 › Smoother playback), volume, previous/next episode, full screen. Keys (changeable in Settings › Keyboard): Space or K, ←/→ (5 s, Shift for 30 s), ↑/↓ volume, M, C (subtitles), F, Shift+N (next episode), Esc. Library music pauses for a video, as ambient music does. |
 | Subtitles, audio, chapters, speed | ✅ | Menus list the file's audio and subtitle tracks (with their languages), its chapters, and speeds from 0.5× to 2×. Subtitle files next to the video whose names contain its name load with it; "Load a subtitle file…" adds another (SRT, ASS, SSA, VTT, SUB, SUP). |
 | Volume | ✅ | The video and music players start at 35% and remember where you left each one (like the ambient music). |
 | Resume and watched | ✅ | Saved every 5 seconds and on closing; opening again resumes 2 s before ("Resumed at 0:21", with "Start over"). Past 92% counts as watched. Films and episodes can be marked watched or not by hand. |
@@ -242,16 +242,47 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 - **Not covered yet:** a real drive. Reading the table of contents, CD-Text, raw audio sectors and the DVD copyright descriptor goes through Windows calls that only a drive can answer. Ripping speed, drive caches, scratched discs and real DVD/Blu-ray structures need the owner's drive and discs.
 - **Found and fixed while testing:** chapters weren't shown when playing from a disc (the chapter file is now in a format mpv reads); the insert notice didn't close itself while a rip was running.
 
+## Phase 5: advanced personalization (done)
+| Feature | Status | Notes |
+|---|---|---|
+| Looks and palettes (D-023) | ✅ | Settings › Appearance: **Style** Breeze or Cinematic (charcoal glass, amber, Inter with expanded Archivo headings; light and night). Breeze **palettes**: Sky, Sunset, Midnight (always dark; the theme buttons say so) and High contrast. A look or palette brings its own accent unless you picked one. Readers and the player keep their own dark controls. |
+| Shelf materials | ✅ | In the shelf view's toolbar (the brush button) or Settings › Appearance › Shelves: Breeze, Wood, Glass (covers reflect in it) and Dark metal (a pegboard). Work with covers and spines, light and night. |
+| Customize Home | ✅ | "Customize Home" puts a bar on each section to move it up or down and to hide or show it, even sections that are empty right now; "Reset" brings the original order back. Saved as you go. |
+| Featured today | ✅ | A big card on Home with one item's artwork, description and facts, and Read/Play/Details. The pick changes each day and stays the same all day; unfinished items come first. |
+| Statistics | ✅ | Reading, watching and listening time this month and year; the last 14 days as bars (with each day's figures on hover and as a table); finished this month and year; in progress; most played artists this year; items per category. Time is counted while a reader is open and in use (up to 5 minutes after the last page turn or input) or while a video or music plays, and kept in the library only. |
+| Detailed view | ✅ | Rows with big artwork, title, creator and year, category, formats, facts ("320 pages", "12 tracks · 48 min", "2 episodes", "1080p"), whether you have it on the shelf or digital, the start of the description, tags and progress. The cover-size slider sets the row height. |
+| Carousel view | ✅ | Covers in a 3D row with reflections: arrows, the wheel, dragging, clicking a side cover or the slider move along; Enter or a click on the front cover opens it. Its keys can be changed. |
+| Smart shelves | ✅ | "New smart shelf" on the Shelves page: rules on category, kind of media, tags, year, creator, title, format, progress, favorite, copies, when added or last opened; match all or any; an order and "only the first N". A live count shows how many items match, and a rule that doesn't make sense says why. Smart shelves show a sparkle, fill and order themselves, aren't offered in "Add to shelf", and their menu has "Edit rules…". |
+| Keyboard shortcuts | ✅ | Settings › Keyboard lists every shortcut by where it works (Everywhere, Library views, Readers, Video player). "+" records a new key (Esc cancels); a key already in use asks "Use it here instead?"; keys can be removed, and one action or all reset. Buttons' tooltips and the search box show the current keys. New everywhere: Alt+Home (Home), Ctrl+, (Settings), Ctrl+P (music play/pause), Ctrl+Shift+→/← (next/previous track). |
+
+### Smoother playback (2026-10-31)
+- **Seeking in the video player** was sometimes slow or ignored and needed several clicks. The position bar is now Digitify's own: a click lands on the exact frame, a drag previews as it goes and lands where it's let go, and the bar stays at the target until mpv gets there instead of jumping back. Hovering shows the time (and chapter) under the pointer. ←/→ now move exactly 5 s (they jumped by keyframes, so a long gap between keyframes could swallow the step). mpv keeps up to 150 MB ahead and 100 MB behind in memory, so jumping back and forth nearby doesn't reread the disk, and a spinner shows if a jump or the disk takes a moment.
+- **Fewer redraws:** mpv reports the position on every frame; the UI now gets it ten times a second (and at once after a jump), for both the video and the music player.
+- The music player's "Now playing" uses the same position bar.
+
+### How Phase 5 was tested (2026-10-31)
+- `cargo test`: 51 unit tests pass. The new ones cover smart-shelf rules (each kind of rule, all or any, an order with a limit, values bound rather than pasted into SQL, LIKE's own characters, rules that don't fit refused, stored rules that stopped fitting matching nothing) and recorded time (adding up per day and kind, a cap per report, unknown items and kinds).
+- Seeking (`e2e-seek`), on a 3-minute video with a keyframe only every 12 seconds: a click at 50% and at 25% lands at 1:30 and 0:45 by mpv's own position (45.04 s) within about a quarter of a second, and the bar is at the target the moment it's clicked. A drag from 25% to 80% lands at 2:24; three quick clicks land on the last one (2:42); ←, Home and the player's → move exactly. Pointing at 75% shows "2:15".
+- Phase 5 (`e2e-phase5`), on a fresh library:
+  1. Home shows "Featured today" (the same pick on every call that day). Recorded time shows in Statistics ("Reading this month 20 min", today's bar and tooltip). Customizing hides "Recently added" and moves Statistics up; the order is saved.
+  2. Keyboard: Ctrl+K is added to "Search the library" and focuses the search; Ctrl+P asks to move from "Play or pause the music", which is left with no key; the ambient music isn't paused by the keys being recorded. "Reset all" empties the changes.
+  3. Cinematic switches the fonts and the accent to amber and back; Sunset brings coral; Midnight forces dark and disables the theme buttons; High contrast. Screenshots of each in light and night.
+  4. The four shelf materials in light and night, with covers and spines; picking one closes the menu.
+  5. Detailed rows show facts, ownership and descriptions. The carousel moves with →, a click on the next cover, a drag (3 → 9 of 17) and opens the front cover with Enter.
+  6. A smart shelf "Comics not started" (progress not started, kind comics) counts 6 live, lists them, can't be added to by hand, and opens again in "Edit rules…"; a year of "soon" is refused.
+  7. Playing a film for 36 seconds adds 38 s of watching; reading a comic for 36 seconds adds 36 s of reading.
+- **Found and fixed while testing:** a key being recorded in Settings could also trigger the shortcut it already had; the search box always said "Ctrl F".
+
 ## Product features by phase
 | Area | Status |
 |---|---|
-| Core library (Phase 1) | 🔄 See above |
+| Core library (Phase 1) | ✅ See above |
 | PDF, image and comic reader | ✅ Phase 2 |
 | EPUB reader | ✅ Phase 2: EPUB, MOBI, AZW3 and FB2 |
 | Video player | ✅ Phase 3 |
 | Music player and playlists | ✅ Phase 3 |
 | Optical drives, audio CD, DVD/Blu-ray | 🟡 Phase 4: built, waiting for a real drive |
-| Advanced personalization | ⬜ Phase 5 |
+| Advanced personalization | ✅ Phase 5 |
 | DRM circumvention | ⛔ D-007 |
 
 ## Known limitations

@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorText, type QueueEntry, type Track } from "../api";
 import { useAmbientHold } from "../ambient/AmbientProvider";
+import { useActivity } from "../activity";
 import { usePreferences } from "../preferences";
 
 /** A message from the music player's mpv, forwarded by the core. */
@@ -131,6 +132,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const current = playback.index >= 0 ? (tracks.get(playback.playlist[playback.index]) ?? null) : null;
   const active = playback.playlist.length > 0 && !playback.idle;
   useAmbientHold("media", active && !playback.paused);
+  useActivity(current?.itemId, "listen", active && !playback.paused);
 
   // "Recently played" counts a track once it starts.
   const played = useRef<string | null>(null);

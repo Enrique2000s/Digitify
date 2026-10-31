@@ -28,6 +28,8 @@ mod pdf;
 mod player;
 mod series;
 mod setup;
+mod smart;
+mod stats;
 mod tools;
 mod watch;
 
@@ -124,6 +126,10 @@ pub fn run() {
             library::categories_list,
             library::library_query,
             library::library_query_ids,
+            library::items_blurbs,
+            smart::smart_count,
+            stats::activity_add,
+            stats::library_stats,
             library::dashboard_get,
             library::item_get,
             library::item_update,

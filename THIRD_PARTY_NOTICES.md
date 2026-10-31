@@ -157,6 +157,8 @@ SOFTWARE.
 
 ## Fonts (bundled; never loaded from the internet)
 - **Nunito:** SIL Open Font License 1.1, Copyright 2014 The Nunito Project Authors · <https://github.com/googlefonts/nunito>
+- **Inter** (Cinematic look): SIL Open Font License 1.1, Copyright 2016 The Inter Project Authors · <https://github.com/rsms/inter>
+- **Archivo** (Cinematic look): SIL Open Font License 1.1, Copyright 2020 The Archivo Project Authors · <https://github.com/Omnibus-Type/Archivo>
 
 ## Libraries compiled into Digitify
 | Component | License |

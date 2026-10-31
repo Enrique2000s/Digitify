@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Popover } from "radix-ui";
 import { Bookmark as BookmarkIcon, BookmarkCheck, Pencil, X } from "lucide-react";
 import { api, type Bookmark, type BookmarkLocator } from "../../lib/api";
+import { hint } from "../../lib/shortcuts";
 
 export interface Place {
   locator: BookmarkLocator;
@@ -102,7 +103,7 @@ export function BookmarksMenu({ itemId, container, open, onOpenChange, here, isH
   return (
     <Popover.Root open={open} onOpenChange={onOpenChange}>
       <Popover.Trigger asChild>
-        <button type="button" className="round-btn" aria-label="Bookmarks" aria-pressed={marked} title="Bookmarks (B adds or removes)">
+        <button type="button" className="round-btn" aria-label="Bookmarks" aria-pressed={marked} title={`Bookmarks${hint("readers.bookmark").replace(")", " adds or removes)")}`}>
           {marked ? <BookmarkCheck size={17} /> : <BookmarkIcon size={17} />}
         </button>
       </Popover.Trigger>

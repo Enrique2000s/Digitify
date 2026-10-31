@@ -1,10 +1,31 @@
-import { forwardRef, type ComponentPropsWithoutRef, type ReactNode } from "react";
+import { forwardRef, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { ChevronRight, FilePlus, FolderPlus, FolderSearch, LibraryBig, Moon, Package, Plus, Star, Sun, TriangleAlert, Volume2, VolumeOff } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  FilePlus,
+  FolderPlus,
+  FolderSearch,
+  LayoutDashboard,
+  LibraryBig,
+  Moon,
+  Package,
+  Plus,
+  RotateCcw,
+  Star,
+  Sun,
+  TriangleAlert,
+  Volume2,
+  VolumeOff,
+} from "lucide-react";
 import { type Category, type ItemCard, type TileCover } from "../../lib/api";
 import { plural } from "../../lib/format";
 import { useImporter } from "../../lib/importer";
-import { usePreferences } from "../../lib/preferences";
+import { HOME_SECTIONS, usePreferences, type HomeSection } from "../../lib/preferences";
 import { useAmbient } from "../../lib/ambient/AmbientProvider";
 import { useDashboard, useShelves } from "../../lib/queries";
 import { AddMenu } from "../../components/AddMenu";
@@ -13,6 +34,20 @@ import { aspectFor, CategoryIcon, Cover } from "../../components/common";
 import { MediaCard } from "../../components/MediaCard";
 import { ShelfCard } from "../organize/pages";
 import { useRelink } from "../settings/LibraryTools";
+import { Featured } from "./Featured";
+import { StatsPanel } from "./Stats";
+
+const SECTION_NAMES: Record<HomeSection, string> = {
+  tiles: "Library sections",
+  featured: "Featured today",
+  continueWatching: "Continue watching",
+  continueReading: "Pick up where you left off",
+  shelves: "Your shelves",
+  recentlyOpened: "Recently opened",
+  recentlyAdded: "Recently added",
+  favorites: "Favorites",
+  stats: "Statistics",
+};
 
 function greeting(): string {
   const hour = new Date().getHours();
@@ -118,7 +153,6 @@ function ContinueCard({ item }: { item: ItemCard }) {
 }
 
 function Row({ title, items, more }: { title: string; items: ItemCard[]; more?: { scope: string } }) {
-  if (items.length === 0) return null;
   return (
     <section className="section">
       <div className="section-head">
@@ -138,16 +172,108 @@ function Row({ title, items, more }: { title: string; items: ItemCard[]; more?: 
   );
 }
 
+/** In "Customize Home", each section gets a bar to move it up or down and to hide or show it. */
+function EditBar({ section, index, count, hidden, empty }: { section: HomeSection; index: number; count: number; hidden: boolean; empty: boolean }) {
+  const { preferences, update } = usePreferences();
+  const move = (by: number) => {
+    const order = [...preferences.home.order];
+    const [moved] = order.splice(index, 1);
+    order.splice(index + by, 0, moved);
+    update({ home: { ...preferences.home, order } });
+  };
+  const toggle = () =>
+    update({
+      home: { ...preferences.home, hidden: hidden ? preferences.home.hidden.filter((s) => s !== section) : [...preferences.home.hidden, section] },
+    });
+  return (
+    <div className="home-edit-bar">
+      <strong>{SECTION_NAMES[section]}</strong>
+      {hidden ? <span className="home-edit-note">Hidden</span> : empty && <span className="home-edit-note">Nothing to show right now</span>}
+      <span className="spacer" />
+      <button type="button" className="icon-btn" aria-label={`Move “${SECTION_NAMES[section]}” up`} disabled={index === 0} onClick={() => move(-1)}>
+        <ArrowUp size={16} />
+      </button>
+      <button type="button" className="icon-btn" aria-label={`Move “${SECTION_NAMES[section]}” down`} disabled={index === count - 1} onClick={() => move(1)}>
+        <ArrowDown size={16} />
+      </button>
+      <button type="button" className="btn btn-sm" aria-pressed={!hidden} onClick={toggle}>
+        {hidden ? <EyeOff size={15} /> : <Eye size={15} />} {hidden ? "Show" : "Shown"}
+      </button>
+    </div>
+  );
+}
+
 export function HomePage({ onCatalog }: { onCatalog: () => void }) {
   const dashboard = useDashboard();
   const importer = useImporter();
   const relink = useRelink();
-  const { resolvedTheme, update } = usePreferences();
+  const { preferences, resolvedTheme, update } = usePreferences();
   const ambient = useAmbient();
   const shelves = useShelves();
+  const [editing, setEditing] = useState(false);
   const data = dashboard.data;
   if (!data) return <div className="page" />;
   const dark = resolvedTheme === "dark";
+  const hasItems = data.totals.items > 0;
+
+  // Each section's content, or null when it has nothing to show.
+  const content: Record<HomeSection, ReactNode> = {
+    tiles: <Tiles categories={data.categories} covers={data.tileCovers} total={data.totals.items} />,
+    featured: data.featured && (
+      <section className="section" aria-label="Featured today">
+        <Featured item={data.featured} />
+      </section>
+    ),
+    continueWatching: data.continueWatching.length > 0 && (
+      <section className="section">
+        <div className="section-head">
+          <h2>Continue watching</h2>
+        </div>
+        <div className="continue-grid">
+          {data.continueWatching.map((item) => (
+            <ContinueCard key={item.id} item={item} />
+          ))}
+        </div>
+      </section>
+    ),
+    continueReading: data.continueItems.length > 0 && (
+      <section className="section">
+        <div className="section-head">
+          <h2>Pick up where you left off</h2>
+        </div>
+        <div className="continue-grid">
+          {data.continueItems.map((item) => (
+            <ContinueCard key={item.id} item={item} />
+          ))}
+        </div>
+      </section>
+    ),
+    shelves: shelves.data && shelves.data.length > 0 && (
+      <section className="section">
+        <div className="section-head">
+          <h2>Your shelves</h2>
+          <Link to="/shelves">See all</Link>
+        </div>
+        <div className="shelf-row">
+          {shelves.data.slice(0, 8).map((shelf) => (
+            <ShelfCard key={shelf.id} shelf={shelf} />
+          ))}
+        </div>
+      </section>
+    ),
+    recentlyOpened: data.recentlyOpened.length > 0 && <Row title="Recently opened" items={data.recentlyOpened} />,
+    recentlyAdded: data.recent.length > 0 && <Row title="Recently added" items={data.recent} more={{ scope: "all" }} />,
+    favorites: data.favorites.length > 0 && <Row title="Favorites" items={data.favorites} more={{ scope: "favorites" }} />,
+    stats: hasItems && (
+      <section className="section">
+        <div className="section-head">
+          <h2>Statistics</h2>
+        </div>
+        <StatsPanel />
+      </section>
+    ),
+  };
+  const order = preferences.home.order;
 
   return (
     <div className="page">
@@ -157,6 +283,11 @@ export function HomePage({ onCatalog }: { onCatalog: () => void }) {
           <p>{data.totals.items === 0 ? "Let's bring your collection in." : "Where would you like to go today?"}</p>
         </div>
         <div className="greeting-actions">
+          {hasItems && (
+            <button type="button" className="btn glow-when-on" aria-pressed={editing} onClick={() => setEditing(!editing)}>
+              <LayoutDashboard size={17} strokeWidth={2.4} aria-hidden /> Customize Home
+            </button>
+          )}
           <button
             type="button"
             className="btn glow-when-on"
@@ -215,48 +346,31 @@ export function HomePage({ onCatalog }: { onCatalog: () => void }) {
         </div>
       )}
 
-      <Tiles categories={data.categories} covers={data.tileCovers} total={data.totals.items} />
+      {editing && (
+        <div className="notice home-edit-notice">
+          <LayoutDashboard size={18} aria-hidden style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>Arrange Home: move sections up or down, and hide the ones you don't need. Changes are saved as you go.</span>
+          <span className="spacer" />
+          <button type="button" className="btn btn-sm" onClick={() => update({ home: { order: [...HOME_SECTIONS], hidden: [] } })}>
+            <RotateCcw size={14} /> Reset
+          </button>
+          <button type="button" className="btn btn-sm btn-primary" onClick={() => setEditing(false)}>
+            <Check size={14} /> Done
+          </button>
+        </div>
+      )}
 
-      {data.continueWatching.length > 0 && (
-        <section className="section">
-          <div className="section-head">
-            <h2>Continue watching</h2>
+      {order.map((section, index) => {
+        const hidden = preferences.home.hidden.includes(section);
+        const body = content[section] || null;
+        if (!editing) return hidden || !body ? null : <div key={section}>{body}</div>;
+        return (
+          <div key={section} className={`home-block${hidden ? " is-hidden" : ""}`}>
+            <EditBar section={section} index={index} count={order.length} hidden={hidden} empty={!body} />
+            {!hidden && body}
           </div>
-          <div className="continue-grid">
-            {data.continueWatching.map((item) => (
-              <ContinueCard key={item.id} item={item} />
-            ))}
-          </div>
-        </section>
-      )}
-      {data.continueItems.length > 0 && (
-        <section className="section">
-          <div className="section-head">
-            <h2>Pick up where you left off</h2>
-          </div>
-          <div className="continue-grid">
-            {data.continueItems.map((item) => (
-              <ContinueCard key={item.id} item={item} />
-            ))}
-          </div>
-        </section>
-      )}
-      {shelves.data && shelves.data.length > 0 && (
-        <section className="section">
-          <div className="section-head">
-            <h2>Your shelves</h2>
-            <Link to="/shelves">See all</Link>
-          </div>
-          <div className="shelf-row">
-            {shelves.data.slice(0, 8).map((shelf) => (
-              <ShelfCard key={shelf.id} shelf={shelf} />
-            ))}
-          </div>
-        </section>
-      )}
-      <Row title="Recently opened" items={data.recentlyOpened} />
-      <Row title="Recently added" items={data.recent} more={{ scope: "all" }} />
-      <Row title="Favorites" items={data.favorites} more={{ scope: "favorites" }} />
+        );
+      })}
       {data.totals.items > 0 && (
         <p className="home-totals">
           {plural(data.totals.items, "item")} · {data.totals.physical.toLocaleString()} with a physical copy ·{" "}

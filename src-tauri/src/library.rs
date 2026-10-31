@@ -164,7 +164,7 @@ pub fn categories(conn: &Connection) -> AppResult<Vec<Category>> {
 // ---------------------------------------------------------------------------------------------
 // Library views
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct QueryParams {
     pub category: Option<String>,
@@ -181,6 +181,22 @@ pub struct QueryParams {
     pub sort: Option<String>,
     pub offset: i64,
     pub limit: i64,
+    /// A smart shelf's rules, filled in from `shelf` by `resolve` (never sent by the UI).
+    #[serde(skip)]
+    pub smart: Option<crate::smart::SmartRules>,
+}
+
+/// A smart shelf (Phase 5) is shown through its rules rather than its list.
+fn resolve(conn: &Connection, params: &QueryParams) -> AppResult<Option<QueryParams>> {
+    let Some(shelf) = params.shelf else { return Ok(None) };
+    let Some(rules) = crate::smart::rules_of(conn, shelf)? else { return Ok(None) };
+    let mut resolved = params.clone();
+    resolved.shelf = None;
+    if matches!(resolved.sort.as_deref(), None | Some("shelf")) {
+        resolved.sort = Some(rules.sort.clone().unwrap_or_else(|| "title".into()));
+    }
+    resolved.smart = Some(rules);
+    Ok(Some(resolved))
 }
 
 #[derive(Debug, Serialize)]
@@ -222,14 +238,15 @@ pub async fn library_query(state: State<'_, AppState>, params: QueryParams) -> A
 pub async fn library_query_ids(state: State<'_, AppState>, params: QueryParams) -> AppResult<Vec<i64>> {
     with_library(&state, move |library| {
         library.db.with(|conn| {
-            let QueryParts { joins, filter, args, order } = QueryParts::new(&params);
+            let resolved = resolve(conn, &params)?;
+            let QueryParts { joins, filter, args, order } = QueryParts::new(resolved.as_ref().unwrap_or(&params));
             ids(conn, &format!("SELECT i.id FROM items i{joins}{filter} ORDER BY {order} LIMIT 100000"), &args)
         })
     })
     .await
 }
 
-const CREATOR_SORT: &str = "(SELECT p.sort_name FROM item_people ip JOIN people p ON p.id = ip.person_id \
+pub(crate) const CREATOR_SORT: &str = "(SELECT p.sort_name FROM item_people ip JOIN people p ON p.id = ip.person_id \
                             WHERE ip.item_id = i.id ORDER BY ip.position LIMIT 1)";
 
 const CARD_COLUMNS: &str = "i.id, i.title, \
@@ -308,6 +325,10 @@ impl QueryParts {
             args.push(SqlValue::Text(expr.clone()));
             conditions.push(format!("items_fts MATCH ?{}", args.len()));
         }
+        if let Some(rules) = &params.smart {
+            let sql = rules.sql(&mut args);
+            conditions.push(sql);
+        }
         if let Some(shelf) = params.shelf {
             args.push(SqlValue::Integer(shelf));
             joins.push_str(&format!(" JOIN shelf_items si ON si.item_id = i.id AND si.shelf_id = ?{}", args.len()));
@@ -345,6 +366,7 @@ impl QueryParts {
             None | Some("relevance") if search.is_some() => "f.rank".to_string(),
             None | Some("shelf") if params.shelf.is_some() => "si.position, si.added_at, i.id".to_string(),
             Some("added") => "i.added_at DESC, i.id DESC".to_string(),
+            Some("opened") => "i.last_opened_at IS NULL, i.last_opened_at DESC, i.id DESC".to_string(),
             Some("year") => "i.year IS NULL, i.year DESC, i.sort_title".to_string(),
             Some("creator") => format!("{CREATOR_SORT} IS NULL, {CREATOR_SORT}, i.sort_title"),
             _ => "i.sort_title, i.id".to_string(),
@@ -355,6 +377,8 @@ impl QueryParts {
 
 fn query(conn: &Connection, params: &QueryParams) -> AppResult<QueryResult> {
     let started = Instant::now();
+    let resolved = resolve(conn, params)?;
+    let params = resolved.as_ref().unwrap_or(params);
     let QueryParts { joins, filter, args, order } = QueryParts::new(params);
     let total: i64 = conn.query_row(
         &format!("SELECT count(*) FROM items i{joins}{filter}"),
@@ -371,6 +395,130 @@ fn query(conn: &Connection, params: &QueryParams) -> AppResult<QueryResult> {
     )?;
     let items = cards_by_ids(conn, &page)?;
     Ok(QueryResult { total, offset, items, elapsed_ms: started.elapsed().as_secs_f64() * 1000.0 })
+}
+
+// ---------------------------------------------------------------------------------------------
+// Blurbs for the detailed view (Phase 5)
+
+/// What the detailed view shows under a title: the start of its description, its tags, and a few
+/// facts such as "320 pages" or "12 tracks · 48 min".
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Blurb {
+    pub id: i64,
+    pub description: Option<String>,
+    pub tags: Vec<String>,
+    pub facts: Vec<String>,
+}
+
+const BLURB_CHARS: usize = 420;
+
+/// "1 h 52 min", "48 min" or "3 min".
+pub fn length_label(seconds: f64) -> Option<String> {
+    if !(seconds >= 30.0) {
+        return None;
+    }
+    let minutes = (seconds / 60.0).round() as i64;
+    Some(if minutes >= 60 { format!("{} h {} min", minutes / 60, minutes % 60) } else { format!("{minutes} min") })
+}
+
+fn blurb_facts(handler: &str, metadata: &Value, parts: i64, parts_kind: Option<&str>) -> Vec<String> {
+    let text = |key: &str| match metadata.get(key) {
+        Some(Value::String(s)) if !s.trim().is_empty() => Some(s.trim().to_string()),
+        Some(Value::Number(n)) => Some(n.to_string()),
+        _ => None,
+    };
+    let number = |key: &str| metadata.get(key).and_then(|v| v.as_f64().or_else(|| v.as_str().and_then(|s| s.parse().ok())));
+    let mut facts = Vec::new();
+    match handler {
+        "book" | "comic" => {
+            if let Some(series) = text("series") {
+                facts.push(match text("volume") {
+                    Some(volume) => format!("{series} · Vol. {volume}"),
+                    None => series,
+                });
+            }
+            if let Some(pages) = number("pageCount").filter(|p| *p > 0.0) {
+                facts.push(format!("{} pages", pages as i64));
+            }
+            if let Some(publisher) = text("publisher") {
+                facts.push(publisher);
+            }
+        }
+        "video" => {
+            if parts_kind == Some("episode") && parts > 0 {
+                facts.push(format!("{parts} episode{}", if parts == 1 { "" } else { "s" }));
+            } else if let Some(length) = number("durationSec").and_then(length_label) {
+                facts.push(length);
+            }
+            if let Some(height) = number("height").filter(|h| *h > 0.0) {
+                facts.push(match height as i64 {
+                    h if h >= 2000 => "4K".into(),
+                    h => format!("{h}p"),
+                });
+            }
+        }
+        "audio" => {
+            if parts > 0 {
+                let tracks = format!("{parts} track{}", if parts == 1 { "" } else { "s" });
+                facts.push(match number("durationSec").and_then(length_label) {
+                    Some(length) => format!("{tracks} · {length}"),
+                    None => tracks,
+                });
+            }
+            if let Some(genre) = text("genre") {
+                facts.push(genre);
+            }
+        }
+        _ => {}
+    }
+    facts
+}
+
+pub fn blurbs(conn: &Connection, ids: &[i64]) -> AppResult<Vec<Blurb>> {
+    let mut out = Vec::with_capacity(ids.len());
+    let mut item = conn.prepare(
+        "SELECT i.description, i.metadata, c.handler, \
+           (SELECT count(*) FROM parts p WHERE p.item_id = i.id), \
+           (SELECT p.kind FROM parts p WHERE p.item_id = i.id LIMIT 1) \
+         FROM items i JOIN categories c ON c.id = i.category_id WHERE i.id = ?1",
+    )?;
+    let mut tags = conn.prepare("SELECT t.name FROM item_tags it JOIN tags t ON t.id = it.tag_id WHERE it.item_id = ?1 ORDER BY t.name COLLATE NOCASE")?;
+    for &id in ids.iter().take(200) {
+        let row = item
+            .query_row([id], |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                ))
+            })
+            .optional()?;
+        let Some((description, metadata, handler, parts, parts_kind)) = row else { continue };
+        let metadata: Value = serde_json::from_str(&metadata).unwrap_or(Value::Null);
+        let description = description.map(|d| d.split_whitespace().collect::<Vec<_>>().join(" ")).filter(|d| !d.is_empty()).map(|d| {
+            if d.chars().count() <= BLURB_CHARS {
+                d
+            } else {
+                let cut: String = d.chars().take(BLURB_CHARS).collect();
+                format!("{}…", cut.trim_end())
+            }
+        });
+        out.push(Blurb {
+            id,
+            description,
+            tags: tags.query_map([id], |row| row.get(0))?.collect::<Result<_, _>>()?,
+            facts: blurb_facts(&handler, &metadata, parts, parts_kind.as_deref()),
+        });
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+pub async fn items_blurbs(state: State<'_, AppState>, ids: Vec<i64>) -> AppResult<Vec<Blurb>> {
+    with_library(&state, move |library| library.db.with(|conn| blurbs(conn, &ids))).await
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -444,15 +592,35 @@ fn tile_covers(conn: &Connection) -> AppResult<HashMap<String, Vec<TileCover>>> 
     Ok(tiles)
 }
 
+/// "Featured today" (Phase 5): one item with artwork, picked anew each local day and the same all
+/// day. Items not yet finished come first.
+fn featured_of_the_day(conn: &Connection) -> AppResult<Vec<i64>> {
+    let day: i64 = conn.query_row("SELECT CAST(julianday('now', 'localtime') AS INTEGER)", [], |row| row.get(0))?;
+    for finished in [false, true] {
+        let candidates = ids(
+            conn,
+            &format!(
+                "SELECT i.id FROM items i WHERE i.cover_key IS NOT NULL AND EXISTS (SELECT 1 FROM progress pr                  WHERE pr.item_id = i.id AND pr.part_id = 0 AND pr.completed = 1) = {finished} ORDER BY i.id"
+            ),
+            &[],
+        )?;
+        if !candidates.is_empty() {
+            // SplitMix64 of the day, so consecutive days land far apart.
+            let mut z = (day as u64).wrapping_add(0x9E37_79B9_7F4A_7C15);
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^= z >> 31;
+            return Ok(vec![candidates[(z % candidates.len() as u64) as usize]]);
+        }
+    }
+    Ok(Vec::new())
+}
+
 #[tauri::command]
 pub async fn dashboard_get(state: State<'_, AppState>) -> AppResult<Dashboard> {
     with_library(&state, |library| {
         library.db.with(|conn| {
-            let featured_id = ids(
-                conn,
-                "SELECT id FROM items WHERE cover_key IS NOT NULL ORDER BY added_at DESC, id DESC LIMIT 1",
-                &[],
-            )?;
+            let featured_id = featured_of_the_day(conn)?;
             // Reading and watching are offered apart: books and comics here, video below.
             let in_progress = |video: bool| {
                 ids(

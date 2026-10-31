@@ -62,8 +62,13 @@ export interface AccentVariables {
   "--accent-ring": string;
 }
 
-export function accentVariables(hex: string, theme: "dark" | "light"): AccentVariables {
+/**
+ * `background` is the page color the accent text sits on (Breeze's by default); `ratio` is the
+ * contrast that text needs (High contrast asks for 7:1).
+ */
+export function accentVariables(hex: string, theme: "dark" | "light", background?: string, ratio = 4.5): AccentVariables {
   const base = parseHex(hex) ?? ([21, 146, 208] as Rgb);
+  const page = (background && parseHex(background)) || (theme === "dark" ? DARK_BG : LIGHT_BG);
   if (theme === "dark") {
     const bright = mix(base, WHITE, 0.15);
     // Bright colors keep their vividness with dark text; mid tones darken a little for white text.
@@ -73,7 +78,7 @@ export function accentVariables(hex: string, theme: "dark" | "light"): AccentVar
       "--accent": toHex(fill),
       "--accent-ink": darkInk ? DARK_INK : "#ffffff",
       "--accent-soft": rgba(bright, 0.16),
-      "--accent-text": toHex(ensureContrast(bright, DARK_BG, 4.5, "white")),
+      "--accent-text": toHex(ensureContrast(bright, page, ratio, "white")),
       "--accent-bright": toHex(bright),
       "--accent-glow": rgba(bright, 0.35),
       "--accent-ring": rgba(bright, 0.4),
@@ -84,7 +89,7 @@ export function accentVariables(hex: string, theme: "dark" | "light"): AccentVar
     "--accent": toHex(fill),
     "--accent-ink": "#ffffff",
     "--accent-soft": rgba(base, 0.14),
-    "--accent-text": toHex(ensureContrast(fill, LIGHT_BG, 4.5, "black")),
+    "--accent-text": toHex(ensureContrast(fill, page, ratio, "black")),
     "--accent-bright": toHex(base),
     "--accent-glow": rgba(base, 0.32),
     "--accent-ring": rgba(base, 0.35),

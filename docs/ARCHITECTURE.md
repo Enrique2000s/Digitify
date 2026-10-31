@@ -53,14 +53,16 @@ Digitify.exe (Tauri 2)
 | `builder` | The image-set book builder: previews of picked images and reordering an image book's pages (`import::book_from_images` creates the book) |
 | `archives` | Comic archives (D-017): ZIP, RAR (UnRAR), 7z and TAR recognized by their first bytes; listing, reading one entry, and one pass over all entries (fast for solid archives) |
 | `pdf` | PDFium, loaded from `pdfium.dll` on first use (D-013): page sizes, page rendering, and title, author, year, page count and cover at import |
-| `player` | mpv for video: process lifecycle, IPC events (`player-event`), the video host window under the WebView, subtitle files |
+| `player` | mpv for video: process lifecycle, IPC events (`player-event`; `time-pos` at most ten times a second, which the music player shares), the video host window under the WebView, subtitle files |
 | `watch` | Films and episodes in the player (Phase 3): the file and start position for an item or episode, the next episode, progress every few seconds, watched marks, and a series' summed-up progress (part 0) |
 | `episodes` | Episode names at import (D-018): "S01E02", "1x02", season folders |
 | `optical` | Discs (Phase 4, D-022): `win` (Windows drive calls: drives, media, TOC, CD-Text, raw audio sectors, DVD copyright descriptor, eject), `cd` (TOC and CD-Text parsing, verified ripping), `dvd` (IFO titles, chapters, languages; CSS scrambling check), `bluray` (MPLS playlists; AACS/BD+), and the service: drive watcher (`drives-changed`), contents, playing titles through mpv (EDL plus a chapters file), CD audio over the media server, rip and import jobs (`disc-job`), cataloging. `DIGITIFY_FAKE_DRIVES` adds simulated drives for testing. |
+| `smart` | Smart shelves (D-023): rules stored in a shelf's `settings`, checked when saved and turned into one SQL condition with bound values; `library_query` shows a smart shelf through its rules |
+| `stats` | Recorded time (`activity`: day, item, read/watch/listen, seconds) and Home's statistics |
 | `music` | The music player (D-020): a second, audio-only mpv whose playlist is the queue (gapless), tracks and artists, favorites, playlists, recently played, track edits |
 | `dev` | Phase 0 video lab harness (Settings › Developer) |
 
-Planned modules: none for now (Phase 5 is personalization).
+Planned modules: none for now.
 
 ### Import pipeline
 1. **Scan** the picked or dropped paths into candidates:
@@ -86,14 +88,15 @@ React + TypeScript via Vite, organized by feature:
 | `features/reader/` | The reader screen at `/read/$id` (`?page=` opens a page): the page reader (layout of views, spreads and strips), the ebook reader around foliate-js, their shared controls (full screen, controls that hide, bookmarks, display), contents, and page turns (CSS 3D turn and a WebGL curl shader) |
 | `features/player/` | The video player at `/watch/$id` (`?part=` an episode) and `/disc/$letter/$title` (a disc title) |
 | `features/discs/` | **Discs** (`/discs`): drives and their contents, ripping, importing, cataloging, data-disc browsing, and the insert notice; `lib/discs.tsx` keeps drives and jobs current |
+| `features/home/` | Home: sections in the user's order, "Customize Home", Featured today and Statistics |
 | `features/music/` | The music category's tabs (artists, tracks, playlists, recently played, favorites) and track lists with their menus and dialogs |
 | `lib/music/` | The music provider: the queue and playback state from `music-event`s, shared by every screen |
 | `features/builder/` | "Book from images…" and "Arrange pages": the page grid with pointer dragging (the window's file drop takes over HTML drag and drop) |
 | `vendor/foliate-js/` | foliate-js at a pinned commit (D-014; see its README), loaded only when an ebook opens |
 | `features/` | Home (category tiles, your shelves), library views (virtualized grid/list/shelf with multi-select and the bulk bar), organize (collections, shelves, tags, move dialogs), item page and forms (with custom fields), import UI, onboarding, settings (Categories, Sound) |
-| `lib/` | Typed API, TanStack Query hooks, paged item cache, preferences (theme/accent/motion/music), accent contrast math, formatting |
+| `lib/` | Typed API, TanStack Query hooks, paged item cache, preferences (look, palette, theme, accent, motion, music, shelf material, Home's layout, shortcuts), accent contrast math, formatting, `shortcuts.ts` (every keyboard action, its default keys and the user's), `activity.ts` (recording time for Statistics) |
 | `lib/ambient/` | Ambient music and interface sounds: the "Morning Lounge" composition and synth, the playback engine, and its React provider |
-| `styles/` | Breeze tokens and app styles (D-016); the Nunito font is bundled via Fontsource, never loaded online |
+| `styles/` | Breeze tokens and app styles (D-016); `looks.css` (Cinematic and the Breeze palettes, as token overrides) and `views.css` (shelf materials, detailed and carousel views, smart shelves, Home's widgets) (D-023). Nunito, Inter and Archivo are bundled via Fontsource, never loaded online |
 | `poc/` | Video lab |
 
 ### Ambient music and interface sounds (D-016)
@@ -126,7 +129,7 @@ Category       Books · Comics · Manga · Movies & Series · Music · your own�
        └ Parts     optional: chapters, episodes, tracks, each with its own progress
 Shelves & tags: cross-cutting groups; one item can sit on many shelves
 ```
-The schema lives in `src-tauri/migrations/` (v3 adds `playlists`, `playlist_tracks`, `plays` and `parts.is_favorite`). Tables: `categories`, `field_definitions`, `collections`, `items`, `people`, `item_people`, `parts`, `versions`, `files`, `progress`, `bookmarks`, `shelves`, `shelf_items`, `tags`, `item_tags`, `settings` and `items_fts` (full-text index).
+The schema lives in `src-tauri/migrations/` (v3 adds `playlists`, `playlist_tracks`, `plays` and `parts.is_favorite`; v4 adds `activity`). Tables: `categories`, `field_definitions`, `collections`, `items`, `people`, `item_people`, `parts`, `versions`, `files`, `progress`, `bookmarks`, `shelves` (a smart shelf's rules in `settings`), `shelf_items`, `tags`, `item_tags`, `activity`, `settings` and `items_fts` (full-text index).
 
 ## Media serving
 On Windows, the UI loads library resources from `http://digitify.localhost/<route>`:

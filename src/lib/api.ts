@@ -62,6 +62,41 @@ export interface ItemCard {
   progress: number | null;
 }
 
+/** Seconds spent reading, watching and listening. */
+export interface ActivityTime {
+  read: number;
+  watch: number;
+  listen: number;
+}
+
+export interface NamedCount {
+  key: string;
+  name: string;
+  count: number;
+}
+
+/** Home's statistics (Phase 5). */
+export interface LibraryStats {
+  month: ActivityTime;
+  year: ActivityTime;
+  since: string | null;
+  days: (ActivityTime & { day: string })[];
+  finishedMonth: number;
+  finishedYear: number;
+  inProgress: number;
+  playsMonth: number;
+  topArtists: NamedCount[];
+  categories: NamedCount[];
+}
+
+/** The detailed view's extra lines for an item (Phase 5). */
+export interface Blurb {
+  id: number;
+  description: string | null;
+  tags: string[];
+  facts: string[];
+}
+
 export interface QueryParams {
   category?: string | null;
   /** A collection and everything inside it. */
@@ -382,12 +417,37 @@ export interface Tag {
   itemCount: number;
 }
 
+/** A smart shelf's rule (Phase 5), e.g. `{ field: "progress", op: "is", value: "notStarted" }`. */
+export interface SmartCondition {
+  field: string;
+  op: string;
+  value: string;
+  value2?: string | null;
+}
+
+export interface SmartRules {
+  /** Any one rule is enough (otherwise all must match). */
+  any: boolean;
+  conditions: SmartCondition[];
+  /** Only the first this many, in `sort` order. */
+  limit: number | null;
+  sort: string | null;
+}
+
 export interface Shelf {
   id: number;
   name: string;
   description: string | null;
   itemCount: number;
   covers: TileCover[];
+  /** Set for a smart shelf, which fills itself. */
+  rules: SmartRules | null;
+}
+
+export interface ShelfInput {
+  name: string;
+  description: string | null;
+  rules?: SmartRules | null;
 }
 
 export interface Collection {
@@ -523,13 +583,17 @@ export const api = {
   categories: () => invoke<Category[]>("categories_list"),
   query: (params: QueryParams) => invoke<QueryResult>("library_query", { params }),
   queryIds: (params: Omit<QueryParams, "offset" | "limit">) => invoke<number[]>("library_query_ids", { params: { ...params, offset: 0, limit: 0 } }),
+  blurbs: (ids: number[]) => invoke<Blurb[]>("items_blurbs", { ids }),
+  activityAdd: (item: number, kind: "read" | "watch" | "listen", seconds: number) => invoke<void>("activity_add", { item, kind, seconds }),
+  stats: () => invoke<LibraryStats>("library_stats"),
   tags: () => invoke<Tag[]>("tags_list"),
   itemTagsSet: (id: number, names: string[]) => invoke<void>("item_tags_set", { id, names }),
   tagRename: (id: number, name: string) => invoke<void>("tag_rename", { id, name }),
   tagDelete: (id: number) => invoke<void>("tag_delete", { id }),
   shelves: () => invoke<Shelf[]>("shelves_list"),
-  shelfCreate: (shelf: { name: string; description: string | null }) => invoke<number>("shelf_create", { shelf }),
-  shelfUpdate: (id: number, shelf: { name: string; description: string | null }) => invoke<void>("shelf_update", { id, shelf }),
+  shelfCreate: (shelf: ShelfInput) => invoke<number>("shelf_create", { shelf }),
+  shelfUpdate: (id: number, shelf: ShelfInput) => invoke<void>("shelf_update", { id, shelf }),
+  smartCount: (rules: SmartRules) => invoke<number>("smart_count", { rules }),
   shelfDelete: (id: number) => invoke<void>("shelf_delete", { id }),
   collections: (category: string, parent: number | null) => invoke<CollectionLevel>("collections_list", { category, parent }),
   collectionTree: (category: string) => invoke<CollectionNode[]>("collection_tree", { category }),

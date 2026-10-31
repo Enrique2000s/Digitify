@@ -91,8 +91,15 @@ Built on Digitify's own disc layer (D-022) and tested with simulated drives; dri
    - ✅ one-click cataloging of any disc, protected or not
 4. ✅ **Data discs:** browse and import (copied into the library).
 
-## Phase 5 — Advanced personalization
-Expanded themes, shelf appearance and custom shelves, custom dashboard widgets, more layouts, advanced metadata and organization, and a keyboard-shortcut editor.
+## Phase 5 — Advanced personalization (done)
+Scope chosen by the owner in D-023.
+1. ✅ **Expanded themes:** Cinematic as an optional look; Breeze palettes Sky, Sunset, Midnight and High contrast.
+2. ✅ **Shelf appearance:** Wood, Glass and Dark metal besides Breeze.
+3. ✅ **Custom dashboard:** Home's sections reordered and hidden; Featured today; Statistics (with recorded reading, watching and listening time).
+4. ✅ **More layouts:** Detailed and Carousel, besides Grid, Shelf and List.
+5. ✅ **Advanced organization:** smart shelves that fill themselves from rules.
+6. ✅ **Keyboard-shortcut editor.**
+7. ✅ Backup and restore, custom categories and fields were already done in Phase 1.
 
 ## Release engineering (ongoing)
 NSIS installer, third-party license notices, then decisions on code signing and on an update strategy.
@@ -103,5 +110,5 @@ NSIS installer, third-party license notices, then decisions on code signing and 
 | Topic | When |
 |---|---|
 | Online metadata providers (MusicBrainz, Open Library, TMDB, ComicVine, AniList, …) | When metadata work starts; offline-only until approved |
-| Optional proposals P1–P9 (Digitize Studio, generated covers/spines, collector tools, smart collections, watch folders, Windows integration, reading/listening extras, licensed-player handoff, importers) | Any time; none approved yet |
+| Optional proposals P1–P9 (Digitize Studio, generated covers/spines, collector tools, smart collections, watch folders, Windows integration, reading/listening extras, licensed-player handoff, importers) | Any time. Smart collections arrived as smart shelves (D-023); the rest are not approved yet |
 | Code signing | Before the first public build |

@@ -7,6 +7,8 @@ import { useAmbient, useAmbientHold } from "../../lib/ambient/AmbientProvider";
 import { accentVariables } from "../../lib/color";
 import { usePreferences, type ReaderPreferences } from "../../lib/preferences";
 import { libraryChanged } from "../../lib/queries";
+import { useActivity } from "../../lib/activity";
+import { actionFor, hint, isTyping } from "../../lib/shortcuts";
 import { WindowButtons } from "../../components/TitleBar";
 import { BookmarksMenu, toggleBookmark, useBookmarks } from "./Bookmarks";
 import { chapterAt, ChaptersMenu } from "./Chapters";
@@ -167,56 +169,53 @@ export function PageReader({ book, startPage, onClose, next: nextVolume, onNext 
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement && event.target.type !== "range") return;
-      if ((event.target as HTMLElement | null)?.closest?.(".reader-panel") && event.key !== "Escape") return;
+      if (isTyping(event)) return;
+      const action = actionFor(event, "readers");
+      if ((event.target as HTMLElement | null)?.closest?.(".reader-panel") && action !== "readers.close") return;
       const element = stage.current;
       const scrollable = !!element && element.scrollHeight > element.clientHeight + 2;
-      switch (event.key) {
-        case "ArrowRight":
+      switch (action) {
+        case "readers.right":
           rtl ? prev() : next();
           break;
-        case "ArrowLeft":
+        case "readers.left":
           rtl ? next() : prev();
           break;
-        case "ArrowDown":
-        case "ArrowUp":
-          if (scroll || scrollable) return; // the page scrolls natively
-          event.key === "ArrowDown" ? next() : prev();
-          break;
-        case "PageDown":
-        case "PageUp":
-        case " ":
-          if (scroll) {
-            element?.scrollBy({ top: (event.key === "PageUp" || event.shiftKey ? -0.9 : 0.9) * element.clientHeight, behavior: "smooth" });
+        case "readers.next":
+        case "readers.previous": {
+          const forward = action === "readers.next";
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            if (scroll || scrollable) return; // the page scrolls natively
+            forward ? next() : prev();
+          } else if (scroll) {
+            element?.scrollBy({ top: (forward ? 0.9 : -0.9) * element.clientHeight, behavior: "smooth" });
           } else {
-            event.key === "PageUp" || event.shiftKey ? prev() : next();
+            forward ? next() : prev();
           }
           break;
-        case "Home":
+        }
+        case "readers.first":
           go(0);
           break;
-        case "End":
+        case "readers.last":
           go(total - 1);
           break;
-        case "+":
-        case "=":
+        case "readers.zoomIn":
           zoomBy(1);
           break;
-        case "-":
+        case "readers.zoomOut":
           zoomBy(-1);
           break;
-        case "0":
+        case "readers.zoomReset":
           setZoom(1);
           break;
-        case "f":
-        case "F11":
+        case "readers.fullscreen":
           void toggleFullscreen();
           break;
-        case "b":
-        case "B":
+        case "readers.bookmark":
           void toggleBookmark(bookmarks, here, isHere);
           break;
-        case "Escape":
+        case "readers.close":
           // Escape closes an open panel first, then full screen, then the reader.
           if (panel) setPanel(null);
           else if (fullscreen) void toggleFullscreen();
@@ -275,6 +274,8 @@ export function PageReader({ book, startPage, onClose, next: nextVolume, onNext 
 
   // Progress is saved once the reader moves; just opening a book doesn't change where it stopped.
   const reached = scroll ? page : view[view.length - 1];
+  const nudge = useActivity(book.itemId, "read", true);
+  useEffect(nudge, [reached, nudge]);
   const latest = useRef(reached);
   const moved = useRef(false);
   if (latest.current !== reached) moved.current = true;
@@ -442,7 +443,7 @@ export function PageReader({ book, startPage, onClose, next: nextVolume, onNext 
       </div>
 
       <header className={`reader-bar top${showBars ? "" : " hidden"}`} data-tauri-drag-region {...barProps}>
-        <button type="button" className="round-btn" aria-label="Close the reader" title="Close (Esc)" onClick={onClose}>
+        <button type="button" className="round-btn" aria-label="Close the reader" title={`Close${hint("readers.close")}`} onClick={onClose}>
           <ArrowLeft size={18} strokeWidth={2.6} />
         </button>
         <div className="reader-title" data-tauri-drag-region>
@@ -515,7 +516,7 @@ export function PageReader({ book, startPage, onClose, next: nextVolume, onNext 
           open={panel === "display"}
           onOpenChange={(open) => setPanel(open ? "display" : null)}
         />
-        <button type="button" className="round-btn" aria-label={fullscreen ? "Leave full screen" : "Full screen"} title="Full screen (F)" onClick={() => void toggleFullscreen()}>
+        <button type="button" className="round-btn" aria-label={fullscreen ? "Leave full screen" : "Full screen"} title={`Full screen${hint("readers.fullscreen")}`} onClick={() => void toggleFullscreen()}>
           {fullscreen ? <Shrink size={17} /> : <Expand size={17} />}
         </button>
         {!fullscreen && <WindowButtons />}

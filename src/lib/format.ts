@@ -1,6 +1,6 @@
 import type { Handler } from "./api";
 
-const FORMAT_LABELS: Record<string, string> = {
+export const FORMAT_LABELS: Record<string, string> = {
   epub: "EPUB",
   pdf: "PDF",
   mobi: "MOBI",

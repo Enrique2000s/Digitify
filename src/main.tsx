@@ -1,6 +1,11 @@
 import "@fontsource-variable/nunito";
+// Cinematic's fonts (D-015, D-023), loaded only when that look is on.
+import "@fontsource-variable/inter";
+import "@fontsource-variable/archivo/wdth.css";
 import "./styles/tokens.css";
 import "./styles/app.css";
+import "./styles/looks.css";
+import "./styles/views.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

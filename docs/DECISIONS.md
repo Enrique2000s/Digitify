@@ -100,6 +100,22 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-023 · Phase 5: what personalization includes
+- **Date:** 2026-10-31 · **Approved by:** project owner (picked from bundled options; the keyboard-shortcut editor was already in the roadmap)
+- **Looks and palettes:**
+  - **Cinematic returns as an optional look** (D-015): charcoal glass surfaces, an amber accent, Inter with expanded Archivo headings, light and dark. It restyles the same layout; Breeze stays the default (D-016).
+  - **Breeze palettes:** Sky (the original), Sunset (warm, with a coral accent), Midnight (pure black, always dark) and High contrast (black and white with strong edges, accent text at 7:1).
+  - A look or palette brings its own accent unless the accent was changed by hand.
+  - Not chosen: an interface font setting, a picture of your own behind Home.
+- **Shelf materials** for the shelf view: Breeze (as before), Wood, Glass (with reflections) and Dark metal (a pegboard). They're drawn with CSS and an SVG noise filter for the grain; no image files. Not chosen: a material per shelf.
+- **Home:** its sections can be reordered and hidden ("Customize Home"). Two new sections:
+  - **Featured today:** one item with artwork, picked anew each day (unfinished items first), with its description and Read/Play.
+  - **Statistics:** time spent reading, watching and listening this month and year, the last 14 days, what was finished, the most played artists and the library's make-up. Time is recorded while a reader is open and in use (it stops after 5 minutes without a page turn or input) or while a video or music plays, in a new `activity` table (schema v4). It never leaves the library.
+  - Not chosen: a row of any shelf, tag or collection; a "recent music" section.
+- **Layouts:** a **Detailed** view (the brief's "large artwork, description and metadata") and a **Carousel** view (covers in a 3D row).
+- **Smart shelves:** shelves that fill themselves from rules (category, kind of media, tags, year, creator, title, format, progress, favorite, copies, added or last opened within some days), matching all or any, with an order and an optional "only the first N". The rules live in the shelf's `settings`; the shelves table didn't change. Not chosen: a personal status and star rating.
+- **Keyboard shortcuts:** every shortcut is listed in Settings › Keyboard by where it works (everywhere, library views, readers, video player). Keys can be added, removed and reset; a key already in use asks before it moves. New everywhere-shortcuts: Home (Alt+Home), Settings (Ctrl+,), and the music's play/pause (Ctrl+P), next and previous (Ctrl+Shift+→/←).
+
 ### D-022 · Optical discs: Digitify's own disc layer
 - **Date:** 2026-10-31 · **Approved by:** project owner (chose the own disc layer over an mpv build with libdvdnav/libbluray; offline-only ripping and titles)
 - **Decision:**
@@ -157,7 +173,7 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - **Ducking:** pauses automatically while Digitify plays video (and, from Phase 3, any media).
 - **Name (2026-10-31, owner's request):** the original theme is shown as "Digitify Main Menu Music" (it was "Morning Lounge").
 - **Interface sounds:** soft hover and press tones. On by default, with a switch in Settings.
-- Cinematic could come back later as an optional theme (Phase 5), only if requested.
+- Cinematic could come back later as an optional theme (Phase 5), only if requested. It did, as an optional look (D-023).
 
 ### D-015 · Visual identity: Cinematic (superseded by D-016)
 - **Date:** 2026-10-30 · **Approved by:** project owner (chosen from the visual concepts canvas)

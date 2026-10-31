@@ -11,8 +11,8 @@ use std::sync::Mutex;
 use rusqlite::{params, params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tauri::{AppHandle, Emitter, Manager, State};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tauri::{AppHandle, Manager, State};
+use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 
 use crate::error::{AppError, AppResult};
@@ -431,16 +431,7 @@ async fn session(app: &AppHandle, state: &MusicState, volume: f64) -> AppResult<
             }
         }
     });
-    let events = app.clone();
-    tauri::async_runtime::spawn(async move {
-        let mut lines = BufReader::new(reader).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            if let Ok(message) = serde_json::from_str::<Value>(&line) {
-                let _ = events.emit("music-event", message);
-            }
-        }
-        let _ = events.emit("music-event", json!({ "event": "closed" }));
-    });
+    tauri::async_runtime::spawn(player::forward(reader, app.clone(), "music-event"));
     for (index, name) in OBSERVED.iter().enumerate() {
         player::send(&commands, json!({ "command": ["observe_property", index + 1, name] }));
     }

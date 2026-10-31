@@ -15,6 +15,7 @@ import { CatalogDialog } from "../features/item/forms";
 import { BookBuilderDialog } from "../features/builder/BookBuilder";
 import { Onboarding } from "../features/onboarding/Onboarding";
 import { BuilderContext, CatalogContext } from "./catalog";
+import { AppShortcuts } from "./AppShortcuts";
 
 export function Root() {
   const status = useAppStatus();
@@ -41,6 +42,7 @@ export function Root() {
       <AmbientProvider>
         <MusicProvider>
         <DiscsProvider>
+        <AppShortcuts />
         {fullWindow ? (
           // The video lab and the reader take the whole window.
           <Outlet />

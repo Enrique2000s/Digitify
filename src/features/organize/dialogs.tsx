@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { FolderPlus } from "lucide-react";
-import { api, errorText, type CollectionNode } from "../../lib/api";
+import { api, errorText, type CollectionNode, type SmartRules } from "../../lib/api";
 import { libraryChanged, useCategories, useCollectionTree } from "../../lib/queries";
 import { Dialog, Field } from "../../components/common";
 
@@ -141,7 +141,7 @@ export function ShelfDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  shelf?: { id: number; name: string; description: string | null };
+  shelf?: { id: number; name: string; description: string | null; rules?: SmartRules | null };
   onSaved?: (id: number) => Promise<unknown> | void;
 }) {
   const queryClient = useQueryClient();
@@ -157,7 +157,7 @@ export function ShelfDialog({
   }, [open, shelf, setError]);
   const save = () =>
     void run(async () => {
-      const input = { name: name.trim(), description: description.trim() || null };
+      const input = { name: name.trim(), description: description.trim() || null, rules: shelf?.rules ?? null };
       let id = shelf?.id;
       if (id == null) id = await api.shelfCreate(input);
       else await api.shelfUpdate(id, input);

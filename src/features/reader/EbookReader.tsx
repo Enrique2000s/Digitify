@@ -7,6 +7,8 @@ import { useAmbient, useAmbientHold } from "../../lib/ambient/AmbientProvider";
 import { accentVariables } from "../../lib/color";
 import { EBOOK_SIZES, EBOOK_SPACINGS, usePreferences, type EbookPreferences } from "../../lib/preferences";
 import { libraryChanged } from "../../lib/queries";
+import { useActivity } from "../../lib/activity";
+import { actionFor, hint, isTyping } from "../../lib/shortcuts";
 import { Switch } from "../../components/common";
 import { WindowButtons } from "../../components/TitleBar";
 import type { Location, TocItem, View } from "../../vendor/foliate-js/view.js";
@@ -134,6 +136,8 @@ export function EbookReader({ book, onClose, next: nextVolume, onNext }: {
   const root = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<View | null>(null);
+  // Page turns inside the book count as reading (its input doesn't reach the window).
+  const nudgeRef = useRef(useActivity(book.itemId, "read", true));
   const [state, setState] = useState<{ status: "opening" | "ready" } | { status: "failed"; message: string }>({ status: "opening" });
   const [toc, setToc] = useState<TocItem[]>([]);
   const [rtl, setRtl] = useState(false);
@@ -195,46 +199,46 @@ export function EbookReader({ book, onClose, next: nextVolume, onNext }: {
   input.current.key = (event: KeyboardEvent) => {
     const view = viewRef.current;
     const target = event.target as HTMLElement | null;
-    if (!view || !ready) return;
-    if (target instanceof HTMLInputElement && target.type !== "range") return;
-    if (target?.closest?.(".reader-panel") && event.key !== "Escape") return;
-    switch (event.key) {
-      case "ArrowRight":
+    if (!view || !ready || isTyping(event)) return;
+    const action = actionFor(event, "readers");
+    if (target?.closest?.(".reader-panel") && action !== "readers.close") return;
+    // In a scrolling book the arrows move a little; the other keys move a screen.
+    const arrow = scroll && (event.key === "ArrowDown" || event.key === "ArrowUp") ? 80 : undefined;
+    switch (action) {
+      case "readers.right":
         void view.goRight();
         break;
-      case "ArrowLeft":
+      case "readers.left":
         void view.goLeft();
         break;
-      case "ArrowDown":
-        void view.next(scroll ? 80 : undefined);
+      case "readers.next":
+        void view.next(arrow);
         break;
-      case "ArrowUp":
-        void view.prev(scroll ? 80 : undefined);
+      case "readers.previous":
+        void view.prev(arrow);
         break;
-      case "PageDown":
-      case "PageUp":
-      case " ":
-        void (event.key === "PageUp" || event.shiftKey ? view.prev() : view.next());
-        break;
-      case "Home":
+      case "readers.first":
         void view.goToFraction(0);
         break;
-      case "+":
-      case "=":
+      case "readers.last":
+        void view.goToFraction(1);
+        break;
+      case "readers.zoomIn":
         resize(1);
         break;
-      case "-":
+      case "readers.zoomOut":
         resize(-1);
         break;
-      case "f":
-      case "F11":
+      case "readers.zoomReset":
+        setEbook({ size: 100 });
+        break;
+      case "readers.fullscreen":
         void toggleFullscreen();
         break;
-      case "b":
-      case "B":
+      case "readers.bookmark":
         void toggleBookmark(bookmarks, here, isHere);
         break;
-      case "Escape":
+      case "readers.close":
         if (panel) setPanel(null);
         else if (fullscreen) void toggleFullscreen();
         else onClose();
@@ -293,6 +297,7 @@ export function EbookReader({ book, onClose, next: nextVolume, onNext }: {
     let view: View | null = null;
     const onRelocate = (event: Event) => {
       const detail = (event as CustomEvent<Location>).detail;
+      nudgeRef.current();
       setLocation(detail);
       setAtEnd(detail.fraction >= 0.995 || !!view?.renderer.atEnd);
       if (!opened.current || !view) return;
@@ -392,7 +397,7 @@ export function EbookReader({ book, onClose, next: nextVolume, onNext }: {
       )}
 
       <header className={`reader-bar top${showBars ? "" : " hidden"}`} data-tauri-drag-region {...barProps}>
-        <button type="button" className="round-btn" aria-label="Close the reader" title="Close (Esc)" onClick={onClose}>
+        <button type="button" className="round-btn" aria-label="Close the reader" title={`Close${hint("readers.close")}`} onClick={onClose}>
           <ArrowLeft size={18} strokeWidth={2.6} />
         </button>
         <div className="reader-title" data-tauri-drag-region>
@@ -529,7 +534,7 @@ export function EbookReader({ book, onClose, next: nextVolume, onNext }: {
             </Popover.Content>
           </Popover.Portal>
         </Popover.Root>
-        <button type="button" className="round-btn" aria-label={fullscreen ? "Leave full screen" : "Full screen"} title="Full screen (F)" onClick={() => void toggleFullscreen()}>
+        <button type="button" className="round-btn" aria-label={fullscreen ? "Leave full screen" : "Full screen"} title={`Full screen${hint("readers.fullscreen")}`} onClick={() => void toggleFullscreen()}>
           {fullscreen ? <Shrink size={17} /> : <Expand size={17} />}
         </button>
         {!fullscreen && <WindowButtons />}

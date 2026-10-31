@@ -31,7 +31,7 @@ export function ShelfMenu({ ids, member, children, onError }: { ids: number[]; m
         <DropdownMenu.Portal>
           <DropdownMenu.Content className="menu" align="start" sideOffset={8}>
             {shelves.data?.length === 0 && <div className="menu-note">No shelves yet.</div>}
-            {shelves.data?.map((shelf) =>
+            {shelves.data?.filter((shelf) => !shelf.rules).map((shelf) =>
               member ? (
                 <DropdownMenu.CheckboxItem
                   key={shelf.id}

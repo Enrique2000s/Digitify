@@ -27,7 +27,10 @@ import { useMusic } from "../../lib/music/MusicProvider";
 import { accentVariables } from "../../lib/color";
 import { usePreferences } from "../../lib/preferences";
 import { libraryChanged } from "../../lib/queries";
+import { useActivity } from "../../lib/activity";
 import { WindowButtons } from "../../components/TitleBar";
+import { SeekBar } from "../../components/SeekBar";
+import { actionFor, hint, isTyping } from "../../lib/shortcuts";
 import { useAutoHide, useFullscreen } from "../reader/chrome";
 
 /** A message from mpv's JSON IPC, forwarded by the core. */
@@ -58,9 +61,12 @@ interface Playback {
   tracks: Track[];
   chapters: { title?: string; time: number }[];
   chapter: number;
+  /** mpv is seeking, or waiting for data. */
+  seeking: boolean;
+  buffering: boolean;
 }
 
-const EMPTY: Playback = { time: 0, duration: 0, paused: false, volume: 100, muted: false, speed: 1, ended: false, tracks: [], chapters: [], chapter: -1 };
+const EMPTY: Playback = { time: 0, duration: 0, paused: false, volume: 100, muted: false, speed: 1, ended: false, tracks: [], chapters: [], chapter: -1, seeking: false, buffering: false };
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const SAVE_EVERY_MS = 5000;
 const NEXT_COUNTDOWN = 8;
@@ -87,6 +93,10 @@ function apply(state: Playback, name: string, data: unknown): Playback {
       return Array.isArray(data) ? { ...state, chapters: data as Playback["chapters"] } : state;
     case "chapter":
       return typeof data === "number" ? { ...state, chapter: data } : state;
+    case "seeking":
+      return { ...state, seeking: data === true };
+    case "paused-for-cache":
+      return { ...state, buffering: data === true };
     default:
       return state;
   }
@@ -179,10 +189,10 @@ function VideoPlayer({ source }: { source: Source }) {
   const [target, setTarget] = useState<WatchTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [playback, setPlayback] = useState<Playback>(EMPTY);
-  const [scrub, setScrub] = useState<number | null>(null);
   const [menu, setMenu] = useState<"speed" | "audio" | "subs" | "chapters" | null>(null);
   const [resumed, setResumed] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
   const latest = useRef(playback);
   latest.current = playback;
 
@@ -312,6 +322,19 @@ function VideoPlayer({ source }: { source: Source }) {
     return () => window.clearTimeout(timer);
   }, [resumed]);
 
+  useActivity(target?.itemId, "watch", !!target && !playback.paused && !playback.ended);
+
+  // A seek or a wait for data that takes a moment shows a spinner, so it's clear the click landed.
+  const waiting = playback.seeking || playback.buffering;
+  useEffect(() => {
+    if (!waiting) {
+      setBusy(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setBusy(true), 350);
+    return () => window.clearTimeout(timer);
+  }, [waiting]);
+
   // The volume is remembered for next time (mpv starts at it).
   useEffect(() => {
     if (!target) return;
@@ -325,41 +348,41 @@ function VideoPlayer({ source }: { source: Source }) {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const element = event.target as HTMLElement | null;
-      if (element instanceof HTMLInputElement && element.type !== "range") return;
-      if (element?.closest?.(".reader-panel") && event.key !== "Escape") return;
+      if (isTyping(event)) return;
+      const action = actionFor(event, "video");
+      if ((event.target as HTMLElement | null)?.closest?.(".reader-panel") && action !== "video.close") return;
       const now = latest.current;
-      switch (event.key) {
-        case " ":
-        case "k":
+      switch (action) {
+        case "video.playPause":
           command(["cycle", "pause"]);
           break;
-        case "ArrowLeft":
-          command(["seek", event.shiftKey ? -30 : -5, "relative"]);
+        case "video.back":
+        case "video.forward":
+        case "video.backLong":
+        case "video.forwardLong": {
+          const seconds = { "video.back": -5, "video.forward": 5, "video.backLong": -30, "video.forwardLong": 30 }[action];
+          command(["seek", seconds, "relative+exact"]);
           break;
-        case "ArrowRight":
-          command(["seek", event.shiftKey ? 30 : 5, "relative"]);
-          break;
-        case "ArrowUp":
+        }
+        case "video.volumeUp":
           command(["set_property", "volume", Math.min(100, now.volume + 5)]);
           break;
-        case "ArrowDown":
+        case "video.volumeDown":
           command(["set_property", "volume", Math.max(0, now.volume - 5)]);
           break;
-        case "m":
+        case "video.mute":
           command(["cycle", "mute"]);
           break;
-        case "c":
+        case "video.subtitles":
           command(["cycle", "sub"]);
           break;
-        case "f":
-        case "F11":
+        case "video.fullscreen":
           void toggleFullscreen();
           break;
-        case "N":
+        case "video.nextEpisode":
           if (target?.next) playPart(target.next);
           break;
-        case "Escape":
+        case "video.close":
           if (menu) setMenu(null);
           else if (fullscreen) void toggleFullscreen();
           else close();
@@ -376,19 +399,14 @@ function VideoPlayer({ source }: { source: Source }) {
 
   // ------------------------------------------------------------------ view
 
-  const position = scrub ?? playback.time;
   const duration = playback.duration;
   const audio = playback.tracks.filter((t) => t.type === "audio");
   const subs = playback.tracks.filter((t) => t.type === "sub");
-  const sliderFill = duration > 0 ? (position / duration) * 100 : 0;
   const showBars = shown || playback.paused || menu !== null || !target || countdown !== null;
   // Picking an option closes its menu.
   const choose = (_: void) => setMenu(null);
-  const commitScrub = () => {
-    if (scrub === null) return;
-    command(["seek", scrub, "absolute"]);
-    setScrub(null);
-  };
+  // Dragging previews with fast keyframe seeks; letting go (or a click) lands on the exact frame.
+  const seek = (seconds: number, exact: boolean) => command(["seek", seconds, exact ? "absolute+exact" : "absolute+keyframes"]);
   const loadSubtitles = async () => {
     setMenu(null);
     const picked = await openDialog({ multiple: false, title: "Choose a subtitle file", filters: [{ name: "Subtitles", extensions: ["srt", "ass", "ssa", "vtt", "sub", "sup", "idx"] }] });
@@ -403,6 +421,12 @@ function VideoPlayer({ source }: { source: Source }) {
       onMouseMove={poke}
     >
       <div ref={surface} className="watch-surface" onClick={() => target && command(["cycle", "pause"])} onDoubleClick={() => void toggleFullscreen()} />
+
+      {target && busy && (
+        <div className="watch-busy" aria-label="Loading">
+          <LoaderCircle size={30} className="spin" />
+        </div>
+      )}
 
       {!target && (
         <div className="reader-message">
@@ -421,7 +445,7 @@ function VideoPlayer({ source }: { source: Source }) {
       )}
 
       <header className={`reader-bar top${showBars ? "" : " hidden"}`} data-tauri-drag-region {...barProps}>
-        <button type="button" className="round-btn" aria-label="Close the player" title="Close (Esc)" onClick={close}>
+        <button type="button" className="round-btn" aria-label="Close the player" title={`Close${hint("video.close")}`} onClick={close}>
           <ArrowLeft size={18} strokeWidth={2.6} />
         </button>
         <div className="reader-title" data-tauri-drag-region>
@@ -435,27 +459,7 @@ function VideoPlayer({ source }: { source: Source }) {
       {target && (
         <footer className={`reader-bar bottom watch-bar${showBars ? "" : " hidden"}`} {...barProps}>
           <div className="watch-seek">
-            <span className="watch-time">{clock(position)}</span>
-            <div className="watch-track">
-              <input
-                type="range"
-                className="reader-slider"
-                aria-label="Position"
-                min={0}
-                max={duration || 0}
-                step={0.1}
-                value={Math.min(position, duration || 0)}
-                style={{ "--fill": `${sliderFill}%` } as CSSProperties}
-                onChange={(event) => setScrub(Number(event.target.value))}
-                onPointerUp={commitScrub}
-                onKeyUp={commitScrub}
-              />
-              {duration > 0 &&
-                playback.chapters.slice(1).map((chapter, index) => (
-                  <span key={index} className="watch-tick" style={{ left: `${(chapter.time / duration) * 100}%` }} title={chapter.title} />
-                ))}
-            </div>
-            <span className="watch-time">{clock(duration)}</span>
+            <SeekBar time={playback.time} duration={duration} marks={playback.chapters} clock={clock} timeClassName="watch-time" onSeek={seek} />
           </div>
           <div className="watch-controls">
             <button type="button" className="round-btn" aria-label="Previous episode" disabled={!target.previous} onClick={() => target.previous && playPart(target.previous)}>
@@ -520,7 +524,7 @@ function VideoPlayer({ source }: { source: Source }) {
                 </Choice>
               ))}
             </Menu>
-            <button type="button" className="round-btn" aria-label={fullscreen ? "Leave full screen" : "Full screen"} title="Full screen (F)" onClick={() => void toggleFullscreen()}>
+            <button type="button" className="round-btn" aria-label={fullscreen ? "Leave full screen" : "Full screen"} title={`Full screen${hint("video.fullscreen")}`} onClick={() => void toggleFullscreen()}>
               {fullscreen ? <Shrink size={17} /> : <Expand size={17} />}
             </button>
           </div>

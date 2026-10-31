@@ -1,31 +1,38 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Check, LayoutGrid, LibraryBig, List, ListChecks, Plus } from "lucide-react";
-import { api, type ItemCard, type Ownership, type QueryParams, type SortKey } from "../../lib/api";
+import { Popover } from "radix-ui";
+import { Check, ChevronLeft, ChevronRight, GalleryHorizontalEnd, Heart, LayoutGrid, LayoutList, LibraryBig, List, ListChecks, Paintbrush, Plus } from "lucide-react";
+import { api, type Blurb, type ItemCard, type Ownership, type QueryParams, type SortKey } from "../../lib/api";
 import { spineColors } from "../../lib/color";
 import { formatLabel } from "../../lib/format";
 import { usePreferences, type Layout } from "../../lib/preferences";
 import { usePagedItems, type PageCache } from "../../lib/queries";
+import { actionFor, isTyping } from "../../lib/shortcuts";
 import { SelectionProvider, useSelectable, useSelection, useSelectionState } from "../../lib/selection";
 import { AddMenu } from "../../components/AddMenu";
 import { CategoryStrip } from "../../components/CategoryStrip";
 import { aspectFor, CardSizeSlider, Cover } from "../../components/common";
 import { CardSkeleton, caseBand, MediaCard } from "../../components/MediaCard";
+import { SHELF_LOOKS, ShelfLookPicker } from "../../components/ShelfLookPicker";
 import { BulkBar } from "./BulkBar";
 
 const GAP = 22;
 
-function useWidth(ref: React.RefObject<HTMLElement | null>): number {
-  const [width, setWidth] = useState(0);
+function useSize(ref: React.RefObject<HTMLElement | null>): { width: number; height: number } {
+  const [size, setSize] = useState({ width: 0, height: 0 });
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    const observer = new ResizeObserver(([entry]) => setSize({ width: entry.contentRect.width, height: entry.contentRect.height }));
     observer.observe(el);
     return () => observer.disconnect();
   }, [ref]);
-  return width;
+  return size;
+}
+
+function useWidth(ref: React.RefObject<HTMLElement | null>): number {
+  return useSize(ref).width;
 }
 
 /** Keeps the pages for the rendered rows loaded. */
@@ -214,7 +221,7 @@ function ShelfView({ cache, total, square }: ViewProps) {
   useEnsureRows(cache, total, perShelf, rows);
 
   return (
-    <div ref={scroll} className="view-scroll">
+    <div ref={scroll} className={`view-scroll shelves shelves-${preferences.shelfLook}`}>
       <div className="view-canvas" style={{ height: virtualizer.getTotalSize() + 8 }}>
         {rows.map((row) => (
           <div
@@ -235,6 +242,280 @@ function ShelfView({ cache, total, square }: ViewProps) {
         ))}
       </div>
     </div>
+  );
+}
+
+// ------------------------------------------------------------------ detailed view (Phase 5)
+
+/** Blurbs (description, tags, facts) for the items on screen, fetched as they scroll into view. */
+function useBlurbs(ids: number[]): Map<number, Blurb> {
+  const store = useRef(new Map<number, Blurb>());
+  const asked = useRef(new Set<number>());
+  const [, rerender] = useState(0);
+  const missing = ids.filter((id) => !asked.current.has(id)).join(",");
+  useEffect(() => {
+    if (!missing) return;
+    const timer = window.setTimeout(() => {
+      const wanted = missing.split(",").map(Number);
+      for (const id of wanted) asked.current.add(id);
+      void api.blurbs(wanted).then(
+        (list) => {
+          for (const blurb of list) store.current.set(blurb.id, blurb);
+          rerender((n) => n + 1);
+        },
+        () => wanted.forEach((id) => asked.current.delete(id)),
+      );
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [missing]);
+  return store.current;
+}
+
+function DetailedRow({ item, index, top, height, blurb }: { item: ItemCard; index: number; top: number; height: number; blurb: Blurb | undefined }) {
+  const band = caseBand(item);
+  const { selecting, checked, props } = useSelectable(item.id, index);
+  const progress = item.progress ?? 0;
+  const ownership = item.hasPhysical && item.hasDigital ? "On the shelf and digital" : item.hasPhysical ? "On the shelf" : "Digital";
+  return (
+    <Link to="/item/$id" params={{ id: String(item.id) }} className="detail-row" style={{ top, height }} data-blip {...props}>
+      <div className="detail-cover" style={{ height: height - 26, aspectRatio: aspectFor(item.handler) }}>
+        <Cover item={item} />
+        {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
+        {selecting && (
+          <span className={`card-check${checked ? " on" : ""}`} aria-hidden>
+            {checked && <Check size={15} strokeWidth={3.2} />}
+          </span>
+        )}
+      </div>
+      <div className="detail-body">
+        <div className="detail-title">
+          <strong>{item.title}</strong>
+          {item.isFavorite && <Heart size={15} fill="currentColor" className="detail-heart" aria-label="Favorite" />}
+          {item.missing && <span className="chip warning">Missing</span>}
+        </div>
+        {(item.subtitle || item.year) && <div className="detail-sub">{[item.subtitle, item.year].filter(Boolean).join(" · ")}</div>}
+        <div className="detail-facts">
+          <span className="chip">{item.category}</span>
+          {item.formats.slice(0, 3).map((format) => (
+            <span key={format} className="chip">
+              {formatLabel(format)}
+            </span>
+          ))}
+          {blurb?.facts.map((fact) => (
+            <span key={fact} className="detail-fact">
+              {fact}
+            </span>
+          ))}
+          <span className="detail-fact">{ownership}</span>
+        </div>
+        {blurb?.description ? <p className="detail-description">{blurb.description}</p> : blurb && <p className="detail-description none">No description yet.</p>}
+        {blurb && blurb.tags.length > 0 && (
+          <div className="detail-tags">
+            {blurb.tags.slice(0, 8).map((tag) => (
+              <span key={tag} className="detail-tag">
+                #{tag}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      {progress > 0 && (
+        <div className="detail-progress" title={progress >= 0.999 ? "Finished" : `${Math.round(progress * 100)}%`}>
+          <span style={{ width: `${Math.min(100, progress * 100)}%` }} />
+        </div>
+      )}
+    </Link>
+  );
+}
+
+/** Rows with big artwork, the description, facts and tags (the brief's "Detailed view"). */
+function DetailedView({ cache, total }: ViewProps) {
+  const { preferences } = usePreferences();
+  const scroll = useRef<HTMLDivElement>(null);
+  const rowHeight = Math.round(preferences.cardSize * 1.05) + 26;
+  const virtualizer = useVirtualizer({ count: total, getScrollElement: () => scroll.current, estimateSize: () => rowHeight + 14, overscan: 4 });
+  useEffect(() => virtualizer.measure(), [virtualizer, rowHeight]);
+  const rows = virtualizer.getVirtualItems();
+  useEnsureRows(cache, total, 1, rows);
+  const blurbs = useBlurbs(rows.map((row) => cache.get(row.index)?.id).filter((id): id is number => id != null));
+  return (
+    <div ref={scroll} className="view-scroll">
+      <div className="view-canvas" style={{ height: virtualizer.getTotalSize() }}>
+        {rows.map((row) => {
+          const item = cache.get(row.index);
+          if (!item) return <div key={row.key} className="detail-row skeleton" style={{ top: row.start, height: rowHeight }} />;
+          return <DetailedRow key={row.key} item={item} index={row.index} top={row.start} height={rowHeight} blurb={blurbs.get(item.id)} />;
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ carousel view (Phase 5)
+
+/** Covers in a 3D row: the one in front is big, its neighbours turn away. Arrow keys, the wheel,
+ * dragging, clicking a cover or the slider move along; Enter or a click on the front cover opens it. */
+function CarouselView({ cache, total }: ViewProps) {
+  const navigate = useNavigate();
+  const stage = useRef<HTMLDivElement>(null);
+  const { width, height } = useSize(stage);
+  const [index, setIndex] = useState(0);
+  const go = useCallback((next: number) => setIndex(Math.max(0, Math.min(total - 1, Math.round(next)))), [total]);
+  const current = cache.get(index);
+  const latest = useRef({ index, current });
+  latest.current = { index, current };
+
+  useEffect(() => {
+    if (index > total - 1) setIndex(Math.max(0, total - 1));
+    if (total > 0) cache.ensure(Math.max(0, index - 14), Math.min(total - 1, index + 14));
+  }, [cache, index, total]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (isTyping(event) || (event.target as HTMLElement | null)?.closest?.("[role=dialog], .menu")) return;
+      const action = actionFor(event, "library");
+      const { index, current } = latest.current;
+      if (action === "library.carouselPrevious") go(index - 1);
+      else if (action === "library.carouselNext") go(index + 1);
+      else if (action === "library.carouselOpen" && current) void navigate({ to: "/item/$id", params: { id: String(current.id) } });
+      else return;
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [go, navigate]);
+
+  // The wheel moves one cover per notch; a drag moves with the pointer.
+  const wheel = useRef(0);
+  const onWheel = (event: React.WheelEvent) => {
+    wheel.current += Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    if (Math.abs(wheel.current) >= 60) {
+      go(index + Math.sign(wheel.current));
+      wheel.current = 0;
+    }
+  };
+  const coverHeight = Math.max(150, Math.min(460, Math.round(height * 0.68)));
+  const spacing = coverHeight * 0.3;
+  const drag = useRef<{ x: number; from: number; moved: boolean } | null>(null);
+  const onPointerDown = (event: React.PointerEvent) => {
+    if (event.button !== 0) return;
+    drag.current = { x: event.clientX, from: index, moved: false };
+  };
+  const onPointerMove = (event: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d || !(event.buttons & 1)) return;
+    const dx = event.clientX - d.x;
+    if (Math.abs(dx) > 6) d.moved = true;
+    if (d.moved) go(d.from - dx / spacing);
+  };
+  const onClickCapture = (event: React.MouseEvent) => {
+    if (drag.current?.moved) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  };
+
+  const reach = Math.min(9, Math.ceil(width / 2 / spacing) + 1);
+  const shown: number[] = [];
+  for (let i = Math.max(0, index - reach); i <= Math.min(total - 1, index + reach); i++) shown.push(i);
+  return (
+    <div className="carousel">
+      <div
+        ref={stage}
+        className="carousel-stage"
+        onWheel={onWheel}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={() => {
+          // After a drag, the click that follows is swallowed (onClickCapture), then the drag ends.
+          if (drag.current?.moved) window.setTimeout(() => (drag.current = null), 0);
+          else drag.current = null;
+        }}
+        onClickCapture={onClickCapture}
+      >
+        {height > 0 &&
+          shown.map((i) => {
+            const item = cache.get(i);
+            const d = i - index;
+            const side = Math.sign(d);
+            const far = Math.abs(d);
+            const x = d === 0 ? 0 : side * (coverHeight * 0.5 + (far - 1) * spacing);
+            const style = {
+              "--x": `${x}px`,
+              "--z": `${d === 0 ? 90 : -60 - far * 14}px`,
+              "--turn": `${d === 0 ? 0 : -side * 58}deg`,
+              zIndex: 100 - far,
+              opacity: far > reach - 1 ? 0 : 1,
+              height: coverHeight,
+              aspectRatio: item ? aspectFor(item.handler) : 2 / 3,
+              bottom: Math.max(40, (height - coverHeight) / 2 + 10),
+            } as CSSProperties;
+            return item ? (
+              <CarouselCover key={i} item={item} index={i} front={d === 0} style={style} onPick={() => go(i)} />
+            ) : (
+              <div key={i} className="carousel-item skeleton" style={style} />
+            );
+          })}
+        <button type="button" className="round-btn carousel-arrow left" aria-label="Previous" disabled={index <= 0} onClick={() => go(index - 1)}>
+          <ChevronLeft size={20} />
+        </button>
+        <button type="button" className="round-btn carousel-arrow right" aria-label="Next" disabled={index >= total - 1} onClick={() => go(index + 1)}>
+          <ChevronRight size={20} />
+        </button>
+      </div>
+      <div className="carousel-info">
+        <strong className="carousel-title">{current?.title ?? " "}</strong>
+        <span className="carousel-sub">{current ? [current.subtitle, current.year].filter(Boolean).join(" · ") || " " : " "}</span>
+        <div className="carousel-scrub">
+          <input
+            type="range"
+            aria-label="Position in the carousel"
+            min={0}
+            max={Math.max(0, total - 1)}
+            value={index}
+            style={{ "--fill": `${total > 1 ? (index / (total - 1)) * 100 : 0}%` } as CSSProperties}
+            onChange={(event) => go(Number(event.target.value))}
+          />
+          <span className="carousel-count">
+            {(index + 1).toLocaleString()} of {total.toLocaleString()}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CarouselCover({ item, index, front, style, onPick }: { item: ItemCard; index: number; front: boolean; style: CSSProperties; onPick: () => void }) {
+  const band = caseBand(item);
+  const { selecting, checked, props } = useSelectable(item.id, index);
+  return (
+    <Link
+      to="/item/$id"
+      params={{ id: String(item.id) }}
+      className={`carousel-item${front ? " front" : ""}`}
+      style={style}
+      title={item.title}
+      draggable={false}
+      tabIndex={front ? 0 : -1}
+      {...props}
+      onClick={(event) => {
+        // A cover at the side comes to the front first; the front one opens (or is selected).
+        if (!front && !selecting) {
+          event.preventDefault();
+          onPick();
+          return;
+        }
+        (props as { onClick?: (event: React.MouseEvent) => void }).onClick?.(event);
+      }}
+    >
+      <Cover item={item} />
+      {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
+      {selecting && (
+        <span className={`card-check${checked ? " on" : ""}`} aria-hidden>
+          {checked && <Check size={15} strokeWidth={3.2} />}
+        </span>
+      )}
+    </Link>
   );
 }
 
@@ -261,8 +542,10 @@ function SelectToggle({ base }: { base: Omit<QueryParams, "offset" | "limit"> })
     if (!selection?.active) return;
     const onKey = (event: KeyboardEvent) => {
       const typing = event.target instanceof HTMLElement && event.target.closest("input, textarea, select, [role=dialog]");
-      if (event.key === "Escape" && !typing) selection.stop();
-      if (event.ctrlKey && event.key.toLowerCase() === "a" && !typing) {
+      if (typing) return;
+      const action = actionFor(event, "library");
+      if (action === "library.stopSelecting") selection.stop();
+      if (action === "library.selectAll") {
         event.preventDefault();
         void api.queryIds(base).then(selection.set, () => {});
       }
@@ -289,6 +572,7 @@ export function LibraryView({
   actions,
   prelude,
   square,
+  smart,
   empty,
 }: {
   viewKey: string;
@@ -302,6 +586,8 @@ export function LibraryView({
   /** Shown between the header and the toolbar (sub-collections). */
   prelude?: ReactNode;
   square?: boolean;
+  /** A smart shelf: it orders and fills itself, so nothing can be taken off it by hand. */
+  smart?: boolean;
   empty: ReactNode;
 }) {
   const { preferences, update } = usePreferences();
@@ -315,6 +601,7 @@ export function LibraryView({
   const sorts = onShelf ? [SHELF_SORT, ...SORTS] : SORTS;
 
   const setLayout = (next: Layout) => update({ layouts: { ...preferences.layouts, [viewKey]: next } });
+  const [materials, setMaterials] = useState(false);
 
   return (
     <SelectionProvider value={selection}>
@@ -344,16 +631,19 @@ export function LibraryView({
           </div>
           {prelude}
           <div className="toolbar">
-            <div className="segmented" role="group" aria-label="Layout">
+            <div className="segmented layout-switch" role="group" aria-label="Layout">
               {(
                 [
                   ["grid", "Grid", LayoutGrid],
                   ["shelf", "Shelf", LibraryBig],
                   ["list", "List", List],
+                  ["detailed", "Detailed", LayoutList],
+                  ["carousel", "Carousel", GalleryHorizontalEnd],
                 ] as const
               ).map(([value, label, Icon]) => (
-                <button key={value} type="button" aria-pressed={layout === value} onClick={() => setLayout(value)}>
-                  <Icon size={15} aria-hidden /> {label}
+                <button key={value} type="button" aria-pressed={layout === value} aria-label={label} title={label} onClick={() => setLayout(value)}>
+                  <Icon size={16} aria-hidden />
+                  {layout === value && <span className="layout-name">{label}</span>}
                 </button>
               ))}
             </div>
@@ -367,15 +657,29 @@ export function LibraryView({
             <div className="spacer" />
             {total != null && total > 0 && <SelectToggle base={params} />}
             {layout === "shelf" && (
-              <div className="segmented" role="group" aria-label="Shelf style">
-                {(["covers", "spines"] as const).map((style) => (
-                  <button key={style} type="button" aria-pressed={preferences.shelfStyle === style} onClick={() => update({ shelfStyle: style })}>
-                    {style === "covers" ? "Covers" : "Spines"}
-                  </button>
-                ))}
-              </div>
+              <>
+                <div className="segmented" role="group" aria-label="Shelf style">
+                  {(["covers", "spines"] as const).map((style) => (
+                    <button key={style} type="button" aria-pressed={preferences.shelfStyle === style} onClick={() => update({ shelfStyle: style })}>
+                      {style === "covers" ? "Covers" : "Spines"}
+                    </button>
+                  ))}
+                </div>
+                <Popover.Root open={materials} onOpenChange={setMaterials}>
+                  <Popover.Trigger asChild>
+                    <button type="button" className="btn btn-sm" aria-label="Shelf material" title="Shelf material">
+                      <Paintbrush size={15} /> {SHELF_LOOKS.find((look) => look.value === preferences.shelfLook)?.name}
+                    </button>
+                  </Popover.Trigger>
+                  <Popover.Portal>
+                    <Popover.Content className="menu shelf-look-menu" align="end" sideOffset={8} collisionPadding={16}>
+                      <ShelfLookPicker onPick={() => setMaterials(false)} />
+                    </Popover.Content>
+                  </Popover.Portal>
+                </Popover.Root>
+              </>
             )}
-            {layout !== "list" && (
+            {layout !== "list" && layout !== "carousel" && (
               <label className="inline">
                 Size
                 <CardSizeSlider value={preferences.cardSize} onChange={(cardSize) => update({ cardSize })} />
@@ -401,10 +705,14 @@ export function LibraryView({
           <ListView cache={cache} total={total} square={!!square} />
         ) : total != null && layout === "shelf" ? (
           <ShelfView cache={cache} total={total} square={!!square} />
+        ) : total != null && layout === "detailed" ? (
+          <DetailedView cache={cache} total={total} square={!!square} />
+        ) : total != null && layout === "carousel" ? (
+          <CarouselView cache={cache} total={total} square={!!square} />
         ) : total != null ? (
           <GridView cache={cache} total={total} square={!!square} />
         ) : null}
-        {total != null && <BulkBar base={params} total={total} shelf={base.shelf ?? undefined} />}
+        {total != null && <BulkBar base={params} total={total} shelf={smart ? undefined : (base.shelf ?? undefined)} />}
       </div>
     </SelectionProvider>
   );
