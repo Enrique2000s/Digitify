@@ -47,12 +47,20 @@ Digitify.exe (Tauri 2)
 | `ambient` | Ambient music from the user's files, folders and library albums (D-016) |
 | `pages` | The page engine: a digital copy as numbered pages (CBZ entries in natural order, image files, PDF pages), page sizes for layout, pages served scaled to the reader's width with a 128 MB cache, `progress_save`, and `reader_open`, which picks the page reader or the ebook reader for an item |
 | `ebooks` | Ebooks (D-014): finds a copy's EPUB, MOBI, AZW3 or FB2 file, refuses copy-protected books (checks only, never decrypts), and `ebook_progress_save` (a CFI and a fraction) |
+| `bookmarks` | Bookmarks: a page, or an ebook CFI with its fraction and location, with a label |
+| `chapters` | Chapters of page-based books (D-019): detected from folders or a PDF outline, or the reader's own (stored as `parts` of kind `chapter`) |
+| `series` | Series navigation: the items sharing a series name (or a collection) in volume and number order; series from comic file names |
+| `builder` | The image-set book builder: previews of picked images and reordering an image book's pages (`import::book_from_images` creates the book) |
 | `archives` | Comic archives (D-017): ZIP, RAR (UnRAR), 7z and TAR recognized by their first bytes; listing, reading one entry, and one pass over all entries (fast for solid archives) |
 | `pdf` | PDFium, loaded from `pdfium.dll` on first use (D-013): page sizes, page rendering, and title, author, year, page count and cover at import |
-| `player` | mpv process lifecycle, IPC, video host window (PoC 1; becomes the Phase 3 player) |
+| `player` | mpv for video: process lifecycle, IPC events (`player-event`), the video host window under the WebView, subtitle files |
+| `watch` | Films and episodes in the player (Phase 3): the file and start position for an item or episode, the next episode, progress every few seconds, watched marks, and a series' summed-up progress (part 0) |
+| `episodes` | Episode names at import (D-018): "S01E02", "1x02", season folders |
+| `optical` | Discs (Phase 4, D-022): `win` (Windows drive calls: drives, media, TOC, CD-Text, raw audio sectors, DVD copyright descriptor, eject), `cd` (TOC and CD-Text parsing, verified ripping), `dvd` (IFO titles, chapters, languages; CSS scrambling check), `bluray` (MPLS playlists; AACS/BD+), and the service: drive watcher (`drives-changed`), contents, playing titles through mpv (EDL plus a chapters file), CD audio over the media server, rip and import jobs (`disc-job`), cataloging. `DIGITIFY_FAKE_DRIVES` adds simulated drives for testing. |
+| `music` | The music player (D-020): a second, audio-only mpv whose playlist is the queue (gapless), tracks and artists, favorites, playlists, recently played, track edits |
 | `dev` | Phase 0 video lab harness (Settings › Developer) |
 
-Planned modules: `optical`, `ripper`.
+Planned modules: none for now (Phase 5 is personalization).
 
 ### Import pipeline
 1. **Scan** the picked or dropped paths into candidates:
@@ -75,7 +83,12 @@ React + TypeScript via Vite, organized by feature:
 |---|---|
 | `app/` | Router (hash history) and root layout |
 | `components/` | Header capsule with the music capsule, category strip, "Add to library" menu, cards, covers, dialogs, switch |
-| `features/reader/` | The reader screen at `/read/$id`: the page reader (layout of views, spreads and strips), the ebook reader around foliate-js, and their shared controls (full screen, controls that hide) |
+| `features/reader/` | The reader screen at `/read/$id` (`?page=` opens a page): the page reader (layout of views, spreads and strips), the ebook reader around foliate-js, their shared controls (full screen, controls that hide, bookmarks, display), contents, and page turns (CSS 3D turn and a WebGL curl shader) |
+| `features/player/` | The video player at `/watch/$id` (`?part=` an episode) and `/disc/$letter/$title` (a disc title) |
+| `features/discs/` | **Discs** (`/discs`): drives and their contents, ripping, importing, cataloging, data-disc browsing, and the insert notice; `lib/discs.tsx` keeps drives and jobs current |
+| `features/music/` | The music category's tabs (artists, tracks, playlists, recently played, favorites) and track lists with their menus and dialogs |
+| `lib/music/` | The music provider: the queue and playback state from `music-event`s, shared by every screen |
+| `features/builder/` | "Book from images…" and "Arrange pages": the page grid with pointer dragging (the window's file drop takes over HTML drag and drop) |
 | `vendor/foliate-js/` | foliate-js at a pinned commit (D-014; see its README), loaded only when an ebook opens |
 | `features/` | Home (category tiles, your shelves), library views (virtualized grid/list/shelf with multi-select and the bulk bar), organize (collections, shelves, tags, move dialogs), item page and forms (with custom fields), import UI, onboarding, settings (Categories, Sound) |
 | `lib/` | Typed API, TanStack Query hooks, paged item cache, preferences (theme/accent/motion/music), accent contrast math, formatting |
@@ -113,7 +126,7 @@ Category       Books · Comics · Manga · Movies & Series · Music · your own�
        └ Parts     optional: chapters, episodes, tracks, each with its own progress
 Shelves & tags: cross-cutting groups; one item can sit on many shelves
 ```
-The schema lives in `src-tauri/migrations/`. Tables: `categories`, `field_definitions`, `collections`, `items`, `people`, `item_people`, `parts`, `versions`, `files`, `progress`, `bookmarks`, `shelves`, `shelf_items`, `tags`, `item_tags`, `settings` and `items_fts` (full-text index).
+The schema lives in `src-tauri/migrations/` (v3 adds `playlists`, `playlist_tracks`, `plays` and `parts.is_favorite`). Tables: `categories`, `field_definitions`, `collections`, `items`, `people`, `item_people`, `parts`, `versions`, `files`, `progress`, `bookmarks`, `shelves`, `shelf_items`, `tags`, `item_tags`, `settings` and `items_fts` (full-text index).
 
 ## Media serving
 On Windows, the UI loads library resources from `http://digitify.localhost/<route>`:
@@ -122,6 +135,7 @@ On Windows, the UI loads library resources from `http://digitify.localhost/<rout
 - `/file/<id>`: a library file, with HTTP Range support (Phase 2, for readers and players)
 - `/page/<copy>/<n>?w=<width>`: a page of a book for the reader, scaled down to the width asked for (rounded up to 400 px steps)
 - `/book/<copy>`: the ebook file of a digital copy, which foliate-js lays out in the WebView
+- `/cd/<drive>/<track>`: an audio CD track read straight from the disc as WAV, in range slices
 
 Only resources registered in the library are served. Paths never come straight from the UI.
 
@@ -148,12 +162,12 @@ Only resources registered in the library are served. Paths never come straight f
 | mpv | 0.41.0, official x86_64 MSVC release (`mpv.exe` + `vulkan-1.dll`, ~56 MB) | Plays every file format we need. It contains no CSS/AACS decryption code and no `dvd://`, `bd://` or `cdda://` modules. |
 | FFmpeg | 9.0.2, BtbN LGPL shared build | Development tool for now (test media). Probing and thumbnails come in Phase 1. |
 
-Because the bundled mpv has no disc modules, Phase 4 plans to play unprotected discs through Digitify's own disc layer:
-- Rust reads the disc structure (DVD IFO files, Blu-ray MPLS playlists).
-- mpv plays the unencrypted VOB/M2TS streams directly.
-- Audio CDs are read sector by sector by the ripper.
+Because the bundled mpv has no disc modules, unprotected discs go through Digitify's own disc layer (D-022, approved):
+- Rust reads the disc structure (DVD IFO files, Blu-ray MPLS playlists, the CD table of contents and CD-Text).
+- mpv plays the unencrypted VOB/M2TS streams directly, as one title through an EDL, with a chapters file.
+- Audio CDs are read sector by sector: by the media server for playback, by the ripper for import. FFmpeg encodes FLAC and remuxes titles to MKV.
 
-This avoids GPL disc libraries and any decryption code. It will be confirmed with the project owner at the start of Phase 4.
+This avoids GPL disc libraries and any decryption code.
 
 ### Embedding mpv video under the web UI
 Proven in PoC 1; see STATUS.md.

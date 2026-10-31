@@ -42,7 +42,7 @@ Each phase ends with a runnable build and updated docs. No dates are given; each
 
 **Exit criteria:** the owner's real files import and browse end to end, and an installer build works.
 
-## Phase 2 — Readers (current)
+## Phase 2 — Readers (done)
 1. **Page engine:**
    - ✅ PDF (PDFium), CBZ, folders of page images and single images
    - ✅ CBR, CB7 and CBT archives (D-017), recognized by content whatever their extension
@@ -51,7 +51,7 @@ Each phase ends with a runnable build and updated docs. No dates are given; each
    - ✅ fit page or width, zoom (up to 400%) and drag to pan, preloading
 2. **Page transitions:**
    - ✅ slide and fade, off with reduced motion
-   - ⬜ 3D turn and realistic curl
+   - ✅ 3D turn and a WebGL page curl that can be dragged from a corner (D-021)
 3. ✅ **EPUB/MOBI/AZW3/FB2** via foliate-js (D-014):
    - one page, two facing pages or a continuous scroll
    - text size, font, line spacing, page width and justification; Paper, Sepia and Night themes
@@ -59,32 +59,37 @@ Each phase ends with a runnable build and updated docs. No dates are given; each
    - book scripts blocked, website links shown instead of opened, copy-protected books refused
 4. **Reading tools:**
    - ✅ progress and resume, full screen
-   - ⬜ bookmarks
-   - ⬜ night mode, brightness and backgrounds for the page reader (pages sit on a dark backdrop; ebooks already have a Night theme)
-   - ⬜ an image-set book builder that orders photos into one item
+   - ✅ bookmarks in both readers
+   - ✅ night mode, brightness and backgrounds (presets or your own color); ebooks have brightness and their Night theme
+   - ✅ an image-set book builder ("Book from images…") and "Arrange pages" for existing image books
 5. **Series navigation:**
    - ✅ "Pick up where you left off"
-   - ⬜ series, volumes and chapters
+   - ✅ series and volumes ("In this series", "Next volume" at the end of a book), chapters detected from archive folders and PDF outlines or marked by hand (D-019)
 6. ✅ **Recently opened** on Home.
 7. ✅ **PDF details at import** (title, author, year, page count and a cover from the first page). PDFs imported earlier get their cover and page count in the background.
 
-## Phase 3 — Media playback
-1. **Video player:** controls, subtitles (embedded and external), audio tracks, chapters, speed, resume, watched state and fullscreen.
-2. **Series organization:** series and season organization, posters and backgrounds, "continue watching".
-3. **Music:**
-   - artists, albums and tracks
-   - queue, gapless playback, shuffle and repeat
-   - playlists, favorites and recently played
-   - mini-player and metadata editing
+**Exit criteria:** every reader feature in the brief works on the owner's files (waiting for the owner's check).
 
-## Phase 4 — Physical media (a drive is needed to validate)
-1. **Drive service:** enumeration, insert/eject events, media type, protection detection.
-2. **Audio CD:** track listing, CD-Text, playback, ripping (FLAC/WAV with verification), import as an album.
+## Phase 3 — Media playback (done)
+1. ✅ **Video player:** controls, subtitles (embedded, files next to the video, or a file you pick), audio tracks, chapters, speed, resume, watched state and fullscreen.
+2. ✅ **Series organization (D-018):** one item per series with seasons and episodes, grouped at import; posters (artwork) and backgrounds; "Continue watching" and the next episode.
+3. ✅ **Music (D-020):**
+   - artists, albums and tracks, with search by track, artist, album or genre
+   - queue, gapless playback (mpv), shuffle and repeat
+   - playlists, favorite tracks and recently played
+   - the mini-player in the title-bar capsule, "Now playing", and editing a track's details
+
+**Exit criteria:** the owner's films, series and music play end to end (waiting for the owner's check).
+
+## Phase 4 — Physical media (built; waiting for a real drive to validate)
+Built on Digitify's own disc layer (D-022) and tested with simulated drives; drive I/O itself needs a real drive.
+1. ✅ **Drive service:** enumeration, insert/eject (checked every 2 seconds, with a notice), media type, protection detection (CSS, AACS, BD+), eject.
+2. ✅ **Audio CD:** track listing, CD-Text, playback straight from the disc, ripping to FLAC or WAV with read-twice verification, import as an album.
 3. **DVD/Blu-ray:**
-   - read disc structure (titles, chapters, languages)
-   - play and import (remux) unprotected discs
-   - one-click cataloging of any disc, protected or not
-4. **Data discs:** browse and import.
+   - ✅ read disc structure (titles, chapters, languages)
+   - ✅ play and import (remux to MKV) unprotected discs
+   - ✅ one-click cataloging of any disc, protected or not
+4. ✅ **Data discs:** browse and import (copied into the library).
 
 ## Phase 5 — Advanced personalization
 Expanded themes, shelf appearance and custom shelves, custom dashboard widgets, more layouts, advanced metadata and organization, and a keyboard-shortcut editor.
@@ -99,5 +104,4 @@ NSIS installer, third-party license notices, then decisions on code signing and 
 |---|---|
 | Online metadata providers (MusicBrainz, Open Library, TMDB, ComicVine, AniList, …) | When metadata work starts; offline-only until approved |
 | Optional proposals P1–P9 (Digitize Studio, generated covers/spines, collector tools, smart collections, watch folders, Windows integration, reading/listening extras, licensed-player handoff, importers) | Any time; none approved yet |
-| How unprotected discs are played (the bundled official mpv 0.41 build has no DVD/Blu-ray/CD modules; see ARCHITECTURE.md › Helper engines) | Start of Phase 4 |
 | Code signing | Before the first public build |

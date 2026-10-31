@@ -1,6 +1,6 @@
 import { forwardRef, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { ChevronRight, FilePlus, FolderPlus, FolderSearch, LibraryBig, Moon, Package, Plus, Sparkles, Star, Sun, TriangleAlert } from "lucide-react";
+import { ChevronRight, FilePlus, FolderPlus, FolderSearch, LibraryBig, Moon, Package, Plus, Star, Sun, TriangleAlert, Volume2, VolumeOff } from "lucide-react";
 import { type Category, type ItemCard, type TileCover } from "../../lib/api";
 import { plural } from "../../lib/format";
 import { useImporter } from "../../lib/importer";
@@ -102,7 +102,7 @@ function Tiles({ categories, covers, total }: { categories: Category[]; covers: 
 function ContinueCard({ item }: { item: ItemCard }) {
   const percent = Math.round((item.progress ?? 0) * 100);
   return (
-    <Link to="/read/$id" params={{ id: String(item.id) }} className="continue-card" data-blip>
+    <Link to={item.handler === "video" ? "/watch/$id" : "/read/$id"} params={{ id: String(item.id) }} className="continue-card" data-blip>
       <div className="continue-thumb" style={{ aspectRatio: aspectFor(item.handler) }}>
         <Cover item={item} />
       </div>
@@ -163,7 +163,7 @@ export function HomePage({ onCatalog }: { onCatalog: () => void }) {
             aria-pressed={ambient.interfaceSounds}
             onClick={() => ambient.setInterfaceSounds(!ambient.interfaceSounds)}
           >
-            <Sparkles size={17} strokeWidth={2.4} aria-hidden />
+            {ambient.interfaceSounds ? <Volume2 size={17} strokeWidth={2.4} aria-hidden /> : <VolumeOff size={17} strokeWidth={2.4} aria-hidden />}
             Interface sounds: {ambient.interfaceSounds ? "on" : "off"}
           </button>
           <button
@@ -217,6 +217,18 @@ export function HomePage({ onCatalog }: { onCatalog: () => void }) {
 
       <Tiles categories={data.categories} covers={data.tileCovers} total={data.totals.items} />
 
+      {data.continueWatching.length > 0 && (
+        <section className="section">
+          <div className="section-head">
+            <h2>Continue watching</h2>
+          </div>
+          <div className="continue-grid">
+            {data.continueWatching.map((item) => (
+              <ContinueCard key={item.id} item={item} />
+            ))}
+          </div>
+        </section>
+      )}
       {data.continueItems.length > 0 && (
         <section className="section">
           <div className="section-head">

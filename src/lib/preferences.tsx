@@ -30,7 +30,14 @@ export interface ReaderPreferences {
   fit: "page" | "width";
   /** In two-page mode, the first page (usually the cover) stands alone. */
   coverAlone: boolean;
-  transition: "slide" | "fade" | "none";
+  /** Page turns: slide, fade, a 3D turn, a page curl (D-021), or none. */
+  transition: "slide" | "fade" | "turn" | "curl" | "none";
+  /** Page brightness, percent (40–100). */
+  brightness: number;
+  /** Dimmer, warmer pages for reading in the dark. */
+  night: boolean;
+  /** Behind the pages: "night", "black", "gray", "paper", or a color as #rrggbb. */
+  background: string;
 }
 
 /** How reflowable ebooks are laid out (EPUB, MOBI, AZW3, FB2). */
@@ -47,6 +54,8 @@ export interface EbookPreferences {
   /** How wide a column of text may grow. */
   width: "narrow" | "medium" | "wide";
   justify: boolean;
+  /** Percent (40–100). */
+  brightness: number;
 }
 
 export interface Preferences {
@@ -66,6 +75,8 @@ export interface Preferences {
   interfaceSounds: boolean;
   reader: ReaderPreferences;
   ebook: EbookPreferences;
+  /** Where the video and music players' volume was left (0–100), so they start there. */
+  volumes: { video: number; music: number };
 }
 
 export const DEFAULT_MUSIC: MusicPreferences = {
@@ -79,7 +90,16 @@ export const DEFAULT_MUSIC: MusicPreferences = {
   pauseWhileReading: true,
 };
 
-export const DEFAULT_READER: ReaderPreferences = { mode: "single", fit: "page", coverAlone: true, transition: "slide" };
+export const DEFAULT_READER: ReaderPreferences = {
+  mode: "single",
+  fit: "page",
+  coverAlone: true,
+  transition: "slide",
+  brightness: 100,
+  night: false,
+  background: "night",
+};
+export const READER_BACKGROUNDS = ["night", "black", "gray", "paper"];
 
 export const EBOOK_SIZES = [70, 80, 90, 100, 110, 120, 135, 150, 175, 200];
 export const EBOOK_SPACINGS = [1.3, 1.5, 1.8];
@@ -92,6 +112,7 @@ export const DEFAULT_EBOOK: EbookPreferences = {
   spacing: 1.5,
   width: "medium",
   justify: true,
+  brightness: 100,
 };
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -107,6 +128,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   interfaceSounds: true,
   reader: DEFAULT_READER,
   ebook: DEFAULT_EBOOK,
+  volumes: { video: 35, music: 35 },
 };
 
 type Raw<T> = { [K in keyof T]?: unknown };
@@ -118,6 +140,7 @@ function picker<T>(raw: unknown, defaults: T) {
 }
 
 const isBoolean = (v: unknown) => typeof v === "boolean";
+const isBrightness = (v: unknown) => typeof v === "number" && v >= 40 && v <= 100;
 
 function isMusicSource(v: unknown): v is MusicSource {
   const source = v as Partial<Record<string, unknown>> | null;
@@ -146,7 +169,10 @@ function sanitizeReader(raw: unknown): ReaderPreferences {
     mode: pick("mode", (v) => v === "single" || v === "spread" || v === "scroll"),
     fit: pick("fit", (v) => v === "page" || v === "width"),
     coverAlone: pick("coverAlone", isBoolean),
-    transition: pick("transition", (v) => v === "slide" || v === "fade" || v === "none"),
+    transition: pick("transition", (v) => ["slide", "fade", "turn", "curl", "none"].includes(v as string)),
+    brightness: pick("brightness", isBrightness),
+    night: pick("night", isBoolean),
+    background: pick("background", (v) => READER_BACKGROUNDS.includes(v as string) || (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v))),
   };
 }
 
@@ -160,7 +186,14 @@ function sanitizeEbook(raw: unknown): EbookPreferences {
     spacing: pick("spacing", (v) => EBOOK_SPACINGS.includes(v as number)),
     width: pick("width", (v) => v === "narrow" || v === "medium" || v === "wide"),
     justify: pick("justify", isBoolean),
+    brightness: pick("brightness", isBrightness),
   };
+}
+
+function sanitizeVolumes(raw: unknown): Preferences["volumes"] {
+  const pick = picker(raw, DEFAULT_PREFERENCES.volumes);
+  const isVolume = (v: unknown) => typeof v === "number" && v >= 0 && v <= 100;
+  return { video: Math.round(pick("video", isVolume)), music: Math.round(pick("music", isVolume)) };
 }
 
 function sanitize(raw: unknown): Preferences {
@@ -181,6 +214,7 @@ function sanitize(raw: unknown): Preferences {
     interfaceSounds: pick("interfaceSounds", isBoolean),
     reader: sanitizeReader((raw as Raw<Preferences>)?.reader),
     ebook: sanitizeEbook((raw as Raw<Preferences>)?.ebook),
+    volumes: sanitizeVolumes((raw as Raw<Preferences>)?.volumes),
   };
 }
 

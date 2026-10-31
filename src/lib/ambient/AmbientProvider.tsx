@@ -183,7 +183,7 @@ export function AmbientProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
-  let title = "Morning Lounge";
+  let title = "Digitify Main Menu Music";
   let status = "Digitify original";
   if (custom) {
     title = details.data?.title ?? track?.title ?? "Your music";

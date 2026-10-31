@@ -10,7 +10,7 @@ import { usePagedItems, type PageCache } from "../../lib/queries";
 import { SelectionProvider, useSelectable, useSelection, useSelectionState } from "../../lib/selection";
 import { AddMenu } from "../../components/AddMenu";
 import { CategoryStrip } from "../../components/CategoryStrip";
-import { aspectFor, Cover } from "../../components/common";
+import { aspectFor, CardSizeSlider, Cover } from "../../components/common";
 import { CardSkeleton, caseBand, MediaCard } from "../../components/MediaCard";
 import { BulkBar } from "./BulkBar";
 
@@ -193,14 +193,19 @@ function ShelfItem({ item, index, height, spines }: { item: ItemCard; index: num
   );
 }
 
-function ShelfView({ cache, total }: ViewProps) {
+function ShelfView({ cache, total, square }: ViewProps) {
   const { preferences } = usePreferences();
   const scroll = useRef<HTMLDivElement>(null);
   const width = useWidth(scroll);
   const spines = preferences.shelfStyle === "spines";
   const height = Math.round(preferences.cardSize * 1.4);
-  const slot = spines ? Math.round(height * 0.2) + 4 : Math.round(height * (2 / 3)) + 16;
-  const perShelf = Math.max(1, Math.floor((width - 44) / slot));
+  // Shelves fill with as many items as fit at their usual width (album covers are square, shown at
+  // 78% of the height; books and films 2:3; spines vary) and sit centered. When a shelf mixing
+  // categories comes out a little wide, its items narrow slightly (see .shelf-item) rather than
+  // anything being cut at the edge.
+  const cover = square ? height * 0.78 : height * (2 / 3);
+  const slot = (spines && !square ? Math.round(height * 0.2) + 4 : Math.ceil(cover)) + (spines && !square ? 0 : 16);
+  const perShelf = Math.max(1, Math.floor((width - 50 + 16) / slot));
   const shelfHeight = height + 22 + 12 + 26;
   const shelves = Math.ceil(total / perShelf);
   const virtualizer = useVirtualizer({ count: shelves, getScrollElement: () => scroll.current, estimateSize: () => shelfHeight, overscan: 2 });
@@ -373,14 +378,7 @@ export function LibraryView({
             {layout !== "list" && (
               <label className="inline">
                 Size
-                <input
-                  type="range"
-                  min={110}
-                  max={240}
-                  value={preferences.cardSize}
-                  style={{ "--fill": `${((preferences.cardSize - 110) / 130) * 100}%` } as React.CSSProperties}
-                  onChange={(event) => update({ cardSize: Number(event.target.value) })}
-                />
+                <CardSizeSlider value={preferences.cardSize} onChange={(cardSize) => update({ cardSize })} />
               </label>
             )}
             <label className="inline">

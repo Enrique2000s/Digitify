@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ChevronLeft, ChevronRight, Search, Settings } from "lucide-react";
+import { ChevronLeft, ChevronRight, Disc3, Search, Settings } from "lucide-react";
 import { Logo } from "./common";
+import { MiniPlayer } from "./MiniPlayer";
 import { MusicPill } from "./MusicPill";
+import { useMusic } from "../lib/music/MusicProvider";
+import { useDiscs } from "../lib/discs";
 
 const appWindow = getCurrentWindow();
 
@@ -48,6 +51,9 @@ export function WindowButtons() {
 /** The header capsule: brand (home), history, library search, ambient music, settings and window controls. */
 export function TitleBar({ searchEnabled }: { searchEnabled: boolean }) {
   const navigate = useNavigate();
+  const music = useMusic();
+  const { drives } = useDiscs();
+  const discIn = drives.some((drive) => drive.media);
   const location = useRouterState({ select: (state) => state.location });
   const urlQuery = location.pathname === "/search" ? String((location.search as { q?: string }).q ?? "") : "";
   const [query, setQuery] = useState(urlQuery);
@@ -111,7 +117,12 @@ export function TitleBar({ searchEnabled }: { searchEnabled: boolean }) {
           </label>
         )}
         <div className="appbar-drag" data-tauri-drag-region />
-        <MusicPill />
+        {music.active ? <MiniPlayer /> : <MusicPill />}
+        {searchEnabled && drives.length > 0 && (
+          <Link to="/discs" className={`round-btn disc-button${discIn ? " has-disc" : ""}`} aria-label={discIn ? "Discs (a disc is in)" : "Discs"} title="Discs">
+            <Disc3 size={18} strokeWidth={2.4} />
+          </Link>
+        )}
         {searchEnabled && (
           <Link to="/settings" className="round-btn" aria-label="Settings" title="Settings">
             <Settings size={18} strokeWidth={2.4} />

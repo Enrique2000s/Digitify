@@ -7,6 +7,7 @@ use std::sync::OnceLock;
 use image::DynamicImage;
 use pdfium_render::prelude::*;
 
+use crate::chapters::Chapter;
 use crate::error::{AppError, AppResult};
 use crate::formats::year_of;
 
@@ -53,6 +54,44 @@ pub fn page_sizes(path: &Path) -> AppResult<Vec<(u32, u32)>> {
         sizes.push(size.unwrap_or((612, 792)));
     }
     Ok(sizes)
+}
+
+/// The PDF's outline as chapters: each entry's title, the page it leads to and its nesting, up to
+/// 500 entries and three levels.
+pub fn outline(path: &Path) -> AppResult<Vec<Chapter>> {
+    fn walk(first: Option<PdfBookmark<'_>>, depth: u8, out: &mut Vec<Chapter>) {
+        let mut current = first;
+        while let Some(bookmark) = current {
+            if out.len() >= 500 {
+                return;
+            }
+            let page = match bookmark.destination() {
+                Some(destination) => destination.page_index().ok(),
+                None => match bookmark.action() {
+                    Some(action) => action
+                        .as_local_destination_action()
+                        .and_then(|local| local.destination().ok())
+                        .and_then(|destination| destination.page_index().ok()),
+                    None => None,
+                },
+            };
+            if let (Some(title), Some(page)) = (bookmark.title(), page) {
+                let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
+                if !title.is_empty() {
+                    out.push(Chapter { title, page: page as usize, depth });
+                }
+            }
+            if depth < 2 {
+                walk(bookmark.first_child(), depth + 1, out);
+            }
+            current = bookmark.next_sibling();
+        }
+    }
+    let pdfium = pdfium()?;
+    let document = open(pdfium, path)?;
+    let mut chapters = Vec::new();
+    walk(document.bookmarks().root(), 0, &mut chapters);
+    Ok(chapters)
 }
 
 /// Renders one page `width` pixels wide.

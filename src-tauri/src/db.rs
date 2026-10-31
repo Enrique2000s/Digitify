@@ -13,6 +13,7 @@ use crate::error::{AppError, AppResult};
 pub const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0001_init.sql"),
     include_str!("../migrations/0002_library.sql"),
+    include_str!("../migrations/0003_music.sql"),
 ];
 
 pub struct Database {

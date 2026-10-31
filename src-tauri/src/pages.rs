@@ -18,6 +18,7 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::error::{AppError, AppResult};
 use crate::library::{blocking, with_library};
+use crate::chapters::{self, Chapter};
 use crate::{archives, ebooks, pdf, AppState, Library};
 
 const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp", "gif", "bmp", "tif", "tiff"];
@@ -42,6 +43,8 @@ pub struct Book {
     pub source: Source,
     /// Pixel sizes (points for PDFs); the reader needs proportions before pages load.
     pub sizes: Vec<(u32, u32)>,
+    /// Chapters found in the book itself (folders, a PDF outline).
+    pub chapters: Vec<Chapter>,
 }
 
 pub struct Page {
@@ -198,7 +201,7 @@ impl PageEngine {
             return Err(AppError::msg(MISSING_FILES));
         }
         let source = classify(&paths)?;
-        let book = Arc::new(Book { signature, sizes: sizes(&source)?, source });
+        let book = Arc::new(Book { signature, sizes: sizes(&source)?, chapters: chapters::detect(&source), source });
         if let Ok(mut books) = self.books.lock() {
             books.push_front(book.clone());
             books.truncate(BOOKS_KEPT);
@@ -245,6 +248,7 @@ pub struct ReaderBook {
     pub pages: Vec<PageSize>,
     /// The page to start on: where reading stopped last time.
     pub position: usize,
+    pub chapters: Vec<Chapter>,
 }
 
 /// What `reader_open` found: pages for the page reader, or an ebook for the ebook reader.
@@ -315,6 +319,7 @@ fn open_book(library: &Library, engine: &PageEngine, id: i64) -> AppResult<Opene
                     direction: direction.clone(),
                     pages: book.sizes.iter().map(|&(width, height)| PageSize { width, height }).collect(),
                     position,
+                    chapters: Vec::new(),
                 })
             }),
         });
@@ -326,7 +331,11 @@ fn open_book(library: &Library, engine: &PageEngine, id: i64) -> AppResult<Opene
             Err(e) => failure = failure.or(Some(e)),
         }
     }
-    let opened = opened.ok_or_else(|| failure.unwrap_or_else(|| AppError::msg("Nothing to read.")))?;
+    let mut opened = opened.ok_or_else(|| failure.unwrap_or_else(|| AppError::msg("Nothing to read.")))?;
+    if let Opened::Pages(book) = &mut opened {
+        let detected = engine.book(library, book.version_id)?.chapters.clone();
+        book.chapters = chapters::for_item(library, id, &detected)?;
+    }
     library.db.with(|conn| {
         conn.execute("UPDATE items SET last_opened_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1", [id])?;
         Ok(())

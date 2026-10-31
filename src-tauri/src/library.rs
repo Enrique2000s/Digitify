@@ -399,6 +399,8 @@ pub struct TileCover {
 pub struct Dashboard {
     pub featured: Option<ItemCard>,
     pub continue_items: Vec<ItemCard>,
+    /// Films and series in progress (Phase 3).
+    pub continue_watching: Vec<ItemCard>,
     pub recent: Vec<ItemCard>,
     pub recently_opened: Vec<ItemCard>,
     pub favorites: Vec<ItemCard>,
@@ -451,12 +453,20 @@ pub async fn dashboard_get(state: State<'_, AppState>) -> AppResult<Dashboard> {
                 "SELECT id FROM items WHERE cover_key IS NOT NULL ORDER BY added_at DESC, id DESC LIMIT 1",
                 &[],
             )?;
-            let continue_ids = ids(
-                conn,
-                "SELECT item_id FROM progress WHERE part_id = 0 AND fraction > 0.01 AND completed = 0 \
-                 ORDER BY updated_at DESC LIMIT 12",
-                &[],
-            )?;
+            // Reading and watching are offered apart: books and comics here, video below.
+            let in_progress = |video: bool| {
+                ids(
+                    conn,
+                    &format!(
+                        "SELECT pr.item_id FROM progress pr JOIN items i ON i.id = pr.item_id JOIN categories c ON c.id = i.category_id \
+                         WHERE pr.part_id = 0 AND pr.fraction > 0.01 AND pr.completed = 0 AND (c.handler = 'video') = {video} \
+                         ORDER BY pr.updated_at DESC LIMIT 12"
+                    ),
+                    &[],
+                )
+            };
+            let continue_ids = in_progress(false)?;
+            let watching_ids = in_progress(true)?;
             let recent_ids = ids(conn, "SELECT id FROM items ORDER BY added_at DESC, id DESC LIMIT 18", &[])?;
             let opened_ids = ids(
                 conn,
@@ -469,6 +479,7 @@ pub async fn dashboard_get(state: State<'_, AppState>) -> AppResult<Dashboard> {
             Ok(Dashboard {
                 featured: cards_by_ids(conn, &featured_id)?.into_iter().next(),
                 continue_items: cards_by_ids(conn, &continue_ids)?,
+                continue_watching: cards_by_ids(conn, &watching_ids)?,
                 recent: cards_by_ids(conn, &recent_ids)?,
                 recently_opened: cards_by_ids(conn, &opened_ids)?,
                 favorites: cards_by_ids(conn, &favorite_ids)?,
@@ -828,6 +839,30 @@ pub async fn item_set_cover(state: State<'_, AppState>, id: i64, path: String) -
             conn.execute(
                 "UPDATE items SET cover_key = ?2, cover_color = ?3, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
                 params![id, art.key, art.color],
+            )?;
+            Ok(())
+        })
+    })
+    .await
+}
+
+/// A background picture for a film or series page (`metadata.backdropKey`); `None` goes back to
+/// the blurred cover.
+#[tauri::command]
+pub async fn item_set_backdrop(state: State<'_, AppState>, id: i64, path: Option<String>) -> AppResult<()> {
+    with_library(&state, move |library| {
+        let key = match path {
+            Some(path) => {
+                let bytes = std::fs::read(&path).map_err(|e| AppError::msg(format!("could not read {path}: {e}")))?;
+                Some(artwork::store(&library.folder, &bytes)?.key)
+            }
+            None => None,
+        };
+        library.db.with(|conn| {
+            conn.execute(
+                "UPDATE items SET metadata = CASE WHEN ?2 IS NULL THEN json_remove(metadata, '$.backdropKey') \
+                 ELSE json_set(metadata, '$.backdropKey', ?2) END, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
+                params![id, key],
             )?;
             Ok(())
         })

@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use rayon::prelude::*;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -23,7 +23,8 @@ use crate::error::{AppError, AppResult};
 use crate::files::{self, natural_cmp};
 use crate::formats::{self, year_of};
 use crate::library::{reindex, sort_key, upsert_person};
-use crate::{artwork, pdf, AppState, Library};
+use crate::episodes::{self, EpisodeName};
+use crate::{artwork, pdf, series, AppState, Library};
 
 #[derive(Default)]
 pub struct ImportManager {
@@ -215,6 +216,8 @@ enum Candidate {
     ImageSet { dir: PathBuf, pages: Vec<PathBuf> },
     /// Tracks sharing an album; a lone track without album tags is an album of one.
     Album { tracks: Vec<PathBuf> },
+    /// Episodes of one TV series, recognized by their names (D-018).
+    Series { name: String, episodes: Vec<(PathBuf, EpisodeName)> },
 }
 
 impl Candidate {
@@ -224,6 +227,7 @@ impl Candidate {
             Candidate::Single { path, .. } => name(path),
             Candidate::ImageSet { dir, .. } => name(dir),
             Candidate::Album { tracks } => tracks.first().and_then(|t| t.parent()).map(name).unwrap_or_default(),
+            Candidate::Series { name, .. } => name.clone(),
         }
     }
 
@@ -232,6 +236,7 @@ impl Candidate {
             Candidate::Single { path, .. } => vec![path],
             Candidate::ImageSet { pages, .. } => pages.iter().collect(),
             Candidate::Album { tracks } => tracks.iter().collect(),
+            Candidate::Series { episodes, .. } => episodes.iter().map(|(path, _)| path).collect(),
         }
     }
 }
@@ -259,6 +264,7 @@ fn scan(paths: &[PathBuf], cancel: &AtomicBool) -> Vec<Candidate> {
     let mut image_dirs: BTreeMap<PathBuf, Vec<PathBuf>> = BTreeMap::new();
     let mut av_dirs: std::collections::HashSet<PathBuf> = Default::default();
     let mut audio = Vec::new();
+    let mut series: BTreeMap<String, (String, Vec<(PathBuf, EpisodeName)>)> = BTreeMap::new();
     for file in found {
         let parent = file.parent().map(Path::to_path_buf).unwrap_or_default();
         match kind_of(&file) {
@@ -267,12 +273,17 @@ fn scan(paths: &[PathBuf], cancel: &AtomicBool) -> Vec<Candidate> {
                 av_dirs.insert(parent);
                 audio.push(file);
             }
-            Some(kind) => {
-                if kind == Kind::Video {
-                    av_dirs.insert(parent);
+            Some(Kind::Video) => {
+                av_dirs.insert(parent);
+                match episodes::parse(&file) {
+                    Some(episode) => {
+                        let entry = series.entry(episode.series.to_lowercase()).or_insert_with(|| (episode.series.clone(), Vec::new()));
+                        entry.1.push((file, episode));
+                    }
+                    None => candidates.push(Candidate::Single { kind: Kind::Video, path: file }),
                 }
-                candidates.push(Candidate::Single { kind, path: file });
             }
+            Some(kind) => candidates.push(Candidate::Single { kind, path: file }),
             None => {}
         }
     }
@@ -291,6 +302,7 @@ fn scan(paths: &[PathBuf], cancel: &AtomicBool) -> Vec<Candidate> {
         }
     }
     candidates.extend(albums.into_values().map(|tracks| Candidate::Album { tracks }));
+    candidates.extend(series.into_values().map(|(name, episodes)| Candidate::Series { name, episodes }));
     candidates
 }
 
@@ -310,6 +322,10 @@ struct PartDraft {
     number: Option<f64>,
     title: Option<String>,
     duration_ms: Option<i64>,
+    /// For episodes.
+    season: Option<i64>,
+    /// For tracks whose artist isn't the album's.
+    artist: Option<String>,
 }
 
 struct Draft {
@@ -357,6 +373,7 @@ fn prepare(library: &Library, candidate: &Candidate) -> AppResult<Prepared> {
         Candidate::Single { kind, path } => describe_single(*kind, path, files),
         Candidate::ImageSet { dir, .. } => describe_image_set(dir, files),
         Candidate::Album { .. } => describe_album(files),
+        Candidate::Series { name, episodes } => describe_series(name, episodes, files),
     };
     Ok(Prepared::Draft(Box::new(draft)))
 }
@@ -477,6 +494,12 @@ fn describe_single(kind: Kind, path: &Path, files: Vec<FileDraft>) -> Draft {
                     }
                 }
             }
+            if !d.metadata.contains_key("series") {
+                if let Some((series, key, number)) = series::from_name(&d.title) {
+                    d.metadata.insert("series".into(), json!(series));
+                    d.metadata.insert(key.into(), json!(number));
+                }
+            }
             d
         }
         Kind::Video => {
@@ -575,6 +598,8 @@ fn describe_album(files: Vec<FileDraft>) -> Draft {
             number: info.track.map(f64::from).or(Some(index as f64 + 1.0)),
             title: Some(info.title.unwrap_or(track_title)),
             duration_ms: info.duration_ms,
+            season: None,
+            artist: info.artist.filter(|track_artist| Some(track_artist) != artist.as_ref()),
         });
         file.part = Some(index);
         files.push(file);
@@ -599,6 +624,55 @@ fn describe_album(files: Vec<FileDraft>) -> Draft {
     }
     d.metadata.insert("discCount".into(), json!(discs));
     d.metadata.insert("durationSec".into(), json!(total_ms / 1000));
+    d
+}
+
+/// A series item (D-018): one part per episode, in season and episode order.
+fn describe_series(name: &str, episodes: &[(PathBuf, EpisodeName)], mut files: Vec<FileDraft>) -> Draft {
+    let episode_of = |path: &Path| episodes.iter().find(|(p, _)| p == path).map(|(_, e)| e.clone());
+    files.sort_by(|a, b| {
+        let key = |f: &FileDraft| episode_of(&f.path).map(|e| (e.season, e.episode)).unwrap_or((i64::MAX, 0.0));
+        let (ka, kb) = (key(a), key(b));
+        ka.0.cmp(&kb.0).then(ka.1.total_cmp(&kb.1))
+    });
+    let mut parts = Vec::with_capacity(files.len());
+    let mut details = Value::Null;
+    for (index, file) in files.iter_mut().enumerate() {
+        let episode = episode_of(&file.path);
+        let info = formats::probe_video(&file.path);
+        if details.is_null() {
+            details = info.as_ref().map(|i| i.details.clone()).unwrap_or(Value::Null);
+        }
+        let number = episode.as_ref().map(|e| e.episode).unwrap_or(index as f64 + 1.0);
+        parts.push(PartDraft {
+            kind: "episode",
+            number: Some(number),
+            title: Some(episode.as_ref().and_then(|e| e.title.clone()).unwrap_or_else(|| format!("Episode {number}"))),
+            duration_ms: info.and_then(|i| i.duration).map(|d| (d * 1000.0) as i64),
+            season: episode.map(|e| e.season),
+            artist: None,
+        });
+        file.part = Some(index);
+    }
+    let seasons = parts.iter().filter_map(|p| p.season).collect::<std::collections::BTreeSet<_>>().len();
+    let first = files.first().map(|f| f.path.clone());
+    let format = first.as_deref().map(extension).unwrap_or_default();
+    let mut d = draft("video", name.to_string(), None, format, files);
+    if let Some(path) = first {
+        let at = formats::probe_video(&path).and_then(|i| i.duration).map_or(10.0, |duration| (duration * 0.1).clamp(1.0, 300.0));
+        d.artwork = formats::video_frame(&path, at);
+    }
+    if let Value::Object(details) = details {
+        for key in ["resolution", "videoCodec"] {
+            if let Some(value) = details.get(key) {
+                d.metadata.insert(key.into(), value.clone());
+            }
+        }
+    }
+    d.metadata.insert("kind".into(), json!("series"));
+    d.metadata.insert("seasons".into(), json!(seasons));
+    d.parts = parts;
+    d.copy_folder = Some(name.to_string());
     d
 }
 
@@ -637,6 +711,33 @@ struct Stored {
 }
 
 fn save(library: &Library, draft: Draft, mode: ImportMode, category_id: i64, category_name: &str) -> AppResult<()> {
+    // New episodes of a series already in the library join it.
+    if draft.metadata.get("kind").and_then(Value::as_str) == Some("series") {
+        let existing: Option<i64> = library.db.with(|conn| {
+            Ok(conn
+                .query_row(
+                    "SELECT id FROM items WHERE category_id = ?1 AND lower(title) = lower(?2) AND json_extract(metadata, '$.kind') = 'series' LIMIT 1",
+                    params![category_id, draft.title],
+                    |row| row.get(0),
+                )
+                .optional()?)
+        })?;
+        if let Some(item_id) = existing {
+            let stored = store_files(library, &draft, mode, category_name)?;
+            let result = library.db.with(|conn| {
+                let tx = conn.transaction()?;
+                insert_version(&tx, item_id, &draft, true, &stored)?;
+                tx.execute("UPDATE items SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1", [item_id])?;
+                reindex(&tx, item_id)?;
+                tx.commit()?;
+                Ok(())
+            });
+            if result.is_err() {
+                discard_copies(library, &stored);
+            }
+            return result;
+        }
+    }
     let stored = store_files(library, &draft, mode, category_name)?;
     let art = store_artwork(library, &draft);
     let result = library.db.with(|conn| insert(conn, &draft, &stored, category_id, art.as_ref()));
@@ -726,6 +827,87 @@ fn attach(library: &Library, item_id: i64, paths: &[String], mode: ImportMode) -
     Ok(added)
 }
 
+/// Adds files Digitify itself made inside the library folder (ripped CDs, imported discs) as
+/// managed copies, without copying them again. Returns the new items' ids.
+pub fn import_in_place(library: &Library, paths: &[PathBuf]) -> AppResult<Vec<i64>> {
+    let categories: HashMap<String, i64> = library.db.with(|conn| {
+        let rows = conn.prepare("SELECT key, id FROM categories")?.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?.collect::<Result<_, _>>()?;
+        Ok(rows)
+    })?;
+    let mut ids = Vec::new();
+    for candidate in scan(paths, &AtomicBool::new(false)) {
+        let Prepared::Draft(draft) = prepare(library, &candidate)? else { continue };
+        let category_id = *categories.get(draft.category).ok_or_else(|| AppError::msg(format!("unknown category '{}'", draft.category)))?;
+        let stored: Vec<Stored> = draft
+            .files
+            .iter()
+            .map(|file| {
+                let relative = file.path.strip_prefix(&library.folder.root).unwrap_or(&file.path);
+                Stored { path: relative.display().to_string(), storage: "managed", volume: None }
+            })
+            .collect();
+        let art = store_artwork(library, &draft);
+        ids.push(library.db.with(|conn| insert(conn, &draft, &stored, category_id, art.as_ref()))?);
+    }
+    Ok(ids)
+}
+
+/// A book made from images picked and put in order by hand (the image-set book builder).
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageBook {
+    pub title: String,
+    /// A category key.
+    pub category: String,
+    /// The pages, in reading order.
+    pub paths: Vec<String>,
+    pub mode: ImportMode,
+}
+
+#[tauri::command]
+pub async fn book_from_images(app: AppHandle, state: State<'_, AppState>, book: ImageBook) -> AppResult<i64> {
+    let library = state.library()?;
+    let id = crate::library::blocking(move || build_book(&library, book)).await?;
+    let _ = app.emit("library-changed", ());
+    Ok(id)
+}
+
+fn build_book(library: &Library, book: ImageBook) -> AppResult<i64> {
+    let title = book.title.split_whitespace().collect::<Vec<_>>().join(" ");
+    if title.is_empty() {
+        return Err(AppError::msg("Give the book a title."));
+    }
+    if book.paths.is_empty() || book.paths.len() > 5000 {
+        return Err(AppError::msg("A book needs between 1 and 5,000 images."));
+    }
+    let paths: Vec<PathBuf> = book.paths.iter().map(PathBuf::from).collect();
+    if let Some(other) = paths.iter().find(|path| kind_of(path) != Some(Kind::Image)) {
+        return Err(AppError::msg(format!("{} isn't an image Digitify can show.", other.display())));
+    }
+    let (category_id, category_name): (i64, String) = library.db.with(|conn| {
+        conn.query_row("SELECT id, name FROM categories WHERE key = ?1", [&book.category], |row| Ok((row.get(0)?, row.get(1)?)))
+            .optional()?
+            .ok_or_else(|| AppError::msg("That category no longer exists."))
+    })?;
+    let mut drafts = Vec::with_capacity(paths.len());
+    for path in &paths {
+        let metadata = std::fs::metadata(path).map_err(|e| AppError::msg(format!("{} can't be read: {e}", path.display())))?;
+        let quick_hash = files::quick_hash(path, metadata.len())?;
+        drafts.push(FileDraft { path: path.clone(), size: metadata.len(), modified: files::modified_unix(&metadata), quick_hash, part: None });
+    }
+    let mut d = draft("books", title.clone(), None, "images".into(), drafts);
+    d.artwork = std::fs::read(&paths[0]).ok();
+    d.copy_folder = Some(title);
+    d.metadata.insert("pageCount".into(), json!(paths.len()));
+    let stored = store_files(library, &d, book.mode, &category_name)?;
+    let art = store_artwork(library, &d);
+    let result = library.db.with(|conn| insert(conn, &d, &stored, category_id, art.as_ref()));
+    if result.is_err() {
+        discard_copies(library, &stored);
+    }
+    result
+}
+
 fn copy_into_library(library: &Library, draft: &Draft, category_name: &str) -> AppResult<Vec<Stored>> {
     let mut dir = library.folder.media_dir().join(files::safe_name(category_name));
     if let Some(folder) = &draft.copy_folder {
@@ -790,9 +972,17 @@ fn insert_version(conn: &Connection, item_id: i64, draft: &Draft, with_parts: bo
     let mut part_ids = Vec::new();
     if with_parts {
         for (position, part) in draft.parts.iter().enumerate() {
+            let mut metadata = Map::new();
+            if let Some(season) = part.season {
+                metadata.insert("season".into(), json!(season));
+            }
+            if let Some(artist) = &part.artist {
+                metadata.insert("artist".into(), json!(artist));
+            }
+            let metadata = Value::Object(metadata);
             conn.execute(
-                "INSERT INTO parts (item_id, kind, number, title, duration_ms, position) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![item_id, part.kind, part.number, part.title, part.duration_ms, position as i64],
+                "INSERT INTO parts (item_id, kind, number, title, duration_ms, position, metadata) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![item_id, part.kind, part.number, part.title, part.duration_ms, position as i64, metadata.to_string()],
             )?;
             part_ids.push(conn.last_insert_rowid());
         }

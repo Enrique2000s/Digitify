@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { Pause, Play, SkipForward, Volume1, Volume2, VolumeX } from "lucide-react";
 import { useAmbient } from "../lib/ambient/AmbientProvider";
+import { Marquee } from "./Marquee";
 
 /** The ambient music capsule in the title bar: play/pause, what's playing, mute and volume. */
 export function MusicPill() {
@@ -20,12 +21,8 @@ export function MusicPill() {
         {music.enabled ? <Pause size={18} fill="currentColor" strokeWidth={0} /> : <Play size={18} fill="currentColor" strokeWidth={0} />}
       </button>
       <div className="music-text" aria-live="polite">
-        <span className="music-title" title={ambient.title}>
-          {ambient.title}
-        </span>
-        <span className="music-status" title={ambient.status}>
-          {ambient.status}
-        </span>
+        <Marquee className="music-title" text={ambient.title} />
+        <Marquee className="music-status" text={ambient.status} />
       </div>
       {ambient.canSkip && (
         <button type="button" className="icon-btn" aria-label="Next track" title="Next track" onClick={ambient.skip}>
@@ -52,6 +49,7 @@ export function MusicPill() {
         style={{ "--fill": `${music.volume}%` } as CSSProperties}
         onChange={(event) => updateMusic({ volume: Number(event.target.value), muted: false })}
       />
+      <span className="volume-value">{music.volume}%</span>
     </div>
   );
 }

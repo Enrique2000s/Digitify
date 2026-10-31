@@ -110,14 +110,14 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 - **PoC 1:** mpv video shows through the transparent WebView with translucent React controls. Tested at 1280×800, 960×600 and fullscreen. Hardware decoding (d3d11va) was active, and mpv always exits with the app. The video host window must not use `WS_CLIPSIBLINGS`.
 - **PoC 2:** 50,000 synthetic items scrolled at 144 fps with 0 dropped frames, both steady and fast. Jumping anywhere settled in 35–42 ms, a page of 200 cards loaded in about 4 ms of SQLite time, and search took 11 ms or less. Peak memory was 39 MB for the app process and 586 MB with WebView2.
 
-## Phase 2: readers (in progress)
+## Phase 2: readers (done; waiting for the owner's check with real files)
 | Feature | Status | Notes |
 |---|---|---|
 | Page reader | ✅ | Opens comic archives (CBZ, CBR, CB7, CBT), folders of page images and PDFs. Modes: one page, two pages and a continuous scroll. In two-page mode the cover stands alone and wide pages stand alone. |
 | Reading direction | ✅ | Right to left for manga (from the item or its category). It can be switched in the reader and is remembered for the item. |
 | Fit, zoom and pan | ✅ | Fit page or fit width, zoom from 100% to 400% (buttons, + and −, or Ctrl+wheel), and drag to pan. |
 | Turning pages | ✅ | Arrow keys (they follow the reading direction), Page Up/Down, Space, Home/End, the mouse wheel, clicking either side, or the page slider. |
-| Page transitions | 🟡 | Slide and fade (none with reduced motion). The 3D turn and page curl are still to come. |
+| Page transitions | ✅ | Slide, fade, a 3D turn around the spine, and a page curl drawn with WebGL (D-021). With the curl, a page's outer corner can be dragged: let go past halfway and it turns, earlier and it falls back. Two-page views turn like a book (the back of the leaf is the next left page); a wide page or the cover alone slides instead. Off with reduced motion. Chosen in the reader's Display panel. |
 | Progress and resume | ✅ | Saved as you read and when you close the reader; just opening a book doesn't change it. Shown as "Continue reading · 83%" on the item, on cards, and in "Pick up where you left off". |
 | Recently opened | ✅ | A row on Home. |
 | Page serving | ✅ | `/page/<copy>/<page>?w=<width>`: large pages are scaled down to the width shown (in 400 px steps) and the latest 128 MB are cached. PDF pages are rendered by PDFium. |
@@ -129,8 +129,24 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 | Ebook progress | ✅ | Saved as a CFI as you read and resumed on the next open; feeds "Continue reading" and "Pick up where you left off" like the page reader. |
 | Ebook safety | ✅ | Scripts and inline handlers in books never run. Website links show their address with "Copy address" instead of opening. Copy-protected books (Adobe, Readium LCP, Apple, Kindle) are refused with an explanation; Digitify doesn't remove DRM. |
 | CBR, CB7, CBT | ✅ | D-017: RAR through RARLAB's UnRAR code, 7z read-only, TAR. Archives are recognized by their contents, so a RAR named `.cbz` still opens. At import they get a cover from their first page, a page count and their ComicInfo.xml, like CBZ. |
-| Bookmarks, night mode, brightness, backgrounds | ⬜ | |
-| Series navigation, image-set book builder | ⬜ | |
+| Bookmarks | ✅ | Both readers: B or the bookmark button marks what's on screen; the list goes to, renames or removes them. Ebook bookmarks are kept as a CFI with foliate-js's "locations", so they don't depend on the window size. |
+| Night mode, brightness, backgrounds | ✅ | Page reader: brightness 40–100%, night mode (dimmer, warmer pages), and Night, Black, Gray, Paper or your own color behind the pages. Ebooks: brightness, with Paper, Sepia and Night themes. |
+| Chapters (D-019) | ✅ | Detected from the folders inside a comic archive or among an image book's files, and from a PDF's outline. "Contents" in the page reader lists them, marks the current one, and lets you start a chapter on the page shown, rename or remove one (then the item keeps your own list). The item page lists them; each opens the reader at its page. |
+| Series and volumes | ✅ | Items of a category sharing a series (from ComicInfo, the edit form, or names such as "Saga v02", "Saga #12", "Saga 001"), else the items of a collection, ordered by volume and number. "In this series" on the item page; "Next: …" at the end of a book opens the next volume. |
+| Image-set book builder | ✅ | "Book from images…" in "Add to library": pick images (previews load a few at a time), drag them into order or use the arrows, sort by file name, take pages out, then name the book and choose a category and whether to copy the files. "Arrange pages" on an image book's copy reorders or takes out pages; taken-out pages stay on disk unless you choose the Recycle Bin for copies Digitify made. |
+
+### How the rest of Phase 2 was tested (2026-10-31)
+- `cargo test`: 32 unit tests pass. The new ones cover bookmark places and labels, chapters from folders (and a cover before the first chapter), cleaning edited chapters, series from file names ("Catch 22" is not a series), series order, and base64 for previews.
+- `scripts\make-samples.ps1` now also writes `Night Market Tales 02.cbz`, with its pages in three chapter folders, and gives the sample PDF an outline.
+- End-to-end run of the release build on a fresh library:
+  1. "Night Market Tales 01" and "02" form a series from their names. The item page of #2 shows its three chapters and "In this series".
+  2. The end of #1 offers "Next: #2 · Night Market Tales 02", which opens it at "Chapter 1 - Lanterns".
+  3. Contents marks the current chapter and goes to "Chapter 3 - Rain". Marking page 6 adds "Chapter 4"; the saved list has all four.
+  4. B bookmarks page 6 and the button shows it. Night mode on Paper gives pages `brightness(0.82) sepia(0.32)`.
+  5. The 3D turn plays a leaf over the next page. In two-page mode the curl plays forward and back; a corner dragged a little falls back, and dragged past halfway turns to pages 4–5.
+  6. The PDF's outline gives "Section 1–3". Previews come back as JPEG data. A book built from four images in reverse order keeps that order; dragging page 1 onto page 3 and "Sort by file name" saves page-01 to page-04.
+  7. An ebook bookmark is saved with its chapter, 34% and location 2.
+- **Found and fixed while testing:** Escape closed the page reader while one of its panels was open (it now closes the panel first); the reader's top bar squeezed the book title out (labels hide sooner).
 
 ### How the ebook reader was tested (2026-10-31)
 - `cargo test`: 25 unit tests pass. The new ones:
@@ -176,21 +192,73 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
   - The sample PDF generator wrote a broken cross-reference table.
   - Closing the reader could remount it for a moment and save page 1 over your progress. Two fixes: the full-window decision now follows the route being shown, not the address, and the reader no longer saves progress unless you moved.
 
+## Phase 3: media playback (done; waiting for the owner's check with real files)
+| Feature | Status | Notes |
+|---|---|---|
+| Video player | ✅ | mpv draws under the window (as proven in PoC 1); Digitify's own controls float over it and hide while watching. Play/pause, seek with chapter marks, volume, previous/next episode, full screen. Keys: Space, ←/→ (5 s, Shift for 30 s), ↑/↓ volume, M, C (subtitles), F, Shift+N (next episode), Esc. Library music pauses for a video, as ambient music does. |
+| Subtitles, audio, chapters, speed | ✅ | Menus list the file's audio and subtitle tracks (with their languages), its chapters, and speeds from 0.5× to 2×. Subtitle files next to the video whose names contain its name load with it; "Load a subtitle file…" adds another (SRT, ASS, SSA, VTT, SUB, SUP). |
+| Volume | ✅ | The video and music players start at 35% and remember where you left each one (like the ambient music). |
+| Resume and watched | ✅ | Saved every 5 seconds and on closing; opening again resumes 2 s before ("Resumed at 0:21", with "Start over"). Past 92% counts as watched. Films and episodes can be marked watched or not by hand. |
+| TV series (D-018) | ✅ | At import, files named like "Show S01E02 - Title", "show.s01e02" or "Show 1x02" become one series item; a season folder's parent names the show. Later episodes join the existing series. The item page lists seasons and episodes with progress, a play link and a watched mark; "Play S1 · E3" or "Continue" picks the next one. At the end of an episode the next one starts after 8 seconds unless cancelled. |
+| Continue watching | ✅ | A Home row of films and series in progress (a series' own progress sums up its episodes). Reading keeps "Pick up where you left off". Films and series also appear in "Recently opened". |
+| Posters and backgrounds | ✅ | "Change artwork" sets the poster; "Background…" on a film or series sets a picture for its page (stored like artwork, removable). |
+| Music player (D-020) | ✅ | A second, audio-only mpv plays the queue as its playlist, so tracks follow each other without gaps and every format FFmpeg reads plays. Music keeps playing across screens. |
+| Mini-player and Now playing | ✅ | While library music plays, the title-bar capsule shows the track with pause and next; it opens "Now playing" (cover, favorite, seek, previous/next, shuffle, repeat all or one, volume, the queue to jump to or remove from, "Stop and clear"). Ambient music pauses meanwhile and comes back after. |
+| Music library | ✅ | The music category has tabs: Albums (the usual view), Artists, Tracks (search by track, artist, album or genre), Playlists, Recently played and Favorites. Every list can be played or shuffled and saved as a playlist; each track has play, a favorite heart and a menu (play next, add to queue, add to a playlist or a new one, edit details, go to album, and in a playlist move or remove). |
+| Track details | ✅ | Title, artist and number can be edited; the change is kept in the catalog, not written into the file (D-009). At import, a track's artist is kept when it differs from the album's (compilations). |
+
+### How Phase 3 was tested (2026-10-31)
+- `cargo test`: 39 unit tests pass. The new ones cover episode names ("S01E02", "s02e10", "1x03", "S01 E04", season folders) and what isn't one ("Blade Runner 2049", "1917", "Mission 2x4"), a series' progress summed from its episodes, the next episode to play, and finding tracks by title, artist, album, genre or a track's own artist, in a given order.
+- `scripts\make-samples.ps1` now also writes a small series, "Harbor Watch" (three episodes in "Season 1", one in "Season 2" named `harbor.watch.s02e01.mkv`).
+- End-to-end runs of the release build on fresh libraries:
+  1. Video: "Harbor Watch" imports as one item with S1E1–E3 and S2E1 in order. The sample film plays; its audio menu lists "Tone 440 Hz · English" and "Tono 660 Hz · Spanish" and switches; subtitles list English; chapters "Opening, Middle, Ending" jump to 0:20; speed 1.5× is applied. Closing saves 38%, the page offers "Resume · 38%", and reopening resumes at 0:21 with "Start over".
+  2. Series: "Play S1 · E1" plays it; near the end "Next episode in 8 · S1 · E2 · The Fog" appears and "Play now" goes on. E1 is watched, E2 started, the series at 28%; Home shows both under "Continue watching". "Mark all watched" marks every episode.
+  3. Music: artists and tracks are listed; searching "middle" finds "Middle Tone". Playing the album shows the mini-player ("Low Tone · Digitify Test Ensemble") and marks the row; next goes to "Middle Tone", which becomes a favorite. "Now playing" shows the queue; repeat goes to "all". "Save as playlist" makes "Evening Tones (3)". Recently played lists both tracks; an edited track's new artist appears under Artists. "Stop and clear" brings the ambient capsule back.
+  4. Every earlier suite (Breeze, ambient music, organizing, readers, archives, ebooks, the rest of Phase 2) passes again.
+- **Not covered by the tests:** what mpv draws can't be captured by the WebView's screenshots, so video pictures and audio were checked by mpv's own state (positions, tracks, chapters, end of file), not by eye or ear. Gapless joins need listening on real albums.
+- **Found and fixed while testing:** choosing an option in a player menu now closes it (Esc after it closed the player); the first track of a new queue wasn't recorded as played when its details arrived after mpv started it; music lists now refresh after imports and plays.
+
+## Phase 4: physical media (built; not yet tried on a real drive)
+| Feature | Status | Notes |
+|---|---|---|
+| Drive service | 🟡 | Lists the CD/DVD/Blu-ray drives and what's in them; a disc going in or out is noticed within 2 seconds and announced ("DVD inserted · Drive E: · Open"). The title bar shows a disc button (with a dot when a disc is in) that opens **Discs**. Eject. Media type: audio CD, DVD, Blu-ray, data disc, or blank/unreadable. |
+| Protection detection (D-007) | 🟡 | DVDs: the drive's copyright descriptor, else scrambled sectors in the first title set. Blu-rays: `AACS` or `BDSVM` folders. Protected discs show why, and only offer cataloging. |
+| Audio CDs | 🟡 | Tracks and lengths from the table of contents, names from CD-Text (else "Track 1…", editable). Tracks play straight from the disc (one after another). Ripping to FLAC or WAV reads everything twice and re-reads parts that differ; parts that never agree are listed. Tracks are tagged (title, album, artist, number, year) and imported as an album in the library's music folder. |
+| DVDs and Blu-rays | 🟡 | Titles with their length, chapters, audio and subtitle languages (DVD IFO files; Blu-ray playlists, longest first). A title plays in the video player with its chapters; "Import" copies it into the library as an MKV with chapters, audio and subtitles, without re-encoding, then adds it. No disc menus (D-022). |
+| Data discs | 🟡 | Browse folders, pick files or folders, and import them; they're copied into the library, since the disc leaves the drive. |
+| One-click cataloging | 🟡 | "Catalog this disc" records an audio CD (album, artist, tracks), a DVD or a Blu-ray (title from the volume label, length) as a physical item, protected or not. |
+
+🟡 here means built and tested end to end with simulated drives, but not yet on a real drive.
+
+### How Phase 4 was tested (2026-10-31)
+- `cargo test`: 48 unit tests pass. The new ones cover a CD's table of contents (audio and data tracks, the 2-second lead-in), CD-Text across packs and "same as before" entries, ripping verification (a block that settles on a second read, one that never does, cancelling), DVD titles, chapters and languages from generated IFO files, CSS-scrambled sectors, Blu-ray playlists (clips, chapters, languages, duplicates and short playlists left out, AACS), volume labels, mpv's EDL and FFmetadata chapters, and data-disc paths that can't leave the disc.
+- Simulated drives (`DIGITIFY_FAKE_DRIVES`): the app writes the disc structures (IFO, MPLS, a CD image with CD-Text and tones) and FFmpeg makes the video streams. End-to-end run of the release build:
+  1. Six drives: R DVD (two titles), S Blu-ray, T audio CD "Harbor Songs", U DVD with CSS, V data disc, W empty. The title bar's disc button shows a disc is in.
+  2. R lists "Title 1 · 3 chapters · Audio: English, Spanish · Subtitles: English · 0:12" and "Title 2". S lists "Title 800 · 2 chapters". T lists "Low Tide, Fog Bell, Last Ferry Home". U explains the protection and offers only cataloging. V lists its folder and file.
+  3. A CD track plays from the disc (2 s into 6). Ripping makes three tagged FLAC files under "The Lighthouse Keepers - Harbor Songs", imported as one album with its tracks and lengths.
+  4. DVD title 1 and the Blu-ray title play in the video player with their chapters ("Chapter 1 0:00, Chapter 2 0:04, Chapter 3 0:08"). Importing DVD title 1 makes an MKV with 3 chapters, added to Movies & Series.
+  5. Cataloging the protected DVD makes a physical DVD copy noted "Copy-protected (CSS): cataloged only". A PDF imported from the data disc is stored as a managed copy.
+  6. A DVD put into a new drive while Digitify runs brings up "DVD inserted · Drive X:".
+- **Not covered yet:** a real drive. Reading the table of contents, CD-Text, raw audio sectors and the DVD copyright descriptor goes through Windows calls that only a drive can answer. Ripping speed, drive caches, scratched discs and real DVD/Blu-ray structures need the owner's drive and discs.
+- **Found and fixed while testing:** chapters weren't shown when playing from a disc (the chapter file is now in a format mpv reads); the insert notice didn't close itself while a rip was running.
+
 ## Product features by phase
 | Area | Status |
 |---|---|
 | Core library (Phase 1) | 🔄 See above |
-| PDF, image and comic reader | 🔄 Phase 2: page reader done (CBZ, CBR, CB7, CBT, images, PDF); transitions and tools to come |
+| PDF, image and comic reader | ✅ Phase 2 |
 | EPUB reader | ✅ Phase 2: EPUB, MOBI, AZW3 and FB2 |
-| Video player | ⬜ Phase 3 (embedding proven) |
-| Music player and playlists | ⬜ Phase 3 |
-| Optical drives, audio CD, DVD/Blu-ray | ⬜ Phase 4 |
+| Video player | ✅ Phase 3 |
+| Music player and playlists | ✅ Phase 3 |
+| Optical drives, audio CD, DVD/Blu-ray | 🟡 Phase 4: built, waiting for a real drive |
 | Advanced personalization | ⬜ Phase 5 |
 | DRM circumvention | ⛔ D-007 |
 
 ## Known limitations
 - **Protected discs:** most commercial DVDs (CSS) and virtually all commercial Blu-rays (AACS/BD+) can be detected and cataloged but not played or imported (D-007).
-- **Disc playback engine:** the bundled mpv has no disc modules, so Phase 4 will use Digitify's own disc layer (see ARCHITECTURE.md).
+- **Disc menus:** DVD and Blu-ray menus aren't shown; titles and chapters are picked in Digitify (D-022). Discs whose main feature is split by a menu-driven playlist may need the right title picked by length.
+- **CD verification:** reading twice can't catch an error a drive repeats the same way every time; AccurateRip (online) isn't used (D-022).
+- **Disc titles and CD names:** offline only: CD-Text, volume labels, or what you type.
 - **Password-protected PDFs:** they can't be opened; the reader says so.
 - **MOBI/AZW3/FB2 details at import:** they import with the title from the file name and no cover; their own title, author and cover show only inside the reader.
 - **Ebook fonts:** "Serif" and "Sans" use Windows' own Georgia and Segoe UI. Fixed-layout EPUBs ignore text settings.
@@ -199,9 +267,13 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 - **Solid RAR and 7z archives:** reading page by page means unpacking the pages before it, so late pages of large solid archives take longer. Most CBR files aren't solid.
 - **Partial album imports:** importing an album whose tracks are partly in the library adds the new tracks as a separate item. Merging into the existing album is not built yet.
 - **Window snap layouts:** with the custom title bar, the Windows 11 snap-layout flyout on the maximize button is not available. Win+Z and dragging to screen edges still work.
-- **Page curl:** realistic page curl will be limited to fixed-layout pages (Phase 2).
+- **Page curl:** only in the page reader (D-021): ebook pages are live HTML laid out by foliate-js. A wide page or the cover alone in two-page mode slides instead of turning.
+- **Chapters in image folders:** importing a folder still makes one item per folder of images, so a volume whose chapters are separate folders becomes several items. "Book from images…" can join them into one book, and its chapters then follow the folders.
 - **DRM-protected ebooks:** Kindle, Adobe, Readium LCP and Apple DRM ebooks can't be opened; the reader says why (D-007).
 - **HEIC photos:** need Microsoft's HEIF extension, or conversion at import.
+- **Episodes without a marker:** a video only joins a series when its name has "S01E02" or "1x02". Files named "Episode 3.mkv" import as separate films; their titles can be fixed by hand.
+- **Track artists in older imports:** albums imported before Phase 3 don't have per-track artists, so compilations show the album artist until re-imported or edited.
+- **Video in screenshots:** the picture is drawn by mpv under the window, so it doesn't appear in captures made by the WebView itself (Windows' own screenshots show it).
 - **Disc testing:** the development PC has no optical drive yet.
 - **Windows 10:** best effort only.
 - **Ripping legality:** whether ripping your own CDs is legal varies by country.

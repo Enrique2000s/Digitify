@@ -100,6 +100,39 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-022 · Optical discs: Digitify's own disc layer
+- **Date:** 2026-10-31 · **Approved by:** project owner (chose the own disc layer over an mpv build with libdvdnav/libbluray; offline-only ripping and titles)
+- **Decision:**
+  - **Reading:** Digitify reads disc structure itself in Rust through Windows: the drive list and inserted media, an audio CD's table of contents and CD-Text, a DVD's titles, chapters and languages (IFO files), and a Blu-ray's playlists, clips, chapters and languages (MPLS files).
+  - **Playing:** the bundled mpv plays the unencrypted streams (DVD VOB, Blu-ray M2TS); audio CDs play straight from the disc through Digitify's media server. There are no interactive disc menus: titles and chapters are picked in Digitify.
+  - **Importing:** FFmpeg (already bundled) remuxes a DVD or Blu-ray title into MKV with its chapters, and encodes ripped CD audio to FLAC (or keeps WAV).
+  - **CD verification:** every block of audio is read twice and compared; mismatches are re-read until two reads agree, and tracks that never agree are reported. Fully offline; no AccurateRip.
+  - **CD titles:** CD-Text when the disc has it, otherwise "Track 1, Track 2…" to edit. No online lookups (D-008).
+  - **Protection (D-007):** DVDs are checked for CSS (the drive's copyright descriptor, or scrambled sectors), Blu-rays for AACS/BD+ (their `AACS` and `BDSVM` folders). Protected discs are never played or imported; they can still be cataloged in one click.
+- **No new dependencies**, and no GPL disc libraries.
+- **Testing:** the development PC has no optical drive, so drive I/O is tested with generated disc structures and simulated sector reads until the owner tries real discs.
+
+### D-018 · TV series: one item per series
+- **Date:** 2026-10-31 · **Approved by:** project owner (chose "one item per series" over "one item per episode")
+- **Decision:** a series is one library item. Its episodes are parts (`parts.kind = 'episode'`, with season and episode numbers), each with its own progress and watched mark. The grid shows one poster per series; "Continue watching" offers the next episode.
+- **Import:** video files are grouped into a series by their folders and by names such as `S01E02` or `1x02`. A single film stays an item of its own.
+- **Tradeoff:** an episode can't carry its own tags or shelves; the series does.
+
+### D-019 · Chapters inside comic and manga volumes
+- **Date:** 2026-10-31 · **Approved by:** project owner (chose "detect and mark" over "one item per chapter")
+- **Decision:** a volume's chapters are detected from the folders inside its archive or image folder. You can also mark the page where a chapter starts, rename chapters, or remove them. Chapters appear in the page reader's contents and on the item page.
+- **Series:** volumes are items of a series (the `series` field and number, or their collection), with "Next volume" at the end of a book.
+
+### D-020 · Music player: mini-player in the title-bar capsule, played by mpv
+- **Date:** 2026-10-31 · **Approved by:** project owner (chose the title-bar capsule over a bottom bar or a separate window)
+- **Decision:** while library music plays, the title-bar music capsule becomes the mini-player (cover, title, pause, next) and opens "Now playing" with the queue. Ambient music pauses while your music plays.
+- **Engine (engineering choice within D-002):** library music plays through a second, audio-only mpv process. mpv gives true gapless playback and reads every format FFmpeg reads (including ALAC, APE and WMA, which the WebView can't play).
+
+### D-021 · Page transitions: 3D turn and page curl
+- **Date:** 2026-10-31 · **Approved by:** project owner (chose "3D turn and curl" over "3D turn only")
+- **Decision:** the page reader gains two transitions beside slide and fade: a 3D turn around the spine, and a realistic page curl drawn with WebGL that can be dragged from a page corner. Both are off with reduced motion.
+- **Limit:** ebooks keep their slide: their pages are live HTML laid out by foliate-js, which can't be curled.
+
 ### D-017 · Comic archives: RAR through the UnRAR library
 - **Date:** 2026-10-31 · **Approved by:** project owner (chose "unrar" over 7-Zip as a separate program)
 - **Decision:**
@@ -122,6 +155,7 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - **Defaults:** on, at 40% volume.
   - **Controls:** a capsule in the title bar (play/pause, mute, volume). Settings › Ambient music offers on/off, volume, the source (Digitify original or your music: files, folders, or albums from the Digitify library), shuffle, and "pause when minimized" (on by default).
   - **Ducking:** pauses automatically while Digitify plays video (and, from Phase 3, any media).
+- **Name (2026-10-31, owner's request):** the original theme is shown as "Digitify Main Menu Music" (it was "Morning Lounge").
 - **Interface sounds:** soft hover and press tones. On by default, with a switch in Settings.
 - Cinematic could come back later as an optional theme (Phase 5), only if requested.
 

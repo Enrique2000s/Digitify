@@ -4,11 +4,15 @@ mod ambient;
 mod archives;
 mod artwork;
 mod backup;
+mod bookmarks;
+mod builder;
 mod categories;
+mod chapters;
 mod config;
 mod db;
 mod dev;
 mod ebooks;
+mod episodes;
 mod error;
 mod files;
 mod formats;
@@ -16,12 +20,16 @@ mod import;
 mod library;
 mod library_folder;
 mod media_protocol;
+mod music;
+mod optical;
 mod organize;
 mod pages;
 mod pdf;
 mod player;
+mod series;
 mod setup;
 mod tools;
+mod watch;
 
 use std::sync::{Arc, RwLock};
 
@@ -89,6 +97,9 @@ pub fn run() {
             }
             app.manage(state);
             app.manage(player::PlayerState::default());
+            app.manage(music::MusicState::default());
+            app.manage(optical::OpticalState::default());
+            optical::watch(app.handle().clone());
             app.manage(ambient::AmbientState::default());
             app.manage(pages::PageEngine::default());
             dev::configure_window(app)?;
@@ -119,6 +130,7 @@ pub fn run() {
             library::item_create,
             library::item_set_favorite,
             library::item_set_cover,
+            library::item_set_backdrop,
             library::item_remove,
             library::version_save,
             library::version_delete,
@@ -141,6 +153,45 @@ pub fn run() {
             pages::reader_open,
             pages::progress_save,
             ebooks::ebook_progress_save,
+            bookmarks::bookmarks_list,
+            bookmarks::bookmark_add,
+            bookmarks::bookmark_rename,
+            bookmarks::bookmark_remove,
+            chapters::chapters_get,
+            chapters::chapters_set,
+            series::series_get,
+            builder::image_previews,
+            watch::watch_open,
+            watch::watch_progress_save,
+            watch::watch_mark,
+            watch::episodes_list,
+            player::player_add_subtitle,
+            music::music_tracks,
+            music::music_artists,
+            music::music_set_favorite,
+            music::track_update,
+            music::music_played,
+            music::playlists_list,
+            music::playlist_create,
+            music::playlist_rename,
+            music::playlist_delete,
+            music::playlist_add,
+            music::playlist_set,
+            music::music_play,
+            music::music_enqueue,
+            music::music_command,
+            music::music_stop,
+            optical::drives_list,
+            optical::drive_eject,
+            optical::disc_contents,
+            optical::disc_play,
+            optical::cd_rip,
+            optical::disc_import,
+            optical::disc_job_cancel,
+            optical::disc_catalog,
+            optical::dev_write_sample_discs,
+            builder::pages_arrange,
+            import::book_from_images,
             categories::category_create,
             categories::category_update,
             categories::category_delete,
@@ -162,6 +213,7 @@ pub fn run() {
     app.run(|handle, event| {
         if let tauri::RunEvent::Exit = event {
             player::shutdown(handle);
+            music::shutdown(handle);
         }
     });
 }

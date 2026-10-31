@@ -1,4 +1,4 @@
-import { useState, type ComponentType, type ReactNode } from "react";
+import { useState, type ComponentType, type CSSProperties, type ReactNode } from "react";
 import { Dialog as RadixDialog } from "radix-ui";
 import {
   AudioLines,
@@ -35,6 +35,27 @@ export function Logo({ size = 30 }: { size?: number }) {
       <rect x="14.5" y="12.5" width="4" height="12.5" rx="2" fill="#ffffff" />
       <circle cx="24" cy="20.5" r="4.4" fill="none" stroke="#ffffff" strokeWidth="2.6" />
     </svg>
+  );
+}
+
+/** Cover sizes the size slider steps through, in pixels of card width. */
+export const CARD_SIZES = [120, 140, 160, 185, 210, 240];
+
+/** The cover-size slider: it snaps to a few set sizes instead of sliding freely. */
+export function CardSizeSlider({ value, onChange, style }: { value: number; onChange: (size: number) => void; style?: CSSProperties }) {
+  const index = CARD_SIZES.reduce((best, size, i) => (Math.abs(size - value) < Math.abs(CARD_SIZES[best] - value) ? i : best), 0);
+  return (
+    <input
+      type="range"
+      min={0}
+      max={CARD_SIZES.length - 1}
+      step={1}
+      value={index}
+      aria-label="Cover size"
+      aria-valuetext={`${CARD_SIZES[index]} pixels`}
+      style={{ ...style, "--fill": `${(index / (CARD_SIZES.length - 1)) * 100}%` } as CSSProperties}
+      onChange={(event) => onChange(CARD_SIZES[Number(event.target.value)])}
+    />
   );
 }
 

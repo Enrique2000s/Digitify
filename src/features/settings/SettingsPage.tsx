@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -7,6 +7,7 @@ import { api, errorText } from "../../lib/api";
 import { ACCENT_PRESETS } from "../../lib/color";
 import { usePreferences, type MotionChoice, type ThemeChoice } from "../../lib/preferences";
 import { keys, libraryChanged, useAppStatus } from "../../lib/queries";
+import { CardSizeSlider } from "../../components/common";
 import { CategoriesPanel } from "./CategoriesPanel";
 import { BackupsPanel } from "./LibraryTools";
 import { Setting } from "./Setting";
@@ -93,15 +94,7 @@ export function SettingsPage() {
             </select>
           </Setting>
           <Setting title="Cover size" text="Width of covers in the grid and shelf views.">
-            <input
-              type="range"
-              min={110}
-              max={240}
-              value={preferences.cardSize}
-              aria-label="Cover size"
-              style={{ width: 180, "--fill": `${((preferences.cardSize - 110) / 130) * 100}%` } as CSSProperties}
-              onChange={(event) => update({ cardSize: Number(event.target.value) })}
-            />
+            <CardSizeSlider value={preferences.cardSize} onChange={(cardSize) => update({ cardSize })} style={{ width: 180 }} />
           </Setting>
         </section>
 
@@ -143,7 +136,7 @@ export function SettingsPage() {
           <h2>About</h2>
           <Setting
             title={`Digitify ${status.data?.version ?? ""}`}
-            text="Works fully offline. No accounts, no telemetry, and nothing is uploaded. Helper engines: mpv (GPL) and FFmpeg (LGPL), run as separate programs. The ambient theme “Morning Lounge” is original to Digitify."
+            text="Works fully offline. No accounts, no telemetry, and nothing is uploaded. Helper engines: mpv (GPL) and FFmpeg (LGPL), run as separate programs. The ambient theme “Digitify Main Menu Music” is original to Digitify."
           >
             <span />
           </Setting>

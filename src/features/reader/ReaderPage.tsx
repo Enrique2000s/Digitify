@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { api, errorText, type ItemDetail } from "../../lib/api";
 import { WindowButtons } from "../../components/TitleBar";
@@ -25,15 +25,20 @@ export function canRead(item: ItemDetail): boolean {
 /** `/read/$id`: the reader, full window, without the library's header. */
 export function ReaderPage() {
   const { id } = useParams({ from: "/read/$id" });
+  const { page } = useSearch({ from: "/read/$id" });
   const navigate = useNavigate();
   const book = useQuery({ queryKey: ["reader", Number(id)], queryFn: () => api.readerOpen(Number(id)), staleTime: 0, gcTime: 0, retry: false });
+  const series = useQuery({ queryKey: ["series", Number(id)], queryFn: () => api.seriesGet(Number(id)) });
+  const next = series.data ? (series.data.entries[series.data.index + 1] ?? null) : null;
+  // The next volume replaces this one in history, so closing still goes back where reading began.
+  const openNext = next ? () => void navigate({ to: "/read/$id", params: { id: String(next.id) }, replace: true }) : undefined;
   const close = () => {
     if (window.history.length > 1) window.history.back();
     else void navigate({ to: "/item/$id", params: { id } });
   };
 
-  if (book.data?.kind === "ebook") return <EbookReader book={book.data} onClose={close} />;
-  if (book.data) return <PageReader book={book.data} onClose={close} />;
+  if (book.data?.kind === "ebook") return <EbookReader key={book.data.itemId} book={book.data} onClose={close} next={next} onNext={openNext} />;
+  if (book.data) return <PageReader key={book.data.itemId} book={book.data} startPage={page} onClose={close} next={next} onNext={openNext} />;
   return (
     <div className="reader">
       <header className="reader-bar top" data-tauri-drag-region>

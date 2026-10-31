@@ -143,7 +143,7 @@ export function SoundSettings() {
         text={
           custom
             ? "Your own songs: files, folders, or albums from your Digitify library."
-            : "“Morning Lounge”, an original theme written for Digitify. It improvises a little, so it never plays exactly the same way twice."
+            : "“Digitify Main Menu Music”, an original theme written for Digitify. It improvises a little, so it never plays exactly the same way twice."
         }
       >
         <div className="segmented" role="group" aria-label="Music">

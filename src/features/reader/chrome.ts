@@ -3,6 +3,13 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 const appWindow = getCurrentWindow();
 
+/** Whether animations may play: the app's motion setting, or the system's when it follows it. */
+export function motionAllowed(): boolean {
+  const choice = document.documentElement.dataset.motion;
+  if (choice === "reduced" || choice === "off") return false;
+  return choice === "full" || !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 /** Full screen for a reader. Leaving the reader leaves full screen too. */
 export function useFullscreen() {
   const [fullscreen, setFullscreen] = useState(false);

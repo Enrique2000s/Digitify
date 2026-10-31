@@ -4,6 +4,8 @@ import { ItemPage } from "../features/item/ItemPage";
 import { LibraryPage, SearchPage } from "../features/library/LibraryPage";
 import { ShelfPage, ShelvesPage, TagPage, TagsPage } from "../features/organize/pages";
 import { ReaderPage } from "../features/reader/ReaderPage";
+import { DiscPlayPage, WatchPage } from "../features/player/VideoPlayer";
+import { DiscsPage } from "../features/discs/DiscsPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { VideoPoc } from "../poc/VideoPoc";
 import { api } from "../lib/api";
@@ -33,9 +35,11 @@ const routeTree = rootRoute.addChildren([
     getParentRoute: () => rootRoute,
     path: "/library/$scope",
     // `collection`: show one collection of the category, with everything inside it.
-    validateSearch: (search: Record<string, unknown>): { collection?: number } => {
+    // `tab`: a music category's other lists (artists, tracks, playlists…); albums are the default.
+    validateSearch: (search: Record<string, unknown>): { collection?: number; tab?: string } => {
       const collection = Number(search.collection);
-      return Number.isInteger(collection) && collection > 0 ? { collection } : {};
+      const tab = typeof search.tab === "string" ? search.tab : undefined;
+      return { ...(Number.isInteger(collection) && collection > 0 ? { collection } : {}), ...(tab ? { tab } : {}) };
     },
     component: LibraryPage,
   }),
@@ -50,7 +54,28 @@ const routeTree = rootRoute.addChildren([
     component: SearchPage,
   }),
   createRoute({ getParentRoute: () => rootRoute, path: "/item/$id", component: ItemPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: "/read/$id", component: ReaderPage }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/read/$id",
+    // `page`: open a page-based book at this page (from 0), e.g. a chapter picked on the item page.
+    validateSearch: (search: Record<string, unknown>): { page?: number } => {
+      const page = Number(search.page);
+      return Number.isInteger(page) && page >= 0 ? { page } : {};
+    },
+    component: ReaderPage,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/watch/$id",
+    // `part`: an episode of a series; without it, the film or the next episode to watch.
+    validateSearch: (search: Record<string, unknown>): { part?: number } => {
+      const part = Number(search.part);
+      return Number.isInteger(part) && part > 0 ? { part } : {};
+    },
+    component: WatchPage,
+  }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/disc/$letter/$title", component: DiscPlayPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/discs", component: DiscsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/settings", component: SettingsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/lab", component: Lab }),
 ]);

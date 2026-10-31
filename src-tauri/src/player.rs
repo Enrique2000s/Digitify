@@ -4,7 +4,7 @@
 //! React controls float over the picture. Commands and events travel as JSON lines over mpv's
 //! IPC named pipe; every message mpv sends is forwarded to the UI as a `player-event`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
@@ -21,8 +21,10 @@ use crate::error::{AppError, AppResult};
 /// mpv properties mirrored to the UI as `property-change` events.
 const OBSERVED: &[&str] = &[
     "time-pos", "duration", "pause", "volume", "mute", "eof-reached", "media-title",
-    "track-list", "chapter-list", "chapter",
+    "track-list", "chapter-list", "chapter", "speed", "sid", "aid",
 ];
+
+const SUBTITLE_EXTENSIONS: &[&str] = &["srt", "ass", "ssa", "vtt", "sub", "sup", "idx"];
 
 static NEXT_PIPE: AtomicU32 = AtomicU32::new(1);
 
@@ -37,6 +39,7 @@ struct Session {
     commands: mpsc::UnboundedSender<String>,
 }
 
+/// Opens any file in the player (the Phase 0 video lab only; library videos use `watch_open`).
 #[tauri::command]
 pub async fn player_open(
     app: AppHandle,
@@ -44,7 +47,27 @@ pub async fn player_open(
     state: State<'_, PlayerState>,
     path: String,
 ) -> AppResult<()> {
-    stop(&app, &state);
+    start(&app, &window, &state, Path::new(&path), 0.0, 100.0).await
+}
+
+/// Starts mpv on `path` under the WebView, `start` seconds in, at `volume` (0–100). Subtitles next
+/// to the video whose names contain its name load with it.
+pub async fn start(app: &AppHandle, window: &WebviewWindow, state: &PlayerState, path: &Path, start: f64, volume: f64) -> AppResult<()> {
+    start_with(app, window, state, &path.to_string_lossy(), start, volume, &[]).await
+}
+
+/// Like `start`, for any source mpv can open (a disc title's EDL) with extra options.
+pub async fn start_with(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    state: &PlayerState,
+    source: &str,
+    start: f64,
+    volume: f64,
+    options: &[String],
+) -> AppResult<()> {
+    stop(app, state);
+    let app = app.clone();
 
     let parent = window.hwnd()?.0 as isize;
     let host = on_main_thread(&app, move || video_host::create(parent))
@@ -74,9 +97,12 @@ pub async fn player_open(
             "--load-scripts=no".into(),
             "--ytdl=no".into(),
             "--hwdec=auto-safe".into(),
+            "--sub-auto=fuzzy".into(),
+            format!("--volume={}", volume.clamp(0.0, 100.0).round()),
             "--terminal=no".into(),
             format!("--log-file={}", log_file.display()),
         ])
+        .args(options)
         .spawn();
     let mut child = match spawned {
         Ok(child) => child,
@@ -122,10 +148,27 @@ pub async fn player_open(
     for (index, name) in OBSERVED.iter().enumerate() {
         send(&commands, json!({ "command": ["observe_property", index + 1, name] }));
     }
-    send(&commands, json!({ "command": ["loadfile", path] }));
+    if start > 0.0 {
+        send(&commands, json!({ "command": ["set_property", "start", format!("{start:.1}")] }));
+    }
+    send(&commands, json!({ "command": ["loadfile", source] }));
 
-    *lock(&state)? = Some(Session { child, host, commands });
-    log::info!("video player started (mpv pid {})", lock(&state)?.as_ref().map_or(0, |s| s.child.id()));
+    *lock(state)? = Some(Session { child, host, commands });
+    log::info!("video player started (mpv pid {})", lock(state)?.as_ref().map_or(0, |s| s.child.id()));
+    Ok(())
+}
+
+/// Loads a subtitle file the viewer picked and shows it.
+#[tauri::command]
+pub fn player_add_subtitle(state: State<'_, PlayerState>, path: String) -> AppResult<()> {
+    let file = Path::new(&path);
+    let extension = file.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
+    if !SUBTITLE_EXTENSIONS.contains(&extension.as_str()) || !file.is_file() {
+        return Err(AppError::msg("That isn't a subtitle file Digitify can load (SRT, ASS, SSA, VTT, SUB or SUP)."));
+    }
+    let guard = lock(&state)?;
+    let session = guard.as_ref().ok_or_else(|| AppError::msg("no video is open"))?;
+    send(&session.commands, json!({ "command": ["sub-add", path, "select"] }));
     Ok(())
 }
 
@@ -191,7 +234,7 @@ fn destroy_host(app: &AppHandle, host: isize) {
     let _ = app.run_on_main_thread(move || video_host::destroy(host));
 }
 
-fn send(commands: &mpsc::UnboundedSender<String>, message: Value) {
+pub(crate) fn send(commands: &mpsc::UnboundedSender<String>, message: Value) {
     let _ = commands.send(format!("{message}\n"));
 }
 
@@ -199,7 +242,7 @@ fn lock(state: &PlayerState) -> AppResult<std::sync::MutexGuard<'_, Option<Sessi
     state.session.lock().map_err(|_| AppError::msg("player state is unavailable"))
 }
 
-fn mpv_path() -> AppResult<PathBuf> {
+pub(crate) fn mpv_path() -> AppResult<PathBuf> {
     let exe = std::env::current_exe()?;
     let path = exe
         .parent()
@@ -216,7 +259,7 @@ fn mpv_path() -> AppResult<PathBuf> {
 }
 
 /// mpv creates its control pipe shortly after starting; retry until it appears.
-async fn connect(pipe: &str) -> AppResult<NamedPipeClient> {
+pub(crate) async fn connect(pipe: &str) -> AppResult<NamedPipeClient> {
     const ERROR_FILE_NOT_FOUND: i32 = 2;
     const ERROR_PIPE_BUSY: i32 = 231;
     for _ in 0..200 {

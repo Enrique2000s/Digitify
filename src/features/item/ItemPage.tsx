@@ -4,11 +4,15 @@ import { Link, useParams } from "@tanstack/react-router";
 import { open } from "@tauri-apps/plugin-dialog";
 import { BookOpen, FilePlus, FolderOpen, HardDrive, ImagePlus, Package, Pencil, Plus, Star, Trash } from "lucide-react";
 import { api, artworkUrl, errorText, type FieldDef, type ItemDetail, type VersionInfo } from "../../lib/api";
-import { bytes, date, duration, formatLabel, longDuration, ROLE_LABELS } from "../../lib/format";
+import { bytes, date, formatLabel, longDuration, ROLE_LABELS } from "../../lib/format";
 import { libraryChanged, useCategories, useItem } from "../../lib/queries";
 import { aspectFor, Cover } from "../../components/common";
 import { HomePath, OrganizePanel } from "../organize/OrganizePanel";
 import { canRead } from "../reader/ReaderPage";
+import { ChaptersPanel, SeriesPanel } from "./SeriesPanels";
+import { canWatch, EpisodesPanel, WatchButton, WatchedButton } from "./WatchPanels";
+import { ArrangePagesDialog } from "../builder/BookBuilder";
+import { TrackList } from "../music/Tracks";
 import { customValues, formatCustom } from "./customFields";
 import { AttachFilesDialog, EditItemDialog, PhysicalCopyDialog, RemoveItemDialog } from "./forms";
 
@@ -80,6 +84,8 @@ function facts(item: ItemDetail, fields: FieldDef[]): [string, ReactNode][] {
 function CopyCard({ item, version, onEdit }: { item: ItemDetail; version: VersionInfo; onEdit: () => void }) {
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
+  const [arranging, setArranging] = useState(false);
+  const imageBook = version.kind === "digital" && version.format === "images" && version.files.length > 1;
   const [error, setError] = useState<string | null>(null);
   const physical = version.kind === "physical";
   const remove = async () => {
@@ -129,6 +135,11 @@ function CopyCard({ item, version, onEdit }: { item: ItemDetail; version: Versio
               Edit
             </button>
           )}
+          {imageBook && (
+            <button type="button" className="btn btn-sm" onClick={() => setArranging(true)}>
+              Arrange pages
+            </button>
+          )}
           {confirming ? (
             <>
               <button type="button" className="btn btn-sm btn-danger" onClick={() => void remove()}>
@@ -147,6 +158,7 @@ function CopyCard({ item, version, onEdit }: { item: ItemDetail; version: Versio
         {confirming && !physical && <div className="hint">The files stay on your computer; Digitify just stops tracking them for “{item.title}”.</div>}
         {error && <div className="dialog-error">{error}</div>}
       </div>
+      {imageBook && <ArrangePagesDialog item={item} version={version} open={arranging} onOpenChange={setArranging} />}
     </div>
   );
 }
@@ -188,6 +200,11 @@ export function ItemPage() {
     }
   };
 
+  const backdrop = (item.metadata as Record<string, unknown>).backdropKey as string | undefined;
+  const changeBackdrop = async () => {
+    const path = await open({ multiple: false, title: "Choose a background", filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "webp", "bmp"] }] });
+    if (typeof path === "string") await run(() => api.itemSetBackdrop(item.id, path));
+  };
   const changeArtwork = async () => {
     const path = await open({ multiple: false, title: "Choose artwork", filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "webp", "gif", "bmp"] }] });
     if (typeof path === "string") await run(() => api.itemSetCover(item.id, path));
@@ -201,13 +218,18 @@ export function ItemPage() {
   );
   const formats = [...new Set(item.versions.map((v) => v.format).filter(Boolean))] as string[];
   const readable = canRead(item);
+  const watchable = canWatch(item);
   const physical = item.versions.filter((v) => v.kind === "physical");
   const digital = item.versions.filter((v) => v.kind === "digital");
 
   return (
     <div className="page">
       <section className="hero" aria-labelledby="item-title">
-        {item.coverKey && <div className="hero-backdrop" style={{ backgroundImage: `url(${artworkUrl(item.coverKey)})` }} />}
+        {backdrop ? (
+        <div className="hero-backdrop custom" style={{ backgroundImage: `url(${artworkUrl(backdrop, "cover")})` }} />
+      ) : (
+        item.coverKey && <div className="hero-backdrop" style={{ backgroundImage: `url(${artworkUrl(item.coverKey)})` }} />
+      )}
         <div className="hero-cover" style={{ flexBasis: 220, aspectRatio: aspectFor(item.handler) }}>
           <Cover item={item} size="cover" />
         </div>
@@ -235,6 +257,8 @@ export function ItemPage() {
             </div>
           )}
           <div className="hero-actions">
+            {watchable && <WatchButton item={item} />}
+            {watchable && <WatchedButton item={item} />}
             {readable && (
               <Link to="/read/$id" params={{ id: String(item.id) }} className="btn btn-primary">
                 <BookOpen size={16} />
@@ -243,7 +267,7 @@ export function ItemPage() {
             )}
             <button
               type="button"
-              className={readable ? "btn" : "btn btn-primary"}
+              className={readable || watchable ? "btn" : "btn btn-primary"}
               aria-pressed={item.isFavorite}
               onClick={() => void run(() => api.itemSetFavorite(item.id, !item.isFavorite))}
             >
@@ -256,6 +280,11 @@ export function ItemPage() {
             <button type="button" className="btn" onClick={() => void changeArtwork()}>
               <ImagePlus size={16} /> Change artwork
             </button>
+            {item.handler === "video" && (
+              <button type="button" className="btn" onClick={() => void (backdrop ? run(() => api.itemSetBackdrop(item.id, null)) : changeBackdrop())}>
+                <ImagePlus size={16} /> {backdrop ? "Remove background" : "Background…"}
+              </button>
+            )}
             <button type="button" className="btn" onClick={() => setRemoving(true)}>
               <Trash size={16} /> Remove
             </button>
@@ -275,17 +304,12 @@ export function ItemPage() {
           {item.handler === "audio" && item.parts.length > 0 && (
             <section className="panel">
               <h2>Tracks</h2>
-              <ol className="tracks">
-                {item.parts.map((part, index) => (
-                  <li key={part.id}>
-                    <span className="no">{part.number ?? index + 1}</span>
-                    <span>{part.title}</span>
-                    <span className="muted">{duration(part.durationMs)}</span>
-                  </li>
-                ))}
-              </ol>
+              <TrackList filter={{ album: item.id }} empty="This album's tracks can't be found." showAlbum={false} compact />
             </section>
           )}
+          <EpisodesPanel item={item} />
+          {readable && <ChaptersPanel itemId={item.id} />}
+          <SeriesPanel itemId={item.id} handler={item.handler} />
           <section className="panel">
             <h2>Details</h2>
             <dl className="facts">

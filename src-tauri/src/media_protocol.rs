@@ -39,6 +39,7 @@ fn route<R: Runtime>(app: &AppHandle<R>, request: &Request<Vec<u8>>) -> Routed {
         (Some("ambient"), Some(track)) => ambient_track(app, track, request),
         (Some("page"), Some(page)) => book_page(app, page, request),
         (Some("book"), Some(version)) => ebook_file(app, version, request),
+        (Some("cd"), Some(track)) => cd_track(track, request),
         _ => Err((StatusCode::NOT_FOUND, format!("unknown resource {path}"))),
     }
 }
@@ -117,6 +118,34 @@ fn ebook_file<R: Runtime>(app: &AppHandle<R>, version: &str, request: &Request<V
         .map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?
         .ok_or_else(|| (StatusCode::NOT_FOUND, format!("copy {version} isn't an ebook")))?;
     stream(&path, ebooks::mime_type(&path), request)
+}
+
+/// An audio CD track straight from the disc as WAV, `cd/<letter>/<track>`, in range slices.
+fn cd_track(track: &str, request: &Request<Vec<u8>>) -> Routed {
+    let bad = || (StatusCode::BAD_REQUEST, "invalid track".to_string());
+    let (letter, number) = track.split_once('/').ok_or_else(bad)?;
+    let number: u32 = number.parse().map_err(|_| bad())?;
+    let requested = request.headers().get(header::RANGE).and_then(|v| v.to_str().ok()).map(str::to_string);
+    let (_, total) = crate::optical::cd_stream(letter, number, Some((0, 0))).map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?;
+    let range = match &requested {
+        Some(value) => Some(parse_range(value, total).ok_or((StatusCode::RANGE_NOT_SATISFIABLE, "bad range".to_string()))?),
+        None => None,
+    };
+    let (bytes, total) = crate::optical::cd_stream(letter, number, range).map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?;
+    let start = range.map_or(0, |(start, _)| start);
+    let builder = Response::builder()
+        .header(header::CONTENT_TYPE, "audio/wav")
+        .header(header::ACCEPT_RANGES, "bytes")
+        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*");
+    let response = if range.is_some() {
+        builder
+            .status(StatusCode::PARTIAL_CONTENT)
+            .header(header::CONTENT_RANGE, format!("bytes {start}-{}/{total}", start + bytes.len() as u64 - 1))
+            .body(bytes)
+    } else {
+        builder.status(StatusCode::OK).body(bytes)
+    };
+    response.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
 /// Serves a file in slices, the way media elements expect (HTTP range requests), so a long track

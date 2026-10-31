@@ -6,6 +6,7 @@ import { useCategories, useCollections } from "../../lib/queries";
 import { CategoryIcon } from "../../components/common";
 import { CollectionActions, CollectionCrumbs, CollectionRow } from "../organize/collections";
 import { LibraryView } from "./LibraryView";
+import { MUSIC_TABS, MusicPage, MusicTabs, type MusicTab } from "../music/MusicPage";
 
 function EmptyLibrary({ text }: { text: string }) {
   const importer = useImporter();
@@ -39,7 +40,12 @@ function CategoryView({ category, collection }: { category: Category; collection
       icon={current ? <FolderOpen size={26} strokeWidth={2.2} aria-hidden /> : <CategoryIcon icon={category.icon} size={26} />}
       square={category.handler === "audio"}
       actions={<CollectionActions category={category} path={current ? path : []} />}
-      prelude={<CollectionRow category={category.key} parent={collection} />}
+      prelude={
+        <>
+          {category.handler === "audio" && collection == null && <MusicTabs category={category} tab="albums" />}
+          <CollectionRow category={category.key} parent={collection} />
+        </>
+      }
       empty={
         current ? (
           <div className="empty">
@@ -58,7 +64,7 @@ function CategoryView({ category, collection }: { category: Category; collection
 
 export function LibraryPage() {
   const { scope } = useParams({ from: "/library/$scope" });
-  const { collection } = useSearch({ from: "/library/$scope" });
+  const { collection, tab } = useSearch({ from: "/library/$scope" });
   const categories = useCategories();
 
   if (scope === "all") {
@@ -87,6 +93,8 @@ export function LibraryPage() {
   }
   const category = categories.data?.find((c) => c.key === scope);
   if (!category) return null;
+  const musicTab = MUSIC_TABS.find((key) => key === tab) as MusicTab | undefined;
+  if (category.handler === "audio" && musicTab && musicTab !== "albums") return <MusicPage category={category} tab={musicTab} />;
   return <CategoryView key={`${scope}:${collection ?? ""}`} category={category} collection={collection ?? null} />;
 }
 

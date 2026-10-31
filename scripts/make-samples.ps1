@@ -311,9 +311,12 @@ $garden = @(
 
 # A one-page PDF with an info dictionary, written by hand (offsets computed for the xref table).
 # A minimal PDF: one heading and one line of text per page, plus a title and author.
-function New-SimplePdf([string]$Path, [string]$Title, [string]$Body, [int]$Pages = 1) {
+# With -Outline, each page also gets an outline (bookmark) entry, "Section n", which Digitify reads
+# as the PDF's chapters.
+function New-SimplePdf([string]$Path, [string]$Title, [string]$Body, [int]$Pages = 1, [switch]$Outline) {
     $objects = [System.Collections.Generic.List[string]]::new()
-    $objects.Add('<< /Type /Catalog /Pages 2 0 R >>')
+    $outlineRoot = 4 + 2 * $Pages
+    $objects.Add($(if ($Outline) { "<< /Type /Catalog /Pages 2 0 R /Outlines $outlineRoot 0 R /PageMode /UseOutlines >>" } else { '<< /Type /Catalog /Pages 2 0 R >>' }))
     $kids = (0..($Pages - 1) | ForEach-Object { "$(4 + $_ * 2) 0 R" }) -join ' '
     $objects.Add("<< /Type /Pages /Kids [$kids] /Count $Pages >>")
     $objects.Add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
@@ -322,6 +325,14 @@ function New-SimplePdf([string]$Path, [string]$Title, [string]$Body, [int]$Pages
         $content = "BT /F1 26 Tf 72 760 Td ($heading) Tj ET BT /F1 12 Tf 72 720 Td ($Body) Tj ET"
         $objects.Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents $(5 + ($n - 1) * 2) 0 R /Resources << /Font << /F1 3 0 R >> >> >>")
         $objects.Add("<< /Length $($content.Length) >>`nstream`n$content`nendstream")
+    }
+    if ($Outline) {
+        $objects.Add("<< /Type /Outlines /First $($outlineRoot + 1) 0 R /Last $($outlineRoot + $Pages) 0 R /Count $Pages >>")
+        for ($n = 1; $n -le $Pages; $n++) {
+            $entry = $outlineRoot + $n
+            $siblings = $(if ($n -gt 1) { " /Prev $($entry - 1) 0 R" }) + $(if ($n -lt $Pages) { " /Next $($entry + 1) 0 R" })
+            $objects.Add("<< /Title (Section $n) /Parent $outlineRoot 0 R$siblings /Dest [$(4 + ($n - 1) * 2) 0 R /Fit] >>")
+        }
     }
     $objects.Add("<< /Title ($Title) /Author (Digitify Test Suite) >>")
     $pdf = New-Object System.Text.StringBuilder
@@ -338,13 +349,17 @@ function New-SimplePdf([string]$Path, [string]$Title, [string]$Body, [int]$Pages
     [void]$pdf.Append("trailer`n<< /Size $($objects.Count + 1) /Root 1 0 R /Info $($objects.Count) 0 R >>`nstartxref`n$xref`n%%EOF`n")
     [IO.File]::WriteAllText($Path, $pdf.ToString(), [Text.Encoding]::ASCII)
 }
-New-SimplePdf (Join-Path $books 'The Cartographer''s Notebook (1998).pdf') "The Cartographer's Notebook" 'A sample PDF generated for testing Digitify.' -Pages 3
+New-SimplePdf (Join-Path $books 'The Cartographer''s Notebook (1998).pdf') "The Cartographer's Notebook" 'A sample PDF generated for testing Digitify.' -Pages 3 -Outline
 
 # Comic archives: a manga volume with ComicInfo.xml (right-to-left), and a plain comic without metadata.
-function New-Cbz([string]$Path, [string]$ComicInfo) {
+# With -Chapters, the pages are split evenly into one folder per chapter inside the archive, the way
+# many manga volumes are packed (D-019 detects chapters from them).
+function New-Cbz([string]$Path, [string]$ComicInfo, [string[]]$Chapters = @()) {
     $zip = [IO.Compression.ZipFile]::Open($Path, 'Create')
-    foreach ($page in Get-ChildItem $comicPages -Filter *.jpg | Sort-Object Name) {
-        Add-ZipEntry $zip $page.Name ([IO.File]::ReadAllBytes($page.FullName))
+    $pages = @(Get-ChildItem $comicPages -Filter *.jpg | Sort-Object Name)
+    for ($i = 0; $i -lt $pages.Count; $i++) {
+        $folder = if ($Chapters.Count) { $Chapters[[Math]::Floor($i * $Chapters.Count / $pages.Count)] + '/' } else { '' }
+        Add-ZipEntry $zip ($folder + $pages[$i].Name) ([IO.File]::ReadAllBytes($pages[$i].FullName))
     }
     if ($ComicInfo) { Add-ZipEntry $zip 'ComicInfo.xml' (Get-Utf8 $ComicInfo) }
     $zip.Dispose()
@@ -363,6 +378,7 @@ New-Cbz (Join-Path $comics 'Starfall Academy v03.cbz') @'
 </ComicInfo>
 '@
 New-Cbz (Join-Path $comics 'Night Market Tales 01.cbz') $null
+New-Cbz (Join-Path $comics 'Night Market Tales 02.cbz') $null -Chapters @('Chapter 1 - Lanterns', 'Chapter 2 - Noodles', 'Chapter 3 - Rain')
 
 # The same pages as the other comic archive formats (D-017). No free tool creates RAR files, so the
 # CBR is written here as a RAR 4 archive of stored (uncompressed) files, which the format allows.
@@ -455,6 +471,22 @@ foreach ($track in $tracks) {
 }
 
 Copy-Item -LiteralPath $video -Destination (Join-Path $movies 'Digitify Sample Film (2026).mkv')
+
+# A tiny TV series (D-018): two seasons of 12-second episodes, named the ways downloads usually are.
+$show = Join-Path $set 'TV\Harbor Watch'
+foreach ($episode in @(
+        @{ File = 'Season 1\Harbor Watch S01E01 - Lights On.mkv'; Hue = 0; Tone = 330 },
+        @{ File = 'Season 1\Harbor Watch S01E02 - The Fog.mkv'; Hue = 90; Tone = 392 },
+        @{ File = 'Season 1\Harbor Watch S01E03 - Night Ferry.mkv'; Hue = 180; Tone = 440 },
+        @{ File = 'Season 2\harbor.watch.s02e01.mkv'; Hue = 270; Tone = 494 })) {
+    $path = Join-Path $show $episode.File
+    New-Item -ItemType Directory -Force (Split-Path $path) | Out-Null
+    Invoke-FFmpeg @(
+        '-f', 'lavfi', '-i', "testsrc2=size=640x360:rate=25:duration=12,hue=h=$($episode.Hue)",
+        '-f', 'lavfi', '-i', "sine=frequency=$($episode.Tone):sample_rate=48000:duration=12",
+        '-c:v', 'mpeg4', '-q:v', '5', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '96k', $path
+    )
+}
 
 # A separate "scan" to attach to an existing item.
 $attach = Join-Path $samples 'attach-test'

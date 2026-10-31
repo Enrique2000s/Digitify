@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Popover } from "radix-ui";
-import { ArrowLeft, ChevronLeft, ChevronRight, Columns2, Expand, Link2, List, LoaderCircle, Minus, Plus, RectangleVertical, Rows3, Shrink, Type, X } from "lucide-react";
-import { api, bookUrl, type Ebook } from "../../lib/api";
+import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Columns2, Expand, Link2, List, LoaderCircle, Minus, Plus, RectangleVertical, Rows3, Shrink, Type, X } from "lucide-react";
+import { api, bookUrl, type BookmarkLocator, type Ebook, type SeriesEntry } from "../../lib/api";
 import { useAmbient, useAmbientHold } from "../../lib/ambient/AmbientProvider";
 import { accentVariables } from "../../lib/color";
 import { EBOOK_SIZES, EBOOK_SPACINGS, usePreferences, type EbookPreferences } from "../../lib/preferences";
@@ -10,7 +10,9 @@ import { libraryChanged } from "../../lib/queries";
 import { Switch } from "../../components/common";
 import { WindowButtons } from "../../components/TitleBar";
 import type { Location, TocItem, View } from "../../vendor/foliate-js/view.js";
-import { useAutoHide, useFullscreen } from "./chrome";
+import { BookmarksMenu, toggleBookmark, useBookmarks, type Place } from "./Bookmarks";
+import { motionAllowed, useAutoHide, useFullscreen } from "./chrome";
+import { BrightnessRow, pageFilter } from "./DisplayPanel";
 
 const THEMES = {
   paper: { label: "Paper", background: "#fbf8f1", text: "#24211b", link: "#1d6aa8" },
@@ -68,12 +70,6 @@ function bookStyles(settings: EbookPreferences): string {
   `;
 }
 
-function motionAllowed(): boolean {
-  const choice = document.documentElement.dataset.motion;
-  if (choice === "reduced" || choice === "off") return false;
-  return choice === "full" || !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
 function applyLayout(view: View, settings: EbookPreferences) {
   if (view.isFixedLayout) return; // pages drawn by the publisher keep their own layout
   const renderer = view.renderer;
@@ -118,7 +114,13 @@ function TocList({ items, current, depth, onPick }: { items: TocItem[]; current?
 }
 
 /** Reflowable ebooks: EPUB, MOBI, AZW3 and FB2, laid out by foliate-js (Phase 2, D-014). */
-export function EbookReader({ book, onClose }: { book: Ebook; onClose: () => void }) {
+export function EbookReader({ book, onClose, next: nextVolume, onNext }: {
+  book: Ebook;
+  onClose: () => void;
+  /** The next volume of the series, offered at the end. */
+  next?: SeriesEntry | null;
+  onNext?: () => void;
+}) {
   const queryClient = useQueryClient();
   const { preferences, update } = usePreferences();
   const settings = preferences.ebook;
@@ -136,8 +138,9 @@ export function EbookReader({ book, onClose }: { book: Ebook; onClose: () => voi
   const [toc, setToc] = useState<TocItem[]>([]);
   const [rtl, setRtl] = useState(false);
   const [location, setLocation] = useState<Location | null>(null);
-  const [panel, setPanel] = useState<"toc" | "type" | null>(null);
+  const [panel, setPanel] = useState<"toc" | "type" | "bookmarks" | null>(null);
   const [link, setLink] = useState<string | null>(null);
+  const [atEnd, setAtEnd] = useState(false);
   const ready = state.status === "ready";
   const scroll = settings.layout === "scroll";
   const setEbook = useCallback(
@@ -151,6 +154,25 @@ export function EbookReader({ book, onClose }: { book: Ebook; onClose: () => voi
     },
     [settings.size, setEbook],
   );
+
+  // ------------------------------------------------------------------ bookmarks
+
+  const bookmarks = useBookmarks(book.itemId);
+  const here: Place | null = location?.cfi
+    ? {
+        locator: { cfi: location.cfi, fraction: location.fraction, location: location.location?.current ?? null },
+        label: location.tocItem?.label?.trim() || `${Math.round(location.fraction * 100)}%`,
+      }
+    : null;
+  // Positions are counted in foliate-js "locations" (about 1,500 characters each), which don't
+  // depend on the window size; a bookmark is on screen when its location is among those shown.
+  const isHere = (locator: BookmarkLocator) => {
+    if (!("cfi" in locator) || !location) return false;
+    if (locator.cfi === location.cfi) return true;
+    const shown = location.location;
+    return locator.location != null && !!shown && locator.location >= shown.current && locator.location <= Math.max(shown.current, shown.next - 1);
+  };
+  const describe = (locator: BookmarkLocator) => ("fraction" in locator ? `${Math.round(locator.fraction * 100)}%` : "");
 
   // ------------------------------------------------------------------ progress
 
@@ -207,6 +229,10 @@ export function EbookReader({ book, onClose }: { book: Ebook; onClose: () => voi
       case "f":
       case "F11":
         void toggleFullscreen();
+        break;
+      case "b":
+      case "B":
+        void toggleBookmark(bookmarks, here, isHere);
         break;
       case "Escape":
         if (panel) setPanel(null);
@@ -268,6 +294,7 @@ export function EbookReader({ book, onClose }: { book: Ebook; onClose: () => voi
     const onRelocate = (event: Event) => {
       const detail = (event as CustomEvent<Location>).detail;
       setLocation(detail);
+      setAtEnd(detail.fraction >= 0.995 || !!view?.renderer.atEnd);
       if (!opened.current || !view) return;
       pending.current = { cfi: detail.cfi, fraction: detail.fraction, finished: detail.fraction >= 0.999 || !!view.renderer.atEnd };
       window.clearTimeout(saveTimer.current);
@@ -346,7 +373,7 @@ export function EbookReader({ book, onClose }: { book: Ebook; onClose: () => voi
       style={{ ...accentVariables(preferences.accent, "dark"), "--book-bg": theme.background } as CSSProperties}
       onMouseMove={poke}
     >
-      <div ref={host} className="ebook-stage" />
+      <div ref={host} className="ebook-stage" style={{ filter: pageFilter(settings.brightness, false) }} />
 
       {state.status !== "ready" && (
         <div className="reader-message">
@@ -398,6 +425,16 @@ export function EbookReader({ book, onClose }: { book: Ebook; onClose: () => voi
           ))}
         </div>
         <span className="appbar-drag" data-tauri-drag-region />
+        <BookmarksMenu
+          itemId={book.itemId}
+          container={root.current}
+          open={panel === "bookmarks"}
+          onOpenChange={(open) => setPanel(open ? "bookmarks" : null)}
+          here={ready ? here : null}
+          isHere={isHere}
+          describe={describe}
+          onGo={(locator) => "cfi" in locator && void viewRef.current?.goTo(locator.cfi)}
+        />
         <Popover.Root open={panel === "type"} onOpenChange={(open) => setPanel(open ? "type" : null)}>
           <Popover.Trigger asChild>
             <button type="button" className="round-btn" aria-label="Text and theme" title="Text and theme">
@@ -484,6 +521,7 @@ export function EbookReader({ book, onClose }: { book: Ebook; onClose: () => voi
                   ))}
                 </div>
               </div>
+              <BrightnessRow value={settings.brightness} onChange={(brightness) => setEbook({ brightness })} />
               <div className="type-row">
                 <span>Justify text</span>
                 <Switch checked={settings.justify} label="Justify text" onChange={(justify) => setEbook({ justify })} />
@@ -519,6 +557,12 @@ export function EbookReader({ book, onClose }: { book: Ebook; onClose: () => voi
         </button>
       </footer>
 
+      {atEnd && nextVolume && onNext && (
+        <button type="button" className="btn btn-primary next-volume" onClick={onNext}>
+          Next: {nextVolume.label ? `${nextVolume.label} · ` : ""}
+          {nextVolume.title} <ArrowRight size={16} />
+        </button>
+      )}
       {link && (
         <div className="ebook-link" role="status">
           <Link2 size={17} aria-hidden />

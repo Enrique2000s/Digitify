@@ -92,6 +92,8 @@ export interface TileCover {
 export interface Dashboard {
   featured: ItemCard | null;
   continueItems: ItemCard[];
+  /** Films and series in progress. */
+  continueWatching: ItemCard[];
   recent: ItemCard[];
   recentlyOpened: ItemCard[];
   favorites: ItemCard[];
@@ -125,6 +127,32 @@ export interface ReaderBook {
   pages: { width: number; height: number }[];
   /** Where reading stopped last time. */
   position: number;
+  chapters: Chapter[];
+}
+
+/** A chapter of a page-based book (D-019): detected, from a PDF outline, or the reader's own. */
+export interface Chapter {
+  title: string;
+  /** The page it starts on, from 0. */
+  page: number;
+  depth: number;
+}
+
+export interface SeriesEntry {
+  id: number;
+  title: string;
+  coverKey: string | null;
+  /** "Vol. 3" or "#12". */
+  label: string | null;
+  progress: number | null;
+  completed: boolean;
+}
+
+/** The volumes of a series in reading order, and where the asked-for item sits. */
+export interface Series {
+  name: string;
+  entries: SeriesEntry[];
+  index: number;
 }
 
 /** An ebook opened for reading (EPUB, MOBI, AZW3, FB2), laid out by foliate-js. */
@@ -139,6 +167,146 @@ export interface Ebook {
 }
 
 export type Opened = ReaderBook | Ebook;
+
+/** What's in a disc drive (Phase 4, D-022). */
+export interface DiscMedia {
+  kind: "audio" | "dvd" | "bluray" | "data" | "unknown";
+  label: string | null;
+  /** "CSS", "AACS" or "BD+" when the disc is copy-protected. */
+  protection: string | null;
+}
+
+export interface DriveInfo {
+  letter: string;
+  name: string | null;
+  media: DiscMedia | null;
+  simulated: boolean;
+}
+
+export interface DiscTitle {
+  number: number;
+  seconds: number;
+  chapters: number[];
+  audio: string[];
+  subtitles: string[];
+}
+
+export interface DiscTrack {
+  number: number;
+  title: string | null;
+  artist: string | null;
+  seconds: number;
+  audio: boolean;
+}
+
+export type DiscContents =
+  | { kind: "audio"; album: string | null; artist: string | null; tracks: DiscTrack[] }
+  | { kind: "dvd"; titles: DiscTitle[] }
+  | { kind: "bluray"; titles: DiscTitle[] }
+  | { kind: "data"; root: string; path: string; entries: { name: string; path: string; dir: boolean; size: number }[] }
+  | { kind: "protected"; disc: string; protection: string; message: string }
+  | { kind: "empty" };
+
+/** A rip or a disc import running in the background. */
+export interface DiscJob {
+  id: number;
+  letter: string;
+  kind: "rip" | "import";
+  phase: "reading" | "encoding" | "importing" | "done" | "failed" | "cancelled";
+  fraction: number;
+  current: string | null;
+  warnings: string[];
+  error: string | null;
+  itemId: number | null;
+}
+
+export interface RipRequest {
+  tracks: number[];
+  album: string;
+  artist: string | null;
+  year: number | null;
+  titles: Record<number, string>;
+  format: "flac" | "wav";
+}
+
+/** A track of an album in the library (Phase 3 music). */
+export interface Track {
+  id: number;
+  itemId: number;
+  title: string;
+  artist: string | null;
+  album: string;
+  number: number | null;
+  durationMs: number | null;
+  coverKey: string | null;
+  favorite: boolean;
+  genre: string | null;
+}
+
+export interface TrackFilter {
+  search?: string;
+  artist?: string;
+  album?: number;
+  favorites?: boolean;
+  playlist?: number;
+  recent?: boolean;
+  ids?: number[];
+}
+
+/** A queued track and the file the music player plays for it. */
+export interface QueueEntry {
+  path: string;
+  track: Track;
+}
+
+export interface Artist {
+  name: string;
+  albums: number;
+  tracks: number;
+}
+
+export interface Playlist {
+  id: number;
+  name: string;
+  tracks: number;
+  durationMs: number;
+  updatedAt: string;
+}
+
+/** What the video player opened: a film, or an episode of a series (D-018). */
+export interface WatchTarget {
+  itemId: number;
+  partId: number | null;
+  title: string;
+  /** "S1 · E3 · The Fog", for episodes. */
+  episode: string | null;
+  /** Seconds to start at: where it stopped last time, or 0. */
+  start: number;
+  previous: number | null;
+  next: number | null;
+  nextLabel: string | null;
+}
+
+export interface Episode {
+  id: number;
+  season: number | null;
+  number: number | null;
+  title: string | null;
+  durationMs: number | null;
+  progress: number;
+  completed: boolean;
+  seconds: number | null;
+}
+
+/** A page of a page-based book, or a place in an ebook. */
+export type BookmarkLocator = { page: number } | { cfi: string; fraction: number; location?: number | null };
+
+export interface Bookmark {
+  id: number;
+  locator: BookmarkLocator;
+  label: string | null;
+  createdAt: string;
+}
 
 export interface TrackDetails {
   title: string | null;
@@ -373,6 +541,16 @@ export const api = {
   readerOpen: (id: number) => invoke<Opened>("reader_open", { id }),
   ebookProgressSave: (id: number, cfi: string, fraction: number, finished: boolean) =>
     invoke<void>("ebook_progress_save", { id, cfi, fraction, finished }),
+  imagePreviews: (paths: string[]) => invoke<(string | null)[]>("image_previews", { paths }),
+  bookFromImages: (book: { title: string; category: string; paths: string[]; mode: ImportMode }) => invoke<number>("book_from_images", { book }),
+  pagesArrange: (version: number, files: number[], trashRemoved: boolean) => invoke<void>("pages_arrange", { version, files, trashRemoved }),
+  chaptersGet: (id: number) => invoke<Chapter[]>("chapters_get", { id }),
+  chaptersSet: (id: number, chapters: Chapter[]) => invoke<void>("chapters_set", { id, chapters }),
+  seriesGet: (id: number) => invoke<Series | null>("series_get", { id }),
+  bookmarksList: (id: number) => invoke<Bookmark[]>("bookmarks_list", { id }),
+  bookmarkAdd: (id: number, locator: BookmarkLocator, label: string | null) => invoke<Bookmark>("bookmark_add", { id, locator, label }),
+  bookmarkRename: (id: number, label: string | null) => invoke<void>("bookmark_rename", { id, label }),
+  bookmarkRemove: (id: number) => invoke<void>("bookmark_remove", { id }),
   progressSave: (id: number, page: number, pages: number) => invoke<void>("progress_save", { id, page, pages }),
   categoryCreate: (category: CategoryInput) => invoke<string>("category_create", { category }),
   categoryUpdate: (key: string, category: CategoryInput) => invoke<void>("category_update", { key, category }),
@@ -401,6 +579,36 @@ export const api = {
   playerCommand: (args: unknown[]) => invoke<void>("player_command", { args }),
   playerSetRect: (rect: Rect) => invoke<void>("player_set_rect", { ...rect }),
   playerClose: () => invoke<void>("player_close"),
+  playerAddSubtitle: (path: string) => invoke<void>("player_add_subtitle", { path }),
+  itemSetBackdrop: (id: number, path: string | null) => invoke<void>("item_set_backdrop", { id, path }),
+  drivesList: () => invoke<DriveInfo[]>("drives_list"),
+  driveEject: (letter: string) => invoke<void>("drive_eject", { letter }),
+  discContents: (letter: string, path: string | null) => invoke<DiscContents>("disc_contents", { letter, path }),
+  discPlay: (letter: string, title: number, volume: number) => invoke<{ title: string; episode: string }>("disc_play", { letter, title, volume }),
+  cdRip: (letter: string, request: RipRequest) => invoke<number>("cd_rip", { letter, request }),
+  discImport: (letter: string, title: number) => invoke<number>("disc_import", { letter, title }),
+  discJobCancel: (id: number) => invoke<void>("disc_job_cancel", { id }),
+  discCatalog: (letter: string) => invoke<number>("disc_catalog", { letter }),
+  musicTracks: (filter: TrackFilter) => invoke<Track[]>("music_tracks", { filter }),
+  musicArtists: () => invoke<Artist[]>("music_artists"),
+  musicSetFavorite: (id: number, favorite: boolean) => invoke<void>("music_set_favorite", { id, favorite }),
+  trackUpdate: (id: number, edit: { title: string; artist: string | null; number: number | null }) => invoke<void>("track_update", { id, edit }),
+  musicPlayed: (id: number) => invoke<void>("music_played", { id }),
+  playlistsList: () => invoke<Playlist[]>("playlists_list"),
+  playlistCreate: (name: string, tracks: number[]) => invoke<number>("playlist_create", { name, tracks }),
+  playlistRename: (id: number, name: string) => invoke<void>("playlist_rename", { id, name }),
+  playlistDelete: (id: number) => invoke<void>("playlist_delete", { id }),
+  playlistAdd: (id: number, tracks: number[]) => invoke<void>("playlist_add", { id, tracks }),
+  playlistSet: (id: number, tracks: number[]) => invoke<void>("playlist_set", { id, tracks }),
+  musicPlay: (tracks: number[], start: number, volume: number) => invoke<QueueEntry[]>("music_play", { tracks, start, volume }),
+  musicEnqueue: (tracks: number[], next: boolean, volume: number) => invoke<QueueEntry[]>("music_enqueue", { tracks, next, volume }),
+  musicCommand: (args: unknown[]) => invoke<void>("music_command", { args }),
+  musicStop: () => invoke<void>("music_stop"),
+  watchOpen: (id: number, part: number | null, volume: number) => invoke<WatchTarget>("watch_open", { id, part, volume }),
+  watchProgressSave: (id: number, part: number | null, seconds: number, duration: number) =>
+    invoke<void>("watch_progress_save", { id, part, seconds, duration }),
+  watchMark: (id: number, part: number | null, watched: boolean) => invoke<void>("watch_mark", { id, part, watched }),
+  episodesList: (id: number) => invoke<Episode[]>("episodes_list", { id }),
 
   devMode: () => invoke<string | null>("dev_mode"),
   devReport: (name: string, report: unknown) => invoke<string>("dev_report", { name, report }),
@@ -413,6 +621,11 @@ export function artworkUrl(key: string, size: "thumb" | "cover" = "thumb"): stri
 }
 
 /** A page of an open book, at least `width` device pixels wide (the core rounds widths up). */
+/** An audio CD track straight from the disc, as WAV. */
+export function cdTrackUrl(letter: string, track: number): string {
+  return `http://digitify.localhost/cd/${letter}/${track}`;
+}
+
 /** The ebook file of a digital copy, for the ebook reader. */
 export function bookUrl(versionId: number): string {
   return `http://digitify.localhost/book/${versionId}`;
