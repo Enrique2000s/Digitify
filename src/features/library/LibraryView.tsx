@@ -2,20 +2,22 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Popover } from "radix-ui";
-import { Check, ChevronLeft, ChevronRight, GalleryHorizontalEnd, Heart, LayoutGrid, LayoutList, LibraryBig, List, ListChecks, Paintbrush, Plus } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, GalleryHorizontalEnd, GripVertical, Heart, LayoutGrid, LayoutList, LibraryBig, List, ListChecks, Paintbrush, Plus } from "lucide-react";
 import { api, type Blurb, type ItemCard, type Ownership, type QueryParams, type SortKey } from "../../lib/api";
 import { spineColors } from "../../lib/color";
 import { formatLabel } from "../../lib/format";
-import { usePreferences, type Layout } from "../../lib/preferences";
+import { coverShapeOf, SHAPE_ASPECT, useCoverShape, usePreferences, type Layout } from "../../lib/preferences";
 import { usePagedItems, type PageCache } from "../../lib/queries";
 import { actionFor, isTyping } from "../../lib/shortcuts";
 import { SelectionProvider, useSelectable, useSelection, useSelectionState } from "../../lib/selection";
 import { AddMenu } from "../../components/AddMenu";
 import { CategoryStrip } from "../../components/CategoryStrip";
-import { aspectFor, CardSizeSlider, Cover } from "../../components/common";
+import { CardSizeSlider, Cover } from "../../components/common";
 import { CardSkeleton, caseBand, MediaCard } from "../../components/MediaCard";
 import { SHELF_LOOKS, ShelfLookPicker } from "../../components/ShelfLookPicker";
 import { BulkBar } from "./BulkBar";
+import { ArrangeDialog } from "./ArrangeDialog";
+import type { CoverShape } from "../../lib/api";
 
 const GAP = 22;
 
@@ -48,14 +50,18 @@ interface ViewProps {
   cache: PageCache;
   total: number;
   square: boolean;
+  /** The view's usual cover shape (an item may have its own). */
+  shape: CoverShape | "book";
 }
 
-function GridView({ cache, total, square }: ViewProps) {
+function GridView({ cache, total, shape }: ViewProps) {
   const { preferences } = usePreferences();
+  const shapeOf = useCoverShape();
   const scroll = useRef<HTMLDivElement>(null);
   const width = useWidth(scroll);
-  const cardWidth = preferences.cardSize;
-  const aspect = square ? 1 : 2 / 3;
+  // Horizontal covers get wider cards, so they're not tiny.
+  const cardWidth = shape === "landscape" ? Math.round(preferences.cardSize * 1.6) : preferences.cardSize;
+  const aspect = SHAPE_ASPECT[shape];
   const columns = Math.max(1, Math.floor((width + GAP) / (cardWidth + GAP)));
   const rowHeight = Math.round(cardWidth / aspect) + 44 + GAP;
   const virtualizer = useVirtualizer({
@@ -74,8 +80,10 @@ function GridView({ cache, total, square }: ViewProps) {
         {rows.map((row) => (
           <div
             key={row.key}
+            ref={virtualizer.measureElement}
+            data-index={row.index}
             className="grid-row"
-            style={{ transform: `translateY(${row.start}px)`, gridTemplateColumns: `repeat(${columns}, ${cardWidth}px)`, columnGap: GAP }}
+            style={{ transform: `translateY(${row.start}px)`, gridTemplateColumns: `repeat(${columns}, ${cardWidth}px)`, columnGap: GAP, paddingBottom: GAP }}
           >
             {Array.from({ length: columns }, (_, column) => {
               const index = row.index * columns + column;
@@ -83,7 +91,8 @@ function GridView({ cache, total, square }: ViewProps) {
               const item = cache.get(index);
               return item ? (
                 <div key={index} className="grid-cell" style={{ width: cardWidth }}>
-                  <MediaCard item={item} index={index} />
+                  {/* In a grid of horizontal covers, a vertical one keeps the usual card size. */}
+                  <MediaCard item={item} index={index} width={shape === "landscape" && shapeOf(item).shape !== "landscape" ? preferences.cardSize : undefined} />
                 </div>
               ) : (
                 <CardSkeleton key={index} width={cardWidth} aspect={aspect} />
@@ -126,6 +135,7 @@ function ListView({ cache, total }: ViewProps) {
 
 function ListRow({ item, index, top }: { item: ItemCard; index: number; top: number }) {
   const { selecting, checked, props } = useSelectable(item.id, index);
+  const shapeOf = useCoverShape();
   return (
               <Link
                 to="/item/$id"
@@ -134,7 +144,7 @@ function ListRow({ item, index, top }: { item: ItemCard; index: number; top: num
                 style={{ top, height: 54 }}
                 {...props}
               >
-                <span className="thumb">
+                <span className="thumb" data-shape={shapeOf(item).shape}>
                   {selecting ? (
                     <span className={`row-check${checked ? " on" : ""}`} aria-hidden>
                       {checked && <Check size={16} strokeWidth={3.2} />}
@@ -167,8 +177,16 @@ function jitter(id: number, salt: number): number {
   return x - Math.floor(x);
 }
 
+/** A cover's size on a shelf `height` tall: square and round ones are a little lower, horizontal ones lower still. */
+function shelfBox(shape: CoverShape | "book", height: number): { height: number; width: number } {
+  if (shape === "square" || shape === "disc") return { height: height * 0.78, width: height * 0.78 };
+  if (shape === "landscape") return { height: height * 0.6, width: height * 0.6 * (16 / 9) };
+  return { height, width: height * (2 / 3) };
+}
+
 function ShelfItem({ item, index, height, spines }: { item: ItemCard; index: number; height: number; spines: boolean }) {
   const band = caseBand(item);
+  const { shape, aspect } = useCoverShape()(item);
   const { selecting, checked, props } = useSelectable(item.id, index);
   const check = selecting && (
     <span className={`card-check${checked ? " on" : ""}`} aria-hidden>
@@ -188,10 +206,9 @@ function ShelfItem({ item, index, height, spines }: { item: ItemCard; index: num
       </Link>
     );
   }
-  const aspect = aspectFor(item.handler);
   return (
     <Link to="/item/$id" params={{ id: String(item.id) }} className="shelf-item" title={item.title} data-blip {...props}>
-      <div className="shelf-cover" style={{ height: aspect === 1 ? height * 0.78 : height, aspectRatio: aspect, position: "relative" }}>
+      <div className="shelf-cover" data-shape={shape} style={{ height: shelfBox(shape, height).height, aspectRatio: aspect, position: "relative" }}>
         <Cover item={item} />
         {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
       </div>
@@ -200,7 +217,7 @@ function ShelfItem({ item, index, height, spines }: { item: ItemCard; index: num
   );
 }
 
-function ShelfView({ cache, total, square }: ViewProps) {
+function ShelfView({ cache, total, square, shape }: ViewProps) {
   const { preferences } = usePreferences();
   const scroll = useRef<HTMLDivElement>(null);
   const width = useWidth(scroll);
@@ -210,7 +227,7 @@ function ShelfView({ cache, total, square }: ViewProps) {
   // 78% of the height; books and films 2:3; spines vary) and sit centered. When a shelf mixing
   // categories comes out a little wide, its items narrow slightly (see .shelf-item) rather than
   // anything being cut at the edge.
-  const cover = square ? height * 0.78 : height * (2 / 3);
+  const cover = shelfBox(square ? "square" : shape, height).width;
   const slot = (spines && !square ? Math.round(height * 0.2) + 4 : Math.ceil(cover)) + (spines && !square ? 0 : 16);
   const perShelf = Math.max(1, Math.floor((width - 50 + 16) / slot));
   const shelfHeight = height + 22 + 12 + 26;
@@ -274,11 +291,12 @@ function useBlurbs(ids: number[]): Map<number, Blurb> {
 function DetailedRow({ item, index, top, height, blurb }: { item: ItemCard; index: number; top: number; height: number; blurb: Blurb | undefined }) {
   const band = caseBand(item);
   const { selecting, checked, props } = useSelectable(item.id, index);
+  const { shape, aspect } = useCoverShape()(item);
   const progress = item.progress ?? 0;
   const ownership = item.hasPhysical && item.hasDigital ? "On the shelf and digital" : item.hasPhysical ? "On the shelf" : "Digital";
   return (
     <Link to="/item/$id" params={{ id: String(item.id) }} className="detail-row" style={{ top, height }} data-blip {...props}>
-      <div className="detail-cover" style={{ height: height - 26, aspectRatio: aspectFor(item.handler) }}>
+      <div className="detail-cover" data-shape={shape} style={{ height: (height - 26) * (shape === "landscape" ? 0.72 : 1), aspectRatio: aspect }}>
         <Cover item={item} />
         {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
         {selecting && (
@@ -357,6 +375,7 @@ function DetailedView({ cache, total }: ViewProps) {
  * dragging, clicking a cover or the slider move along; Enter or a click on the front cover opens it. */
 function CarouselView({ cache, total }: ViewProps) {
   const navigate = useNavigate();
+  const shapeOf = useCoverShape();
   const stage = useRef<HTMLDivElement>(null);
   const { width, height } = useSize(stage);
   const [index, setIndex] = useState(0);
@@ -436,6 +455,7 @@ function CarouselView({ cache, total }: ViewProps) {
         {height > 0 &&
           shown.map((i) => {
             const item = cache.get(i);
+            const look = item ? shapeOf(item) : { shape: "book" as const, aspect: 2 / 3 };
             const d = i - index;
             const side = Math.sign(d);
             const far = Math.abs(d);
@@ -446,12 +466,12 @@ function CarouselView({ cache, total }: ViewProps) {
               "--turn": `${d === 0 ? 0 : -side * 58}deg`,
               zIndex: 100 - far,
               opacity: far > reach - 1 ? 0 : 1,
-              height: coverHeight,
-              aspectRatio: item ? aspectFor(item.handler) : 2 / 3,
+              height: look.shape === "landscape" ? coverHeight * 0.62 : coverHeight,
+              aspectRatio: look.aspect,
               bottom: Math.max(40, (height - coverHeight) / 2 + 10),
             } as CSSProperties;
             return item ? (
-              <CarouselCover key={i} item={item} index={i} front={d === 0} style={style} onPick={() => go(i)} />
+              <CarouselCover key={i} item={item} index={i} front={d === 0} shape={look.shape} style={style} onPick={() => go(i)} />
             ) : (
               <div key={i} className="carousel-item skeleton" style={style} />
             );
@@ -485,7 +505,7 @@ function CarouselView({ cache, total }: ViewProps) {
   );
 }
 
-function CarouselCover({ item, index, front, style, onPick }: { item: ItemCard; index: number; front: boolean; style: CSSProperties; onPick: () => void }) {
+function CarouselCover({ item, index, front, shape, style, onPick }: { item: ItemCard; index: number; front: boolean; shape: string; style: CSSProperties; onPick: () => void }) {
   const band = caseBand(item);
   const { selecting, checked, props } = useSelectable(item.id, index);
   return (
@@ -493,6 +513,7 @@ function CarouselCover({ item, index, front, style, onPick }: { item: ItemCard; 
       to="/item/$id"
       params={{ id: String(item.id) }}
       className={`carousel-item${front ? " front" : ""}`}
+      data-shape={shape}
       style={style}
       title={item.title}
       draggable={false}
@@ -520,6 +541,7 @@ function CarouselCover({ item, index, front, style, onPick }: { item: ItemCard; 
 }
 
 const SHELF_SORT = { value: "shelf" as SortKey, label: "Shelf order" };
+const CUSTOM_SORT = { value: "custom" as SortKey, label: "Custom order" };
 
 const SORTS: { value: SortKey; label: string }[] = [
   { value: "title", label: "Title" },
@@ -572,6 +594,7 @@ export function LibraryView({
   actions,
   prelude,
   square,
+  handler,
   smart,
   empty,
 }: {
@@ -586,21 +609,49 @@ export function LibraryView({
   /** Shown between the header and the toolbar (sub-collections). */
   prelude?: ReactNode;
   square?: boolean;
+  /** The kind of media of a category's view, for its usual cover shape. */
+  handler?: string;
   /** A smart shelf: it orders and fills itself, so nothing can be taken off it by hand. */
   smart?: boolean;
   empty: ReactNode;
 }) {
   const { preferences, update } = usePreferences();
   const onShelf = base.shelf != null;
-  const [sort, setSort] = useState<SortKey | "">(base.search ? "" : onShelf ? "shelf" : "title");
-  const [ownership, setOwnership] = useState<Ownership | "">("");
-  const layout: Layout = preferences.layouts[viewKey] ?? "grid";
-  const params = { ...base, sort: sort || null, ownership: ownership || null };
+  const manualShelf = onShelf && !smart;
+  // Layout and the copies filter are shared by every view unless Settings says otherwise.
+  const shared = preferences.syncViews ? "*" : viewKey;
+  const other = preferences.syncViews ? viewKey : "*";
+  const layout: Layout = preferences.layouts[shared] ?? preferences.layouts[other] ?? "grid";
+  const ownership: Ownership | "" = preferences.ownership[shared] ?? preferences.ownership[other] ?? "";
+  // The sort is remembered per view; a custom order belongs to its view too.
+  const orderKey = base.search
+    ? null
+    : onShelf
+      ? `shelf:${base.shelf}`
+      : base.collection != null
+        ? `collection:${base.collection}`
+        : base.tag != null
+          ? `tag:${base.tag}`
+          : base.favorites
+            ? "favorites"
+            : (base.category ?? "all");
+  const sorts = manualShelf ? [SHELF_SORT, ...SORTS] : base.search ? SORTS : [...SORTS, CUSTOM_SORT];
+  const [searchSort, setSearchSort] = useState<SortKey | "">("");
+  const saved = orderKey ? preferences.sorts[orderKey] : undefined;
+  const sort: SortKey | "" = base.search ? searchSort : saved && sorts.some((s) => s.value === saved) ? saved : manualShelf ? "shelf" : "title";
+  const setSort = (next: SortKey | "") => {
+    if (!orderKey) setSearchSort(next);
+    else if (next) update((current) => ({ sorts: { ...current.sorts, [orderKey]: next } }));
+  };
+  const params = { ...base, sort: sort || null, ownership: ownership || null, custom: sort === "custom" ? orderKey : null };
   const { cache, total, error } = usePagedItems(params);
   const selection = useSelectionState(cache);
-  const sorts = onShelf ? [SHELF_SORT, ...SORTS] : SORTS;
+  const shape = coverShapeOf({ handler: handler ?? "book" }, preferences.coverShapes);
+  const arrangeable = !!orderKey && (sort === "custom" || (manualShelf && sort === "shelf"));
+  const [arranging, setArranging] = useState(false);
 
-  const setLayout = (next: Layout) => update({ layouts: { ...preferences.layouts, [viewKey]: next } });
+  const setLayout = (next: Layout) => update((current) => ({ layouts: { ...current.layouts, [shared]: next } }));
+  const setOwnership = (next: Ownership | "") => update((current) => ({ ownership: { ...current.ownership, [shared]: next } }));
   const [materials, setMaterials] = useState(false);
 
   return (
@@ -696,22 +747,36 @@ export function LibraryView({
                 ))}
               </select>
             </label>
+            {arrangeable && total != null && total > 1 && (
+              <button type="button" className="btn btn-sm" onClick={() => setArranging(true)}>
+                <GripVertical size={15} /> Arrange…
+              </button>
+            )}
           </div>
         </div>
         {error && <div className="notice danger" style={{ margin: "0 40px" }}>{error}</div>}
         {total === 0 ? (
           <div style={{ padding: "8px 40px" }}>{empty}</div>
         ) : total != null && layout === "list" ? (
-          <ListView cache={cache} total={total} square={!!square} />
+          <ListView cache={cache} total={total} square={!!square} shape={shape} />
         ) : total != null && layout === "shelf" ? (
-          <ShelfView cache={cache} total={total} square={!!square} />
+          <ShelfView cache={cache} total={total} square={!!square} shape={shape} />
         ) : total != null && layout === "detailed" ? (
-          <DetailedView cache={cache} total={total} square={!!square} />
+          <DetailedView cache={cache} total={total} square={!!square} shape={shape} />
         ) : total != null && layout === "carousel" ? (
-          <CarouselView cache={cache} total={total} square={!!square} />
+          <CarouselView cache={cache} total={total} square={!!square} shape={shape} />
         ) : total != null ? (
-          <GridView cache={cache} total={total} square={!!square} />
+          <GridView cache={cache} total={total} square={!!square} shape={shape} />
         ) : null}
+        {arranging && orderKey && (
+          <ArrangeDialog
+            base={{ ...base, ownership: null }}
+            view={orderKey}
+            shelf={manualShelf ? (base.shelf ?? undefined) : undefined}
+            title={title}
+            onClose={() => setArranging(false)}
+          />
+        )}
         {total != null && <BulkBar base={params} total={total} shelf={smart ? undefined : (base.shelf ?? undefined)} />}
       </div>
     </SelectionProvider>

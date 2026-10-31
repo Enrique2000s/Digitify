@@ -307,6 +307,26 @@ pub async fn shelf_delete(state: State<'_, AppState>, id: i64) -> AppResult<()> 
     .await
 }
 
+/// Puts a shelf's items in this order (from "Arrange"). Items not listed keep their place after them.
+pub fn set_shelf_order(conn: &mut Connection, shelf: i64, ids: &[i64]) -> AppResult<()> {
+    let tx = conn.transaction()?;
+    let rest: Vec<i64> = {
+        let mut stmt = tx.prepare("SELECT item_id FROM shelf_items WHERE shelf_id = ?1 ORDER BY position, added_at")?;
+        let rows = stmt.query_map([shelf], |row| row.get(0))?.collect::<Result<Vec<i64>, _>>()?;
+        rows.into_iter().filter(|id| !ids.contains(id)).collect()
+    };
+    for (position, id) in ids.iter().chain(rest.iter()).enumerate() {
+        tx.execute("UPDATE shelf_items SET position = ?3 WHERE shelf_id = ?1 AND item_id = ?2", params![shelf, id, position as i64 + 1])?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn shelf_order_set(state: State<'_, AppState>, shelf: i64, ids: Vec<i64>) -> AppResult<()> {
+    with_library(&state, move |library| library.db.with(|conn| set_shelf_order(conn, shelf, &ids))).await
+}
+
 /// Adds items to the end of a shelf, in the given order; items already on it stay where they are.
 fn add_to_shelf(conn: &Connection, shelf: i64, ids: &[i64]) -> AppResult<()> {
     let exists: bool = conn.query_row("SELECT EXISTS (SELECT 1 FROM shelves WHERE id = ?1)", [shelf], |row| row.get(0))?;
@@ -555,6 +575,8 @@ pub enum BulkOp {
     SetSeries { series: Option<String> },
     /// `ltr` or `rtl`: how comics and manga turn their pages.
     SetDirection { direction: String },
+    /// `square` or `disc` (music), `poster` or `landscape` (video); none goes back to the default.
+    SetCoverShape { shape: Option<String> },
 }
 
 /// Applies `ops` to every item in `ids`, all or nothing.
@@ -633,6 +655,19 @@ pub fn apply_bulk(conn: &mut Connection, ids: &[i64], ops: &[BulkOp]) -> AppResu
                     tx.execute("UPDATE items SET metadata = json_set(metadata, '$.readingDirection', ?2) WHERE id = ?1", params![id, direction])?;
                 }
             }
+            BulkOp::SetCoverShape { shape } => match shape.as_deref() {
+                None => {
+                    for id in ids {
+                        tx.execute("UPDATE items SET metadata = json_remove(metadata, '$.coverShape') WHERE id = ?1", [id])?;
+                    }
+                }
+                Some(shape @ ("square" | "disc" | "poster" | "landscape")) => {
+                    for id in ids {
+                        tx.execute("UPDATE items SET metadata = json_set(metadata, '$.coverShape', ?2) WHERE id = ?1", params![id, shape])?;
+                    }
+                }
+                Some(_) => return Err(AppError::msg("That isn't a cover shape.")),
+            },
         }
     }
     if searchable {
@@ -742,5 +777,15 @@ mod tests {
         assert_eq!(order, [c, a, b]);
         assert!(apply_bulk(&mut conn, &[a], &[BulkOp::AddToShelf { shelf: shelf + 1 }]).is_err());
         assert_eq!(shelves(&conn).unwrap()[0].item_count, 3);
+        // Arranging by hand: the listed items first, the others after them in their old order.
+        set_shelf_order(&mut conn, shelf, &[b]).unwrap();
+        let order: Vec<i64> = conn
+            .prepare("SELECT item_id FROM shelf_items WHERE shelf_id = ?1 ORDER BY position")
+            .unwrap()
+            .query_map([shelf], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(order, [b, c, a]);
     }
 }

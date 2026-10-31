@@ -100,6 +100,14 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-024 · Views that stay put, custom order, dragging, cover shapes
+- **Date:** 2026-10-31 · **Approved by:** project owner (asked for each of these)
+- **Same view everywhere:** the layout (grid, shelf, list, detailed, carousel) and the copies filter (All, On the shelf, Digital, Not digitized) are shared by every view and remembered. Settings › Appearance › "Same view in every category" turns this off to keep one per category.
+- **Sorts are remembered** per view. Every view (except search) also has **Custom order**: "Arrange…" lists its items to drag into place (or send to the top or bottom, or start again from another sort). The order is kept per view in a new `custom_order` table (schema v5); items added later come after the arranged ones. On a hand-made shelf, "Shelf order" is arranged the same way.
+- **Dragging to reorder** wherever things can be put in order: Home's sections (Customize Home now shows them as a list), categories and their custom fields, playlist tracks and the custom order. The arrows stay for the keyboard.
+- **Playlists:** each has a menu (Play, Add music…, Edit tracks, Rename, Delete); "Add music" searches the whole music library and adds the picked tracks. The music category reopens on the tab used last.
+- **Cover shapes:** albums as square covers or round CDs, videos as vertical posters or horizontal frames, as a default in Settings › Appearance and per item on its page (stored in the item's `metadata.coverShape`).
+
 ### D-023 · Phase 5: what personalization includes
 - **Date:** 2026-10-31 · **Approved by:** project owner (picked from bundled options; the keyboard-shortcut editor was already in the roadmap)
 - **Looks and palettes:**

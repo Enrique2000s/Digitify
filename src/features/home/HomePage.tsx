@@ -1,4 +1,4 @@
-import { forwardRef, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
+import { forwardRef, useState, type ComponentPropsWithoutRef, type CSSProperties, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowDown,
@@ -10,6 +10,7 @@ import {
   FilePlus,
   FolderPlus,
   FolderSearch,
+  GripVertical,
   LayoutDashboard,
   LibraryBig,
   Moon,
@@ -25,12 +26,13 @@ import {
 import { type Category, type ItemCard, type TileCover } from "../../lib/api";
 import { plural } from "../../lib/format";
 import { useImporter } from "../../lib/importer";
-import { HOME_SECTIONS, usePreferences, type HomeSection } from "../../lib/preferences";
+import { arrayMove, useReorder } from "../../lib/reorder";
+import { HOME_SECTIONS, useCoverShape, usePreferences, type HomeSection } from "../../lib/preferences";
 import { useAmbient } from "../../lib/ambient/AmbientProvider";
 import { useDashboard, useShelves } from "../../lib/queries";
 import { AddMenu } from "../../components/AddMenu";
 import { Collage } from "../../components/Collage";
-import { aspectFor, CategoryIcon, Cover } from "../../components/common";
+import { CategoryIcon, Cover } from "../../components/common";
 import { MediaCard } from "../../components/MediaCard";
 import { ShelfCard } from "../organize/pages";
 import { useRelink } from "../settings/LibraryTools";
@@ -136,9 +138,10 @@ function Tiles({ categories, covers, total }: { categories: Category[]; covers: 
 
 function ContinueCard({ item }: { item: ItemCard }) {
   const percent = Math.round((item.progress ?? 0) * 100);
+  const { shape, aspect } = useCoverShape()(item);
   return (
     <Link to={item.handler === "video" ? "/watch/$id" : "/read/$id"} params={{ id: String(item.id) }} className="continue-card" data-blip>
-      <div className="continue-thumb" style={{ aspectRatio: aspectFor(item.handler) }}>
+      <div className="continue-thumb" data-shape={shape} style={{ aspectRatio: aspect }}>
         <Cover item={item} />
       </div>
       <div className="continue-body">
@@ -172,21 +175,35 @@ function Row({ title, items, more }: { title: string; items: ItemCard[]; more?: 
   );
 }
 
-/** In "Customize Home", each section gets a bar to move it up or down and to hide or show it. */
-function EditBar({ section, index, count, hidden, empty }: { section: HomeSection; index: number; count: number; hidden: boolean; empty: boolean }) {
+/** In "Customize Home", each section is a row to drag (or move with the arrows) and to hide or show. */
+function EditBar({
+  section,
+  index,
+  count,
+  hidden,
+  empty,
+  handle,
+  style,
+}: {
+  section: HomeSection;
+  index: number;
+  count: number;
+  hidden: boolean;
+  empty: boolean;
+  handle: ReturnType<ReturnType<typeof useReorder>["handle"]>;
+  style?: CSSProperties;
+}) {
   const { preferences, update } = usePreferences();
-  const move = (by: number) => {
-    const order = [...preferences.home.order];
-    const [moved] = order.splice(index, 1);
-    order.splice(index + by, 0, moved);
-    update({ home: { ...preferences.home, order } });
-  };
+  const move = (by: number) => update({ home: { ...preferences.home, order: arrayMove(preferences.home.order, index, index + by) } });
   const toggle = () =>
     update({
       home: { ...preferences.home, hidden: hidden ? preferences.home.hidden.filter((s) => s !== section) : [...preferences.home.hidden, section] },
     });
   return (
-    <div className="home-edit-bar">
+    <li className={`home-edit-bar${hidden ? " is-hidden" : ""}`} data-reorder style={style}>
+      <span {...handle} aria-label={`Drag “${SECTION_NAMES[section]}”`}>
+        <GripVertical size={18} />
+      </span>
       <strong>{SECTION_NAMES[section]}</strong>
       {hidden ? <span className="home-edit-note">Hidden</span> : empty && <span className="home-edit-note">Nothing to show right now</span>}
       <span className="spacer" />
@@ -199,7 +216,7 @@ function EditBar({ section, index, count, hidden, empty }: { section: HomeSectio
       <button type="button" className="btn btn-sm" aria-pressed={!hidden} onClick={toggle}>
         {hidden ? <EyeOff size={15} /> : <Eye size={15} />} {hidden ? "Show" : "Shown"}
       </button>
-    </div>
+    </li>
   );
 }
 
@@ -211,6 +228,7 @@ export function HomePage({ onCatalog }: { onCatalog: () => void }) {
   const ambient = useAmbient();
   const shelves = useShelves();
   const [editing, setEditing] = useState(false);
+  const reorder = useReorder((from, to) => update((current) => ({ home: { ...current.home, order: arrayMove(current.home.order, from, to) } })));
   const data = dashboard.data;
   if (!data) return <div className="page" />;
   const dark = resolvedTheme === "dark";
@@ -349,7 +367,7 @@ export function HomePage({ onCatalog }: { onCatalog: () => void }) {
       {editing && (
         <div className="notice home-edit-notice">
           <LayoutDashboard size={18} aria-hidden style={{ flexShrink: 0, marginTop: 1 }} />
-          <span>Arrange Home: move sections up or down, and hide the ones you don't need. Changes are saved as you go.</span>
+          <span>Arrange Home: drag sections into the order you like, and hide the ones you don't need. Changes are saved as you go.</span>
           <span className="spacer" />
           <button type="button" className="btn btn-sm" onClick={() => update({ home: { order: [...HOME_SECTIONS], hidden: [] } })}>
             <RotateCcw size={14} /> Reset
@@ -360,17 +378,27 @@ export function HomePage({ onCatalog }: { onCatalog: () => void }) {
         </div>
       )}
 
-      {order.map((section, index) => {
-        const hidden = preferences.home.hidden.includes(section);
-        const body = content[section] || null;
-        if (!editing) return hidden || !body ? null : <div key={section}>{body}</div>;
-        return (
-          <div key={section} className={`home-block${hidden ? " is-hidden" : ""}`}>
-            <EditBar section={section} index={index} count={order.length} hidden={hidden} empty={!body} />
-            {!hidden && body}
-          </div>
-        );
-      })}
+      {editing ? (
+        <ol ref={reorder.listRef} className="home-arrange">
+          {order.map((section, index) => (
+            <EditBar
+              key={section}
+              section={section}
+              index={index}
+              count={order.length}
+              hidden={preferences.home.hidden.includes(section)}
+              empty={!content[section]}
+              handle={reorder.handle(index)}
+              style={reorder.style(index)}
+            />
+          ))}
+        </ol>
+      ) : (
+        order.map((section) => {
+          const body = content[section] || null;
+          return preferences.home.hidden.includes(section) || !body ? null : <div key={section}>{body}</div>;
+        })
+      )}
       {data.totals.items > 0 && (
         <p className="home-totals">
           {plural(data.totals.items, "item")} · {data.totals.physical.toLocaleString()} with a physical copy ·{" "}

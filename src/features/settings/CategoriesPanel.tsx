@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Plus, Trash, X } from "lucide-react";
+import { ArrowDown, ArrowUp, GripVertical, Plus, Trash, X } from "lucide-react";
 import { api, errorText, type Category, type FieldKind, type Handler } from "../../lib/api";
 import { plural } from "../../lib/format";
-import { libraryChanged, useCategories } from "../../lib/queries";
+import { keys, libraryChanged, useCategories } from "../../lib/queries";
+import { arrayMove, useReorder } from "../../lib/reorder";
 import { CATEGORY_ICONS, CategoryIcon, Dialog, Field, Switch } from "../../components/common";
 
 const KINDS: { value: Handler; label: string }[] = [
@@ -65,12 +66,8 @@ function CategoryDialog({ category, onClose }: { category: Category | "new" | nu
   }, [open, editing]);
 
   const update = (uid: number, change: Partial<EditableField>) => setFields((list) => list.map((field) => (field.uid === uid ? { ...field, ...change } : field)));
-  const shift = (index: number, delta: number) =>
-    setFields((list) => {
-      const next = [...list];
-      [next[index], next[index + delta]] = [next[index + delta], next[index]];
-      return next;
-    });
+  const shift = (index: number, delta: number) => setFields((list) => arrayMove(list, index, index + delta));
+  const fieldOrder = useReorder((from, to) => setFields((list) => arrayMove(list, from, to)));
 
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
@@ -163,8 +160,12 @@ function CategoryDialog({ category, onClose }: { category: Category | "new" | nu
       <div className="field">
         <span>Custom fields</span>
         {fields.length === 0 && <p className="hint">Add your own details to fill in for each item, like “Players”, “Condition” or “Where I bought it”.</p>}
+        <div ref={fieldOrder.listRef} className="field-editors">
         {fields.map((field, index) => (
-          <div key={field.uid} className="field-editor">
+          <div key={field.uid} className="field-editor" data-reorder style={fieldOrder.style(index)}>
+            <span {...fieldOrder.handle(index)} aria-label={`Drag ${field.label || "field"}`}>
+              <GripVertical size={16} />
+            </span>
             <input className="input" aria-label="Field name" placeholder="Field name" value={field.label} onChange={(event) => update(field.uid, { label: event.target.value })} />
             <select className="select" aria-label="Field type" value={field.kind} onChange={(event) => update(field.uid, { kind: event.target.value as FieldKind })}>
               {FIELD_KINDS.map((option) => (
@@ -193,6 +194,7 @@ function CategoryDialog({ category, onClose }: { category: Category | "new" | nu
             )}
           </div>
         ))}
+        </div>
         <button
           type="button"
           className="btn btn-sm"
@@ -254,6 +256,8 @@ export function CategoriesPanel() {
 
   const arrange = async (order: Category[]) => {
     setError(null);
+    // Shown at once; the library catches up behind it.
+    queryClient.setQueryData(keys.categories, order);
     try {
       await api.categoriesArrange(
         order.map((c) => c.key),
@@ -264,11 +268,8 @@ export function CategoriesPanel() {
       setError(errorText(reason));
     }
   };
-  const move = (index: number, delta: number) => {
-    const order = [...list];
-    [order[index], order[index + delta]] = [order[index + delta], order[index]];
-    void arrange(order);
-  };
+  const move = (index: number, delta: number) => void arrange(arrayMove(list, index, index + delta));
+  const order = useReorder((from, to) => void arrange(arrayMove(list, from, to)));
 
   return (
     <section className="panel" id="categories">
@@ -279,12 +280,15 @@ export function CategoriesPanel() {
         </button>
       </div>
       <p className="hint" style={{ marginBottom: 10 }}>
-        This order is the order of the tiles on Home and of the section buttons. Hidden categories keep their items, which still
+        Drag categories (or use the arrows) to set the order of the tiles on Home and of the section buttons. Hidden categories keep their items, which still
         appear in Everything and in search.
       </p>
-      <ul className="category-list">
+      <ul ref={order.listRef} className="category-list">
         {list.map((category, index) => (
-          <li key={category.key} className={category.isHidden ? "hidden" : undefined}>
+          <li key={category.key} className={category.isHidden ? "hidden" : undefined} data-reorder style={order.style(index)}>
+            <span {...order.handle(index)} aria-label={`Drag ${category.name}`}>
+              <GripVertical size={18} />
+            </span>
             <span className="category-icon">
               <CategoryIcon icon={category.icon} size={20} />
             </span>

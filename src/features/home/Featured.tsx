@@ -2,11 +2,13 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { BookOpen, Info, Play, Sparkles } from "lucide-react";
 import { api, type ItemCard } from "../../lib/api";
-import { aspectFor, Cover } from "../../components/common";
+import { Cover } from "../../components/common";
+import { useCoverShape } from "../../lib/preferences";
 
 /** "Featured today" (D-023): one item from the library, big, with its description; a new one each day. */
 export function Featured({ item }: { item: ItemCard }) {
   const blurb = useQuery({ queryKey: ["blurb", item.id], queryFn: () => api.blurbs([item.id]).then((list) => list[0] ?? null) });
+  const { shape, aspect } = useCoverShape()(item);
   const progress = item.progress ?? 0;
   const started = progress > 0.01 && progress < 0.999;
   const readable = item.hasDigital && !item.missing && (item.handler === "book" || item.handler === "comic");
@@ -18,7 +20,7 @@ export function Featured({ item }: { item: ItemCard }) {
           <Cover item={item} size="cover" />
         </div>
       )}
-      <Link to="/item/$id" params={{ id: String(item.id) }} className="featured-cover" style={{ aspectRatio: aspectFor(item.handler) }} tabIndex={-1} data-blip>
+      <Link to="/item/$id" params={{ id: String(item.id) }} className="featured-cover" data-shape={shape} style={{ aspectRatio: aspect, height: shape === "landscape" ? 170 : undefined }} tabIndex={-1} data-blip>
         <Cover item={item} size="cover" />
       </Link>
       <div className="featured-body">

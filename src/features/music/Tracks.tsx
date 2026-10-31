@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import { DropdownMenu } from "radix-ui";
-import { AudioLines, ChevronDown, ChevronUp, Disc3, Heart, ListEnd, ListMusic, ListPlus, MoreHorizontal, Pencil, Play, Plus, Shuffle, X } from "lucide-react";
+import { AudioLines, ChevronDown, ChevronUp, Disc3, GripVertical, Heart, ListEnd, ListMusic, ListPlus, MoreHorizontal, Pencil, Play, Plus, Shuffle, X } from "lucide-react";
 import { api, errorText, type Track, type TrackFilter } from "../../lib/api";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { Dialog, Field } from "../../components/common";
+import { arrayMove, useVirtualReorder } from "../../lib/reorder";
 
 const ROW = 46;
 
@@ -235,8 +236,20 @@ export function TrackList({ filter, empty, playlistId, showAlbum = true, compact
   const [creating, setCreating] = useState<number[] | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const list = tracks.data ?? [];
-  const virtual = useVirtualizer({ count: compact ? 0 : list.length, getScrollElement: () => scroller.current, estimateSize: () => ROW, overscan: 8 });
   const ids = list.map((t) => t.id);
+  // In a playlist, tracks are dragged into a new order by their handle.
+  const reorder = useVirtualReorder(ROW, scroller, (from, to) => void setPlaylist(arrayMove(ids, from, to)));
+  const virtual = useVirtualizer({
+    count: compact ? 0 : list.length,
+    getScrollElement: () => scroller.current,
+    estimateSize: () => ROW,
+    overscan: 8,
+    rangeExtractor: (range) => {
+      const indexes = defaultRangeExtractor(range);
+      const dragged = reorder.dragging;
+      return dragged != null && !indexes.includes(dragged) ? [...indexes, dragged].sort((a, b) => a - b) : indexes;
+    },
+  });
 
   const favorite = async (track: Track) => {
     await api.musicSetFavorite(track.id, !track.favorite);
@@ -245,6 +258,9 @@ export function TrackList({ filter, empty, playlistId, showAlbum = true, compact
   };
   const setPlaylist = async (next: number[]) => {
     if (playlistId == null) return;
+    // Shown in the new order at once.
+    const byId = new Map(list.map((t) => [t.id, t]));
+    queryClient.setQueryData(["tracks", filter], next.map((id) => byId.get(id)).filter(Boolean));
     await api.playlistSet(playlistId, next);
     void queryClient.invalidateQueries({ queryKey: ["tracks"] });
     void queryClient.invalidateQueries({ queryKey: ["playlists"] });
@@ -253,7 +269,17 @@ export function TrackList({ filter, empty, playlistId, showAlbum = true, compact
   const row = (track: Track, index: number, style?: React.CSSProperties) => {
     const playing = music.current?.id === track.id;
     return (
-      <div key={`${track.id}:${index}`} className={`track-row${playing ? " playing" : ""}`} style={style} onDoubleClick={() => void music.play(ids, index)}>
+      <div
+        key={`${track.id}:${index}`}
+        className={`track-row${playing ? " playing" : ""}${playlistId != null ? " reorderable" : ""}`}
+        style={playlistId != null ? { ...style, ...reorder.style(index) } : style}
+        onDoubleClick={() => void music.play(ids, index)}
+      >
+        {playlistId != null && !compact && (
+          <span {...reorder.handle(index, list.length)} aria-label={`Drag ${track.title}`}>
+            <GripVertical size={16} />
+          </span>
+        )}
         <button type="button" className="track-play" aria-label={`Play ${track.title}`} onClick={() => void music.play(ids, index)}>
           <span className="track-no">{playing ? <AudioLines size={15} /> : (track.number ?? index + 1)}</span>
           <Play size={15} className="track-play-icon" />

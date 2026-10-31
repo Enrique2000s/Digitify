@@ -928,3 +928,317 @@
     align-items: flex-start;
   }
 }
+
+/* ---------------------------------------------------------------- dragging to reorder */
+
+.drag-handle {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 26px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--faint);
+  cursor: grab;
+  touch-action: none;
+}
+.drag-handle:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+html.reordering,
+html.reordering * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+[data-reorder] {
+  position: relative;
+}
+
+/* Customize Home: one row per section. */
+.home-arrange {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.home-arrange .home-edit-bar {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--raise-sm);
+}
+.home-arrange .home-edit-bar.is-hidden strong {
+  color: var(--muted);
+}
+
+.field-editors {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.field-editor {
+  grid-template-columns: 26px minmax(0, 1fr) 200px repeat(3, 36px);
+  background: var(--panel);
+  border-radius: 12px;
+}
+.field-editor .choices {
+  grid-column: 2 / -1;
+}
+.category-list li {
+  background: var(--field);
+}
+
+/* Playlist tracks have a handle in front. */
+.track-row.reorderable {
+  grid-template-columns: 26px 44px minmax(0, 1fr) minmax(0, 140px) 56px 36px 36px;
+  background: var(--panel);
+}
+.track-row.reorderable:hover {
+  background: var(--field);
+}
+
+/* ---------------------------------------------------------------- Arrange (custom order) */
+
+.arrange-list {
+  height: min(56vh, 560px);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--field);
+}
+.arrange-loading {
+  display: grid;
+  place-items: center;
+  height: 240px;
+}
+.arrange-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 3px 6px;
+  padding: 0 8px;
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--raise-sm);
+}
+.arrange-number {
+  min-width: 34px;
+  color: var(--faint);
+  font-size: 12.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.arrange-thumb {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 42px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--raised);
+}
+.arrange-thumb .cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.arrange-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.arrange-title strong,
+.arrange-title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.arrange-title span {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.arrange-start {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+/* ---------------------------------------------------------------- playlists */
+
+.playlist-card {
+  position: relative;
+  padding: 0;
+  cursor: default;
+}
+.playlist-open {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 16px 12px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.playlist-menu {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+.playlist-rename {
+  margin: -6px 12px 12px;
+  width: calc(100% - 24px);
+}
+.playlist-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px 12px;
+}
+.add-music-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.add-music-search {
+  flex: 1;
+}
+.add-music-search input {
+  width: 100%;
+}
+.add-music-list {
+  position: relative;
+  height: min(50vh, 480px);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--field);
+}
+.add-music-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 2px 6px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.add-music-row:hover {
+  background: var(--panel);
+}
+.add-music-row.on {
+  border-color: var(--accent-bright);
+  background: var(--accent-soft);
+}
+.add-music-row .track-title {
+  flex: 1;
+  min-width: 0;
+}
+.add-music-check {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--accent-ink);
+}
+.add-music-row.on .add-music-check {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.add-music-count {
+  margin-right: auto;
+  color: var(--accent-text);
+  font-weight: 800;
+}
+
+/* ---------------------------------------------------------------- cover shapes */
+
+.cover-shape-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* Round CDs: the art cut into a disc with a center hole and a little shine. */
+[data-shape="disc"] {
+  position: relative;
+  border-radius: 50% !important;
+  overflow: hidden;
+}
+[data-shape="disc"] > .cover-img,
+[data-shape="disc"] > .cover-fallback {
+  border-radius: 50% !important;
+}
+[data-shape="disc"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 20deg,
+    rgba(255, 255, 255, 0) 0deg,
+    rgba(255, 255, 255, 0.26) 24deg,
+    rgba(255, 255, 255, 0) 60deg,
+    rgba(255, 255, 255, 0) 180deg,
+    rgba(255, 255, 255, 0.2) 204deg,
+    rgba(255, 255, 255, 0) 240deg
+  );
+  pointer-events: none;
+}
+[data-shape="disc"]::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  width: 32%;
+  height: 32%;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--bg) 0 30%, rgba(214, 222, 230, 0.95) 32% 58%, rgba(255, 255, 255, 0.4) 60% 100%);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.card-art[data-shape="disc"] {
+  padding: 4px;
+}
+.list-row .thumb[data-shape="disc"],
+.list-row .thumb[data-shape="square"] {
+  height: 34px;
+}
+.list-row .thumb[data-shape="landscape"] {
+  width: 44px;
+  height: 25px;
+}
+.arrange-thumb[data-shape="disc"],
+.arrange-thumb[data-shape="square"] {
+  height: 30px;
+}
+.arrange-thumb[data-shape="landscape"] {
+  width: 44px;
+  height: 25px;
+}

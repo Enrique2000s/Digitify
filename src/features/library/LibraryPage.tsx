@@ -3,6 +3,7 @@ import { FilePlus, FolderOpen, FolderPlus, LibraryBig, Search, Star } from "luci
 import type { Category } from "../../lib/api";
 import { useImporter } from "../../lib/importer";
 import { useCategories, useCollections } from "../../lib/queries";
+import { usePreferences } from "../../lib/preferences";
 import { CategoryIcon } from "../../components/common";
 import { CollectionActions, CollectionCrumbs, CollectionRow } from "../organize/collections";
 import { LibraryView } from "./LibraryView";
@@ -39,6 +40,7 @@ function CategoryView({ category, collection }: { category: Category; collection
       eyebrow={current ? <CollectionCrumbs category={category} path={path} /> : undefined}
       icon={current ? <FolderOpen size={26} strokeWidth={2.2} aria-hidden /> : <CategoryIcon icon={category.icon} size={26} />}
       square={category.handler === "audio"}
+      handler={category.handler}
       actions={<CollectionActions category={category} path={current ? path : []} />}
       prelude={
         <>
@@ -66,6 +68,7 @@ export function LibraryPage() {
   const { scope } = useParams({ from: "/library/$scope" });
   const { collection, tab } = useSearch({ from: "/library/$scope" });
   const categories = useCategories();
+  const { preferences } = usePreferences();
 
   if (scope === "all") {
     return (
@@ -93,7 +96,8 @@ export function LibraryPage() {
   }
   const category = categories.data?.find((c) => c.key === scope);
   if (!category) return null;
-  const musicTab = MUSIC_TABS.find((key) => key === tab) as MusicTab | undefined;
+  // A music category opens on the tab used last time.
+  const musicTab = MUSIC_TABS.find((key) => key === (tab ?? (collection == null ? preferences.musicTab : undefined))) as MusicTab | undefined;
   if (category.handler === "audio" && musicTab && musicTab !== "albums") return <MusicPage category={category} tab={musicTab} />;
   return <CategoryView key={`${scope}:${collection ?? ""}`} category={category} collection={collection ?? null} />;
 }

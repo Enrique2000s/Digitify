@@ -3,10 +3,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { open } from "@tauri-apps/plugin-dialog";
 import { BookOpen, FilePlus, FolderOpen, HardDrive, ImagePlus, Package, Pencil, Plus, Star, Trash } from "lucide-react";
-import { api, artworkUrl, errorText, type FieldDef, type ItemDetail, type VersionInfo } from "../../lib/api";
+import { api, artworkUrl, errorText, type CoverShape, type FieldDef, type ItemDetail, type VersionInfo } from "../../lib/api";
 import { bytes, date, formatLabel, longDuration, ROLE_LABELS } from "../../lib/format";
 import { libraryChanged, useCategories, useItem } from "../../lib/queries";
-import { aspectFor, Cover } from "../../components/common";
+import { Cover } from "../../components/common";
+import { coverShapeOf, SHAPE_ASPECT, usePreferences } from "../../lib/preferences";
 import { HomePath, OrganizePanel } from "../organize/OrganizePanel";
 import { canRead } from "../reader/ReaderPage";
 import { ChaptersPanel, SeriesPanel } from "./SeriesPanels";
@@ -168,6 +169,7 @@ export function ItemPage() {
   const queryClient = useQueryClient();
   const query = useItem(Number(id));
   const categories = useCategories();
+  const { preferences } = usePreferences();
   const [editing, setEditing] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [copy, setCopy] = useState<VersionInfo | "new" | null>(null);
@@ -201,6 +203,13 @@ export function ItemPage() {
   };
 
   const backdrop = (item.metadata as Record<string, unknown>).backdropKey as string | undefined;
+  // Albums as square covers or CDs, videos vertical or horizontal; one that matches the default isn't stored.
+  const ownShape = (item.metadata as Record<string, unknown>).coverShape as CoverShape | undefined;
+  const shape = coverShapeOf({ handler: item.handler, coverShape: ownShape }, preferences.coverShapes);
+  const setShape = (value: CoverShape) => {
+    const usual = coverShapeOf({ handler: item.handler }, preferences.coverShapes);
+    void run(() => api.itemsBulk([item.id], [{ op: "setCoverShape", shape: value === usual ? null : value }]));
+  };
   const changeBackdrop = async () => {
     const path = await open({ multiple: false, title: "Choose a background", filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "webp", "bmp"] }] });
     if (typeof path === "string") await run(() => api.itemSetBackdrop(item.id, path));
@@ -230,7 +239,7 @@ export function ItemPage() {
       ) : (
         item.coverKey && <div className="hero-backdrop" style={{ backgroundImage: `url(${artworkUrl(item.coverKey)})` }} />
       )}
-        <div className="hero-cover" style={{ flexBasis: 220, aspectRatio: aspectFor(item.handler) }}>
+        <div className="hero-cover" data-shape={shape} style={{ flexBasis: shape === "landscape" ? 360 : 220, aspectRatio: SHAPE_ASPECT[shape] }}>
           <Cover item={item} size="cover" />
         </div>
         <div className="hero-body">
@@ -289,6 +298,27 @@ export function ItemPage() {
               <Trash size={16} /> Remove
             </button>
           </div>
+          {(item.handler === "audio" || item.handler === "video") && (
+            <div className="cover-shape-row">
+              <span className="eyebrow">Cover</span>
+              <div className="segmented" role="group" aria-label="Cover shape">
+                {(item.handler === "audio"
+                  ? ([
+                      ["square", "Square"],
+                      ["disc", "CD"],
+                    ] as const)
+                  : ([
+                      ["poster", "Vertical"],
+                      ["landscape", "Horizontal"],
+                    ] as const)
+                ).map(([value, label]) => (
+                  <button key={value} type="button" aria-pressed={shape === value} onClick={() => setShape(value)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {error && <div className="dialog-error">{error}</div>}
         </div>
       </section>

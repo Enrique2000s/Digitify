@@ -3,7 +3,8 @@ import { Link } from "@tanstack/react-router";
 import { Check, Star } from "lucide-react";
 import type { ItemCard } from "../lib/api";
 import { useSelectable } from "../lib/selection";
-import { aspectFor, Cover } from "./common";
+import { Cover } from "./common";
+import { useCoverShape } from "../lib/preferences";
 
 /** The physical case band (Blu-ray blue, DVD black) shown on video covers you own on disc. */
 export function caseBand(item: ItemCard): "bluray" | "dvd" | null {
@@ -18,9 +19,10 @@ export const MediaCard = memo(function MediaCard({ item, width, index }: { item:
   const band = caseBand(item);
   const subtitle = [item.subtitle, item.year].filter(Boolean).join(" · ");
   const { selecting, checked, props } = useSelectable(item.id, index);
+  const { shape, aspect } = useCoverShape()(item);
   return (
     <Link to="/item/$id" params={{ id: String(item.id) }} className="card" style={width ? { width } : undefined} data-blip {...props}>
-      <div className="card-art" style={{ aspectRatio: aspectFor(item.handler) }}>
+      <div className="card-art" data-shape={shape} style={{ aspectRatio: aspect }}>
         <Cover item={item} />
         {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
         {(item.isFavorite || item.missing) && (

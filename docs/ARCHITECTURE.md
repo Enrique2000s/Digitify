@@ -88,13 +88,14 @@ React + TypeScript via Vite, organized by feature:
 | `features/reader/` | The reader screen at `/read/$id` (`?page=` opens a page): the page reader (layout of views, spreads and strips), the ebook reader around foliate-js, their shared controls (full screen, controls that hide, bookmarks, display), contents, and page turns (CSS 3D turn and a WebGL curl shader) |
 | `features/player/` | The video player at `/watch/$id` (`?part=` an episode) and `/disc/$letter/$title` (a disc title) |
 | `features/discs/` | **Discs** (`/discs`): drives and their contents, ripping, importing, cataloging, data-disc browsing, and the insert notice; `lib/discs.tsx` keeps drives and jobs current |
+| `features/library/ArrangeDialog.tsx` | "Arrange…": a view's custom order (or a shelf's own order), dragged into place |
 | `features/home/` | Home: sections in the user's order, "Customize Home", Featured today and Statistics |
 | `features/music/` | The music category's tabs (artists, tracks, playlists, recently played, favorites) and track lists with their menus and dialogs |
 | `lib/music/` | The music provider: the queue and playback state from `music-event`s, shared by every screen |
 | `features/builder/` | "Book from images…" and "Arrange pages": the page grid with pointer dragging (the window's file drop takes over HTML drag and drop) |
 | `vendor/foliate-js/` | foliate-js at a pinned commit (D-014; see its README), loaded only when an ebook opens |
 | `features/` | Home (category tiles, your shelves), library views (virtualized grid/list/shelf with multi-select and the bulk bar), organize (collections, shelves, tags, move dialogs), item page and forms (with custom fields), import UI, onboarding, settings (Categories, Sound) |
-| `lib/` | Typed API, TanStack Query hooks, paged item cache, preferences (look, palette, theme, accent, motion, music, shelf material, Home's layout, shortcuts), accent contrast math, formatting, `shortcuts.ts` (every keyboard action, its default keys and the user's), `activity.ts` (recording time for Statistics) |
+| `lib/` | Typed API, TanStack Query hooks, paged item cache, preferences (look, palette, theme, accent, motion, music, shelf material, Home's layout, shortcuts), accent contrast math, formatting, `shortcuts.ts` (every keyboard action, its default keys and the user's), `activity.ts` (recording time for Statistics), `reorder.ts` (dragging rows into a new order, for short lists and virtualized ones) |
 | `lib/ambient/` | Ambient music and interface sounds: the "Morning Lounge" composition and synth, the playback engine, and its React provider |
 | `styles/` | Breeze tokens and app styles (D-016); `looks.css` (Cinematic and the Breeze palettes, as token overrides) and `views.css` (shelf materials, detailed and carousel views, smart shelves, Home's widgets) (D-023). Nunito, Inter and Archivo are bundled via Fontsource, never loaded online |
 | `poc/` | Video lab |
@@ -129,7 +130,7 @@ Category       Books · Comics · Manga · Movies & Series · Music · your own�
        └ Parts     optional: chapters, episodes, tracks, each with its own progress
 Shelves & tags: cross-cutting groups; one item can sit on many shelves
 ```
-The schema lives in `src-tauri/migrations/` (v3 adds `playlists`, `playlist_tracks`, `plays` and `parts.is_favorite`; v4 adds `activity`). Tables: `categories`, `field_definitions`, `collections`, `items`, `people`, `item_people`, `parts`, `versions`, `files`, `progress`, `bookmarks`, `shelves` (a smart shelf's rules in `settings`), `shelf_items`, `tags`, `item_tags`, `activity`, `settings` and `items_fts` (full-text index).
+The schema lives in `src-tauri/migrations/` (v3 adds `playlists`, `playlist_tracks`, `plays` and `parts.is_favorite`; v4 adds `activity`; v5 adds `custom_order`). Tables: `categories`, `field_definitions`, `collections`, `items`, `people`, `item_people`, `parts`, `versions`, `files`, `progress`, `bookmarks`, `shelves` (a smart shelf's rules in `settings`), `shelf_items`, `tags`, `item_tags`, `activity`, `custom_order` (hand-arranged order per view), `settings` and `items_fts` (full-text index).
 
 ## Media serving
 On Windows, the UI loads library resources from `http://digitify.localhost/<route>`:

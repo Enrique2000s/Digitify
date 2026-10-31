@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { api, type ImportMode, type MusicSource } from "./api";
+import { api, type CoverShape, type ImportMode, type MusicSource, type Ownership, type SortKey } from "./api";
 import { accentVariables } from "./color";
 import { sanitizeShortcuts, setCustomShortcuts, type ShortcutMap } from "./shortcuts";
 
@@ -94,8 +94,18 @@ export interface Preferences {
   motion: MotionChoice;
   /** Cover width in the grid and shelf views, in pixels. */
   cardSize: number;
-  /** Last layout used per view (all, favorites, a category key, search). */
+  /** Last layout used per view (all, favorites, a category key, search), or for every view under "*". */
   layouts: Record<string, Layout>;
+  /** The same layout and copies filter in every view (under "*"), rather than one per view. */
+  syncViews: boolean;
+  /** Last copies filter (All, On the shelf, Digital, Not digitized) per view, or under "*". */
+  ownership: Record<string, Ownership | "">;
+  /** Last sort per view ("books", "all", "collection:3", "shelf:5"…). */
+  sorts: Record<string, SortKey>;
+  /** How albums and videos are shown unless an item has its own shape. */
+  coverShapes: { audio: "square" | "disc"; video: "poster" | "landscape" };
+  /** The music category's tab, opened again next time. */
+  musicTab: string;
   shelfStyle: "covers" | "spines";
   shelfLook: ShelfLook;
   importMode: "ask" | ImportMode;
@@ -171,6 +181,11 @@ export const DEFAULT_PREFERENCES: Preferences = {
   motion: "system",
   cardSize: 160,
   layouts: {},
+  syncViews: true,
+  ownership: {},
+  sorts: {},
+  coverShapes: { audio: "square", video: "poster" },
+  musicTab: "albums",
   shelfStyle: "covers",
   shelfLook: "breeze",
   importMode: "ask",
@@ -248,6 +263,29 @@ function sanitizeVolumes(raw: unknown): Preferences["volumes"] {
   return { video: Math.round(pick("video", isVolume)), music: Math.round(pick("music", isVolume)) };
 }
 
+function sanitizeShapes(raw: unknown): Preferences["coverShapes"] {
+  const value = (raw && typeof raw === "object" ? raw : {}) as { audio?: unknown; video?: unknown };
+  return { audio: value.audio === "disc" ? "disc" : "square", video: value.video === "landscape" ? "landscape" : "poster" };
+}
+
+/** The shape an item's cover is shown in: its own, or the default for its kind. */
+export function coverShapeOf(item: { handler: string; coverShape?: CoverShape | null }, defaults: Preferences["coverShapes"]): CoverShape | "book" {
+  if (item.handler === "audio") return item.coverShape === "disc" || item.coverShape === "square" ? item.coverShape : defaults.audio;
+  if (item.handler === "video") return item.coverShape === "poster" || item.coverShape === "landscape" ? item.coverShape : defaults.video;
+  return "book";
+}
+
+export const SHAPE_ASPECT: Record<CoverShape | "book", number> = { square: 1, disc: 1, poster: 2 / 3, landscape: 16 / 9, book: 2 / 3 };
+
+/** The cover shape of an item, with the user's defaults. */
+export function useCoverShape() {
+  const { preferences } = usePreferences();
+  return (item: { handler: string; coverShape?: CoverShape | null }) => {
+    const shape = coverShapeOf(item, preferences.coverShapes);
+    return { shape, aspect: SHAPE_ASPECT[shape] };
+  };
+}
+
 const isHomeSection = (v: unknown): v is HomeSection => HOME_SECTIONS.includes(v as HomeSection);
 
 function sanitizeHome(raw: unknown): HomeLayout {
@@ -275,6 +313,11 @@ function sanitize(raw: unknown): Preferences {
     motion: pick("motion", (v) => ["system", "full", "reduced", "off"].includes(v as string)),
     cardSize: pick("cardSize", (v) => typeof v === "number" && v >= 110 && v <= 260),
     layouts: pick("layouts", (v) => !!v && typeof v === "object"),
+    syncViews: pick("syncViews", isBoolean),
+    ownership: pick("ownership", (v) => !!v && typeof v === "object"),
+    sorts: pick("sorts", (v) => !!v && typeof v === "object"),
+    coverShapes: sanitizeShapes((raw as Raw<Preferences>)?.coverShapes),
+    musicTab: pick("musicTab", (v) => typeof v === "string" && v.length < 20),
     shelfStyle: pick("shelfStyle", (v) => v === "covers" || v === "spines"),
     shelfLook: pick("shelfLook", (v) => ["breeze", "wood", "glass", "metal"].includes(v as string)),
     importMode: pick("importMode", (v) => v === "ask" || v === "reference" || v === "copy"),

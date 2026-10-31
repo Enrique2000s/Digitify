@@ -7,7 +7,7 @@ import { api, errorText } from "../../lib/api";
 import { ACCENT_PRESETS } from "../../lib/color";
 import { LOOK_ACCENTS, PALETTE_ACCENTS, usePreferences, type Look, type MotionChoice, type Palette, type ThemeChoice } from "../../lib/preferences";
 import { keys, libraryChanged, useAppStatus } from "../../lib/queries";
-import { CardSizeSlider } from "../../components/common";
+import { CardSizeSlider, Switch } from "../../components/common";
 import { ShelfLookPicker } from "../../components/ShelfLookPicker";
 import { CategoriesPanel } from "./CategoriesPanel";
 import { KeyboardSettings } from "./KeyboardSettings";
@@ -147,6 +147,40 @@ export function SettingsPage() {
               <option value="reduced">Reduced</option>
               <option value="off">Off</option>
             </select>
+          </Setting>
+          <Setting
+            title="Same view in every category"
+            text="The layout (grid, shelf, list, detailed, carousel) and the All / On the shelf / Digital / Not digitized filter stay as you left them everywhere. Turn off to keep a different one per category."
+          >
+            <Switch checked={preferences.syncViews} label="Same view in every category" onChange={(syncViews) => update({ syncViews })} />
+          </Setting>
+          <Setting title="Album covers" text="Square covers, or round CDs. Each album can also be set on its own page.">
+            <div className="segmented" role="group" aria-label="Album covers">
+              {(
+                [
+                  ["square", "Square"],
+                  ["disc", "CD"],
+                ] as const
+              ).map(([value, label]) => (
+                <button key={value} type="button" aria-pressed={preferences.coverShapes.audio === value} onClick={() => update((c) => ({ coverShapes: { ...c.coverShapes, audio: value } }))}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </Setting>
+          <Setting title="Video covers" text="Vertical posters, or horizontal frames. Each film or series can also be set on its own page.">
+            <div className="segmented" role="group" aria-label="Video covers">
+              {(
+                [
+                  ["poster", "Vertical"],
+                  ["landscape", "Horizontal"],
+                ] as const
+              ).map(([value, label]) => (
+                <button key={value} type="button" aria-pressed={preferences.coverShapes.video === value} onClick={() => update((c) => ({ coverShapes: { ...c.coverShapes, video: value } }))}>
+                  {label}
+                </button>
+              ))}
+            </div>
           </Setting>
           <Setting title="Shelves" text="What the shelves in the shelf view are made of.">
             <ShelfLookPicker />

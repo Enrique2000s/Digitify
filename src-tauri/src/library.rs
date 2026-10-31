@@ -181,6 +181,8 @@ pub struct QueryParams {
     pub sort: Option<String>,
     pub offset: i64,
     pub limit: i64,
+    /// The view whose hand-arranged order `sort: "custom"` uses ("books", "all", "collection:3"…).
+    pub custom: Option<String>,
     /// A smart shelf's rules, filled in from `shelf` by `resolve` (never sent by the UI).
     #[serde(skip)]
     pub smart: Option<crate::smart::SmartRules>,
@@ -216,6 +218,8 @@ pub struct ItemCard {
     pub has_digital: bool,
     pub missing: bool,
     pub progress: Option<f64>,
+    /// The item's own cover shape (`square`, `disc`, `poster` or `landscape`), if it has one.
+    pub cover_shape: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -239,7 +243,7 @@ pub async fn library_query_ids(state: State<'_, AppState>, params: QueryParams) 
     with_library(&state, move |library| {
         library.db.with(|conn| {
             let resolved = resolve(conn, &params)?;
-            let QueryParts { joins, filter, args, order } = QueryParts::new(resolved.as_ref().unwrap_or(&params));
+            let QueryParts { joins, filter, args, order, .. } = QueryParts::new(resolved.as_ref().unwrap_or(&params));
             ids(conn, &format!("SELECT i.id FROM items i{joins}{filter} ORDER BY {order} LIMIT 100000"), &args)
         })
     })
@@ -257,7 +261,8 @@ const CARD_COLUMNS: &str = "i.id, i.title, \
     EXISTS (SELECT 1 FROM versions v WHERE v.item_id = i.id AND v.kind = 'physical'), \
     EXISTS (SELECT 1 FROM versions v WHERE v.item_id = i.id AND v.kind = 'digital'), \
     EXISTS (SELECT 1 FROM files f JOIN versions v ON v.id = f.version_id WHERE v.item_id = i.id AND f.status <> 'ok'), \
-    (SELECT pr.fraction FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0)";
+    (SELECT pr.fraction FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0), \
+    json_extract(i.metadata, '$.coverShape')";
 
 fn card(row: &Row<'_>) -> rusqlite::Result<ItemCard> {
     let formats: Option<String> = row.get(9)?;
@@ -280,6 +285,7 @@ fn card(row: &Row<'_>) -> rusqlite::Result<ItemCard> {
         has_digital: row.get::<_, i64>(11)? != 0,
         missing: row.get::<_, i64>(12)? != 0,
         progress: row.get(13)?,
+        cover_shape: row.get(14)?,
     })
 }
 
@@ -310,6 +316,8 @@ struct QueryParts {
     joins: String,
     filter: String,
     args: Vec<SqlValue>,
+    /// How many of `args` the filter uses (the rest belong to the order).
+    counted: usize,
     order: String,
 }
 
@@ -362,7 +370,20 @@ impl QueryParts {
             _ => {}
         }
         let filter = if conditions.is_empty() { String::new() } else { format!(" WHERE {}", conditions.join(" AND ")) };
+        let counted = args.len();
+        let custom = match (params.sort.as_deref(), &params.custom) {
+            (Some("custom"), Some(view)) => {
+                args.push(SqlValue::Text(view.clone()));
+                Some(format!("(SELECT co.position FROM custom_order co WHERE co.view = ?{} AND co.item_id = i.id)", args.len()))
+            }
+            _ => None,
+        };
         let order = match params.sort.as_deref() {
+            // Arranged items first, in their order; the rest after them by title.
+            Some("custom") if custom.is_some() => {
+                let position = custom.unwrap();
+                format!("{position} IS NULL, {position}, i.sort_title, i.id")
+            }
             None | Some("relevance") if search.is_some() => "f.rank".to_string(),
             None | Some("shelf") if params.shelf.is_some() => "si.position, si.added_at, i.id".to_string(),
             Some("added") => "i.added_at DESC, i.id DESC".to_string(),
@@ -371,7 +392,7 @@ impl QueryParts {
             Some("creator") => format!("{CREATOR_SORT} IS NULL, {CREATOR_SORT}, i.sort_title"),
             _ => "i.sort_title, i.id".to_string(),
         };
-        Self { joins, filter, args, order }
+        Self { joins, filter, args, counted, order }
     }
 }
 
@@ -379,10 +400,10 @@ fn query(conn: &Connection, params: &QueryParams) -> AppResult<QueryResult> {
     let started = Instant::now();
     let resolved = resolve(conn, params)?;
     let params = resolved.as_ref().unwrap_or(params);
-    let QueryParts { joins, filter, args, order } = QueryParts::new(params);
+    let QueryParts { joins, filter, args, counted, order } = QueryParts::new(params);
     let total: i64 = conn.query_row(
         &format!("SELECT count(*) FROM items i{joins}{filter}"),
-        params_from_iter(args.iter()),
+        params_from_iter(args[..counted].iter()),
         |row| row.get(0),
     )?;
     // Page over the ids first so deep offsets never compute card details for skipped rows.
@@ -395,6 +416,38 @@ fn query(conn: &Connection, params: &QueryParams) -> AppResult<QueryResult> {
     )?;
     let items = cards_by_ids(conn, &page)?;
     Ok(QueryResult { total, offset, items, elapsed_ms: started.elapsed().as_secs_f64() * 1000.0 })
+}
+
+// ---------------------------------------------------------------------------------------------
+// Custom order
+
+/// Saves a view's hand-arranged order. The order is kept per view; ids are stored in the given order.
+pub fn set_custom_order(conn: &mut Connection, view: &str, ids: &[i64]) -> AppResult<()> {
+    let view = view.trim();
+    if view.is_empty() || view.len() > 100 {
+        return Err(AppError::msg("unknown view"));
+    }
+    let tx = conn.transaction()?;
+    tx.execute("DELETE FROM custom_order WHERE view = ?1", [view])?;
+    {
+        let mut insert = tx.prepare("INSERT OR IGNORE INTO custom_order (view, item_id, position) SELECT ?1, id, ?3 FROM items WHERE id = ?2")?;
+        for (position, id) in ids.iter().enumerate() {
+            insert.execute(params![view, id, position as i64])?;
+        }
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn custom_order_set(state: State<'_, AppState>, view: String, ids: Vec<i64>) -> AppResult<()> {
+    with_library(&state, move |library| library.db.with(|conn| set_custom_order(conn, &view, &ids))).await
+}
+
+/// Cards for some ids, in that order (the "Arrange" list loads them as it scrolls).
+#[tauri::command]
+pub async fn items_cards(state: State<'_, AppState>, ids: Vec<i64>) -> AppResult<Vec<ItemCard>> {
+    with_library(&state, move |library| library.db.with(|conn| cards_by_ids(conn, &ids[..ids.len().min(500)]))).await
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1168,5 +1221,41 @@ mod tests {
         assert_eq!(sort_key("An Iliad"), "iliad");
         assert_eq!(sort_key("Theater"), "theater");
         assert_eq!(person_sort_name("Mary Wollstonecraft Shelley"), "Shelley, Mary Wollstonecraft");
+    }
+
+    #[test]
+    fn custom_order_keeps_arranged_items_first_per_view() {
+        let mut conn = crate::db::memory();
+        let add = |title: &str| {
+            conn.execute(
+                "INSERT INTO items (category_id, title, sort_title) VALUES ((SELECT id FROM categories WHERE key = 'books'), ?1, ?2)",
+                params![title, sort_key(title)],
+            )
+            .unwrap();
+            conn.last_insert_rowid()
+        };
+        let (a, b, c, d) = (add("Alpha"), add("Bravo"), add("Charlie"), add("Delta"));
+        let titles = |conn: &Connection, view: &str| -> Vec<String> {
+            let params = QueryParams { category: Some("books".into()), sort: Some("custom".into()), custom: Some(view.into()), limit: 50, ..Default::default() };
+            query(conn, &params).unwrap().items.into_iter().map(|card| card.title).collect()
+        };
+        // Nothing arranged yet: by title.
+        assert_eq!(titles(&conn, "books"), ["Alpha", "Bravo", "Charlie", "Delta"]);
+        set_custom_order(&mut conn, "books", &[c, a]).unwrap();
+        assert_eq!(titles(&conn, "books"), ["Charlie", "Alpha", "Bravo", "Delta"]);
+        // Another view keeps its own order; arranging again replaces the old one.
+        assert_eq!(titles(&conn, "all"), ["Alpha", "Bravo", "Charlie", "Delta"]);
+        set_custom_order(&mut conn, "books", &[d, b, c, a]).unwrap();
+        assert_eq!(titles(&conn, "books"), ["Delta", "Bravo", "Charlie", "Alpha"]);
+        // Items that are gone are skipped.
+        set_custom_order(&mut conn, "books", &[b, 999]).unwrap();
+        assert_eq!(titles(&conn, "books")[0], "Bravo");
+        assert!(set_custom_order(&mut conn, " ", &[a]).is_err());
+        // A cover shape set on an item shows on its card.
+        crate::organize::apply_bulk(&mut conn, &[a], &[crate::organize::BulkOp::SetCoverShape { shape: Some("disc".into()) }]).unwrap();
+        assert_eq!(cards_by_ids(&conn, &[a]).unwrap()[0].cover_shape.as_deref(), Some("disc"));
+        crate::organize::apply_bulk(&mut conn, &[a], &[crate::organize::BulkOp::SetCoverShape { shape: None }]).unwrap();
+        assert_eq!(cards_by_ids(&conn, &[a]).unwrap()[0].cover_shape, None);
+        assert!(crate::organize::apply_bulk(&mut conn, &[a], &[crate::organize::BulkOp::SetCoverShape { shape: Some("star".into()) }]).is_err());
     }
 }

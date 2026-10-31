@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type Handler = "book" | "comic" | "video" | "audio" | "generic";
 export type Ownership = "physical" | "digital" | "physicalOnly" | "digitalOnly";
-export type SortKey = "title" | "added" | "year" | "creator" | "relevance" | "shelf";
+export type SortKey = "title" | "added" | "year" | "creator" | "relevance" | "shelf" | "custom";
 export type ImportMode = "reference" | "copy";
 export type FieldKind = "text" | "longtext" | "number" | "date" | "rating" | "boolean" | "choice" | "url";
 
@@ -60,7 +60,12 @@ export interface ItemCard {
   hasDigital: boolean;
   missing: boolean;
   progress: number | null;
+  /** The item's own cover shape, when it has one (otherwise the default for its kind). */
+  coverShape: CoverShape | null;
 }
+
+/** Albums as square covers or round CDs; videos as vertical posters or horizontal frames. */
+export type CoverShape = "square" | "disc" | "poster" | "landscape";
 
 /** Seconds spent reading, watching and listening. */
 export interface ActivityTime {
@@ -107,6 +112,8 @@ export interface QueryParams {
   favorites?: boolean;
   ownership?: Ownership | null;
   sort?: SortKey | null;
+  /** The view a custom order belongs to, for `sort: "custom"`. */
+  custom?: string | null;
   offset: number;
   limit: number;
 }
@@ -481,7 +488,8 @@ export type BulkOp =
   | { op: "move"; category: string; collection: number | null }
   | { op: "setYear"; year: number | null }
   | { op: "setSeries"; series: string | null }
-  | { op: "setDirection"; direction: "ltr" | "rtl" };
+  | { op: "setDirection"; direction: "ltr" | "rtl" }
+  | { op: "setCoverShape"; shape: CoverShape | null };
 
 export interface FieldInput {
   key?: string | null;
@@ -584,6 +592,9 @@ export const api = {
   query: (params: QueryParams) => invoke<QueryResult>("library_query", { params }),
   queryIds: (params: Omit<QueryParams, "offset" | "limit">) => invoke<number[]>("library_query_ids", { params: { ...params, offset: 0, limit: 0 } }),
   blurbs: (ids: number[]) => invoke<Blurb[]>("items_blurbs", { ids }),
+  cards: (ids: number[]) => invoke<ItemCard[]>("items_cards", { ids }),
+  customOrderSet: (view: string, ids: number[]) => invoke<void>("custom_order_set", { view, ids }),
+  shelfOrderSet: (shelf: number, ids: number[]) => invoke<void>("shelf_order_set", { shelf, ids }),
   activityAdd: (item: number, kind: "read" | "watch" | "listen", seconds: number) => invoke<void>("activity_add", { item, kind, seconds }),
   stats: () => invoke<LibraryStats>("library_stats"),
   tags: () => invoke<Tag[]>("tags_list"),
