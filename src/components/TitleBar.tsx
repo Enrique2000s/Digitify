@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ChevronLeft, ChevronRight, Disc3, Search, Settings } from "lucide-react";
+import { ChevronLeft, ChevronRight, Disc3, Gamepad2, Search, Settings } from "lucide-react";
+import { enterBigPicture } from "../lib/bigpicture";
 import { Logo } from "./common";
 import { MiniPlayer } from "./MiniPlayer";
 import { MusicPill } from "./MusicPill";
@@ -119,6 +120,17 @@ export function TitleBar({ searchEnabled }: { searchEnabled: boolean }) {
         )}
         <div className="appbar-drag" data-tauri-drag-region />
         {music.active ? <MiniPlayer /> : <MusicPill />}
+        {searchEnabled && (
+          <button
+            type="button"
+            className="round-btn"
+            aria-label="Big Picture"
+            title="Big Picture (full screen, for a controller and the TV)"
+            onClick={() => void enterBigPicture(() => void navigate({ to: "/bp" }))}
+          >
+            <Gamepad2 size={18} strokeWidth={2.4} />
+          </button>
+        )}
         {searchEnabled && drives.length > 0 && (
           <Link to="/discs" className={`round-btn disc-button${discIn ? " has-disc" : ""}`} aria-label={discIn ? "Discs (a disc is in)" : "Discs"} title="Discs">
             <Disc3 size={18} strokeWidth={2.4} />

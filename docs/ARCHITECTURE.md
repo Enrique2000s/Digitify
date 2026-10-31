@@ -89,6 +89,7 @@ React + TypeScript via Vite, organized by feature:
 | `features/player/` | The video player at `/watch/$id` (`?part=` an episode) and `/disc/$letter/$title` (a disc title) |
 | `features/discs/` | **Discs** (`/discs`): drives and their contents, ripping, importing, cataloging, data-disc browsing, and the insert notice; `lib/discs.tsx` keeps drives and jobs current |
 | `features/library/ArrangeDialog.tsx` | "Arrange…": a view's custom order (or a shelf's own order), dragged into place |
+| `features/bigpicture/` | Big Picture (D-025) at `/bp`: its screens, the on-screen keyboard, the cursor and the menu; `Launcher.tsx` opens it with the controller and maps buttons to shortcuts in the readers and the player. `lib/gamepad.ts` reads Xbox and PlayStation controllers (Gamepad API); `lib/bigpicture.ts` keeps whether it's on and moves the selection |
 | `features/home/` | Home: sections in the user's order, "Customize Home", Featured today and Statistics |
 | `features/music/` | The music category's tabs (artists, tracks, playlists, recently played, favorites) and track lists with their menus and dialogs |
 | `lib/music/` | The music provider: the queue and playback state from `music-event`s, shared by every screen |
@@ -130,7 +131,7 @@ Category       Books · Comics · Manga · Movies & Series · Music · your own�
        └ Parts     optional: chapters, episodes, tracks, each with its own progress
 Shelves & tags: cross-cutting groups; one item can sit on many shelves
 ```
-The schema lives in `src-tauri/migrations/` (v3 adds `playlists`, `playlist_tracks`, `plays` and `parts.is_favorite`; v4 adds `activity`; v5 adds `custom_order`). Tables: `categories`, `field_definitions`, `collections`, `items`, `people`, `item_people`, `parts`, `versions`, `files`, `progress`, `bookmarks`, `shelves` (a smart shelf's rules in `settings`), `shelf_items`, `tags`, `item_tags`, `activity`, `custom_order` (hand-arranged order per view), `settings` and `items_fts` (full-text index).
+The schema lives in `src-tauri/migrations/` (v3 adds `playlists`, `playlist_tracks`, `plays` and `parts.is_favorite`; v4 adds `activity`; v5 adds `custom_order`; v6 lets a track be in a playlist once). Tables: `categories`, `field_definitions`, `collections`, `items`, `people`, `item_people`, `parts`, `versions`, `files`, `progress`, `bookmarks`, `shelves` (a smart shelf's rules in `settings`), `shelf_items`, `tags`, `item_tags`, `activity`, `custom_order` (hand-arranged order per view), `settings` and `items_fts` (full-text index).
 
 ## Media serving
 On Windows, the UI loads library resources from `http://digitify.localhost/<route>`:

@@ -100,6 +100,16 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-025 · Big Picture: a TV interface for controllers
+- **Date:** 2026-10-31 · **Approved by:** project owner (chose each option)
+- **Interface:** its own full-screen interface for the TV, like Steam's Big Picture: Home (continue, categories, recently added, favorites), the library by category (LB/RB to switch), an item's page (Read, Play, Play album with its tracks, favorite), search, and a menu. Always dark, big type, a ring around the selection.
+- **Controllers:** Xbox and PlayStation controllers, wired or Bluetooth, through the Gamepad API of WebView2 (no extra software). Button names and symbols follow the controller in use.
+- **Moving around:** by selection (the D-pad or left stick moves to the nearest item in that direction) or with a cursor (left stick moves it, right stick scrolls, A clicks); chosen in the Big Picture menu, with the cursor's speed.
+- **Where the controller works:** in Big Picture and in the readers, the video player and the music started from it. In the readers and the player each button presses a keyboard shortcut (Settings › Keyboard), so changed keys keep working. Not in the normal interface.
+- **Typing:** an on-screen keyboard for search (X deletes, Y types a space).
+- **Entering:** a controller button in the title bar, or the Xbox / PS button; because Windows may keep the Xbox button for its Game Bar, Start + Select together do the same. Leaving: the menu's "Exit Big Picture" or the ✕ at the top.
+- **Also in this round (owner's requests):** a "Watch again" button at the end of a video; horizontal covers as tall as vertical ones (the grid lays out rows of one height; Home's rows, the shelf, the detailed view and the carousel follow); a track only once per playlist (repeats removed, schema v6), with checkmarks in "Add to playlist" and a dialog to remove it or keep it; covers gliding into place when the layout changes (view transitions); Midnight shows no theme choice and no light/night switch; Settings centered.
+
 ### D-024 · Views that stay put, custom order, dragging, cover shapes
 - **Date:** 2026-10-31 · **Approved by:** project owner (asked for each of these)
 - **Same view everywhere:** the layout (grid, shelf, list, detailed, carousel) and the copies filter (All, On the shelf, Digital, Not digitized) are shared by every view and remembered. Settings › Appearance › "Same view in every category" turns this off to keep one per category.

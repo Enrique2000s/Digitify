@@ -1183,8 +1183,11 @@ html.reordering * {
   gap: 10px;
 }
 /* Round CDs: the art cut into a disc with a center hole and a little shine. */
-[data-shape="disc"] {
+/* Only a fallback: a cover box's own position (absolute in the carousel) wins. */
+:where([data-shape="disc"]) {
   position: relative;
+}
+[data-shape="disc"] {
   border-radius: 50% !important;
   overflow: hidden;
 }
@@ -1241,4 +1244,36 @@ html.reordering * {
 .arrange-thumb[data-shape="landscape"] {
   width: 44px;
   height: 25px;
+}
+
+.grid-row.flow {
+  display: flex;
+  align-items: flex-end;
+}
+.row-scroller {
+  display: flex;
+  align-items: flex-end;
+}
+.row-scroller > .card {
+  flex: 0 0 auto;
+}
+
+/* Changing layouts: covers glide from their old places to their new ones, the rest cross-fades. */
+::view-transition-group(*) {
+  animation-duration: 420ms;
+  animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 260ms;
+}
+
+/* Settings sit in the middle of the window, with their title above them. */
+.settings {
+  margin: 0 auto;
+}
+.settings-page > .page-header {
+  max-width: 860px;
+  margin-left: auto;
+  margin-right: auto;
 }

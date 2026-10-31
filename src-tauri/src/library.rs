@@ -237,6 +237,30 @@ pub async fn library_query(state: State<'_, AppState>, params: QueryParams) -> A
     with_library(&state, move |library| library.db.with(|conn| query(conn, &params))).await
 }
 
+/// Each matching item's kind and cover shape, in view order, two letters per item: the kind (`b`ook,
+/// `c`omic, `v`ideo, `a`udio, `g`eneric) and its own shape (`s`quare, `d`isc, `p`oster,
+/// `l`andscape, or `-` for the default). The grid lays out rows of equal height from these.
+#[tauri::command]
+pub async fn library_query_shapes(state: State<'_, AppState>, params: QueryParams) -> AppResult<String> {
+    with_library(&state, move |library| {
+        library.db.with(|conn| {
+            let resolved = resolve(conn, &params)?;
+            let QueryParts { joins, filter, args, order, .. } = QueryParts::new(resolved.as_ref().unwrap_or(&params));
+            let mut stmt = conn.prepare(&format!(
+                "SELECT substr((SELECT c.handler FROM categories c WHERE c.id = i.category_id), 1, 1),                  coalesce(substr(json_extract(i.metadata, '$.coverShape'), 1, 1), '-')                  FROM items i{joins}{filter} ORDER BY {order} LIMIT 100000"
+            ))?;
+            let mut out = String::new();
+            let mut rows = stmt.query(params_from_iter(args.iter()))?;
+            while let Some(row) = rows.next()? {
+                out.push_str(&row.get::<_, String>(0)?);
+                out.push_str(&row.get::<_, String>(1)?);
+            }
+            Ok(out)
+        })
+    })
+    .await
+}
+
 /// Every id matching `params`, in view order (for "Select all"). Capped at 100,000.
 #[tauri::command]
 pub async fn library_query_ids(state: State<'_, AppState>, params: QueryParams) -> AppResult<Vec<i64>> {

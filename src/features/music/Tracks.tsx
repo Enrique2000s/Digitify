@@ -3,8 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import { DropdownMenu } from "radix-ui";
-import { AudioLines, ChevronDown, ChevronUp, Disc3, GripVertical, Heart, ListEnd, ListMusic, ListPlus, MoreHorizontal, Pencil, Play, Plus, Shuffle, X } from "lucide-react";
-import { api, errorText, type Track, type TrackFilter } from "../../lib/api";
+import { AudioLines, Check, ChevronDown, ChevronUp, Disc3, GripVertical, Heart, ListEnd, ListMusic, ListPlus, MoreHorizontal, Pencil, Play, Plus, Shuffle, X } from "lucide-react";
+import { api, errorText, type Playlist, type Track, type TrackFilter } from "../../lib/api";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { Dialog, Field } from "../../components/common";
 import { arrayMove, useVirtualReorder } from "../../lib/reorder";
@@ -78,6 +78,38 @@ export function NewPlaylistDialog({ tracks, open, onOpenChange }: { tracks: numb
   );
 }
 
+/** A track picked for a playlist it's already in: take it out, or leave it. */
+export function AlreadyInPlaylistDialog({ track, playlist, onClose }: { track: { id: number; title: string }; playlist: { id: number; name: string }; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const remove = async () => {
+    await api.playlistRemove(playlist.id, track.id);
+    void queryClient.invalidateQueries({ queryKey: ["playlists"] });
+    void queryClient.invalidateQueries({ queryKey: ["tracks"] });
+    void queryClient.invalidateQueries({ queryKey: ["track-playlists"] });
+    onClose();
+  };
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title="Already in this playlist"
+      description={`“${track.title}” is already in “${playlist.name}”. A track can be in a playlist only once.`}
+      footer={
+        <>
+          <button type="button" className="btn btn-danger" onClick={() => void remove()}>
+            <X size={15} /> Remove from playlist
+          </button>
+          <button type="button" className="btn btn-primary" autoFocus onClick={onClose}>
+            Keep it
+          </button>
+        </>
+      }
+    >
+      <span />
+    </Dialog>
+  );
+}
+
 /** A track's own details, kept in the catalog only; the file isn't changed (D-009). */
 function EditTrackDialog({ track, open, onOpenChange }: { track: Track; open: boolean; onOpenChange: (open: boolean) => void }) {
   const queryClient = useQueryClient();
@@ -143,17 +175,23 @@ function EditTrackDialog({ track, open, onOpenChange }: { track: Track; open: bo
 }
 
 /** Play next, add to the queue or a playlist, edit, and (in a playlist) move or remove. */
-function TrackMenu({ track, onEdit, onNewPlaylist, playlist }: {
+function TrackMenu({ track, onEdit, onNewPlaylist, onAlready, playlist }: {
   track: Track;
   onEdit: () => void;
   onNewPlaylist: () => void;
+  /** The track was picked for a playlist it's already in. */
+  onAlready: (playlist: Playlist) => void;
   playlist?: { move: (step: number) => void; remove: () => void; first: boolean; last: boolean };
 }) {
   const music = useMusic();
   const queryClient = useQueryClient();
   const playlists = usePlaylists();
+  const [open, setOpen] = useState(false);
+  // Which playlists already have this track, for the checkmarks.
+  const member = useQuery({ queryKey: ["track-playlists", track.id], queryFn: () => api.trackPlaylists(track.id), enabled: open });
+  const inList = new Set(member.data ?? []);
   return (
-    <DropdownMenu.Root>
+    <DropdownMenu.Root onOpenChange={setOpen}>
       <DropdownMenu.Trigger asChild>
         <button type="button" className="icon-btn" aria-label={`More for ${track.title}`}>
           <MoreHorizontal size={17} />
@@ -177,8 +215,16 @@ function TrackMenu({ track, onEdit, onNewPlaylist, playlist }: {
                   <DropdownMenu.Item
                     key={list.id}
                     className="menu-item"
-                    onSelect={() => void api.playlistAdd(list.id, [track.id]).then(() => queryClient.invalidateQueries({ queryKey: ["playlists"] }))}
+                    onSelect={() =>
+                      inList.has(list.id)
+                        ? onAlready(list)
+                        : void api.playlistAdd(list.id, [track.id]).then(() => {
+                            void queryClient.invalidateQueries({ queryKey: ["playlists"] });
+                            void queryClient.invalidateQueries({ queryKey: ["track-playlists"] });
+                          })
+                    }
                   >
+                    <span className="menu-check">{inList.has(list.id) && <Check size={15} strokeWidth={3} aria-label="Already in this playlist" />}</span>
                     {list.name}
                   </DropdownMenu.Item>
                 ))}
@@ -234,6 +280,7 @@ export function TrackList({ filter, empty, playlistId, showAlbum = true, compact
   const tracks = useTracks(filter);
   const [editing, setEditing] = useState<Track | null>(null);
   const [creating, setCreating] = useState<number[] | null>(null);
+  const [already, setAlready] = useState<{ track: Track; playlist: Playlist } | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const list = tracks.data ?? [];
   const ids = list.map((t) => t.id);
@@ -297,6 +344,7 @@ export function TrackList({ filter, empty, playlistId, showAlbum = true, compact
           track={track}
           onEdit={() => setEditing(track)}
           onNewPlaylist={() => setCreating([track.id])}
+          onAlready={(playlist) => setAlready({ track, playlist })}
           playlist={
             playlistId != null
               ? {
@@ -346,6 +394,7 @@ export function TrackList({ filter, empty, playlistId, showAlbum = true, compact
       )}
       {editing && <EditTrackDialog track={editing} open onOpenChange={(open) => !open && setEditing(null)} />}
       <NewPlaylistDialog tracks={creating ?? []} open={creating !== null} onOpenChange={(open) => !open && setCreating(null)} />
+      {already && <AlreadyInPlaylistDialog track={already.track} playlist={already.playlist} onClose={() => setAlready(null)} />}
     </div>
   );
 }

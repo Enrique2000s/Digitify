@@ -7,6 +7,7 @@ import { ReaderPage } from "../features/reader/ReaderPage";
 import { DiscPlayPage, WatchPage } from "../features/player/VideoPlayer";
 import { DiscsPage } from "../features/discs/DiscsPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
+import { BigPicturePage, type BigPictureSearch } from "../features/bigpicture/BigPicture";
 import { VideoPoc } from "../poc/VideoPoc";
 import { api } from "../lib/api";
 import { useAmbientHold } from "../lib/ambient/AmbientProvider";
@@ -78,6 +79,21 @@ const routeTree = rootRoute.addChildren([
   createRoute({ getParentRoute: () => rootRoute, path: "/discs", component: DiscsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/settings", component: SettingsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/lab", component: Lab }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/bp",
+    // Big Picture's screens: home, a library category or Favorites, an item, search.
+    validateSearch: (search: Record<string, unknown>): BigPictureSearch => {
+      const screen = ["home", "library", "item", "search"].includes(String(search.screen)) ? (search.screen as BigPictureSearch["screen"]) : undefined;
+      const id = Number(search.id);
+      return {
+        ...(screen ? { screen } : {}),
+        ...(typeof search.scope === "string" ? { scope: search.scope } : {}),
+        ...(Number.isInteger(id) && id > 0 ? { id } : {}),
+      };
+    },
+    component: BigPicturePage,
+  }),
 ]);
 
 // Hash history: every route resolves to index.html without server-side fallbacks.

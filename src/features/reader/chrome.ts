@@ -1,3 +1,4 @@
+import { bigPictureActive } from "../../lib/bigpicture";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -21,7 +22,8 @@ export function useFullscreen() {
   useEffect(
     () => () => {
       void appWindow.isFullscreen().then((on) => {
-        if (on) void appWindow.setFullscreen(false);
+        // In Big Picture the whole app stays full screen.
+        if (on && !bigPictureActive()) void appWindow.setFullscreen(false);
       });
     },
     [],

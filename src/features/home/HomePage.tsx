@@ -155,7 +155,11 @@ function ContinueCard({ item }: { item: ItemCard }) {
   );
 }
 
+/** Cover height in Home's rows (a vertical cover 152 px wide). */
+const ROW_ART_HEIGHT = 228;
+
 function Row({ title, items, more }: { title: string; items: ItemCard[]; more?: { scope: string } }) {
+  const shapeOf = useCoverShape();
   return (
     <section className="section">
       <div className="section-head">
@@ -168,7 +172,8 @@ function Row({ title, items, more }: { title: string; items: ItemCard[]; more?: 
       </div>
       <div className="row-scroller">
         {items.map((item) => (
-          <MediaCard key={item.id} item={item} />
+          // Every cover in a row has the same height; horizontal ones are wider.
+          <MediaCard key={item.id} item={item} width={Math.round(ROW_ART_HEIGHT * shapeOf(item).aspect)} />
         ))}
       </div>
     </section>
@@ -315,15 +320,18 @@ export function HomePage({ onCatalog }: { onCatalog: () => void }) {
             {ambient.interfaceSounds ? <Volume2 size={17} strokeWidth={2.4} aria-hidden /> : <VolumeOff size={17} strokeWidth={2.4} aria-hidden />}
             Interface sounds: {ambient.interfaceSounds ? "on" : "off"}
           </button>
-          <button
-            type="button"
-            className="round-btn lg"
-            aria-label={dark ? "Switch to light mode" : "Switch to night mode"}
-            title={dark ? "Switch to light mode" : "Switch to night mode"}
-            onClick={() => update({ theme: dark ? "light" : "dark" })}
-          >
-            {dark ? <Sun size={19} strokeWidth={2.4} /> : <Moon size={19} strokeWidth={2.4} />}
-          </button>
+          {/* Midnight is only dark: no light/night switch. */}
+          {!(preferences.look === "breeze" && preferences.palette === "midnight") && (
+            <button
+              type="button"
+              className="round-btn lg"
+              aria-label={dark ? "Switch to light mode" : "Switch to night mode"}
+              title={dark ? "Switch to light mode" : "Switch to night mode"}
+              onClick={() => update({ theme: dark ? "light" : "dark" })}
+            >
+              {dark ? <Sun size={19} strokeWidth={2.4} /> : <Moon size={19} strokeWidth={2.4} />}
+            </button>
+          )}
         </div>
       </div>
 

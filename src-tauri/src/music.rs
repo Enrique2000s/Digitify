@@ -275,6 +275,7 @@ fn clean_name(name: &str) -> AppResult<String> {
 #[tauri::command]
 pub async fn playlist_create(state: State<'_, AppState>, name: String, tracks: Vec<i64>) -> AppResult<i64> {
     let name = clean_name(&name)?;
+    let tracks = once_each(tracks);
     with_library(&state, move |library| {
         library.db.with(|conn| {
             let tx = conn.transaction()?;
@@ -313,18 +314,55 @@ pub async fn playlist_delete(state: State<'_, AppState>, id: i64) -> AppResult<(
     .await
 }
 
-/// Adds tracks to the end of a playlist.
+/// Adds tracks to the end of a playlist. A track is in a playlist once: ones already there are skipped.
 #[tauri::command]
 pub async fn playlist_add(state: State<'_, AppState>, id: i64, tracks: Vec<i64>) -> AppResult<()> {
+    with_library(&state, move |library| library.db.with(|conn| add_to_playlist(conn, id, &tracks))).await
+}
+
+pub fn add_to_playlist(conn: &mut rusqlite::Connection, id: i64, tracks: &[i64]) -> AppResult<()> {
+    let tx = conn.transaction()?;
+    let mut position: i64 = tx.query_row("SELECT coalesce(max(position) + 1, 0) FROM playlist_tracks WHERE playlist_id = ?1", [id], |row| row.get(0))?;
+    let mut seen = std::collections::HashSet::new();
+    for part in tracks {
+        let there: bool = tx.query_row("SELECT EXISTS (SELECT 1 FROM playlist_tracks WHERE playlist_id = ?1 AND part_id = ?2)", params![id, part], |row| row.get(0))?;
+        if there || !seen.insert(*part) {
+            continue;
+        }
+        tx.execute("INSERT INTO playlist_tracks (playlist_id, part_id, position) VALUES (?1, ?2, ?3)", params![id, part, position])?;
+        position += 1;
+    }
+    tx.execute("UPDATE playlists SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1", [id])?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// The tracks without repeats, in their first places.
+fn once_each(tracks: Vec<i64>) -> Vec<i64> {
+    let mut seen = std::collections::HashSet::new();
+    tracks.into_iter().filter(|id| seen.insert(*id)).collect()
+}
+
+/// The playlists a track is in (for the checkmarks in "Add to playlist").
+#[tauri::command]
+pub async fn track_playlists(state: State<'_, AppState>, id: i64) -> AppResult<Vec<i64>> {
     with_library(&state, move |library| {
         library.db.with(|conn| {
-            let tx = conn.transaction()?;
-            let start: i64 = tx.query_row("SELECT coalesce(max(position) + 1, 0) FROM playlist_tracks WHERE playlist_id = ?1", [id], |row| row.get(0))?;
-            for (offset, part) in tracks.iter().enumerate() {
-                tx.execute("INSERT INTO playlist_tracks (playlist_id, part_id, position) VALUES (?1, ?2, ?3)", params![id, part, start + offset as i64])?;
-            }
-            tx.execute("UPDATE playlists SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1", [id])?;
-            tx.commit()?;
+            let mut stmt = conn.prepare("SELECT DISTINCT playlist_id FROM playlist_tracks WHERE part_id = ?1")?;
+            let ids = stmt.query_map([id], |row| row.get(0))?.collect::<Result<Vec<i64>, _>>()?;
+            Ok(ids)
+        })
+    })
+    .await
+}
+
+/// Takes a track out of a playlist.
+#[tauri::command]
+pub async fn playlist_remove(state: State<'_, AppState>, id: i64, track: i64) -> AppResult<()> {
+    with_library(&state, move |library| {
+        library.db.with(|conn| {
+            conn.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?1 AND part_id = ?2", params![id, track])?;
+            conn.execute("UPDATE playlists SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1", [id])?;
             Ok(())
         })
     })
@@ -334,6 +372,7 @@ pub async fn playlist_add(state: State<'_, AppState>, id: i64, tracks: Vec<i64>)
 /// Replaces a playlist's tracks with these, in this order (reordering and removing).
 #[tauri::command]
 pub async fn playlist_set(state: State<'_, AppState>, id: i64, tracks: Vec<i64>) -> AppResult<()> {
+    let tracks = once_each(tracks);
     with_library(&state, move |library| {
         library.db.with(|conn| {
             let tx = conn.transaction()?;
@@ -558,5 +597,35 @@ mod tests {
         assert_eq!(list.iter().map(|t| t.id).collect::<Vec<_>>(), vec![2, 1]);
         let by_artist = tracks(&conn, &TrackFilter { artist: Some("guest synth".into()), ..Default::default() }).unwrap();
         assert_eq!(by_artist.len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod playlist_tests {
+    use super::*;
+
+    #[test]
+    fn a_track_is_in_a_playlist_once() {
+        let mut conn = crate::db::memory();
+        conn.execute("INSERT INTO items (category_id, title, sort_title) VALUES ((SELECT id FROM categories WHERE key = 'music'), 'Album', 'album')", []).unwrap();
+        let album = conn.last_insert_rowid();
+        for n in 1..=3 {
+            conn.execute("INSERT INTO parts (item_id, kind, number, title) VALUES (?1, 'track', ?2, 'Track')", params![album, n]).unwrap();
+        }
+        conn.execute("INSERT INTO playlists (name) VALUES ('Mix')", []).unwrap();
+        let list = conn.last_insert_rowid();
+        add_to_playlist(&mut conn, list, &[1, 2, 2]).unwrap();
+        add_to_playlist(&mut conn, list, &[2, 3, 1]).unwrap();
+        let parts: Vec<i64> = conn
+            .prepare("SELECT part_id FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY position")
+            .unwrap()
+            .query_map([list], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(parts, [1, 2, 3]);
+        assert_eq!(once_each(vec![3, 1, 3, 2, 1]), [3, 1, 2]);
+        // The database itself refuses a repeat.
+        assert!(conn.execute("INSERT INTO playlist_tracks (playlist_id, part_id, position) VALUES (?1, 1, 9)", [list]).is_err());
     }
 }

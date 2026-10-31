@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { flushSync } from "react-dom";
+import { motionAllowed } from "../reader/chrome";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Popover } from "radix-ui";
 import { Check, ChevronLeft, ChevronRight, GalleryHorizontalEnd, GripVertical, Heart, LayoutGrid, LayoutList, LibraryBig, List, ListChecks, Paintbrush, Plus } from "lucide-react";
@@ -52,54 +55,86 @@ interface ViewProps {
   square: boolean;
   /** The view's usual cover shape (an item may have its own). */
   shape: CoverShape | "book";
+  params: Omit<QueryParams, "offset" | "limit">;
 }
 
-function GridView({ cache, total, shape }: ViewProps) {
+/** Each cover is named after its item, so a view transition can move it between layouts. */
+function coverTransition(id: number): CSSProperties {
+  return { viewTransitionName: `cover-${id}` } as CSSProperties;
+}
+
+const SHAPE_CODES: Record<string, CoverShape> = { s: "square", d: "disc", p: "poster", l: "landscape" };
+const HANDLER_CODES: Record<string, string> = { b: "book", c: "comic", v: "video", a: "audio", g: "generic" };
+
+/**
+ * Covers in rows of the same height: vertical, square, round and horizontal covers sit side by side
+ * at one height, each as wide as its shape needs (the view's kinds and shapes come from the core,
+ * so every row is known before its cards load).
+ */
+function GridView({ cache, total, shape, params }: ViewProps) {
   const { preferences } = usePreferences();
-  const shapeOf = useCoverShape();
   const scroll = useRef<HTMLDivElement>(null);
   const width = useWidth(scroll);
-  // Horizontal covers get wider cards, so they're not tiny.
-  const cardWidth = shape === "landscape" ? Math.round(preferences.cardSize * 1.6) : preferences.cardSize;
-  const aspect = SHAPE_ASPECT[shape];
-  const columns = Math.max(1, Math.floor((width + GAP) / (cardWidth + GAP)));
-  const rowHeight = Math.round(cardWidth / aspect) + 44 + GAP;
-  const virtualizer = useVirtualizer({
-    count: Math.ceil(total / columns),
-    getScrollElement: () => scroll.current,
-    estimateSize: () => rowHeight,
-    overscan: 3,
-  });
+  const shapes = useQuery({ queryKey: ["shapes", params], queryFn: () => api.queryShapes(params), staleTime: 30_000 });
+  // The art height: posters as tall as before, square views a little lower, horizontal views lower still.
+  const artHeight =
+    shape === "landscape" ? Math.round(preferences.cardSize * 0.9) : shape === "square" || shape === "disc" ? preferences.cardSize : Math.round(preferences.cardSize * 1.5);
+  const viewAspect = SHAPE_ASPECT[shape];
+  const layout = useMemo(() => {
+    const codes = shapes.data ?? "";
+    const widths: number[] = [];
+    for (let i = 0; i < total; i++) {
+      const handler = HANDLER_CODES[codes[i * 2]];
+      const aspect = handler ? SHAPE_ASPECT[coverShapeOf({ handler, coverShape: SHAPE_CODES[codes[i * 2 + 1]] ?? null }, preferences.coverShapes)] : viewAspect;
+      widths.push(Math.round(artHeight * aspect));
+    }
+    const rows: number[] = [0];
+    let used = 0;
+    widths.forEach((w, i) => {
+      const need = used === 0 ? w : used + GAP + w;
+      if (used > 0 && need > Math.max(width, w)) {
+        rows.push(i);
+        used = w;
+      } else {
+        used = need;
+      }
+    });
+    rows.push(total);
+    return { widths, starts: rows };
+  }, [shapes.data, total, width, artHeight, viewAspect, preferences.coverShapes]);
+  const rowCount = Math.max(0, layout.starts.length - 1);
+  const rowHeight = artHeight + 44 + GAP + 10;
+  const virtualizer = useVirtualizer({ count: rowCount, getScrollElement: () => scroll.current, estimateSize: () => rowHeight, overscan: 3 });
   useEffect(() => virtualizer.measure(), [virtualizer, rowHeight]);
   const rows = virtualizer.getVirtualItems();
-  useEnsureRows(cache, total, columns, rows);
+  const first = rows.length ? layout.starts[rows[0].index] : 0;
+  const last = rows.length ? layout.starts[rows[rows.length - 1].index + 1] - 1 : -1;
+  useEffect(() => {
+    if (last >= first) cache.ensure(first, last);
+  }, [cache, first, last]);
 
   return (
     <div ref={scroll} className="view-scroll">
       <div className="view-canvas" style={{ height: virtualizer.getTotalSize() }}>
-        {rows.map((row) => (
-          <div
-            key={row.key}
-            ref={virtualizer.measureElement}
-            data-index={row.index}
-            className="grid-row"
-            style={{ transform: `translateY(${row.start}px)`, gridTemplateColumns: `repeat(${columns}, ${cardWidth}px)`, columnGap: GAP, paddingBottom: GAP }}
-          >
-            {Array.from({ length: columns }, (_, column) => {
-              const index = row.index * columns + column;
-              if (index >= total) return null;
-              const item = cache.get(index);
-              return item ? (
-                <div key={index} className="grid-cell" style={{ width: cardWidth }}>
-                  {/* In a grid of horizontal covers, a vertical one keeps the usual card size. */}
-                  <MediaCard item={item} index={index} width={shape === "landscape" && shapeOf(item).shape !== "landscape" ? preferences.cardSize : undefined} />
-                </div>
-              ) : (
-                <CardSkeleton key={index} width={cardWidth} aspect={aspect} />
-              );
-            })}
-          </div>
-        ))}
+        {width > 0 &&
+          rows.map((row) => {
+            const from = layout.starts[row.index];
+            const to = layout.starts[row.index + 1];
+            return (
+              <div key={row.key} className="grid-row flow" style={{ transform: `translateY(${row.start}px)`, columnGap: GAP }}>
+                {Array.from({ length: to - from }, (_, k) => {
+                  const index = from + k;
+                  const item = cache.get(index);
+                  const w = layout.widths[index];
+                  return item ? (
+                    <MediaCard key={index} item={item} index={index} width={w} transitionName={`cover-${item.id}`} />
+                  ) : (
+                    <CardSkeleton key={index} width={w} aspect={w / artHeight} />
+                  );
+                })}
+              </div>
+            );
+          })}
       </div>
     </div>
   );
@@ -144,7 +179,7 @@ function ListRow({ item, index, top }: { item: ItemCard; index: number; top: num
                 style={{ top, height: 54 }}
                 {...props}
               >
-                <span className="thumb" data-shape={shapeOf(item).shape}>
+                <span className="thumb" data-shape={shapeOf(item).shape} style={coverTransition(item.id)}>
                   {selecting ? (
                     <span className={`row-check${checked ? " on" : ""}`} aria-hidden>
                       {checked && <Check size={16} strokeWidth={3.2} />}
@@ -180,7 +215,7 @@ function jitter(id: number, salt: number): number {
 /** A cover's size on a shelf `height` tall: square and round ones are a little lower, horizontal ones lower still. */
 function shelfBox(shape: CoverShape | "book", height: number): { height: number; width: number } {
   if (shape === "square" || shape === "disc") return { height: height * 0.78, width: height * 0.78 };
-  if (shape === "landscape") return { height: height * 0.6, width: height * 0.6 * (16 / 9) };
+  if (shape === "landscape") return { height, width: height * (16 / 9) };
   return { height, width: height * (2 / 3) };
 }
 
@@ -199,7 +234,7 @@ function ShelfItem({ item, index, height, spines }: { item: ItemCard; index: num
     const spineHeight = Math.round(height * (0.86 + jitter(item.id, 2) * 0.14));
     return (
       <Link to="/item/$id" params={{ id: String(item.id) }} className="shelf-item" title={item.title} data-blip {...props}>
-        <div className="spine" style={{ width, height: spineHeight, ...colors }}>
+        <div className="spine" style={{ width, height: spineHeight, ...colors, ...coverTransition(item.id) }}>
           <span>{item.title}</span>
         </div>
         {check}
@@ -208,7 +243,7 @@ function ShelfItem({ item, index, height, spines }: { item: ItemCard; index: num
   }
   return (
     <Link to="/item/$id" params={{ id: String(item.id) }} className="shelf-item" title={item.title} data-blip {...props}>
-      <div className="shelf-cover" data-shape={shape} style={{ height: shelfBox(shape, height).height, aspectRatio: aspect, position: "relative" }}>
+      <div className="shelf-cover" data-shape={shape} style={{ height: shelfBox(shape, height).height, aspectRatio: aspect, position: "relative", ...coverTransition(item.id) }}>
         <Cover item={item} />
         {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
       </div>
@@ -296,7 +331,7 @@ function DetailedRow({ item, index, top, height, blurb }: { item: ItemCard; inde
   const ownership = item.hasPhysical && item.hasDigital ? "On the shelf and digital" : item.hasPhysical ? "On the shelf" : "Digital";
   return (
     <Link to="/item/$id" params={{ id: String(item.id) }} className="detail-row" style={{ top, height }} data-blip {...props}>
-      <div className="detail-cover" data-shape={shape} style={{ height: (height - 26) * (shape === "landscape" ? 0.72 : 1), aspectRatio: aspect }}>
+      <div className="detail-cover" data-shape={shape} style={{ height: height - 26, aspectRatio: aspect, ...coverTransition(item.id) }}>
         <Cover item={item} />
         {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
         {selecting && (
@@ -437,6 +472,23 @@ function CarouselView({ cache, total }: ViewProps) {
   const reach = Math.min(9, Math.ceil(width / 2 / spacing) + 1);
   const shown: number[] = [];
   for (let i = Math.max(0, index - reach); i <= Math.min(total - 1, index + reach); i++) shown.push(i);
+  // Covers keep one height; a wide one (a horizontal video) pushes its neighbours further out.
+  const widthAt = (i: number) => {
+    const item = cache.get(i);
+    return coverHeight * (item ? shapeOf(item).aspect : 2 / 3);
+  };
+  const offsets = new Map<number, number>([[index, 0]]);
+  for (const side of [-1, 1]) {
+    let x = widthAt(index) / 2;
+    for (let far = 1; far <= reach; far++) {
+      const i = index + side * far;
+      if (i < 0 || i >= total) break;
+      // A turned cover shows about half its width.
+      const half = (widthAt(i) * 0.53) / 2;
+      x += far === 1 ? half + coverHeight * 0.06 : Math.max(spacing, half);
+      offsets.set(i, side * x);
+    }
+  }
   return (
     <div className="carousel">
       <div
@@ -459,14 +511,14 @@ function CarouselView({ cache, total }: ViewProps) {
             const d = i - index;
             const side = Math.sign(d);
             const far = Math.abs(d);
-            const x = d === 0 ? 0 : side * (coverHeight * 0.5 + (far - 1) * spacing);
+            const x = offsets.get(i) ?? side * (coverHeight * 0.5 + (far - 1) * spacing);
             const style = {
               "--x": `${x}px`,
               "--z": `${d === 0 ? 90 : -60 - far * 14}px`,
               "--turn": `${d === 0 ? 0 : -side * 58}deg`,
               zIndex: 100 - far,
               opacity: far > reach - 1 ? 0 : 1,
-              height: look.shape === "landscape" ? coverHeight * 0.62 : coverHeight,
+              height: coverHeight,
               aspectRatio: look.aspect,
               bottom: Math.max(40, (height - coverHeight) / 2 + 10),
             } as CSSProperties;
@@ -514,7 +566,7 @@ function CarouselCover({ item, index, front, shape, style, onPick }: { item: Ite
       params={{ id: String(item.id) }}
       className={`carousel-item${front ? " front" : ""}`}
       data-shape={shape}
-      style={style}
+      style={{ ...style, ...coverTransition(item.id) }}
       title={item.title}
       draggable={false}
       tabIndex={front ? 0 : -1}
@@ -650,7 +702,12 @@ export function LibraryView({
   const arrangeable = !!orderKey && (sort === "custom" || (manualShelf && sort === "shelf"));
   const [arranging, setArranging] = useState(false);
 
-  const setLayout = (next: Layout) => update((current) => ({ layouts: { ...current.layouts, [shared]: next } }));
+  // Switching layouts moves each cover from its old place to its new one (a view transition).
+  const setLayout = (next: Layout) => {
+    const apply = () => update((current) => ({ layouts: { ...current.layouts, [shared]: next } }));
+    if (next === layout || !document.startViewTransition || !motionAllowed()) return apply();
+    document.startViewTransition(() => flushSync(apply));
+  };
   const setOwnership = (next: Ownership | "") => update((current) => ({ ownership: { ...current.ownership, [shared]: next } }));
   const [materials, setMaterials] = useState(false);
 
@@ -758,15 +815,15 @@ export function LibraryView({
         {total === 0 ? (
           <div style={{ padding: "8px 40px" }}>{empty}</div>
         ) : total != null && layout === "list" ? (
-          <ListView cache={cache} total={total} square={!!square} shape={shape} />
+          <ListView cache={cache} total={total} square={!!square} shape={shape} params={params} />
         ) : total != null && layout === "shelf" ? (
-          <ShelfView cache={cache} total={total} square={!!square} shape={shape} />
+          <ShelfView cache={cache} total={total} square={!!square} shape={shape} params={params} />
         ) : total != null && layout === "detailed" ? (
-          <DetailedView cache={cache} total={total} square={!!square} shape={shape} />
+          <DetailedView cache={cache} total={total} square={!!square} shape={shape} params={params} />
         ) : total != null && layout === "carousel" ? (
-          <CarouselView cache={cache} total={total} square={!!square} shape={shape} />
+          <CarouselView cache={cache} total={total} square={!!square} shape={shape} params={params} />
         ) : total != null ? (
-          <GridView cache={cache} total={total} square={!!square} shape={shape} />
+          <GridView cache={cache} total={total} square={!!square} shape={shape} params={params} />
         ) : null}
         {arranging && orderKey && (
           <ArrangeDialog

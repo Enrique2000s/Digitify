@@ -41,7 +41,7 @@ export function useLibraryVersion(): number {
 export function libraryChanged(queryClient: QueryClient) {
   libraryVersion++;
   versionListeners.forEach((listener) => listener());
-  for (const queryKey of [keys.categories, keys.dashboard, keys.tags, keys.shelves, ["item"], ["collections"], ["collection-tree"], ["tracks"], ["artists"], ["playlists"], ["episodes"], ["series"], ["chapters"], ["stats"], ["blurb"]]) {
+  for (const queryKey of [keys.categories, keys.dashboard, keys.tags, keys.shelves, ["item"], ["collections"], ["collection-tree"], ["tracks"], ["artists"], ["playlists"], ["episodes"], ["series"], ["chapters"], ["stats"], ["blurb"], ["shapes"]]) {
     void queryClient.invalidateQueries({ queryKey });
   }
 }

@@ -63,7 +63,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="page">
+    <div className="page settings-page">
       <div className="page-header">
         <div className="title-row">
           <span className="title-badge">
@@ -97,11 +97,10 @@ export function SettingsPage() {
               </div>
             </Setting>
           )}
-          <Setting
-            title="Theme"
-            text={midnight ? "Midnight is always dark; the other palettes follow this." : "Light by default; night keeps the same layout in darker colors."}
-          >
-            <div className="segmented" role="group" aria-label="Theme" aria-disabled={midnight || undefined}>
+          {/* Midnight is only dark, so there's no theme to pick. */}
+          {!midnight && (
+          <Setting title="Theme" text="Light by default; night keeps the same layout in darker colors.">
+            <div className="segmented" role="group" aria-label="Theme">
               {(
                 [
                   ["light", "Light", Sun],
@@ -109,12 +108,13 @@ export function SettingsPage() {
                   ["system", "System", Monitor],
                 ] as const
               ).map(([value, label, Icon]) => (
-                <button key={value} type="button" disabled={midnight} aria-pressed={preferences.theme === value} onClick={() => update({ theme: value as ThemeChoice })}>
+                <button key={value} type="button" aria-pressed={preferences.theme === value} onClick={() => update({ theme: value as ThemeChoice })}>
                   <Icon size={14} aria-hidden /> {label}
                 </button>
               ))}
             </div>
           </Setting>
+          )}
           <Setting title="Accent color" text="Used for highlights, glows, buttons and progress. Text stays readable in both themes.">
             <div className="swatches" role="group" aria-label="Accent color">
               {ACCENT_PRESETS.map((preset) => (

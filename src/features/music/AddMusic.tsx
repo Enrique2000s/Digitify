@@ -4,7 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Check, Search } from "lucide-react";
 import { api, errorText, type Playlist } from "../../lib/api";
 import { Dialog } from "../../components/common";
-import { duration, useTracks } from "./Tracks";
+import { AlreadyInPlaylistDialog, duration, useTracks } from "./Tracks";
 
 const ROW = 48;
 
@@ -19,9 +19,10 @@ export function AddMusicDialog({ playlist, open, onOpenChange }: { playlist: Pla
   const [picked, setPicked] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [already, setAlready] = useState<{ id: number; title: string } | null>(null);
   const tracks = useTracks({ search: query || undefined });
   const inPlaylist = useTracks({ playlist: playlist.id });
-  const already = useMemo(() => new Set(inPlaylist.data?.map((t) => t.id)), [inPlaylist.data]);
+  const alreadyIn = useMemo(() => new Set(inPlaylist.data?.map((t) => t.id)), [inPlaylist.data]);
   const scroller = useRef<HTMLDivElement>(null);
   const list = open ? (tracks.data ?? []) : [];
   const virtual = useVirtualizer({ count: list.length, getScrollElement: () => scroller.current, estimateSize: () => ROW, overscan: 10 });
@@ -40,7 +41,8 @@ export function AddMusicDialog({ playlist, open, onOpenChange }: { playlist: Pla
   }, [search]);
 
   const toggle = (id: number) => setPicked((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
-  const shown = list.map((t) => t.id);
+  // Tracks already in the playlist show as ticked and can't be added twice.
+  const shown = list.map((t) => t.id).filter((id) => !alreadyIn.has(id));
   const allShown = shown.length > 0 && shown.every((id) => picked.includes(id));
   const add = async () => {
     setBusy(true);
@@ -96,23 +98,24 @@ export function AddMusicDialog({ playlist, open, onOpenChange }: { playlist: Pla
         <div style={{ height: virtual.getTotalSize(), position: "relative" }}>
           {virtual.getVirtualItems().map((row) => {
             const track = list[row.index];
-            const on = picked.includes(track.id);
+            const inside = alreadyIn.has(track.id);
+            const on = inside || picked.includes(track.id);
             return (
               <button
                 key={track.id}
                 type="button"
                 role="checkbox"
                 aria-checked={on}
-                className={`add-music-row${on ? " on" : ""}`}
+                className={`add-music-row${on ? " on" : ""}${inside ? " inside" : ""}`}
                 style={{ position: "absolute", top: row.start, left: 0, right: 0, height: ROW - 4 }}
-                onClick={() => toggle(track.id)}
+                onClick={() => (inside ? setAlready(track) : toggle(track.id))}
               >
                 <span className="add-music-check">{on && <Check size={14} strokeWidth={3} />}</span>
                 <span className="track-title">
                   <strong>{track.title}</strong>
                   <span>{[track.artist, track.album].filter(Boolean).join(" · ")}</span>
                 </span>
-                {already.has(track.id) && <span className="chip">In playlist</span>}
+                {inside && <span className="chip">In playlist</span>}
                 <span className="track-time">{duration(track.durationMs)}</span>
               </button>
             );
@@ -120,6 +123,7 @@ export function AddMusicDialog({ playlist, open, onOpenChange }: { playlist: Pla
         </div>
       </div>
       {error && <div className="dialog-error">{error}</div>}
+      {already && <AlreadyInPlaylistDialog track={already} playlist={playlist} onClose={() => setAlready(null)} />}
     </Dialog>
   );
 }

@@ -255,6 +255,21 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 | Smart shelves | ✅ | "New smart shelf" on the Shelves page: rules on category, kind of media, tags, year, creator, title, format, progress, favorite, copies, when added or last opened; match all or any; an order and "only the first N". A live count shows how many items match, and a rule that doesn't make sense says why. Smart shelves show a sparkle, fill and order themselves, aren't offered in "Add to shelf", and their menu has "Edit rules…". |
 | Keyboard shortcuts | ✅ | Settings › Keyboard lists every shortcut by where it works (Everywhere, Library views, Readers, Video player). "+" records a new key (Esc cancels); a key already in use asks "Use it here instead?"; keys can be removed, and one action or all reset. Buttons' tooltips and the search box show the current keys. New everywhere: Alt+Home (Home), Ctrl+, (Settings), Ctrl+P (music play/pause), Ctrl+Shift+→/← (next/previous track). |
 
+### Big Picture and this round's requests (D-025, 2026-10-31)
+| Feature | Status | Notes |
+|---|---|---|
+| Big Picture | 🟡 | Full-screen TV interface: Home, library by category (LB/RB), item pages, search with an on-screen keyboard, the music bar, and a menu (selection or cursor, cursor speed, exit). Enter with the title bar's controller button or the Xbox / PS button (or Start + Select). Tested with simulated controller buttons; needs trying with a real Xbox and PlayStation controller. |
+| Controller in readers and the player | 🟡 | From Big Picture: ←/→ turn pages, LB/RB previous/next page, LT/RT zoom, Y bookmark, B closes; in the player A play/pause, ←/→ 5 s, LB/RB 30 s, ↑/↓ volume, X subtitles, Y mute, RT next episode, B closes. They stay full screen. |
+| Watch again | ✅ | At the end of a video the play button becomes "Watch again" and starts it from the beginning. |
+| Covers of one height | ✅ | Horizontal videos are as tall as vertical covers next to them: the grid lays out rows of one height (each cover as wide as its shape), and Home's rows, the shelf, the detailed view and the carousel do the same. |
+| Carousel with CDs and horizontal covers | ✅ | Fixed: round CD covers were taken out of the carousel's layout and drawn in the wrong place. Wide covers now push their neighbours out. |
+| A track once per playlist | ✅ | Adding a track that's already there does nothing; repeats from before are removed (schema v6). "Add to playlist" shows a checkmark on playlists that have the track, and picking one asks to remove it or keep it; "Add music" shows them ticked and asks the same. |
+| Layout transition | ✅ | Switching grid, shelf, list, detailed and carousel moves each cover from its old place to its new one (not with animations off). |
+| Midnight | ✅ | No Theme setting and no light/night switch on Home, since Midnight is only dark. |
+| Settings | ✅ | Centered in the window. |
+
+**Tested** (`e2e-bigpicture`, with simulated controller buttons): the Xbox button opens Big Picture full screen with "Books" selected; right, down and up move the selection; A opens Comics, RB goes to Manga and LB back; A on a comic opens its page with "Read" selected, A reads, RB turns to page 2 while staying full screen, B returns. Y opens search and the on-screen keyboard types "night" (5 results), X deletes. Start opens the menu; cursor mode shows the cursor; "Exit Big Picture" leaves full screen. A playlist made with a repeat holds the track once, adding it again does nothing, "Add to playlist" shows "Once [in]", picking it asks, and "Remove from playlist" empties it. The carousel's CDs and horizontal covers sit in place; a layout change runs a view transition over 17 named covers; the mixed grid is 240 px tall throughout. At the end of the film the button reads "Watch again" and replays from 0:00. Midnight hides the switch and the Theme setting; Settings are centered. `cargo test`: 53 unit tests.
+
 ### Views that stay put, custom order and cover shapes (D-024, 2026-10-31)
 | Feature | Status | Notes |
 |---|---|---|

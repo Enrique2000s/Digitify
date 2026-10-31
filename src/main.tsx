@@ -6,6 +6,7 @@ import "./styles/tokens.css";
 import "./styles/app.css";
 import "./styles/looks.css";
 import "./styles/views.css";
+import "./styles/bigpicture.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

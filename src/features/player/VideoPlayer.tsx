@@ -20,6 +20,7 @@ import {
   SkipForward,
   Volume2,
   VolumeX,
+  RotateCcw,
 } from "lucide-react";
 import { api, errorText, type WatchTarget } from "../../lib/api";
 import { useAmbientHold } from "../../lib/ambient/AmbientProvider";
@@ -28,6 +29,7 @@ import { accentVariables } from "../../lib/color";
 import { usePreferences } from "../../lib/preferences";
 import { libraryChanged } from "../../lib/queries";
 import { useActivity } from "../../lib/activity";
+import { useControllerShortcuts, VIDEO_PAD } from "../bigpicture/Launcher";
 import { WindowButtons } from "../../components/TitleBar";
 import { SeekBar } from "../../components/SeekBar";
 import { actionFor, hint, isTyping } from "../../lib/shortcuts";
@@ -323,6 +325,8 @@ function VideoPlayer({ source }: { source: Source }) {
   }, [resumed]);
 
   useActivity(target?.itemId, "watch", !!target && !playback.paused && !playback.ended);
+  // In Big Picture the controller plays, seeks, changes the volume and closes; A also pokes the controls.
+  useControllerShortcuts(VIDEO_PAD);
 
   // A seek or a wait for data that takes a moment shows a spinner, so it's clear the click landed.
   const waiting = playback.seeking || playback.buffering;
@@ -354,7 +358,7 @@ function VideoPlayer({ source }: { source: Source }) {
       const now = latest.current;
       switch (action) {
         case "video.playPause":
-          command(["cycle", "pause"]);
+          togglePlay();
           break;
         case "video.back":
         case "video.forward":
@@ -405,6 +409,16 @@ function VideoPlayer({ source }: { source: Source }) {
   const showBars = shown || playback.paused || menu !== null || !target || countdown !== null;
   // Picking an option closes its menu.
   const choose = (_: void) => setMenu(null);
+  // At the end, the play button starts the video again from the beginning.
+  function togglePlay() {
+    if (latest.current.ended) {
+      setCountdown(null);
+      command(["seek", 0, "absolute+exact"]);
+      command(["set_property", "pause", false]);
+    } else {
+      command(["cycle", "pause"]);
+    }
+  }
   // Dragging previews with fast keyframe seeks; letting go (or a click) lands on the exact frame.
   const seek = (seconds: number, exact: boolean) => command(["seek", seconds, exact ? "absolute+exact" : "absolute+keyframes"]);
   const loadSubtitles = async () => {
@@ -420,7 +434,7 @@ function VideoPlayer({ source }: { source: Source }) {
       style={accentVariables(preferences.accent, "dark") as CSSProperties}
       onMouseMove={poke}
     >
-      <div ref={surface} className="watch-surface" onClick={() => target && command(["cycle", "pause"])} onDoubleClick={() => void toggleFullscreen()} />
+      <div ref={surface} className="watch-surface" onClick={() => target && togglePlay()} onDoubleClick={() => void toggleFullscreen()} />
 
       {target && busy && (
         <div className="watch-busy" aria-label="Loading">
@@ -465,8 +479,14 @@ function VideoPlayer({ source }: { source: Source }) {
             <button type="button" className="round-btn" aria-label="Previous episode" disabled={!target.previous} onClick={() => target.previous && playPart(target.previous)}>
               <SkipBack size={17} />
             </button>
-            <button type="button" className="round-btn watch-play" aria-label={playback.paused ? "Play" : "Pause"} onClick={() => command(["cycle", "pause"])}>
-              {playback.paused ? <Play size={20} /> : <Pause size={20} />}
+            <button
+              type="button"
+              className="round-btn watch-play"
+              aria-label={playback.ended ? "Watch again" : playback.paused ? "Play" : "Pause"}
+              title={playback.ended ? "Watch again" : undefined}
+              onClick={togglePlay}
+            >
+              {playback.ended ? <RotateCcw size={20} /> : playback.paused ? <Play size={20} /> : <Pause size={20} />}
             </button>
             <button type="button" className="round-btn" aria-label="Next episode" title={target.nextLabel ?? undefined} disabled={!target.next} onClick={() => target.next && playPart(target.next)}>
               <SkipForward size={17} />

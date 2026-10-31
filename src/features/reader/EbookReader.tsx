@@ -8,6 +8,7 @@ import { accentVariables } from "../../lib/color";
 import { EBOOK_SIZES, EBOOK_SPACINGS, usePreferences, type EbookPreferences } from "../../lib/preferences";
 import { libraryChanged } from "../../lib/queries";
 import { useActivity } from "../../lib/activity";
+import { READER_PAD, useControllerShortcuts } from "../bigpicture/Launcher";
 import { actionFor, hint, isTyping } from "../../lib/shortcuts";
 import { Switch } from "../../components/common";
 import { WindowButtons } from "../../components/TitleBar";
@@ -138,6 +139,7 @@ export function EbookReader({ book, onClose, next: nextVolume, onNext }: {
   const viewRef = useRef<View | null>(null);
   // Page turns inside the book count as reading (its input doesn't reach the window).
   const nudgeRef = useRef(useActivity(book.itemId, "read", true));
+  useControllerShortcuts(READER_PAD);
   const [state, setState] = useState<{ status: "opening" | "ready" } | { status: "failed"; message: string }>({ status: "opening" });
   const [toc, setToc] = useState<TocItem[]>([]);
   const [rtl, setRtl] = useState(false);

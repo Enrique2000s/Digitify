@@ -8,6 +8,7 @@ import { accentVariables } from "../../lib/color";
 import { usePreferences, type ReaderPreferences } from "../../lib/preferences";
 import { libraryChanged } from "../../lib/queries";
 import { useActivity } from "../../lib/activity";
+import { READER_PAD, useControllerShortcuts } from "../bigpicture/Launcher";
 import { actionFor, hint, isTyping } from "../../lib/shortcuts";
 import { WindowButtons } from "../../components/TitleBar";
 import { BookmarksMenu, toggleBookmark, useBookmarks } from "./Bookmarks";
@@ -275,6 +276,7 @@ export function PageReader({ book, startPage, onClose, next: nextVolume, onNext 
   // Progress is saved once the reader moves; just opening a book doesn't change where it stopped.
   const reached = scroll ? page : view[view.length - 1];
   const nudge = useActivity(book.itemId, "read", true);
+  useControllerShortcuts(READER_PAD);
   useEffect(nudge, [reached, nudge]);
   const latest = useRef(reached);
   const moved = useRef(false);

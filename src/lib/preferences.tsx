@@ -106,6 +106,8 @@ export interface Preferences {
   coverShapes: { audio: "square" | "disc"; video: "poster" | "landscape" };
   /** The music category's tab, opened again next time. */
   musicTab: string;
+  /** Big Picture (D-025): moving with the selection or with a cursor, and the cursor's speed. */
+  bigPicture: { navigation: "focus" | "cursor"; cursorSpeed: number };
   shelfStyle: "covers" | "spines";
   shelfLook: ShelfLook;
   importMode: "ask" | ImportMode;
@@ -186,6 +188,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   sorts: {},
   coverShapes: { audio: "square", video: "poster" },
   musicTab: "albums",
+  bigPicture: { navigation: "focus", cursorSpeed: 1000 },
   shelfStyle: "covers",
   shelfLook: "breeze",
   importMode: "ask",
@@ -263,6 +266,14 @@ function sanitizeVolumes(raw: unknown): Preferences["volumes"] {
   return { video: Math.round(pick("video", isVolume)), music: Math.round(pick("music", isVolume)) };
 }
 
+function sanitizeBigPicture(raw: unknown): Preferences["bigPicture"] {
+  const value = (raw && typeof raw === "object" ? raw : {}) as { navigation?: unknown; cursorSpeed?: unknown };
+  return {
+    navigation: value.navigation === "cursor" ? "cursor" : "focus",
+    cursorSpeed: typeof value.cursorSpeed === "number" && value.cursorSpeed >= 300 && value.cursorSpeed <= 3000 ? value.cursorSpeed : 1000,
+  };
+}
+
 function sanitizeShapes(raw: unknown): Preferences["coverShapes"] {
   const value = (raw && typeof raw === "object" ? raw : {}) as { audio?: unknown; video?: unknown };
   return { audio: value.audio === "disc" ? "disc" : "square", video: value.video === "landscape" ? "landscape" : "poster" };
@@ -318,6 +329,7 @@ function sanitize(raw: unknown): Preferences {
     sorts: pick("sorts", (v) => !!v && typeof v === "object"),
     coverShapes: sanitizeShapes((raw as Raw<Preferences>)?.coverShapes),
     musicTab: pick("musicTab", (v) => typeof v === "string" && v.length < 20),
+    bigPicture: sanitizeBigPicture((raw as Raw<Preferences>)?.bigPicture),
     shelfStyle: pick("shelfStyle", (v) => v === "covers" || v === "spines"),
     shelfLook: pick("shelfLook", (v) => ["breeze", "wood", "glass", "metal"].includes(v as string)),
     importMode: pick("importMode", (v) => v === "ask" || v === "reference" || v === "copy"),

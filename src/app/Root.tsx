@@ -16,6 +16,7 @@ import { BookBuilderDialog } from "../features/builder/BookBuilder";
 import { Onboarding } from "../features/onboarding/Onboarding";
 import { BuilderContext, CatalogContext } from "./catalog";
 import { AppShortcuts } from "./AppShortcuts";
+import { BigPictureLauncher } from "../features/bigpicture/Launcher";
 
 export function Root() {
   const status = useAppStatus();
@@ -23,7 +24,7 @@ export function Root() {
   const navigate = useNavigate();
   // Decided from the route being rendered rather than the address: while a navigation is in
   // progress the address already changed, and deciding from it would mount the old page again.
-  const fullWindow = useRouterState({ select: (state) => state.matches.some((match) => match.routeId === "/lab" || match.routeId === "/read/$id" || match.routeId === "/watch/$id" || match.routeId === "/disc/$letter/$title") });
+  const fullWindow = useRouterState({ select: (state) => state.matches.some((match) => match.routeId === "/lab" || match.routeId === "/read/$id" || match.routeId === "/watch/$id" || match.routeId === "/disc/$letter/$title" || match.routeId === "/bp") });
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [builderOpen, setBuilderOpen] = useState(false);
   useLibraryEvents();
@@ -43,6 +44,7 @@ export function Root() {
         <MusicProvider>
         <DiscsProvider>
         <AppShortcuts />
+        <BigPictureLauncher />
         {fullWindow ? (
           // The video lab and the reader take the whole window.
           <Outlet />
