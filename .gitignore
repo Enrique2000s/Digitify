@@ -2,6 +2,7 @@
 node_modules/
 dist/
 src-tauri/target/
+installer/
 src-tauri/gen/schemas/
 
 # Helper engines and tools fetched by scripts/fetch-deps.ps1 (pinned + hash-verified, never committed)

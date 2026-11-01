@@ -1462,3 +1462,24 @@ html.reordering * {
 .page:has(> .category-strip) {
   padding-top: 16px;
 }
+
+/* Music: track lists fill the page down to a margin, instead of running into the window's edge. */
+.music-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 28px;
+}
+.music-page .track-list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.music-page .track-rows.scroll {
+  flex: 1;
+  height: auto;
+  min-height: 140px;
+  padding-bottom: 16px;
+}

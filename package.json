@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "installer": "tauri build && node scripts/copy-installer.mjs"
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.3.0",

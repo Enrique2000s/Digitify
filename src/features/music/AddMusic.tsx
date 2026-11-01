@@ -25,7 +25,20 @@ export function AddMusicDialog({ playlist, open, onOpenChange }: { playlist: Pla
   const alreadyIn = useMemo(() => new Set(inPlaylist.data?.map((t) => t.id)), [inPlaylist.data]);
   const scroller = useRef<HTMLDivElement>(null);
   const list = open ? (tracks.data ?? []) : [];
-  const virtual = useVirtualizer({ count: list.length, getScrollElement: () => scroller.current, estimateSize: () => ROW, overscan: 10 });
+  // The list sits in a dialog that's still opening on the first render, so it starts from a size
+  // instead of waiting to be measured (it used to stay blank until something was typed).
+  const virtual = useVirtualizer({
+    count: list.length,
+    getScrollElement: () => scroller.current,
+    estimateSize: () => ROW,
+    overscan: 10,
+    initialRect: { width: 640, height: 480 },
+  });
+  useEffect(() => {
+    if (!open) return;
+    const frame = requestAnimationFrame(() => virtual.measure());
+    return () => cancelAnimationFrame(frame);
+  }, [open, list.length]);
 
   useEffect(() => {
     if (!open) return;

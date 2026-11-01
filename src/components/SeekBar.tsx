@@ -94,7 +94,11 @@ export function SeekBar({
     if (event.button !== 0 || duration <= 0) return;
     event.preventDefault();
     event.currentTarget.focus();
-    event.currentTarget.setPointerCapture(event.pointerId);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // A press from Big Picture's cursor has no real pointer to capture.
+    }
     dragging.current = true;
     const { seconds } = at(event.clientX);
     scrubRef.current = seconds;

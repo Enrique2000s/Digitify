@@ -268,6 +268,10 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 - **Title bar:** Home and Library (the search box is next to them, so no separate Search button).
 - **Big Picture Home:** "Continue" sits under the categories, with smaller covers (190 px) than the other rows; the first category is selected on arrival.
 - **Collections** of a category sit under the toolbar, above its items.
+- **Add music** lists the library's tracks as soon as it opens (it stayed blank until something was typed).
+- **Big Picture's cursor over the player and readers** works every control: buttons, menus (they open on a press), the position bar (A jumps there) and sliders like the volume.
+- **Music lists** end with a margin above the window's edge instead of running into it.
+- **The installer:** `npm run installer` builds and copies it to the project's `installer` folder (`installer\Digitify_0.1.0_x64-setup.exe`).
 - **In Big Picture, over a reader or the player:** no window or full-screen buttons (the app is already full screen), and the cursor hides with the bars when it's left alone; moving it or pressing a button brings it back.
 - **CDs without artwork** show only their color, no title or icon on the disc.
 - **No cut glow:** collection tiles have room for their lift and glow.

@@ -84,8 +84,29 @@ export function Cursor({ speed, autoHide = false }: { speed: number; autoHide?: 
     const { x, y } = position.current;
     const under = document.elementFromPoint(x, y);
     const target = under?.closest<HTMLElement>(CLICKABLE);
-    if (target) {
+    const press = (element: Element) => {
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup"]) {
+        const Event = type.startsWith("pointer") ? PointerEvent : MouseEvent;
+        element.dispatchEvent(new Event(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: type.endsWith("down") ? 1 : 0, ...(type.startsWith("pointer") ? { pointerType: "mouse", pointerId: 1, isPrimary: true } : {}) }));
+      }
+    };
+    if (target instanceof HTMLInputElement && target.type === "range") {
+      // A slider (volume, a page): jump to where the cursor points.
+      const r = target.getBoundingClientRect();
+      const min = Number(target.min || 0);
+      const max = Number(target.max || 100);
+      const fraction = Math.min(1, Math.max(0, (x - r.left) / r.width));
+      const value = target.dir === "rtl" ? max - fraction * (max - min) : min + fraction * (max - min);
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(target, String(value));
+      target.dispatchEvent(new Event("input", { bubbles: true }));
+      target.dispatchEvent(new Event("change", { bubbles: true }));
+    } else if (target?.getAttribute("role") === "slider") {
+      // Digitify's own sliders (the player's position bar) work from presses.
+      press(target);
+    } else if (target) {
       target.focus({ preventScroll: true });
+      // Menus that open on a press (not a click) open too.
+      press(target);
       target.click();
     } else {
       // Anything else (a reader's page, the video) gets an ordinary click where the cursor is.
