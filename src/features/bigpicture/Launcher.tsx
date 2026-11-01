@@ -68,5 +68,5 @@ export const VIDEO_PAD: Partial<Record<PadAction, ShortcutId>> = {
 export function BigPictureCursor() {
   const active = useBigPicture();
   const { preferences } = usePreferences();
-  return active ? <Cursor speed={preferences.bigPicture.cursorSpeed} /> : null;
+  return active ? <Cursor speed={preferences.bigPicture.cursorSpeed} autoHide /> : null;
 }

@@ -268,6 +268,12 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 - **Title bar:** Home and Library (the search box is next to them, so no separate Search button).
 - **Big Picture Home:** "Continue" sits under the categories, with smaller covers (190 px) than the other rows; the first category is selected on arrival.
 - **Collections** of a category sit under the toolbar, above its items.
+- **In Big Picture, over a reader or the player:** no window or full-screen buttons (the app is already full screen), and the cursor hides with the bars when it's left alone; moving it or pressing a button brings it back.
+- **CDs without artwork** show only their color, no title or icon on the disc.
+- **No cut glow:** collection tiles have room for their lift and glow.
+- **Category buttons** sit at the same height on every page (library pages, Shelves, Tags, Music).
+- **Home's default order:** Discs, Library sections, Featured today, Favorites, Your shelves, Continue watching, Pick up where you left off, Recently opened, Recently added, Statistics (a Home still in the old default moves to it).
+- **Cards line up:** every card keeps a line for its year, and rows align at the top, so a card with a year isn't higher than one without.
 - **Big Picture, steadier:** the selection is drawn with a class (it no longer vanishes when the window loses focus) and comes back if the selected element goes away; picking Home, Library or Search (or a category tab) keeps the selection there; the right stick scrolls the page (and the selected row sideways) quickly; the music playing sits in the top bar next to Search.
 - **Big Picture cursor:** the mouse moves the round cursor (the system pointer is hidden inside the window); readers and the player opened from Big Picture always show it: the left stick points, A clicks, the D-pad and bumpers turn pages or seek, X plays or pauses, Y subtitles, View mutes, B closes.
 - **Big Picture cursor mode** is cursor only: the D-pad and stick don't move a selection, nothing is selected for you, and A clicks what the cursor points at (in the menu too).

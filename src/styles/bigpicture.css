@@ -545,3 +545,10 @@ html.bp-cursor-on,
 html.bp-cursor-on * {
   cursor: none !important;
 }
+
+.bp-cursor {
+  transition: opacity 220ms var(--ease);
+}
+.bp-cursor.idle {
+  opacity: 0;
+}

@@ -8,14 +8,23 @@ const CLICKABLE = "button, a, input, select, label, [data-bp-focus], [role=butto
  * under it, A clicks. The mouse moves it too, replacing the system pointer inside the window. While
  * it's shown, the left stick moves only the cursor (it doesn't also step a selection).
  */
-export function Cursor({ speed }: { speed: number }) {
+export function Cursor({ speed, autoHide = false }: { speed: number; autoHide?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Over a reader or the player, the cursor hides with the bars when it's left alone.
+  const idle = useRef(0);
+  const wake = () => {
+    if (!autoHide) return;
+    ref.current?.classList.remove("idle");
+    window.clearTimeout(idle.current);
+    idle.current = window.setTimeout(() => ref.current?.classList.add("idle"), 2600);
+  };
   const position = useRef({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
   const lastHover = useRef<Element | null>(null);
 
   const place = (x: number, y: number) => {
     position.current = { x, y };
     if (ref.current) ref.current.style.transform = `translate(${x}px, ${y}px)`;
+    wake();
   };
   /** What the cursor is over hears about it (selection rings, controls that show on movement). */
   const hover = (fromStick: boolean) => {
@@ -30,6 +39,7 @@ export function Cursor({ speed }: { speed: number }) {
 
   useEffect(() => {
     const release = claimSticksForCursor();
+    wake();
     document.documentElement.classList.add("bp-cursor-on");
     // The mouse drives the same cursor.
     const onMouse = (event: MouseEvent) => {
@@ -46,6 +56,7 @@ export function Cursor({ speed }: { speed: number }) {
     };
     return () => {
       release();
+      window.clearTimeout(idle.current);
       document.documentElement.classList.remove("bp-cursor-on");
       window.removeEventListener("mousemove", onMouse);
       delete w.__digitifyCursor;
@@ -67,6 +78,8 @@ export function Cursor({ speed }: { speed: number }) {
   });
 
   usePad((action) => {
+    // Any button brings a hidden cursor back, like the bars.
+    wake();
     if (action !== "accept") return;
     const { x, y } = position.current;
     const under = document.elementFromPoint(x, y);

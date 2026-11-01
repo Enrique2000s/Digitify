@@ -1248,11 +1248,11 @@ html.reordering * {
 
 .grid-row.flow {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
 }
 .row-scroller {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
 }
 .row-scroller > .card {
   flex: 0 0 auto;
@@ -1445,4 +1445,20 @@ html.reordering * {
 }
 .before-items:empty {
   display: none;
+}
+
+/* A CD without artwork shows only its color (or the neutral one), no title or icon on the disc. */
+[data-shape="disc"] > .cover-fallback > * {
+  display: none;
+}
+
+/* Collections: room around each tile for its lift and glow, so neither is cut. */
+.collection-row {
+  padding: 16px 16px 22px;
+  margin: -16px -16px -4px;
+}
+
+/* The category buttons sit at the same height on every page. */
+.page:has(> .category-strip) {
+  padding-top: 16px;
 }

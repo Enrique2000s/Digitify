@@ -16,17 +16,22 @@ export type ShelfLook = "breeze" | "wood" | "glass" | "metal";
 
 /** Home's sections (D-023), in their default order. */
 export const HOME_SECTIONS = [
+  "discs",
   "tiles",
   "featured",
+  "favorites",
+  "shelves",
   "continueWatching",
   "continueReading",
-  "shelves",
   "recentlyOpened",
   "recentlyAdded",
-  "favorites",
-  "discs",
   "stats",
 ] as const;
+/** Earlier default orders: a Home still in one of them moves to the current default. */
+const OLD_HOME_ORDERS = [
+  "tiles,featured,continueWatching,continueReading,shelves,recentlyOpened,recentlyAdded,favorites,discs,stats",
+  "tiles,featured,continueWatching,continueReading,shelves,recentlyOpened,recentlyAdded,favorites,stats",
+];
 export type HomeSection = (typeof HOME_SECTIONS)[number];
 export interface HomeLayout {
   order: HomeSection[];
@@ -302,7 +307,8 @@ const isHomeSection = (v: unknown): v is HomeSection => HOME_SECTIONS.includes(v
 
 function sanitizeHome(raw: unknown): HomeLayout {
   const value = (raw && typeof raw === "object" ? raw : {}) as Raw<HomeLayout>;
-  const order = Array.isArray(value.order) ? [...new Set(value.order.filter(isHomeSection))] : [];
+  let order = Array.isArray(value.order) ? [...new Set(value.order.filter(isHomeSection))] : [];
+  if (OLD_HOME_ORDERS.includes(order.join(","))) order = [...HOME_SECTIONS];
   // Sections added in later versions join at their default place.
   for (const [index, section] of HOME_SECTIONS.entries()) {
     if (!order.includes(section)) order.splice(Math.min(index, order.length), 0, section);

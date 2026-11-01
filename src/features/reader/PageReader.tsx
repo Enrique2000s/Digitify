@@ -11,6 +11,7 @@ import { useActivity } from "../../lib/activity";
 import { READER_PAD, useControllerShortcuts } from "../bigpicture/Launcher";
 import { actionFor, hint, isTyping } from "../../lib/shortcuts";
 import { WindowButtons } from "../../components/TitleBar";
+import { useBigPicture } from "../../lib/bigpicture";
 import { BookmarksMenu, toggleBookmark, useBookmarks } from "./Bookmarks";
 import { chapterAt, ChaptersMenu } from "./Chapters";
 import { motionAllowed, useAutoHide, useFullscreen } from "./chrome";
@@ -277,6 +278,7 @@ export function PageReader({ book, startPage, onClose, next: nextVolume, onNext 
   const reached = scroll ? page : view[view.length - 1];
   const nudge = useActivity(book.itemId, "read", true);
   useControllerShortcuts(READER_PAD);
+  const bigPicture = useBigPicture();
   useEffect(nudge, [reached, nudge]);
   const latest = useRef(reached);
   const moved = useRef(false);
@@ -518,10 +520,11 @@ export function PageReader({ book, startPage, onClose, next: nextVolume, onNext 
           open={panel === "display"}
           onOpenChange={(open) => setPanel(open ? "display" : null)}
         />
-        <button type="button" className="round-btn" aria-label={fullscreen ? "Leave full screen" : "Full screen"} title={`Full screen${hint("readers.fullscreen")}`} onClick={() => void toggleFullscreen()}>
+        {/* In Big Picture the whole app is full screen already: no full-screen or window buttons. */}
+        {!bigPicture && <button type="button" className="round-btn" aria-label={fullscreen ? "Leave full screen" : "Full screen"} title={`Full screen${hint("readers.fullscreen")}`} onClick={() => void toggleFullscreen()}>
           {fullscreen ? <Shrink size={17} /> : <Expand size={17} />}
-        </button>
-        {!fullscreen && <WindowButtons />}
+        </button>}
+        {!fullscreen && !bigPicture && <WindowButtons />}
       </header>
 
       <footer className={`reader-bar bottom${showBars ? "" : " hidden"}`} {...barProps}>

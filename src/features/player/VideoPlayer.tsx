@@ -31,6 +31,7 @@ import { libraryChanged } from "../../lib/queries";
 import { useActivity } from "../../lib/activity";
 import { useControllerShortcuts, VIDEO_PAD } from "../bigpicture/Launcher";
 import { WindowButtons } from "../../components/TitleBar";
+import { useBigPicture } from "../../lib/bigpicture";
 import { SeekBar } from "../../components/SeekBar";
 import { actionFor, hint, isTyping } from "../../lib/shortcuts";
 import { useAutoHide, useFullscreen } from "../reader/chrome";
@@ -327,6 +328,7 @@ function VideoPlayer({ source }: { source: Source }) {
   useActivity(target?.itemId, "watch", !!target && !playback.paused && !playback.ended);
   // In Big Picture the controller plays, seeks, changes the volume and closes; A also pokes the controls.
   useControllerShortcuts(VIDEO_PAD);
+  const bigPicture = useBigPicture();
 
   // A seek or a wait for data that takes a moment shows a spinner, so it's clear the click landed.
   const waiting = playback.seeking || playback.buffering;
@@ -544,9 +546,11 @@ function VideoPlayer({ source }: { source: Source }) {
                 </Choice>
               ))}
             </Menu>
-            <button type="button" className="round-btn" aria-label={fullscreen ? "Leave full screen" : "Full screen"} title={`Full screen${hint("video.fullscreen")}`} onClick={() => void toggleFullscreen()}>
-              {fullscreen ? <Shrink size={17} /> : <Expand size={17} />}
-            </button>
+            {!bigPicture && (
+              <button type="button" className="round-btn" aria-label={fullscreen ? "Leave full screen" : "Full screen"} title={`Full screen${hint("video.fullscreen")}`} onClick={() => void toggleFullscreen()}>
+                {fullscreen ? <Shrink size={17} /> : <Expand size={17} />}
+              </button>
+            )}
           </div>
         </footer>
       )}

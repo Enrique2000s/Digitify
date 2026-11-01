@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ChevronLeft, ChevronRight, Disc3, Gamepad2, House, LibraryBig, Search, Settings } from "lucide-react";
-import { enterBigPicture } from "../lib/bigpicture";
+import { enterBigPicture, useBigPicture } from "../lib/bigpicture";
 import { Logo } from "./common";
 import { MiniPlayer } from "./MiniPlayer";
 import { MusicPill } from "./MusicPill";
@@ -16,6 +16,8 @@ const appWindow = getCurrentWindow();
 /** Minimize, maximize/restore and close, as round gel buttons (the window has no system frame). */
 export function WindowButtons() {
   const [maximized, setMaximized] = useState(false);
+  // In Big Picture the app is full screen: no window buttons over the readers and the player.
+  const bigPicture = useBigPicture();
   useEffect(() => {
     const update = () => void appWindow.isMaximized().then(setMaximized);
     update();
@@ -24,6 +26,7 @@ export function WindowButtons() {
       void unlisten.then((stop) => stop());
     };
   }, []);
+  if (bigPicture) return null;
   return (
     <div className="window-buttons">
       <button type="button" className="round-btn" aria-label="Minimize" title="Minimize" onClick={() => void appWindow.minimize()}>

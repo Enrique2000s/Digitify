@@ -12,6 +12,7 @@ import { READER_PAD, useControllerShortcuts } from "../bigpicture/Launcher";
 import { actionFor, hint, isTyping } from "../../lib/shortcuts";
 import { Switch } from "../../components/common";
 import { WindowButtons } from "../../components/TitleBar";
+import { useBigPicture } from "../../lib/bigpicture";
 import type { Location, TocItem, View } from "../../vendor/foliate-js/view.js";
 import { BookmarksMenu, toggleBookmark, useBookmarks, type Place } from "./Bookmarks";
 import { motionAllowed, useAutoHide, useFullscreen } from "./chrome";
@@ -140,6 +141,7 @@ export function EbookReader({ book, onClose, next: nextVolume, onNext }: {
   // Page turns inside the book count as reading (its input doesn't reach the window).
   const nudgeRef = useRef(useActivity(book.itemId, "read", true));
   useControllerShortcuts(READER_PAD);
+  const bigPicture = useBigPicture();
   const [state, setState] = useState<{ status: "opening" | "ready" } | { status: "failed"; message: string }>({ status: "opening" });
   const [toc, setToc] = useState<TocItem[]>([]);
   const [rtl, setRtl] = useState(false);
@@ -536,10 +538,11 @@ export function EbookReader({ book, onClose, next: nextVolume, onNext }: {
             </Popover.Content>
           </Popover.Portal>
         </Popover.Root>
-        <button type="button" className="round-btn" aria-label={fullscreen ? "Leave full screen" : "Full screen"} title={`Full screen${hint("readers.fullscreen")}`} onClick={() => void toggleFullscreen()}>
+        {/* In Big Picture the whole app is full screen already: no full-screen or window buttons. */}
+        {!bigPicture && <button type="button" className="round-btn" aria-label={fullscreen ? "Leave full screen" : "Full screen"} title={`Full screen${hint("readers.fullscreen")}`} onClick={() => void toggleFullscreen()}>
           {fullscreen ? <Shrink size={17} /> : <Expand size={17} />}
-        </button>
-        {!fullscreen && <WindowButtons />}
+        </button>}
+        {!fullscreen && !bigPicture && <WindowButtons />}
       </header>
 
       <footer className={`reader-bar bottom${showBars ? "" : " hidden"}`} {...barProps}>

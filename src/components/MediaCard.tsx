@@ -47,7 +47,8 @@ export const MediaCard = memo(function MediaCard({ item, width, index, transitio
         )}
       </div>
       <div className="card-title">{item.title}</div>
-      <div className="card-sub">{subtitle || " "}</div>
+      {/* Always one line, so cards with and without a year line up. */}
+      <div className="card-sub">{subtitle || "\u00a0"}</div>
     </Link>
   );
 });
