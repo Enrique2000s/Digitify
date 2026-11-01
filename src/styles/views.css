@@ -1471,6 +1471,10 @@ html.reordering * {
   flex-direction: column;
   padding-bottom: 28px;
 }
+/* The search keeps its own height; in this column its flex-grow would stretch it downward. */
+.music-page > .search-pill {
+  flex: none;
+}
 .music-page .track-list {
   flex: 1;
   min-height: 0;
