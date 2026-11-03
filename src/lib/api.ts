@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type Handler = "book" | "comic" | "video" | "audio" | "generic";
 export type Ownership = "physical" | "digital" | "physicalOnly" | "digitalOnly";
-export type SortKey = "title" | "added" | "year" | "creator" | "relevance" | "shelf" | "custom";
+export type SortKey = "title" | "added" | "year" | "creator" | "durationAsc" | "durationDesc" | "relevance" | "shelf" | "custom";
 export type ImportMode = "reference" | "copy";
 export type FieldKind = "text" | "longtext" | "number" | "date" | "rating" | "boolean" | "choice" | "url";
 
@@ -64,7 +64,7 @@ export interface ItemCard {
   coverShape: CoverShape | null;
 }
 
-/** Albums as square covers or round CDs; videos as vertical posters or horizontal frames. */
+/** Music as square covers or round CDs; videos as vertical posters or horizontal frames (Movies & Series: vertical only). */
 export type CoverShape = "square" | "disc" | "poster" | "landscape";
 
 /** Seconds spent reading, watching and listening. */
@@ -271,13 +271,14 @@ export interface RipRequest {
   format: "flac" | "wav";
 }
 
-/** A track of an album in the library (Phase 3 music). */
+/** A track in the library: its own item with one part (D-027); `id` is the part's. */
 export interface Track {
   id: number;
   itemId: number;
   title: string;
   artist: string | null;
-  album: string;
+  /** The album it came from, kept as a detail. */
+  album: string | null;
   number: number | null;
   durationMs: number | null;
   coverKey: string | null;
@@ -288,11 +289,12 @@ export interface Track {
 export interface TrackFilter {
   search?: string;
   artist?: string;
-  album?: number;
   favorites?: boolean;
   playlist?: number;
   recent?: boolean;
   ids?: number[];
+  /** The tracks of these items, in this order. */
+  items?: number[];
 }
 
 /** A queued track and the file the music player plays for it. */
@@ -303,7 +305,6 @@ export interface QueueEntry {
 
 export interface Artist {
   name: string;
-  albums: number;
   tracks: number;
 }
 
@@ -490,7 +491,16 @@ export type BulkOp =
   | { op: "setSeries"; series: string | null }
   | { op: "setDirection"; direction: "ltr" | "rtl" }
   | { op: "setCoverShape"; shape: CoverShape | null }
-  | { op: "setCoverColor"; color: string | null };
+  | { op: "setCoverColor"; color: string | null }
+  | { op: "addToPlaylist"; playlist: number };
+
+/** What a selection allows beyond the actions every item takes (D-027): each only when every selected item supports it. */
+export interface BulkActions {
+  playlist: boolean;
+  coverShapes: CoverShape[];
+  series: boolean;
+  direction: boolean;
+}
 
 export interface FieldInput {
   key?: string | null;
@@ -615,6 +625,7 @@ export const api = {
   collectionMove: (id: number, parent: number | null) => invoke<void>("collection_move", { id, parent }),
   collectionDelete: (id: number) => invoke<void>("collection_delete", { id }),
   itemsBulk: (ids: number[], ops: BulkOp[]) => invoke<number>("items_bulk", { ids, ops }),
+  itemsBulkActions: (ids: number[]) => invoke<BulkActions>("items_bulk_actions", { ids }),
   readerOpen: (id: number) => invoke<Opened>("reader_open", { id }),
   ebookProgressSave: (id: number, cfi: string, fraction: number, finished: boolean) =>
     invoke<void>("ebook_progress_save", { id, cfi, fraction, finished }),
@@ -640,6 +651,7 @@ export const api = {
     invoke<number>("item_create", { item: { item, physical } }),
   itemSetFavorite: (id: number, favorite: boolean) => invoke<void>("item_set_favorite", { id, favorite }),
   itemSetCover: (id: number, path: string) => invoke<void>("item_set_cover", { id, path }),
+  itemsSetCover: (ids: number[], path: string) => invoke<void>("items_set_cover", { ids, path }),
   itemRemove: (ids: number[], trashManagedCopies: boolean) =>
     invoke<RemoveReport>("item_remove", { ids, trashManagedCopies }),
   versionSave: (version: VersionInput) => invoke<number>("version_save", { version }),

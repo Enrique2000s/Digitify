@@ -21,6 +21,7 @@ import {
   Puzzle,
   Sparkles,
   Trophy,
+  SquarePlay,
   Tv,
   X,
   type LucideProps,
@@ -91,6 +92,7 @@ export const CATEGORY_ICONS: Record<string, ComponentType<LucideProps>> = {
   sparkles: Sparkles,
   trophy: Trophy,
   box: Box,
+  play: SquarePlay,
 };
 
 const HANDLER_ICONS: Record<Handler, ComponentType<LucideProps>> = {

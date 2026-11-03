@@ -2,18 +2,19 @@ import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { open } from "@tauri-apps/plugin-dialog";
-import { BookOpen, FilePlus, FolderOpen, HardDrive, ImagePlus, Package, Pencil, Plus, Star, Trash } from "lucide-react";
+import { BookOpen, FilePlus, FolderOpen, HardDrive, ImagePlus, Package, Pause, Pencil, Play, Plus, Star, Trash } from "lucide-react";
 import { api, artworkUrl, errorText, type CoverShape, type FieldDef, type ItemDetail, type VersionInfo } from "../../lib/api";
 import { bytes, date, formatLabel, longDuration, ROLE_LABELS } from "../../lib/format";
 import { libraryChanged, useCategories, useItem } from "../../lib/queries";
 import { Cover } from "../../components/common";
-import { coverShapeOf, SHAPE_ASPECT, usePreferences } from "../../lib/preferences";
+import { coverShapeOf, FILMS, SHAPE_ASPECT, usePreferences } from "../../lib/preferences";
+import { useMusic } from "../../lib/music/MusicProvider";
+import { duration } from "../music/Tracks";
 import { HomePath, OrganizePanel } from "../organize/OrganizePanel";
 import { canRead } from "../reader/ReaderPage";
 import { ChaptersPanel, SeriesPanel } from "./SeriesPanels";
 import { canWatch, EpisodesPanel, WatchButton, WatchedButton } from "./WatchPanels";
 import { ArrangePagesDialog } from "../builder/BookBuilder";
-import { TrackList } from "../music/Tracks";
 import { customValues, formatCustom } from "./customFields";
 import { AttachFilesDialog, EditItemDialog, PhysicalCopyDialog, RemoveItemDialog } from "./forms";
 
@@ -70,10 +71,10 @@ function facts(item: ItemDetail, fields: FieldDef[]): [string, ReactNode][] {
       break;
     }
     case "audio":
+      add("Album", meta(item, "album"));
+      add("Track", meta(item, "trackNumber"));
       add("Genre", meta(item, "genre"));
-      add("Tracks", item.parts.length || null);
-      add("Length", longDuration(Number(meta(item, "durationSec")) || 0));
-      add("Discs", Number(meta(item, "discCount")) > 1 ? meta(item, "discCount") : null);
+      add("Length", duration(Number(meta(item, "durationSec")) * 1000 || null));
       break;
   }
   const custom = customValues(item.metadata);
@@ -173,6 +174,7 @@ export function ItemPage() {
   const query = useItem(Number(id));
   const categories = useCategories();
   const { preferences } = usePreferences();
+  const music = useMusic();
   const [editing, setEditing] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [copy, setCopy] = useState<VersionInfo | "new" | null>(null);
@@ -206,11 +208,12 @@ export function ItemPage() {
   };
 
   const backdrop = (item.metadata as Record<string, unknown>).backdropKey as string | undefined;
-  // Albums as square covers or CDs, videos vertical or horizontal; one that matches the default isn't stored.
+  // Music as square covers or CDs, Videos horizontal or vertical, Movies & Series always vertical
+  // (D-027); one that matches the default isn't stored.
   const ownShape = (item.metadata as Record<string, unknown>).coverShape as CoverShape | undefined;
-  const shape = coverShapeOf({ handler: item.handler, coverShape: ownShape }, preferences.coverShapes);
+  const shape = coverShapeOf({ handler: item.handler, category: item.category, coverShape: ownShape }, preferences.coverShapes);
   const setShape = (value: CoverShape) => {
-    const usual = coverShapeOf({ handler: item.handler }, preferences.coverShapes);
+    const usual = coverShapeOf({ handler: item.handler, category: item.category }, preferences.coverShapes);
     void run(() => api.itemsBulk([item.id], [{ op: "setCoverShape", shape: value === usual ? null : value }]));
   };
   const changeBackdrop = async () => {
@@ -231,6 +234,11 @@ export function ItemPage() {
   const formats = [...new Set(item.versions.map((v) => v.format).filter(Boolean))] as string[];
   const readable = canRead(item);
   const watchable = canWatch(item);
+  // Videos (clips, recordings) just play: no resume and no watched mark (D-027).
+  const clip = item.category === "videos";
+  // A track is its own item; its one part is what the music player plays.
+  const track = item.handler === "audio" ? item.parts.find((part) => part.kind === "track") : undefined;
+  const trackPlaying = !!track && music.current?.id === track.id && !music.paused;
   const physical = item.versions.filter((v) => v.kind === "physical");
   const digital = item.versions.filter((v) => v.kind === "digital");
 
@@ -269,8 +277,22 @@ export function ItemPage() {
             </div>
           )}
           <div className="hero-actions">
-            {watchable && <WatchButton item={item} />}
-            {watchable && <WatchedButton item={item} />}
+            {watchable && clip && (
+              <Link to="/watch/$id" params={{ id: String(item.id) }} className="btn btn-primary">
+                <Play size={16} /> Play
+              </Link>
+            )}
+            {watchable && !clip && <WatchButton item={item} />}
+            {watchable && !clip && <WatchedButton item={item} />}
+            {track && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void run(() => (music.current?.id === track.id ? Promise.resolve(music.toggle()) : music.play([track.id], 0)))}
+              >
+                {trackPlaying ? <Pause size={16} /> : <Play size={16} />} {trackPlaying ? "Pause" : "Play"}
+              </button>
+            )}
             {readable && (
               <Link to="/read/$id" params={{ id: String(item.id) }} className="btn btn-primary">
                 <BookOpen size={16} />
@@ -279,7 +301,7 @@ export function ItemPage() {
             )}
             <button
               type="button"
-              className={readable || watchable ? "btn" : "btn btn-primary"}
+              className="btn"
               aria-pressed={item.isFavorite}
               onClick={() => void run(() => api.itemSetFavorite(item.id, !item.isFavorite))}
             >
@@ -326,7 +348,7 @@ export function ItemPage() {
               )}
             </div>
           )}
-          {(item.handler === "audio" || item.handler === "video") && (
+          {(item.handler === "audio" || (item.handler === "video" && item.category !== FILMS)) && (
             <div className="cover-shape-row">
               <span className="eyebrow">Cover</span>
               <div className="segmented" role="group" aria-label="Cover shape">
@@ -357,12 +379,6 @@ export function ItemPage() {
             <section className="panel">
               <h2>About</h2>
               <p className="description">{item.description}</p>
-            </section>
-          )}
-          {item.handler === "audio" && item.parts.length > 0 && (
-            <section className="panel">
-              <h2>Tracks</h2>
-              <TrackList filter={{ album: item.id }} empty="This album's tracks can't be found." showAlbum={false} compact />
             </section>
           )}
           <EpisodesPanel item={item} />

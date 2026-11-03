@@ -17,6 +17,7 @@ pub const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0004_activity.sql"),
     include_str!("../migrations/0005_custom_order.sql"),
     include_str!("../migrations/0006_playlist_once.sql"),
+    include_str!("../migrations/0007_videos_tracks.sql"),
 ];
 
 pub struct Database {
@@ -91,8 +92,9 @@ fn connect(path: &Path) -> AppResult<Connection> {
 pub fn memory() -> Connection {
     let conn = Connection::open_in_memory().expect("in-memory database");
     conn.pragma_update(None, "foreign_keys", "ON").expect("foreign keys");
-    for sql in MIGRATIONS {
+    for (index, sql) in MIGRATIONS.iter().enumerate() {
         conn.execute_batch(sql).expect("migration");
+        crate::reshape::after(&conn, index as i64 + 1).expect("migration");
     }
     conn
 }
@@ -127,6 +129,7 @@ fn migrate(conn: &mut Connection, backups: &Path) -> AppResult<()> {
         let version = index as i64 + 1;
         let tx = conn.transaction()?;
         tx.execute_batch(sql)?;
+        crate::reshape::after(&tx, version)?;
         tx.pragma_update(None, "user_version", version)?;
         tx.commit()?;
         log::info!("applied database migration {version}");

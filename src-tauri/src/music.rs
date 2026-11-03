@@ -1,6 +1,7 @@
 //! The music player (Phase 3, D-020): library tracks played by a second, audio-only mpv process,
-//! with the queue as mpv's playlist so tracks follow each other without gaps. Tracks are the parts
-//! of album items. Also favorite tracks, playlists, recently played, and editing a track's details
+//! with the queue as mpv's playlist so tracks follow each other without gaps. Each track is an item
+//! of its own with one `track` part (D-027: no albums); playlists, favorites and plays refer to the
+//! part. Also favorite tracks, playlists, recently played, and editing a track's details
 //! (in the catalog only; files are never changed, D-009).
 
 use std::path::PathBuf;
@@ -43,7 +44,8 @@ pub struct Track {
     pub item_id: i64,
     pub title: String,
     pub artist: Option<String>,
-    pub album: String,
+    /// The album the track came from, kept as a detail.
+    pub album: Option<String>,
     pub number: Option<f64>,
     pub duration_ms: Option<i64>,
     pub cover_key: Option<String>,
@@ -51,11 +53,11 @@ pub struct Track {
     pub genre: Option<String>,
 }
 
-const TRACK_SELECT: &str = "SELECT p.id, p.item_id, coalesce(p.title, i.title), \
+const TRACK_SELECT: &str = "SELECT p.id, p.item_id, i.title, \
      coalesce(json_extract(p.metadata, '$.artist'), \
               (SELECT group_concat(pe.name, ', ') FROM item_people ip JOIN people pe ON pe.id = ip.person_id \
                WHERE ip.item_id = i.id AND ip.role = 'artist')), \
-     i.title, p.number, p.duration_ms, i.cover_key, p.is_favorite, json_extract(i.metadata, '$.genre') \
+     json_extract(i.metadata, '$.album'), p.number, p.duration_ms, i.cover_key, p.is_favorite, json_extract(i.metadata, '$.genre') \
      FROM parts p JOIN items i ON i.id = p.item_id JOIN categories c ON c.id = i.category_id";
 
 fn track(row: &rusqlite::Row<'_>) -> rusqlite::Result<Track> {
@@ -80,14 +82,14 @@ pub struct TrackFilter {
     /// Words matched against title, artist, album and genre.
     pub search: Option<String>,
     pub artist: Option<String>,
-    /// One album: its item id.
-    pub album: Option<i64>,
     pub favorites: Option<bool>,
     pub playlist: Option<i64>,
     /// Most recently played first.
     pub recent: Option<bool>,
     /// Exactly these tracks, in this order.
     pub ids: Option<Vec<i64>>,
+    /// The tracks of these items (a library view's songs), in this order.
+    pub items: Option<Vec<i64>>,
 }
 
 fn tracks(conn: &Connection, filter: &TrackFilter) -> AppResult<Vec<Track>> {
@@ -101,10 +103,6 @@ fn tracks(conn: &Connection, filter: &TrackFilter) -> AppResult<Vec<Track>> {
     if filter.favorites == Some(true) {
         sql.push_str(" AND p.is_favorite = 1");
     }
-    if let Some(album) = filter.album {
-        sql.push_str(" AND p.item_id = ?");
-        args.push(album.into());
-    }
     if let Some(ids) = &filter.ids {
         if ids.is_empty() {
             return Ok(Vec::new());
@@ -112,7 +110,14 @@ fn tracks(conn: &Connection, filter: &TrackFilter) -> AppResult<Vec<Track>> {
         sql.push_str(&format!(" AND p.id IN ({})", vec!["?"; ids.len()].join(",")));
         args.extend(ids.iter().map(|&id| id.into()));
     }
-    let haystack = "lower(coalesce(p.title, '') || ' ' || coalesce(json_extract(p.metadata, '$.artist'), '') || ' ' || i.title || ' ' || \
+    if let Some(items) = &filter.items {
+        if items.is_empty() {
+            return Ok(Vec::new());
+        }
+        sql.push_str(&format!(" AND p.item_id IN ({})", vec!["?"; items.len()].join(",")));
+        args.extend(items.iter().map(|&id| id.into()));
+    }
+    let haystack = "lower(i.title || ' ' || coalesce(json_extract(p.metadata, '$.artist'), '') || ' ' || coalesce(json_extract(i.metadata, '$.album'), '') || ' ' || \
                     coalesce(json_extract(i.metadata, '$.genre'), '') || ' ' || coalesce((SELECT group_concat(pe.name, ' ') FROM item_people ip \
                     JOIN people pe ON pe.id = ip.person_id WHERE ip.item_id = i.id), ''))";
     for word in filter.search.as_deref().unwrap_or_default().split_whitespace().take(8) {
@@ -131,14 +136,16 @@ fn tracks(conn: &Connection, filter: &TrackFilter) -> AppResult<Vec<Track>> {
         sql.push_str(" AND EXISTS (SELECT 1 FROM plays pl WHERE pl.part_id = p.id) ORDER BY (SELECT max(played_at) FROM plays pl WHERE pl.part_id = p.id) DESC LIMIT 100");
     } else if filter.playlist.is_some() {
         sql.push_str(" ORDER BY pt.position");
-    } else if filter.album.is_some() {
-        sql.push_str(" ORDER BY p.position, p.number");
     } else {
-        sql.push_str(" ORDER BY i.sort_title, p.position, p.number LIMIT 20000");
+        sql.push_str(" ORDER BY i.sort_title, i.id LIMIT 20000");
     }
     let mut list: Vec<Track> = conn.prepare(&sql)?.query_map(params_from_iter(args), track)?.collect::<Result<_, _>>()?;
     if let Some(ids) = &filter.ids {
         list.sort_by_key(|t| ids.iter().position(|&id| id == t.id).unwrap_or(usize::MAX));
+    }
+    if let Some(items) = &filter.items {
+        let order: std::collections::HashMap<i64, usize> = items.iter().enumerate().map(|(i, &id)| (id, i)).collect();
+        list.sort_by_key(|t| order.get(&t.item_id).copied().unwrap_or(usize::MAX));
     }
     Ok(list)
 }
@@ -152,11 +159,10 @@ pub async fn music_tracks(state: State<'_, AppState>, filter: TrackFilter) -> Ap
 #[serde(rename_all = "camelCase")]
 pub struct Artist {
     pub name: String,
-    pub albums: i64,
     pub tracks: i64,
 }
 
-/// Album artists and the artists of individual tracks, with how much of each is in the library.
+/// The artists of the library's tracks, with how many tracks each has.
 #[tauri::command]
 pub async fn music_artists(state: State<'_, AppState>) -> AppResult<Vec<Artist>> {
     with_library(&state, move |library| {
@@ -168,10 +174,10 @@ pub async fn music_artists(state: State<'_, AppState>) -> AppResult<Vec<Artist>>
                        FROM parts p JOIN items i ON i.id = p.item_id JOIN categories c ON c.id = i.category_id \
                        LEFT JOIN item_people ip ON ip.item_id = i.id AND ip.role = 'artist' LEFT JOIN people pe ON pe.id = ip.person_id \
                        WHERE p.kind = 'track' AND c.handler = 'audio') \
-                     SELECT name, count(DISTINCT item_id), count(DISTINCT part_id) FROM credits WHERE name IS NOT NULL \
+                     SELECT name, count(DISTINCT part_id) FROM credits WHERE name IS NOT NULL \
                      GROUP BY lower(name) ORDER BY lower(name)",
                 )?
-                .query_map([], |row| Ok(Artist { name: row.get(0)?, albums: row.get(1)?, tracks: row.get(2)? }))?
+                .query_map([], |row| Ok(Artist { name: row.get(0)?, tracks: row.get(1)? }))?
                 .collect::<Result<_, _>>()?;
             Ok(artists)
         })
@@ -184,13 +190,20 @@ pub async fn music_set_favorite(state: State<'_, AppState>, id: i64, favorite: b
     with_library(&state, move |library| {
         library.db.with(|conn| {
             conn.execute("UPDATE parts SET is_favorite = ?2 WHERE id = ?1 AND kind = 'track'", params![id, favorite])?;
+            // The track's item carries the same mark, for the library's Favorites.
+            conn.execute(
+                "UPDATE items SET is_favorite = ?2, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = (SELECT item_id FROM parts WHERE id = ?1)",
+                params![id, favorite],
+            )?;
             Ok(())
         })
     })
     .await
 }
 
-/// A track's own details, in the catalog only (D-009): its title, artist and number.
+/// A track's own details, in the catalog only (D-009): its title, artist and number. The title and
+/// artist are its item's (D-027). The title and
+/// artist are its item's.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrackEdit {
@@ -208,12 +221,20 @@ pub async fn track_update(state: State<'_, AppState>, id: i64, edit: TrackEdit) 
     let artist = edit.artist.map(|a| a.split_whitespace().collect::<Vec<_>>().join(" ")).filter(|a| !a.is_empty());
     with_library(&state, move |library| {
         library.db.with(|conn| {
-            conn.execute(
-                "UPDATE parts SET title = ?2, number = ?3, \
-                 metadata = CASE WHEN ?4 IS NULL THEN json_remove(metadata, '$.artist') ELSE json_set(metadata, '$.artist', ?4) END \
-                 WHERE id = ?1 AND kind = 'track'",
-                params![id, title, edit.number, artist],
+            let tx = conn.transaction()?;
+            let item: i64 = tx.query_row("SELECT item_id FROM parts WHERE id = ?1 AND kind = 'track'", [id], |row| row.get(0))?;
+            tx.execute("UPDATE parts SET title = ?2, number = ?3, metadata = json_remove(metadata, '$.artist') WHERE id = ?1", params![id, title, edit.number])?;
+            tx.execute(
+                "UPDATE items SET title = ?2, sort_title = ?3, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
+                params![item, title, crate::library::sort_key(&title)],
             )?;
+            tx.execute("DELETE FROM item_people WHERE item_id = ?1 AND role = 'artist'", [item])?;
+            if let Some(artist) = &artist {
+                let person = crate::library::upsert_person(&tx, artist)?;
+                tx.execute("INSERT INTO item_people (item_id, person_id, role, position) VALUES (?1, ?2, 'artist', 0)", params![item, person])?;
+            }
+            crate::library::reindex(&tx, item)?;
+            tx.commit()?;
             Ok(())
         })
     })
@@ -322,6 +343,17 @@ pub async fn playlist_add(state: State<'_, AppState>, id: i64, tracks: Vec<i64>)
 
 pub fn add_to_playlist(conn: &mut rusqlite::Connection, id: i64, tracks: &[i64]) -> AppResult<()> {
     let tx = conn.transaction()?;
+    append_to_playlist(&tx, id, tracks)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Appends tracks (part ids) to a playlist, skipping ones already in it, inside the caller's transaction.
+pub fn append_to_playlist(tx: &Connection, id: i64, tracks: &[i64]) -> AppResult<()> {
+    let exists: bool = tx.query_row("SELECT EXISTS (SELECT 1 FROM playlists WHERE id = ?1)", [id], |row| row.get(0))?;
+    if !exists {
+        return Err(AppError::msg("That playlist no longer exists."));
+    }
     let mut position: i64 = tx.query_row("SELECT coalesce(max(position) + 1, 0) FROM playlist_tracks WHERE playlist_id = ?1", [id], |row| row.get(0))?;
     let mut seen = std::collections::HashSet::new();
     for part in tracks {
@@ -333,7 +365,6 @@ pub fn add_to_playlist(conn: &mut rusqlite::Connection, id: i64, tracks: &[i64])
         position += 1;
     }
     tx.execute("UPDATE playlists SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1", [id])?;
-    tx.commit()?;
     Ok(())
 }
 
@@ -561,25 +592,26 @@ pub fn shutdown(app: &AppHandle) {
 mod tests {
     use super::*;
 
-    fn library_with_album() -> Connection {
+    /// Two tracks, each its own item; the second has a guest artist of its own.
+    fn library_with_tracks() -> Connection {
         let conn = crate::db::memory();
-        conn.execute("INSERT INTO items (id, category_id, title, sort_title, metadata) VALUES (1, (SELECT id FROM categories WHERE key = 'music'), 'Test Tones', 'test tones', '{\"genre\":\"Ambient\"}')", []).unwrap();
         conn.execute("INSERT INTO people (id, name, sort_name) VALUES (1, 'Digitify', 'Digitify')", []).unwrap();
-        conn.execute("INSERT INTO item_people (item_id, person_id, role, position) VALUES (1, 1, 'artist', 0)", []).unwrap();
         for (id, title, artist) in [(1, "Low Hum", None), (2, "Bright Beep", Some("Guest Synth"))] {
-            let metadata = artist.map(|a| json!({ "artist": a })).unwrap_or(json!({}));
             conn.execute(
-                "INSERT INTO parts (id, item_id, kind, number, title, position, metadata) VALUES (?1, 1, 'track', ?1, ?2, ?1, ?3)",
-                params![id, title, metadata.to_string()],
+                "INSERT INTO items (id, category_id, title, sort_title, metadata) VALUES (?1, (SELECT id FROM categories WHERE key = 'music'), ?2, ?1, '{\"genre\":\"Ambient\",\"album\":\"Test Tones\"}')",
+                params![id, title],
             )
             .unwrap();
+            conn.execute("INSERT INTO item_people (item_id, person_id, role, position) VALUES (?1, 1, 'artist', 0)", [id]).unwrap();
+            let metadata = artist.map(|a| json!({ "artist": a })).unwrap_or(json!({}));
+            conn.execute("INSERT INTO parts (id, item_id, kind, number, position, metadata) VALUES (?1, ?1, 'track', ?1, 0, ?2)", params![id, metadata.to_string()]).unwrap();
         }
         conn
     }
 
     #[test]
     fn tracks_are_found_by_any_detail() {
-        let conn = library_with_album();
+        let conn = library_with_tracks();
         let find = |search: &str| tracks(&conn, &TrackFilter { search: Some(search.into()), ..Default::default() }).unwrap().iter().map(|t| t.title.clone()).collect::<Vec<_>>();
         assert_eq!(find("beep"), vec!["Bright Beep"]);
         assert_eq!(find("ambient"), vec!["Low Hum", "Bright Beep"]);
@@ -592,7 +624,7 @@ mod tests {
 
     #[test]
     fn tracks_keep_the_asked_order() {
-        let conn = library_with_album();
+        let conn = library_with_tracks();
         let list = tracks(&conn, &TrackFilter { ids: Some(vec![2, 1]), ..Default::default() }).unwrap();
         assert_eq!(list.iter().map(|t| t.id).collect::<Vec<_>>(), vec![2, 1]);
         let by_artist = tracks(&conn, &TrackFilter { artist: Some("guest synth".into()), ..Default::default() }).unwrap();

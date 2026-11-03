@@ -109,15 +109,19 @@ function HomeScreen() {
       <section className="bp-row">
         <h2>Library</h2>
         <div className="bp-row-items">
+          {/* The same order as everywhere: Everything, the categories, then Favorites. */}
+          <button type="button" className="bp-category" data-bp-focus data-bp-autofocus onClick={() => void navigate({ to: "/bp", search: { screen: "library", scope: "all" } })}>
+            <LibraryBig size={46} />
+            <strong>Everything</strong>
+          </button>
           {categories.data
             ?.filter((c) => !c.isHidden)
-            .map((category, index) => (
+            .map((category) => (
               <button
                 key={category.key}
                 type="button"
                 className="bp-category"
                 data-bp-focus
-                data-bp-autofocus={index === 0 ? true : undefined}
                 onClick={() => void navigate({ to: "/bp", search: { screen: "library", scope: category.key } })}
               >
                 <CategoryIcon icon={category.icon} size={46} />
@@ -150,7 +154,11 @@ function LibraryScreen({ scope }: { scope: string }) {
     queryKey: ["bp-items", scope, sort, limit],
     queryFn: () => api.query({ ...base, sort: sort === "shelf" ? "title" : sort, custom: sort === "custom" ? scope : null, offset: 0, limit }),
   });
-  const tabs = [...(categories.data?.filter((c) => !c.isHidden).map((c) => ({ key: c.key, name: c.name })) ?? []), { key: "favorites", name: "Favorites" }];
+  const tabs = [
+    { key: "all", name: "Everything" },
+    ...(categories.data?.filter((c) => !c.isHidden).map((c) => ({ key: c.key, name: c.name })) ?? []),
+    { key: "favorites", name: "Favorites" },
+  ];
   // LB and RB switch between the categories.
   usePad((action) => {
     if (action !== "lb" && action !== "rb") return;
@@ -197,15 +205,16 @@ function ItemScreen({ id }: { id: number }) {
   const music = useMusic();
   const item = useQuery({ queryKey: ["item", id], queryFn: () => api.item(id) });
   const blurb = useQuery({ queryKey: ["blurb", id], queryFn: () => api.blurbs([id]).then((list) => list[0] ?? null) });
-  const tracks = useQuery({ queryKey: ["tracks", { album: id }], queryFn: () => api.musicTracks({ album: id }), enabled: item.data?.handler === "audio" });
   const shapeOf = useCoverShape();
   const data = item.data;
   if (!data) return null;
-  const { shape, aspect } = shapeOf({ handler: data.handler, coverShape: (data.metadata as Record<string, unknown>).coverShape as never });
+  const { shape, aspect } = shapeOf({ handler: data.handler, category: data.category, coverShape: (data.metadata as Record<string, unknown>).coverShape as never });
   const digital = data.versions.some((v) => v.kind === "digital");
   const progress = data.progress ?? 0;
-  const started = progress > 0.01 && progress < 0.999;
-  const ids = tracks.data?.map((t) => t.id) ?? [];
+  // Videos always play from the start (D-027).
+  const started = progress > 0.01 && progress < 0.999 && data.category !== "videos";
+  // A track is its own item (D-027): its one part is what the music player plays.
+  const ids = data.handler === "audio" ? data.parts.filter((p) => p.kind === "track").map((p) => p.id) : [];
   const favorite = async () => {
     await api.itemSetFavorite(id, !data.isFavorite);
     libraryChanged(queryClient);
@@ -233,26 +242,13 @@ function ItemScreen({ id }: { id: number }) {
           )}
           {data.handler === "audio" && ids.length > 0 && (
             <button type="button" className="bp-button primary" data-bp-focus data-bp-autofocus onClick={() => void music.play(ids, 0)}>
-              <Play size={26} /> Play album
+              <Play size={26} /> {music.current?.id === ids[0] && !music.paused ? "Playing" : "Play"}
             </button>
           )}
           <button type="button" className="bp-button" data-bp-focus aria-pressed={data.isFavorite} onClick={() => void favorite()}>
             <Heart size={24} fill={data.isFavorite ? "currentColor" : "none"} /> {data.isFavorite ? "Favorite" : "Add to favorites"}
           </button>
         </div>
-        {tracks.data && tracks.data.length > 0 && (
-          <ol className="bp-tracks">
-            {tracks.data.map((track, index) => (
-              <li key={track.id}>
-                <button type="button" className={`bp-track${music.current?.id === track.id ? " playing" : ""}`} data-bp-focus onClick={() => void music.play(ids, index)}>
-                  <span className="bp-track-no">{track.number ?? index + 1}</span>
-                  <span className="bp-track-title">{track.title}</span>
-                  <span className="bp-track-artist">{track.artist ?? ""}</span>
-                </button>
-              </li>
-            ))}
-          </ol>
-        )}
       </div>
     </div>
   );
@@ -398,7 +394,7 @@ function NowPlaying() {
   return (
     <div className="bp-now" role="group" aria-label="Music">
       <div className="bp-now-art">
-        <Cover item={{ title: music.current.album, coverKey: music.current.coverKey, handler: "audio" }} />
+        <Cover item={{ title: music.current.title, coverKey: music.current.coverKey, handler: "audio" }} />
       </div>
       <div className="bp-now-text">
         <strong>{music.current.title}</strong>

@@ -189,7 +189,7 @@ export function AmbientProvider({ children }: { children: ReactNode }) {
     title = details.data?.title ?? track?.title ?? "Your music";
     status = details.data?.artist ?? details.data?.album ?? "Your music";
   }
-  if (!music.enabled) status = "Paused";
+  if (!music.enabled) status = "Off";
   else if (holds.size > 0) status = "Paused while media plays";
   else if (custom && playlist.loading && !track) status = "Loading your music…";
   else if (custom && playlist.error) status = "Couldn't load your music";

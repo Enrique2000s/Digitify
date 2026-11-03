@@ -34,9 +34,10 @@ Digitify.exe (Tauri 2)
 | `config` | Machine-specific `config.json` (library path, interface preferences) in `%LOCALAPPDATA%\com.digitify.desktop`, or `DIGITIFY_CONFIG_DIR` |
 | `library_folder` | Library folder layout and cloud-sync detection |
 | `db` | SQLite connection, WAL mode, migrations tracked by `PRAGMA user_version` (with a snapshot before upgrading an existing library), snapshots, and swapping in a restored database |
+| `reshape` | The Rust half of a migration that SQL can't do alone (D-027: tracks out of albums, loose videos into Videos, the new category order) |
 | `backup` | Library backups in `backups\` (`library-YYYYMMDD-HHMMSS-<kind>.db`); validate and restore, keeping the current state as a backup first |
 | `library` | Catalog queries (views, dashboard, details, full-text search, "select all" ids) and edits (items, people, physical copies, favorites, artwork, removal) |
-| `organize` | Nested collections (tree queries with recursive CTEs, moving without cycles, deleting by moving contents up), shelves, tags (merge on rename, pruned when unused), and bulk edits applied in one transaction |
+| `organize` | Nested collections (tree queries with recursive CTEs, moving without cycles, deleting by moving contents up), shelves, tags (merge on rename, pruned when unused), and bulk edits applied in one transaction, limited to what fits every selected item (`bulk_actions`, D-027) |
 | `categories` | The user's own categories and custom fields (`field_definitions`; values in `metadata.custom`), category order and visibility |
 | `import` | Background import jobs: scan, then in parallel fingerprint, skip duplicates and extract metadata, then save. Also attaches files to existing items. |
 | `formats` | Embedded metadata readers: EPUB OPF, ComicInfo.xml in any comic archive, audio tags (lofty), ffprobe |
@@ -44,7 +45,7 @@ Digitify.exe (Tauri 2)
 | `files` | Fingerprints, volume serials, safe names, natural ordering, reveal in Explorer, missing-file check, relinking moved files by content |
 | `tools` | Locating helper programs (mpv, ffmpeg, ffprobe) and running them without console windows |
 | `media_protocol` | The `digitify` URI scheme: artwork, ambient tracks (range requests), book pages and ebook files |
-| `ambient` | Ambient music from the user's files, folders and library albums (D-016) |
+| `ambient` | Ambient music from the user's files, folders and library tracks (D-016) |
 | `pages` | The page engine: a digital copy as numbered pages (CBZ entries in natural order, image files, PDF pages), page sizes for layout, pages served scaled to the reader's width with a 128 MB cache, `progress_save`, and `reader_open`, which picks the page reader or the ebook reader for an item |
 | `ebooks` | Ebooks (D-014): finds a copy's EPUB, MOBI, AZW3 or FB2 file, refuses copy-protected books (checks only, never decrypts), and `ebook_progress_save` (a CFI and a fraction) |
 | `bookmarks` | Bookmarks: a page, or an ebook CFI with its fraction and location, with a label |
@@ -68,7 +69,8 @@ Planned modules: none for now.
 1. **Scan** the picked or dropped paths into candidates:
    - one per ebook, PDF, comic archive or video
    - one per folder of images, unless that folder also holds audio or video (then the images are artwork)
-   - one per album, grouping tracks by album artist + album tag, or folder + album when there is no album artist
+   - one per music track (D-027: no albums; the album's name is kept as a detail)
+   - videos with a year go to Movies & Series, others to Videos; a category picked in the import dialog applies to the files it can hold
 2. **Prepare** each candidate in parallel (rayon, 8 at a time):
    - fingerprint each file (size + sampled BLAKE3) and drop files already in the library
    - read embedded metadata and artwork
@@ -112,7 +114,7 @@ React + TypeScript via Vite, organized by feature:
   - hover blips on elements marked `data-blip` (tiles, covers, category pills), at most one every 70 ms
   - a press tone on buttons, links, menu items and switches (mouse, Enter or Space)
 - **The user's own music** plays through an `<audio>` element:
-  - `ambient_playlist` (Rust) resolves the chosen files, folders (walked in natural order) and library albums (the primary digital copy's files) into a playlist of up to 10,000 playable files
+  - `ambient_playlist` (Rust) resolves the chosen files, folders (walked in natural order) and library tracks (the primary digital copy's files) into a playlist of up to 10,000 playable files
   - it remembers those files under a new generation number; the UI streams them from `/ambient/<generation>/<index>`, so older URLs stop working when the list changes
   - track titles come from tags (`ambient_track_info`); an unplayable file is skipped, and playback stops only if every file fails
   - volume follows a squared curve for recorded music, and fades are applied on play, pause and source changes
@@ -131,7 +133,7 @@ Category       Books · Comics · Manga · Movies & Series · Music · your own�
        └ Parts     optional: chapters, episodes, tracks, each with its own progress
 Shelves & tags: cross-cutting groups; one item can sit on many shelves
 ```
-The schema lives in `src-tauri/migrations/` (v3 adds `playlists`, `playlist_tracks`, `plays` and `parts.is_favorite`; v4 adds `activity`; v5 adds `custom_order`; v6 lets a track be in a playlist once). Tables: `categories`, `field_definitions`, `collections`, `items`, `people`, `item_people`, `parts`, `versions`, `files`, `progress`, `bookmarks`, `shelves` (a smart shelf's rules in `settings`), `shelf_items`, `tags`, `item_tags`, `activity`, `custom_order` (hand-arranged order per view), `settings` and `items_fts` (full-text index).
+The schema lives in `src-tauri/migrations/` (v3 adds `playlists`, `playlist_tracks`, `plays` and `parts.is_favorite`; v4 adds `activity`; v5 adds `custom_order`; v6 lets a track be in a playlist once; v7 adds the Videos category and turns each album's tracks into items of their own, done by `reshape::after` in the same transaction since it needs more than SQL). Tables: `categories`, `field_definitions`, `collections`, `items`, `people`, `item_people`, `parts`, `versions`, `files`, `progress`, `bookmarks`, `shelves` (a smart shelf's rules in `settings`), `shelf_items`, `tags`, `item_tags`, `activity`, `custom_order` (hand-arranged order per view), `settings` and `items_fts` (full-text index).
 
 ## Media serving
 On Windows, the UI loads library resources from `http://digitify.localhost/<route>`:

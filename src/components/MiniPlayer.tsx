@@ -28,7 +28,7 @@ function NowPlaying() {
     <div className="now-playing">
       <div className="now-head">
         <div className="now-cover">
-          <Cover item={{ title: track.album, coverKey: track.coverKey, handler: "audio" }} />
+          <Cover item={{ title: track.title, coverKey: track.coverKey, handler: "audio" }} />
         </div>
         <div className="now-meta">
           <strong title={track.title}>{track.title}</strong>
@@ -115,10 +115,10 @@ export function MiniPlayer() {
       <Popover.Root>
         <Popover.Trigger asChild>
           <button type="button" className="mini-player-open" aria-label="Now playing" title="Now playing">
-            <span className="mini-cover">{track && <Cover item={{ title: track.album, coverKey: track.coverKey, handler: "audio" }} />}</span>
+            <span className="mini-cover">{track && <Cover item={{ title: track.title, coverKey: track.coverKey, handler: "audio" }} />}</span>
             <span className="music-text">
               <Marquee className="music-title" text={track?.title ?? "Loading…"} />
-              <Marquee className="music-status" text={track ? (track.artist ?? track.album) : ""} />
+              <Marquee className="music-status" text={track ? (track.artist ?? track.album ?? "") : ""} />
             </span>
           </button>
         </Popover.Trigger>

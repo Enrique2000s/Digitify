@@ -560,6 +560,16 @@ input[type="checkbox"] {
   cursor: pointer;
   transition: box-shadow 300ms var(--ease);
 }
+/* The menu music has no play/pause: the round badge only shows it's on. */
+span.music-play {
+  cursor: default;
+}
+.music-pill.idle .music-play {
+  color: var(--muted);
+}
+.music-pill.idle .music-text {
+  width: 160px;
+}
 .music-play.on {
   box-shadow: var(--glow);
   animation: breathe 3.6s ease-in-out infinite;
@@ -967,7 +977,26 @@ input[type="checkbox"] {
 }
 .greeting-actions {
   display: flex;
+  align-items: center;
   gap: 10px;
+}
+/* Interface sounds as a compact toggle, like the light/night switch: lit when on. */
+.round-btn.sound-toggle[aria-pressed="true"] {
+  color: var(--accent-text);
+  box-shadow: var(--glow-sm);
+}
+/* Off: the note is struck through. */
+.menu-music-toggle {
+  position: relative;
+}
+.menu-music-toggle[aria-pressed="false"]::after {
+  content: "";
+  position: absolute;
+  width: 24px;
+  height: 2.4px;
+  border-radius: 2px;
+  background: currentColor;
+  transform: rotate(-45deg);
 }
 .btn[aria-pressed="true"].glow-when-on {
   box-shadow: var(--glow);
@@ -3122,7 +3151,62 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
   background: transparent;
 }
 .reader.watch.loading {
-  background: #000;
+  background: #070b10;
+}
+/* The curtain: the item's artwork while the player opens and closes (fades in from the library,
+   lifts on the first frame, and comes back before leaving). Under the bars. */
+.watch-curtain {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #070b10;
+  transition: opacity 320ms var(--ease);
+  animation: curtain-in 220ms var(--ease) both;
+  pointer-events: none;
+}
+.watch-curtain.gone {
+  opacity: 0;
+}
+@keyframes curtain-in {
+  from {
+    opacity: 0;
+  }
+}
+.watch-curtain-backdrop {
+  position: absolute;
+  inset: -60px;
+  background-position: center;
+  background-size: cover;
+  filter: blur(42px) brightness(0.42) saturate(1.2);
+}
+.watch-curtain-card {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  color: #fff;
+  text-align: center;
+  animation: curtain-card-in 380ms var(--ease) both;
+}
+@keyframes curtain-card-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+.watch-curtain-card strong {
+  max-width: min(70vw, 720px);
+  font-size: 22px;
+  font-weight: 900;
+}
+.watch-curtain-cover {
+  height: min(42vh, 340px);
+  overflow: hidden;
+  border-radius: var(--radius-cover);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
 }
 .watch-surface {
   position: absolute;

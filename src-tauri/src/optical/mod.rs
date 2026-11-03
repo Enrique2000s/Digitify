@@ -729,8 +729,8 @@ pub fn disc_import(app: AppHandle, letter: String, title: u32) -> AppResult<u64>
 // ---------------------------------------------------------------------------------------------
 // Cataloging
 
-/// Records the disc in the drive as a physical item in one click: an audio CD as an album with its
-/// tracks, a DVD or Blu-ray as a film, protected or not (D-007).
+/// Records the disc in the drive as physical items in one click: an audio CD's tracks (each its own
+/// item, D-027), a DVD or Blu-ray as a film, protected or not (D-007). Returns the first item.
 #[tauri::command]
 pub async fn disc_catalog(app: AppHandle, letter: String) -> AppResult<i64> {
     blocking(move || {
@@ -759,32 +759,47 @@ pub async fn disc_catalog(app: AppHandle, letter: String) -> AppResult<i64> {
         library.db.with(|conn| {
             let tx = conn.transaction()?;
             let category_id = category_id(&tx, category)?;
-            let mut metadata = serde_json::Map::new();
-            if let Some(seconds) = seconds {
-                metadata.insert("durationSec".into(), json!(seconds.round() as i64));
-            }
-            tx.execute(
-                "INSERT INTO items (category_id, title, sort_title, metadata) VALUES (?1, ?2, ?3, ?4)",
-                params![category_id, title, sort_key(&title), serde_json::Value::Object(metadata).to_string()],
-            )?;
-            let item = tx.last_insert_rowid();
-            if let Some(artist) = &artist {
-                let person = upsert_person(&tx, artist)?;
-                tx.execute("INSERT INTO item_people (item_id, person_id, role, position) VALUES (?1, ?2, 'artist', 0)", params![item, person])?;
-            }
-            for (position, (number, name, seconds)) in tracks.iter().enumerate() {
+            // A film is one item; an audio CD's tracks are items of their own (D-027), each noting
+            // the CD it's on.
+            let entries: Vec<(String, Option<(u32, f64)>)> = if tracks.is_empty() {
+                vec![(title.clone(), None)]
+            } else {
+                tracks.iter().map(|(number, name, seconds)| (name.clone(), Some((*number, *seconds)))).collect()
+            };
+            let mut first = None;
+            for (name, track) in entries {
+                let mut metadata = serde_json::Map::new();
+                if let Some(seconds) = seconds.or(track.map(|(_, s)| s)) {
+                    metadata.insert("durationSec".into(), json!(seconds.round() as i64));
+                }
+                if let Some((number, _)) = track {
+                    metadata.insert("album".into(), json!(title));
+                    metadata.insert("trackNumber".into(), json!(number));
+                }
                 tx.execute(
-                    "INSERT INTO parts (item_id, kind, number, title, duration_ms, position) VALUES (?1, 'track', ?2, ?3, ?4, ?5)",
-                    params![item, *number as f64, name, (seconds * 1000.0) as i64, position as i64],
+                    "INSERT INTO items (category_id, title, sort_title, metadata) VALUES (?1, ?2, ?3, ?4)",
+                    params![category_id, name, sort_key(&name), serde_json::Value::Object(metadata).to_string()],
                 )?;
+                let item = tx.last_insert_rowid();
+                first.get_or_insert(item);
+                if let Some(artist) = &artist {
+                    let person = upsert_person(&tx, artist)?;
+                    tx.execute("INSERT INTO item_people (item_id, person_id, role, position) VALUES (?1, ?2, 'artist', 0)", params![item, person])?;
+                }
+                if let Some((number, seconds)) = track {
+                    tx.execute(
+                        "INSERT INTO parts (item_id, kind, number, title, duration_ms, position) VALUES (?1, 'track', ?2, ?3, ?4, 0)",
+                        params![item, number as f64, name, (seconds * 1000.0) as i64],
+                    )?;
+                }
+                tx.execute(
+                    "INSERT INTO versions (item_id, kind, format, label, notes, is_primary) VALUES (?1, 'physical', ?2, ?3, ?4, 1)",
+                    params![item, format, track.map(|_| title.clone()), notes],
+                )?;
+                reindex(&tx, item)?;
             }
-            tx.execute(
-                "INSERT INTO versions (item_id, kind, format, notes, is_primary) VALUES (?1, 'physical', ?2, ?3, 1)",
-                params![item, format, notes],
-            )?;
-            reindex(&tx, item)?;
             tx.commit()?;
-            Ok(item)
+            first.ok_or_else(|| AppError::msg("The disc has no tracks."))
         })
     })
     .await

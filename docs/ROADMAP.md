@@ -101,6 +101,10 @@ Scope chosen by the owner in D-023.
 6. ✅ **Keyboard-shortcut editor.**
 7. ✅ Backup and restore, custom categories and fields were already done in Phase 1.
 
+## Library refinements (D-027)
+1. ✅ Music without albums (each track an item), Videos apart from Movies & Series, sort by duration, mass edit of covers, "Add to playlist" for selections, actions that fit the whole selection, the new category order, carousel fixes, Home's + button.
+2. ⏳ Import from URL: YouTube, YouTube Music, Spotify and SoundCloud links with official players; downloads only where allowed; playlists through the owner's API keys; an import queue.
+
 ## Release engineering (ongoing)
 NSIS installer, third-party license notices, then decisions on code signing and on an update strategy.
 

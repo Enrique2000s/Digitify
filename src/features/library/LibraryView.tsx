@@ -5,11 +5,13 @@ import { flushSync } from "react-dom";
 import { motionAllowed } from "../reader/chrome";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Popover } from "radix-ui";
-import { Check, ChevronLeft, ChevronRight, GalleryHorizontalEnd, GripVertical, Heart, LayoutGrid, LayoutList, LibraryBig, List, ListChecks, Paintbrush, Plus } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, GalleryHorizontalEnd, GripVertical, Heart, LayoutGrid, LayoutList, LibraryBig, List, ListChecks, Paintbrush, Play, Plus, Shuffle } from "lucide-react";
 import { api, type Blurb, type ItemCard, type Ownership, type QueryParams, type SortKey } from "../../lib/api";
 import { spineColors } from "../../lib/color";
 import { formatLabel } from "../../lib/format";
-import { coverShapeOf, SHAPE_ASPECT, useCoverShape, usePreferences, type Layout } from "../../lib/preferences";
+import { coverShapeOf, FILMS, SHAPE_ASPECT, useCoverShape, usePreferences, type Layout } from "../../lib/preferences";
+import { useMusic } from "../../lib/music/MusicProvider";
+import { shuffled } from "../music/Tracks";
 import { usePagedItems, type PageCache } from "../../lib/queries";
 import { actionFor, isTyping } from "../../lib/shortcuts";
 import { SelectionProvider, useSelectable, useSelection, useSelectionState } from "../../lib/selection";
@@ -84,7 +86,20 @@ function clearCoverNames() {
 }
 
 const SHAPE_CODES: Record<string, CoverShape> = { s: "square", d: "disc", p: "poster", l: "landscape" };
-const HANDLER_CODES: Record<string, string> = { b: "book", c: "comic", v: "video", a: "audio", g: "generic" };
+const HANDLER_CODES: Record<string, string> = { b: "book", c: "comic", v: "video", m: "video", a: "audio", g: "generic" };
+
+/** The aspect of each item in a view, in view order, from the core's two-letter codes (`m` is Movies & Series). */
+function aspectsOf(codes: string, total: number, fallback: number, defaults: Parameters<typeof coverShapeOf>[1]): number[] {
+  const aspects: number[] = [];
+  for (let i = 0; i < total; i++) {
+    const code = codes[i * 2];
+    const handler = HANDLER_CODES[code];
+    aspects.push(
+      handler ? SHAPE_ASPECT[coverShapeOf({ handler, category: code === "m" ? FILMS : null, coverShape: SHAPE_CODES[codes[i * 2 + 1]] ?? null }, defaults)] : fallback,
+    );
+  }
+  return aspects;
+}
 
 /**
  * Covers in rows of the same height: vertical, square, round and horizontal covers sit side by side
@@ -96,18 +111,12 @@ function GridView({ cache, total, shape, params }: ViewProps) {
   const scroll = useRef<HTMLDivElement>(null);
   const width = useWidth(scroll);
   const shapes = useQuery({ queryKey: ["shapes", params], queryFn: () => api.queryShapes(params), staleTime: 30_000 });
-  // The art height: posters as tall as before, square views a little lower, horizontal views lower still.
-  const artHeight =
-    shape === "landscape" ? Math.round(preferences.cardSize * 0.9) : shape === "square" || shape === "disc" ? preferences.cardSize : Math.round(preferences.cardSize * 1.5);
+  // One art height in every view, whatever its category, so a cover is the same size in Videos,
+  // Music or Everything; each is as wide as its shape needs.
+  const artHeight = Math.round(preferences.cardSize * 1.5);
   const viewAspect = SHAPE_ASPECT[shape];
   const layout = useMemo(() => {
-    const codes = shapes.data ?? "";
-    const widths: number[] = [];
-    for (let i = 0; i < total; i++) {
-      const handler = HANDLER_CODES[codes[i * 2]];
-      const aspect = handler ? SHAPE_ASPECT[coverShapeOf({ handler, coverShape: SHAPE_CODES[codes[i * 2 + 1]] ?? null }, preferences.coverShapes)] : viewAspect;
-      widths.push(Math.round(artHeight * aspect));
-    }
+    const widths = aspectsOf(shapes.data ?? "", total, viewAspect, preferences.coverShapes).map((aspect) => Math.round(artHeight * aspect));
     const rows: number[] = [0];
     let used = 0;
     widths.forEach((w, i) => {
@@ -428,52 +437,75 @@ function DetailedView({ cache, total }: ViewProps) {
 // ------------------------------------------------------------------ carousel view (Phase 5)
 
 /** Covers in a 3D row: the one in front is big, its neighbours turn away. Arrow keys, the wheel,
- * dragging, clicking a cover or the slider move along; Enter or a click on the front cover opens it. */
-function CarouselView({ cache, total }: ViewProps) {
+ * dragging, clicking a cover or the slider move along; Enter or a click on the front cover opens it.
+ * Every cover's shape is known before its card loads (from the core), so posters, squares, CDs and
+ * horizontal frames keep their places and sizes as they come in. */
+function CarouselView({ cache, total, shape, params }: ViewProps) {
   const navigate = useNavigate();
+  const { preferences } = usePreferences();
   const shapeOf = useCoverShape();
   const stage = useRef<HTMLDivElement>(null);
   const { width, height } = useSize(stage);
   const [index, setIndex] = useState(0);
-  const go = useCallback((next: number) => setIndex(Math.max(0, Math.min(total - 1, Math.round(next)))), [total]);
+  const last = Math.max(0, total - 1);
+  const clamp = useCallback((value: number) => Math.max(0, Math.min(last, Math.round(value))), [last]);
+  const go = useCallback((next: number) => setIndex(clamp(next)), [clamp]);
+  // Relative moves build on the latest index, so quick presses never get lost.
+  const step = useCallback((by: number) => setIndex((current) => clamp(current + by)), [clamp]);
   const current = cache.get(index);
-  const latest = useRef({ index, current });
-  latest.current = { index, current };
+  const latest = useRef(current);
+  latest.current = current;
+  const shapes = useQuery({ queryKey: ["shapes", params], queryFn: () => api.queryShapes(params), staleTime: 30_000 });
+  const aspects = useMemo(() => aspectsOf(shapes.data ?? "", total, SHAPE_ASPECT[shape], preferences.coverShapes), [shapes.data, total, shape, preferences.coverShapes]);
 
+  // A new sort or filter starts at the beginning; a shorter list keeps the index in range.
+  const viewKey = JSON.stringify(params);
+  useEffect(() => setIndex(0), [viewKey]);
   useEffect(() => {
-    if (index > total - 1) setIndex(Math.max(0, total - 1));
-    if (total > 0) cache.ensure(Math.max(0, index - 14), Math.min(total - 1, index + 14));
-  }, [cache, index, total]);
+    if (index > last) setIndex(last);
+    if (total > 0) cache.ensure(Math.max(0, index - 14), Math.min(last, index + 14));
+  }, [cache, index, last, total]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (isTyping(event) || (event.target as HTMLElement | null)?.closest?.("[role=dialog], .menu")) return;
       const action = actionFor(event, "library");
-      const { index, current } = latest.current;
-      if (action === "library.carouselPrevious") go(index - 1);
-      else if (action === "library.carouselNext") go(index + 1);
-      else if (action === "library.carouselOpen" && current) void navigate({ to: "/item/$id", params: { id: String(current.id) } });
+      const front = latest.current;
+      if (action === "library.carouselPrevious") step(-1);
+      else if (action === "library.carouselNext") step(1);
+      else if (action === "library.carouselOpen" && front) void navigate({ to: "/item/$id", params: { id: String(front.id) } });
       else return;
       event.preventDefault();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [go, navigate]);
+  }, [step, navigate]);
 
-  // The wheel moves one cover per notch; a drag moves with the pointer.
-  const wheel = useRef(0);
+  // The wheel moves one cover per notch (a trackpad's stream of small deltas adds up to one), and
+  // no faster than the covers can turn.
+  const wheel = useRef({ sum: 0, at: 0 });
   const onWheel = (event: React.WheelEvent) => {
-    wheel.current += Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-    if (Math.abs(wheel.current) >= 60) {
-      go(index + Math.sign(wheel.current));
-      wheel.current = 0;
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    const w = wheel.current;
+    if (Math.sign(delta) !== Math.sign(w.sum)) w.sum = 0;
+    w.sum += event.deltaMode === 1 ? delta * 40 : delta;
+    const now = performance.now();
+    if (Math.abs(w.sum) >= 60 && now - w.at > 110) {
+      step(Math.sign(w.sum));
+      w.sum = 0;
+      w.at = now;
     }
   };
   const coverHeight = Math.max(150, Math.min(460, Math.round(height * 0.68)));
   const spacing = coverHeight * 0.3;
+  const widthAt = (i: number) => {
+    const item = cache.get(i);
+    return coverHeight * (aspects[i] ?? (item ? shapeOf(item).aspect : 2 / 3));
+  };
   const drag = useRef<{ x: number; from: number; moved: boolean } | null>(null);
   const onPointerDown = (event: React.PointerEvent) => {
-    if (event.button !== 0) return;
+    // The arrows and the slider are buttons of their own, never the start of a drag.
+    if (event.button !== 0 || (event.target as HTMLElement).closest("button, input")) return;
     drag.current = { x: event.clientX, from: index, moved: false };
   };
   const onPointerMove = (event: React.PointerEvent) => {
@@ -481,10 +513,11 @@ function CarouselView({ cache, total }: ViewProps) {
     if (!d || !(event.buttons & 1)) return;
     const dx = event.clientX - d.x;
     if (Math.abs(dx) > 6) d.moved = true;
-    if (d.moved) go(d.from - dx / spacing);
+    // One cover per half a front cover dragged, whatever its shape.
+    if (d.moved) go(d.from - dx / Math.max(spacing, widthAt(d.from) * 0.5));
   };
   const onClickCapture = (event: React.MouseEvent) => {
-    if (drag.current?.moved) {
+    if (drag.current?.moved && !(event.target as HTMLElement).closest("button, input")) {
       event.preventDefault();
       event.stopPropagation();
     }
@@ -492,21 +525,17 @@ function CarouselView({ cache, total }: ViewProps) {
 
   const reach = Math.min(9, Math.ceil(width / 2 / spacing) + 1);
   const shown: number[] = [];
-  for (let i = Math.max(0, index - reach); i <= Math.min(total - 1, index + reach); i++) shown.push(i);
-  // Covers keep one height; a wide one (a horizontal video) pushes its neighbours further out.
-  const widthAt = (i: number) => {
-    const item = cache.get(i);
-    return coverHeight * (item ? shapeOf(item).aspect : 2 / 3);
-  };
+  for (let i = Math.max(0, index - reach); i <= Math.min(last, index + reach); i++) shown.push(i);
+  // Covers keep one height; each sits clear of the one before it by both their turned widths, so a
+  // horizontal frame next to a poster or a CD is neither squeezed nor far off.
+  const turned = (i: number) => (widthAt(i) * 0.53) / 2;
   const offsets = new Map<number, number>([[index, 0]]);
   for (const side of [-1, 1]) {
     let x = widthAt(index) / 2;
     for (let far = 1; far <= reach; far++) {
       const i = index + side * far;
-      if (i < 0 || i >= total) break;
-      // A turned cover shows about half its width.
-      const half = (widthAt(i) * 0.53) / 2;
-      x += far === 1 ? half + coverHeight * 0.06 : Math.max(spacing, half);
+      if (i < 0 || i > last) break;
+      x += far === 1 ? turned(i) + coverHeight * 0.06 : Math.max(spacing, (turned(i - side) + turned(i)) * 0.55);
       offsets.set(i, side * x);
     }
   }
@@ -523,12 +552,13 @@ function CarouselView({ cache, total }: ViewProps) {
           if (drag.current?.moved) window.setTimeout(() => (drag.current = null), 0);
           else drag.current = null;
         }}
+        onPointerCancel={() => (drag.current = null)}
         onClickCapture={onClickCapture}
       >
         {height > 0 &&
           shown.map((i) => {
             const item = cache.get(i);
-            const look = item ? shapeOf(item) : { shape: "book" as const, aspect: 2 / 3 };
+            const look = item ? shapeOf(item) : { shape: "book" as const, aspect: aspects[i] ?? 2 / 3 };
             const d = i - index;
             const side = Math.sign(d);
             const far = Math.abs(d);
@@ -540,7 +570,7 @@ function CarouselView({ cache, total }: ViewProps) {
               zIndex: 100 - far,
               opacity: far > reach - 1 ? 0 : 1,
               height: coverHeight,
-              aspectRatio: look.aspect,
+              width: Math.round(widthAt(i)),
               bottom: Math.max(40, (height - coverHeight) / 2 + 10),
             } as CSSProperties;
             return item ? (
@@ -549,10 +579,10 @@ function CarouselView({ cache, total }: ViewProps) {
               <div key={i} className="carousel-item skeleton" style={style} />
             );
           })}
-        <button type="button" className="round-btn carousel-arrow left" aria-label="Previous" disabled={index <= 0} onClick={() => go(index - 1)}>
+        <button type="button" className="round-btn carousel-arrow left" aria-label="Previous" disabled={index <= 0} onClick={() => step(-1)}>
           <ChevronLeft size={20} />
         </button>
-        <button type="button" className="round-btn carousel-arrow right" aria-label="Next" disabled={index >= total - 1} onClick={() => go(index + 1)}>
+        <button type="button" className="round-btn carousel-arrow right" aria-label="Next" disabled={index >= last} onClick={() => step(1)}>
           <ChevronRight size={20} />
         </button>
       </div>
@@ -564,9 +594,9 @@ function CarouselView({ cache, total }: ViewProps) {
             type="range"
             aria-label="Position in the carousel"
             min={0}
-            max={Math.max(0, total - 1)}
+            max={last}
             value={index}
-            style={{ "--fill": `${total > 1 ? (index / (total - 1)) * 100 : 0}%` } as CSSProperties}
+            style={{ "--fill": `${total > 1 ? (index / last) * 100 : 0}%` } as CSSProperties}
             onChange={(event) => go(Number(event.target.value))}
           />
           <span className="carousel-count">
@@ -623,6 +653,39 @@ const SORTS: { value: SortKey; label: string }[] = [
   { value: "year", label: "Year" },
   { value: "creator", label: "Creator" },
 ];
+
+/** For views that can hold music and video; items without a known length come last. */
+const DURATION_SORTS: { value: SortKey; label: string }[] = [
+  { value: "durationAsc", label: "Duration: Shortest First" },
+  { value: "durationDesc", label: "Duration: Longest First" },
+];
+
+/** Play and Shuffle for a music view's tracks, in the view's order. */
+function PlayAll({ params }: { params: Omit<QueryParams, "offset" | "limit"> }) {
+  const music = useMusic();
+  const [error, setError] = useState<string | null>(null);
+  const start = async (mix: boolean) => {
+    setError(null);
+    try {
+      const items = await api.queryIds(params);
+      const tracks = (await api.musicTracks({ items })).map((track) => track.id);
+      if (tracks.length) await music.play(mix ? shuffled(tracks) : tracks, 0);
+    } catch (reason) {
+      setError(String(reason));
+    }
+  };
+  return (
+    <>
+      <button type="button" className="btn btn-primary" onClick={() => void start(false)}>
+        <Play size={16} fill="currentColor" /> Play
+      </button>
+      <button type="button" className="btn" onClick={() => void start(true)}>
+        <Shuffle size={16} /> Shuffle
+      </button>
+      {error && <span className="hint">{error}</span>}
+    </>
+  );
+}
 
 const OWNERSHIP: { value: Ownership | ""; label: string }[] = [
   { value: "", label: "All" },
@@ -712,7 +775,9 @@ export function LibraryView({
           : base.favorites
             ? "favorites"
             : (base.category ?? "all");
-  const sorts = manualShelf ? [SHELF_SORT, ...SORTS] : base.search ? SORTS : [...SORTS, CUSTOM_SORT];
+  // A view of books or comics alone has nothing to time.
+  const timed = handler !== "book" && handler !== "comic" ? [...SORTS, ...DURATION_SORTS] : SORTS;
+  const sorts = manualShelf ? [SHELF_SORT, ...timed] : base.search ? timed : [...timed, CUSTOM_SORT];
   const [searchSort, setSearchSort] = useState<SortKey | "">("");
   const saved = orderKey ? preferences.sorts[orderKey] : undefined;
   const sort: SortKey | "" = base.search ? searchSort : saved && sorts.some((s) => s.value === saved) ? saved : manualShelf ? "shelf" : "title";
@@ -723,7 +788,7 @@ export function LibraryView({
   const params = { ...base, sort: sort || null, ownership: ownership || null, custom: sort === "custom" ? orderKey : null };
   const { cache, total, error } = usePagedItems(params);
   const selection = useSelectionState(cache);
-  const shape = coverShapeOf({ handler: handler ?? "book" }, preferences.coverShapes);
+  const shape = coverShapeOf({ handler: handler ?? "book", category: base.category }, preferences.coverShapes);
   const arrangeable = !!orderKey && (sort === "custom" || (manualShelf && sort === "shelf"));
   const [arranging, setArranging] = useState(false);
 
@@ -759,9 +824,10 @@ export function LibraryView({
               </div>
             </div>
             <div className="header-actions">
+              {handler === "audio" && total != null && total > 0 && <PlayAll params={params} />}
               {actions}
               <AddMenu align="end">
-                <button type="button" className="btn btn-primary">
+                <button type="button" className={handler === "audio" ? "btn" : "btn btn-primary"}>
                   <Plus size={17} strokeWidth={2.6} /> Add
                 </button>
               </AddMenu>

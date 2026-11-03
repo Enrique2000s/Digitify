@@ -15,7 +15,7 @@ use crate::AppState;
 /// Icon names the UI can draw (see `components/common.tsx`).
 pub const ICONS: &[&str] = &[
     "book", "comic", "manga", "film", "music", "palette", "folder", "gamepad", "disc", "camera", "tv", "newspaper",
-    "graduation", "map", "puzzle", "mic", "image", "sparkles", "trophy", "box",
+    "graduation", "map", "puzzle", "mic", "image", "sparkles", "trophy", "box", "play",
 ];
 const HANDLERS: &[&str] = &["book", "comic", "video", "audio", "generic"];
 const FIELD_KINDS: &[&str] = &["text", "longtext", "number", "date", "rating", "boolean", "choice", "url"];

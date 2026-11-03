@@ -238,7 +238,7 @@ pub async fn library_query(state: State<'_, AppState>, params: QueryParams) -> A
 }
 
 /// Each matching item's kind and cover shape, in view order, two letters per item: the kind (`b`ook,
-/// `c`omic, `v`ideo, `a`udio, `g`eneric) and its own shape (`s`quare, `d`isc, `p`oster,
+/// `c`omic, `v`ideo, `m`ovies & series, `a`udio, `g`eneric) and its own shape (`s`quare, `d`isc, `p`oster,
 /// `l`andscape, or `-` for the default). The grid lays out rows of equal height from these.
 #[tauri::command]
 pub async fn library_query_shapes(state: State<'_, AppState>, params: QueryParams) -> AppResult<String> {
@@ -247,7 +247,7 @@ pub async fn library_query_shapes(state: State<'_, AppState>, params: QueryParam
             let resolved = resolve(conn, &params)?;
             let QueryParts { joins, filter, args, order, .. } = QueryParts::new(resolved.as_ref().unwrap_or(&params));
             let mut stmt = conn.prepare(&format!(
-                "SELECT substr((SELECT c.handler FROM categories c WHERE c.id = i.category_id), 1, 1),                  coalesce(substr(json_extract(i.metadata, '$.coverShape'), 1, 1), '-')                  FROM items i{joins}{filter} ORDER BY {order} LIMIT 100000"
+                "SELECT (SELECT CASE c.key WHEN 'video' THEN 'm' ELSE substr(c.handler, 1, 1) END FROM categories c WHERE c.id = i.category_id),                  coalesce(substr(json_extract(i.metadata, '$.coverShape'), 1, 1), '-')                  FROM items i{joins}{filter} ORDER BY {order} LIMIT 100000"
             ))?;
             let mut out = String::new();
             let mut rows = stmt.query(params_from_iter(args.iter()))?;
@@ -276,6 +276,10 @@ pub async fn library_query_ids(state: State<'_, AppState>, params: QueryParams) 
 
 pub(crate) const CREATOR_SORT: &str = "(SELECT p.sort_name FROM item_people ip JOIN people p ON p.id = ip.person_id \
                             WHERE ip.item_id = i.id ORDER BY ip.position LIMIT 1)";
+
+/// An item's length in seconds: its own (films, tracks), else the sum of its parts (a series'
+/// episodes); none for books and anything not measured.
+pub(crate) const DURATION_SORT: &str = "coalesce(json_extract(i.metadata, '$.durationSec'),                             (SELECT sum(pd.duration_ms) / 1000.0 FROM parts pd WHERE pd.item_id = i.id))";
 
 const CARD_COLUMNS: &str = "i.id, i.title, \
     COALESCE((SELECT p.name FROM item_people ip JOIN people p ON p.id = ip.person_id \
@@ -414,6 +418,9 @@ impl QueryParts {
             Some("opened") => "i.last_opened_at IS NULL, i.last_opened_at DESC, i.id DESC".to_string(),
             Some("year") => "i.year IS NULL, i.year DESC, i.sort_title".to_string(),
             Some("creator") => format!("{CREATOR_SORT} IS NULL, {CREATOR_SORT}, i.sort_title"),
+            // Items without a known length come last either way.
+            Some("durationAsc") => format!("{DURATION_SORT} IS NULL, {DURATION_SORT}, i.sort_title, i.id"),
+            Some("durationDesc") => format!("{DURATION_SORT} IS NULL, {DURATION_SORT} DESC, i.sort_title, i.id"),
             _ => "i.sort_title, i.id".to_string(),
         };
         Self { joins, filter, args, counted, order }
@@ -536,12 +543,12 @@ fn blurb_facts(handler: &str, metadata: &Value, parts: i64, parts_kind: Option<&
             }
         }
         "audio" => {
-            if parts > 0 {
-                let tracks = format!("{parts} track{}", if parts == 1 { "" } else { "s" });
-                facts.push(match number("durationSec").and_then(length_label) {
-                    Some(length) => format!("{tracks} · {length}"),
-                    None => tracks,
-                });
+            // A track (D-027): its length and the album it came from.
+            if let Some(length) = number("durationSec").and_then(length_label) {
+                facts.push(length);
+            }
+            if let Some(album) = text("album") {
+                facts.push(album);
             }
             if let Some(genre) = text("genre") {
                 facts.push(genre);
@@ -704,7 +711,7 @@ pub async fn dashboard_get(state: State<'_, AppState>) -> AppResult<Dashboard> {
                     conn,
                     &format!(
                         "SELECT pr.item_id FROM progress pr JOIN items i ON i.id = pr.item_id JOIN categories c ON c.id = i.category_id \
-                         WHERE pr.part_id = 0 AND pr.fraction > 0.01 AND pr.completed = 0 AND (c.handler = 'video') = {video} \
+                         WHERE pr.part_id = 0 AND pr.fraction > 0.01 AND pr.completed = 0 AND (c.handler = 'video') = {video} AND c.key <> 'videos' \
                          ORDER BY pr.updated_at DESC LIMIT 12"
                     ),
                     &[],
@@ -1023,6 +1030,11 @@ fn write_item(conn: &Connection, item_id: Option<i64>, edit: &ItemEdit) -> AppRe
             conn.last_insert_rowid()
         }
     };
+    // Movies & Series covers are always vertical (D-027).
+    conn.execute(
+        "UPDATE items SET metadata = json_remove(metadata, '$.coverShape') WHERE id = ?1          AND json_extract(metadata, '$.coverShape') = 'landscape' AND category_id = (SELECT id FROM categories WHERE key = 'video')",
+        [id],
+    )?;
     set_people(conn, id, &edit.people)?;
     reindex(conn, id)?;
     Ok(id)
@@ -1068,6 +1080,7 @@ pub async fn item_set_favorite(state: State<'_, AppState>, id: i64, favorite: bo
                 "UPDATE items SET is_favorite = ?2, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
                 params![id, favorite],
             )?;
+            conn.execute("UPDATE parts SET is_favorite = ?2 WHERE item_id = ?1 AND kind = 'track'", params![id, favorite])?;
             Ok(())
         })
     })
@@ -1085,6 +1098,27 @@ pub async fn item_set_cover(state: State<'_, AppState>, id: i64, path: String) -
                 "UPDATE items SET cover_key = ?2, cover_color = ?3, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
                 params![id, art.key, art.color],
             )?;
+            Ok(())
+        })
+    })
+    .await
+}
+
+/// The same picked image as the artwork of several items at once.
+#[tauri::command]
+pub async fn items_set_cover(state: State<'_, AppState>, ids: Vec<i64>, path: String) -> AppResult<()> {
+    with_library(&state, move |library| {
+        let bytes = std::fs::read(&path).map_err(|e| AppError::msg(format!("could not read {path}: {e}")))?;
+        let art = artwork::store(&library.folder, &bytes)?;
+        library.db.with(|conn| {
+            let tx = conn.transaction()?;
+            for id in &ids {
+                tx.execute(
+                    "UPDATE items SET cover_key = ?2, cover_color = ?3, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
+                    params![id, art.key, art.color],
+                )?;
+            }
+            tx.commit()?;
             Ok(())
         })
     })
@@ -1275,11 +1309,25 @@ mod tests {
         set_custom_order(&mut conn, "books", &[b, 999]).unwrap();
         assert_eq!(titles(&conn, "books")[0], "Bravo");
         assert!(set_custom_order(&mut conn, " ", &[a]).is_err());
-        // A cover shape set on an item shows on its card.
-        crate::organize::apply_bulk(&mut conn, &[a], &[crate::organize::BulkOp::SetCoverShape { shape: Some("disc".into()) }]).unwrap();
-        assert_eq!(cards_by_ids(&conn, &[a]).unwrap()[0].cover_shape.as_deref(), Some("disc"));
-        crate::organize::apply_bulk(&mut conn, &[a], &[crate::organize::BulkOp::SetCoverShape { shape: None }]).unwrap();
-        assert_eq!(cards_by_ids(&conn, &[a]).unwrap()[0].cover_shape, None);
+        // A cover shape set on an item shows on its card; shapes only go where they fit (D-027).
+        conn.execute("INSERT INTO items (category_id, title, sort_title) VALUES ((SELECT id FROM categories WHERE key = 'music'), 'Song', 'song')", []).unwrap();
+        let song = conn.last_insert_rowid();
+        conn.execute("INSERT INTO items (category_id, title, sort_title) VALUES ((SELECT id FROM categories WHERE key = 'video'), 'Film', 'film')", []).unwrap();
+        let film = conn.last_insert_rowid();
+        let shape = |conn: &Connection, id: i64| cards_by_ids(conn, &[id]).unwrap()[0].cover_shape.clone();
+        let set = |conn: &mut Connection, ids: &[i64], to: Option<&str>| {
+            crate::organize::apply_bulk(conn, ids, &[crate::organize::BulkOp::SetCoverShape { shape: to.map(String::from) }]).unwrap()
+        };
+        // A CD shape for a book and a song together, or a horizontal Movies & Series cover, is refused.
+        let refused = |conn: &mut Connection, ids: &[i64], to: &str| {
+            crate::organize::apply_bulk(conn, ids, &[crate::organize::BulkOp::SetCoverShape { shape: Some(to.into()) }]).is_err()
+        };
+        assert!(refused(&mut conn, &[a, song], "disc"));
+        assert!(refused(&mut conn, &[film], "landscape"));
+        set(&mut conn, &[song], Some("disc"));
+        assert_eq!((shape(&conn, a), shape(&conn, song).as_deref(), shape(&conn, film)), (None, Some("disc"), None));
+        set(&mut conn, &[song], None);
+        assert_eq!(shape(&conn, song), None);
         assert!(crate::organize::apply_bulk(&mut conn, &[a], &[crate::organize::BulkOp::SetCoverShape { shape: Some("star".into()) }]).is_err());
     }
 }

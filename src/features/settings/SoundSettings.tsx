@@ -18,7 +18,7 @@ function sourceLabel(source: MusicSource): string {
   return source.kind === "item" ? source.title : source.path;
 }
 
-/** Albums (or any audio items with files) to add as ambient music. */
+/** Tracks (or any audio items with files) to add as ambient music. */
 function AlbumPicker({ open: isOpen, onOpenChange, onAdd }: { open: boolean; onOpenChange: (open: boolean) => void; onAdd: (sources: MusicSource[]) => void }) {
   const categories = useCategories();
   const audioCategories = categories.data?.filter((category) => category.handler === "audio").map((category) => category.key) ?? [];
@@ -55,8 +55,8 @@ function AlbumPicker({ open: isOpen, onOpenChange, onAdd }: { open: boolean; onO
     <Dialog
       open={isOpen}
       onOpenChange={onOpenChange}
-      title="Add albums from your library"
-      description="Their songs join your ambient music, played from wherever the files are."
+      title="Add tracks from your library"
+      description="They join your ambient music, played from wherever the files are."
       footer={
         <>
           <button type="button" className="btn" onClick={() => onOpenChange(false)}>
@@ -71,13 +71,13 @@ function AlbumPicker({ open: isOpen, onOpenChange, onAdd }: { open: boolean; onO
               onOpenChange(false);
             }}
           >
-            {chosen.size > 1 ? `Add ${chosen.size} albums` : "Add album"}
+            {chosen.size > 1 ? `Add ${chosen.size} tracks` : "Add track"}
           </button>
         </>
       }
     >
-      <input className="input" type="search" placeholder="Search albums and artists" value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Search albums" autoFocus />
-      {albums.data?.length === 0 && <p className="hint">{text ? "No albums match." : "There are no albums with music files in your library yet."}</p>}
+      <input className="input" type="search" placeholder="Search tracks and artists" value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Search tracks" autoFocus />
+      {albums.data?.length === 0 && <p className="hint">{text ? "No tracks match." : "There is no music with files in your library yet."}</p>}
       <ul className="album-picker">
         {albums.data?.map((item) => (
           <li key={item.id}>
@@ -135,14 +135,14 @@ export function SoundSettings() {
   return (
     <section className="panel" id="sound">
       <h2>Sound</h2>
-      <Setting title="Ambient music" text="Plays softly while you browse, and pauses by itself while Digitify plays video.">
+      <Setting title="Menu music" text="Plays softly while you browse, and pauses by itself while Digitify plays video. Also switched on and off next to Customize Home.">
         <Switch checked={music.enabled} onChange={(enabled) => updateMusic({ enabled })} label="Ambient music" />
       </Setting>
       <Setting
         title="Music"
         text={
           custom
-            ? "Your own songs: files, folders, or albums from your Digitify library."
+            ? "Your own songs: files, folders, or tracks from your Digitify library."
             : "“Digitify Main Menu Music”, an original theme written for Digitify. It improvises a little, so it never plays exactly the same way twice."
         }
       >
@@ -158,7 +158,7 @@ export function SoundSettings() {
       {custom && (
         <div className="music-sources">
           {music.sources.length === 0 ? (
-            <p className="hint">Add songs, a folder of music, or albums from your library. Supported: MP3, AAC/M4A, FLAC, Ogg Vorbis, Opus, WAV and WebM audio.</p>
+            <p className="hint">Add songs, a folder of music, or tracks from your library. Supported: MP3, AAC/M4A, FLAC, Ogg Vorbis, Opus, WAV and WebM audio.</p>
           ) : (
             <ul className="source-list" aria-label="Music sources">
               {music.sources.map((source, index) => (
@@ -188,7 +188,7 @@ export function SoundSettings() {
               <FolderPlus size={15} /> Add a folder…
             </button>
             <button type="button" className="btn btn-sm" onClick={() => setPicking(true)}>
-              <Disc3 size={15} /> Add albums from your library…
+              <Disc3 size={15} /> Add tracks from your library…
             </button>
           </div>
           {summary && <p className="hint" role="status">{summary}</p>}

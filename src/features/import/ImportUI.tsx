@@ -70,7 +70,7 @@ export function ImportReviewDialog() {
           </span>
         </label>
       </fieldset>
-      <Field label="Category" hint="Detection uses the file type (and ComicInfo for manga). You can change it per item later.">
+      <Field label="Category" hint="Detection uses the file type (and ComicInfo for manga); videos with a year go to Movies & Series, other videos to Videos. A category you pick applies to the files it can hold. You can change it per item later.">
         <select className="select" value={category} onChange={(event) => setCategory(event.target.value)}>
           <option value="">Detect automatically</option>
           {categories.data?.map((c) => (

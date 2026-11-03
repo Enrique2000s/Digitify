@@ -22,12 +22,14 @@ import {
   VolumeX,
   RotateCcw,
 } from "lucide-react";
-import { api, errorText, type WatchTarget } from "../../lib/api";
+import { api, artworkUrl, errorText, type WatchTarget } from "../../lib/api";
 import { useAmbientHold } from "../../lib/ambient/AmbientProvider";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { accentVariables } from "../../lib/color";
 import { usePreferences } from "../../lib/preferences";
-import { libraryChanged } from "../../lib/queries";
+import { libraryChanged, useItem } from "../../lib/queries";
+import { Cover } from "../../components/common";
+import { useCoverShape } from "../../lib/preferences";
 import { useActivity } from "../../lib/activity";
 import { useControllerShortcuts, VIDEO_PAD } from "../bigpicture/Launcher";
 import { WindowButtons } from "../../components/TitleBar";
@@ -159,6 +161,31 @@ function Choice({ selected, onSelect, children }: { selected: boolean; onSelect:
 type Source = { kind: "item"; id: string; part?: number } | { kind: "disc"; letter: string; title: number };
 
 /** `/watch/$id`: films and series episodes. */
+/** The item's artwork over the player while it opens and closes. */
+function Curtain({ itemId, title, shown }: { itemId: number | null; title?: string; shown: boolean }) {
+  const item = useItem(itemId ?? 0, itemId != null);
+  const shapeOf = useCoverShape();
+  const data = itemId != null ? item.data : undefined;
+  const backdrop = data ? ((data.metadata as Record<string, unknown>).backdropKey as string | undefined) : undefined;
+  const look = data ? shapeOf({ handler: data.handler, category: data.category, coverShape: (data.metadata as Record<string, unknown>).coverShape as never }) : null;
+  return (
+    <div className={`watch-curtain${shown ? "" : " gone"}`} aria-hidden={!shown}>
+      {(backdrop || data?.coverKey) && (
+        <div className="watch-curtain-backdrop" style={{ backgroundImage: `url(${backdrop ? artworkUrl(backdrop, "cover") : artworkUrl(data!.coverKey!)})` }} />
+      )}
+      <div className="watch-curtain-card">
+        {data && look && (
+          <div className="watch-curtain-cover" data-shape={look.shape} style={{ aspectRatio: look.aspect }}>
+            <Cover item={data} size="cover" />
+          </div>
+        )}
+        <strong>{title ?? data?.title ?? ""}</strong>
+        <LoaderCircle size={28} className="spin" aria-label="Opening" />
+      </div>
+    </div>
+  );
+}
+
 export function WatchPage() {
   const { id } = useParams({ from: "/watch/$id" });
   const { part } = useSearch({ from: "/watch/$id" });
@@ -199,10 +226,21 @@ function VideoPlayer({ source }: { source: Source }) {
   const latest = useRef(playback);
   latest.current = playback;
 
+  // The player opens and closes behind a curtain with the item's artwork, so moving between the
+  // library and a video is one continuous picture instead of the app vanishing into black while
+  // mpv starts (and back).
+  const [ready, setReady] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const close = useCallback(() => {
-    if (window.history.length > 1) window.history.back();
-    else if (source.kind === "disc") void navigate({ to: "/discs" });
-    else void navigate({ to: "/item/$id", params: { id } });
+    setLeaving(true);
+    window.setTimeout(
+      () => {
+        if (window.history.length > 1) window.history.back();
+        else if (source.kind === "disc") void navigate({ to: "/discs" });
+        else void navigate({ to: "/item/$id", params: { id } });
+      },
+      document.documentElement.dataset.motion === "off" ? 0 : 180,
+    );
   }, [navigate, id]);
   const playPart = useCallback(
     (partId: number) => void navigate({ to: "/watch/$id", params: { id }, search: { part: partId }, replace: true }),
@@ -226,6 +264,7 @@ function VideoPlayer({ source }: { source: Source }) {
   useEffect(() => {
     let cancelled = false;
     setTarget(null);
+    setReady(false);
     setError(null);
     setPlayback(EMPTY);
     setCountdown(null);
@@ -255,6 +294,16 @@ function VideoPlayer({ source }: { source: Source }) {
       void api.playerClose().catch(() => {});
     };
   }, [id, part, source.kind === "disc" ? `${source.letter}:${source.title}` : ""]);
+
+  // The curtain lifts on the first frame (mpv reports a position), or after a moment regardless.
+  useEffect(() => {
+    if (target && playback.time > 0) setReady(true);
+  }, [target, playback.time]);
+  useEffect(() => {
+    if (!target) return;
+    const timer = window.setTimeout(() => setReady(true), 4000);
+    return () => window.clearTimeout(timer);
+  }, [target]);
 
   useEffect(() => {
     if (!target) return;
@@ -437,6 +486,7 @@ function VideoPlayer({ source }: { source: Source }) {
       onMouseMove={poke}
     >
       <div ref={surface} className="watch-surface" onClick={() => target && togglePlay()} onDoubleClick={() => void toggleFullscreen()} />
+      <Curtain itemId={source.kind === "item" ? Number(id) : null} title={target?.title} shown={(!ready || leaving) && !error} />
 
       {target && busy && (
         <div className="watch-busy" aria-label="Loading">
@@ -454,9 +504,7 @@ function VideoPlayer({ source }: { source: Source }) {
                 Back
               </button>
             </>
-          ) : (
-            <LoaderCircle size={34} className="spin" aria-label="Opening" />
-          )}
+          ) : null}
         </div>
       )}
 

@@ -109,7 +109,8 @@ export interface Preferences {
   /** Last sort per view ("books", "all", "collection:3", "shelf:5"…). */
   sorts: Record<string, SortKey>;
   /** How albums and videos are shown unless an item has its own shape. */
-  coverShapes: { audio: "square" | "disc"; video: "poster" | "landscape" };
+  /** Default cover shapes: music square or CD; Videos horizontal or vertical (Movies & Series are always vertical, D-027). */
+  coverShapes: { audio: "square" | "disc"; videos: "poster" | "landscape" };
   /** The music category's tab, opened again next time. */
   musicTab: string;
   /** Big Picture (D-025): moving with the selection or with a cursor, and the cursor's speed. */
@@ -192,8 +193,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   syncViews: true,
   ownership: {},
   sorts: {},
-  coverShapes: { audio: "square", video: "poster" },
-  musicTab: "albums",
+  coverShapes: { audio: "square", videos: "landscape" },
+  musicTab: "tracks",
   bigPicture: { navigation: "focus", cursorSpeed: 1000 },
   shelfStyle: "covers",
   shelfLook: "breeze",
@@ -281,14 +282,20 @@ function sanitizeBigPicture(raw: unknown): Preferences["bigPicture"] {
 }
 
 function sanitizeShapes(raw: unknown): Preferences["coverShapes"] {
-  const value = (raw && typeof raw === "object" ? raw : {}) as { audio?: unknown; video?: unknown };
-  return { audio: value.audio === "disc" ? "disc" : "square", video: value.video === "landscape" ? "landscape" : "poster" };
+  const value = (raw && typeof raw === "object" ? raw : {}) as { audio?: unknown; videos?: unknown };
+  return { audio: value.audio === "disc" ? "disc" : "square", videos: value.videos === "poster" ? "poster" : "landscape" };
 }
 
+/** Movies & Series: its covers are always vertical (D-027). */
+export const FILMS = "video";
+
 /** The shape an item's cover is shown in: its own, or the default for its kind. */
-export function coverShapeOf(item: { handler: string; coverShape?: CoverShape | null }, defaults: Preferences["coverShapes"]): CoverShape | "book" {
+export function coverShapeOf(item: { handler: string; category?: string | null; coverShape?: CoverShape | null }, defaults: Preferences["coverShapes"]): CoverShape | "book" {
   if (item.handler === "audio") return item.coverShape === "disc" || item.coverShape === "square" ? item.coverShape : defaults.audio;
-  if (item.handler === "video") return item.coverShape === "poster" || item.coverShape === "landscape" ? item.coverShape : defaults.video;
+  if (item.handler === "video") {
+    if (item.category === FILMS) return "poster";
+    return item.coverShape === "poster" || item.coverShape === "landscape" ? item.coverShape : defaults.videos;
+  }
   return "book";
 }
 
@@ -297,7 +304,7 @@ export const SHAPE_ASPECT: Record<CoverShape | "book", number> = { square: 1, di
 /** The cover shape of an item, with the user's defaults. */
 export function useCoverShape() {
   const { preferences } = usePreferences();
-  return (item: { handler: string; coverShape?: CoverShape | null }) => {
+  return (item: { handler: string; category?: string | null; coverShape?: CoverShape | null }) => {
     const shape = coverShapeOf(item, preferences.coverShapes);
     return { shape, aspect: SHAPE_ASPECT[shape] };
   };
@@ -335,7 +342,8 @@ function sanitize(raw: unknown): Preferences {
     ownership: pick("ownership", (v) => !!v && typeof v === "object"),
     sorts: pick("sorts", (v) => !!v && typeof v === "object"),
     coverShapes: sanitizeShapes((raw as Raw<Preferences>)?.coverShapes),
-    musicTab: pick("musicTab", (v) => typeof v === "string" && v.length < 20),
+    // "albums" (D-024) became the Tracks view (D-027).
+    musicTab: (raw as Raw<Preferences>)?.musicTab === "albums" ? "tracks" : pick("musicTab", (v) => typeof v === "string" && v.length < 20),
     bigPicture: sanitizeBigPicture((raw as Raw<Preferences>)?.bigPicture),
     shelfStyle: pick("shelfStyle", (v) => v === "covers" || v === "spines"),
     shelfLook: pick("shelfLook", (v) => ["breeze", "wood", "glass", "metal"].includes(v as string)),

@@ -158,7 +158,7 @@ fn resolve(library: &Library, item: i64, part: Option<i64>) -> AppResult<(WatchT
             .optional()?
             .unwrap_or((None, false));
         let start = match seconds {
-            Some(seconds) if !completed && seconds >= 10.0 => seconds - 2.0,
+            Some(seconds) if !completed && seconds >= 10.0 && keeps_progress(conn, item)? => seconds - 2.0,
             _ => 0.0,
         };
         let index = episode.as_ref().and_then(|e| list.iter().position(|x| x.id == e.id));
@@ -194,6 +194,16 @@ pub async fn watch_open(
     let (target, path) = blocking(move || resolve(&library, id, part)).await?;
     player::start(&app, &window, &player, &path, target.start, volume).await?;
     Ok(target)
+}
+
+/// Videos (clips, recordings) always play from the start and keep no progress (D-027); films and
+/// series do.
+fn keeps_progress(conn: &Connection, item: i64) -> AppResult<bool> {
+    Ok(conn.query_row(
+        "SELECT c.key <> 'videos' FROM items i JOIN categories c ON c.id = i.category_id WHERE i.id = ?1",
+        [item],
+        |row| row.get(0),
+    )?)
 }
 
 fn save(conn: &Connection, item: i64, part: i64, seconds: Option<f64>, fraction: f64, completed: bool) -> AppResult<()> {
@@ -233,6 +243,9 @@ pub async fn watch_progress_save(state: State<'_, AppState>, id: i64, part: Opti
     let fraction = (seconds / duration).clamp(0.0, 1.0);
     with_library(&state, move |library| {
         library.db.with(|conn| {
+            if !keeps_progress(conn, id)? {
+                return Ok(());
+            }
             save(conn, id, part.unwrap_or(0), Some(seconds.max(0.0)), fraction, fraction >= WATCHED_AT)?;
             if part.is_some() {
                 summarize(conn, id)?;

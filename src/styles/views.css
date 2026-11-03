@@ -349,13 +349,16 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0 40px 24px;
+  padding: 0 0 24px;
 }
+/* The row runs to the window's edges and fades out there, instead of being cut 40 px in. */
 .carousel-stage {
   position: relative;
   flex: 1;
   min-height: 220px;
   overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 72px, #000 calc(100% - 72px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 72px, #000 calc(100% - 72px), transparent 100%);
   perspective: 1300px;
   perspective-origin: 50% 40%;
   touch-action: none;
@@ -370,7 +373,8 @@
   background: var(--raised);
   box-shadow: var(--cover-shadow);
   transform: translateX(-50%) translateX(var(--x)) translateZ(var(--z)) rotateY(var(--turn));
-  transition: transform 420ms var(--ease), opacity 300ms var(--ease), box-shadow 200ms var(--ease);
+  transition: transform 420ms var(--ease), width 420ms var(--ease), height 420ms var(--ease), bottom 420ms var(--ease),
+    opacity 300ms var(--ease), box-shadow 200ms var(--ease);
   -webkit-box-reflect: below 6px linear-gradient(transparent 76%, rgba(255, 255, 255, 0.26));
   -webkit-user-drag: none;
   cursor: pointer;
@@ -388,23 +392,25 @@
 .carousel-item.skeleton {
   background: var(--track);
 }
+/* Centered with a margin, not a transform: pressing a round button moves it 1 px with its own
+   transform, which used to drop the centering and pull the arrow from under the pointer, so the
+   click was lost. */
 .carousel-arrow {
   position: absolute;
-  top: 50%;
+  top: calc(50% - 18px);
   z-index: 200;
-  transform: translateY(-50%);
 }
 .carousel-arrow.left {
-  left: 6px;
+  left: 40px;
 }
 .carousel-arrow.right {
-  right: 6px;
+  right: 40px;
 }
 .carousel-info {
   display: grid;
   justify-items: center;
   gap: 4px;
-  padding-top: 6px;
+  padding: 6px 40px 0;
   text-align: center;
 }
 .carousel-title {
@@ -1470,10 +1476,6 @@ html.reordering * {
   display: flex;
   flex-direction: column;
   padding-bottom: 28px;
-}
-/* The search keeps its own height; in this column its flex-grow would stretch it downward. */
-.music-page > .search-pill {
-  flex: none;
 }
 .music-page .track-list {
   flex: 1;

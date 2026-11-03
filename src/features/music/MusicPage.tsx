@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { DropdownMenu } from "radix-ui";
-import { ArrowLeft, Clock, Disc3, Heart, ListMusic, ListPlus, Mic2, MoreHorizontal, Music2, Pencil, Play, Plus, Search, Trash } from "lucide-react";
+import { ArrowLeft, Clock, Heart, ListMusic, ListPlus, Mic2, MoreHorizontal, Music2, Pencil, Play, Plus, Trash } from "lucide-react";
 import { api, errorText, type Category, type Playlist } from "../../lib/api";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { usePreferences } from "../../lib/preferences";
@@ -11,19 +11,18 @@ import { CategoryIcon } from "../../components/common";
 import { CategoryStrip } from "../../components/CategoryStrip";
 import { duration, NewPlaylistDialog, TrackList, usePlaylists } from "./Tracks";
 
-export const MUSIC_TABS = ["albums", "artists", "tracks", "playlists", "recent", "favorites"] as const;
+export const MUSIC_TABS = ["tracks", "artists", "playlists", "recent", "favorites"] as const;
 export type MusicTab = (typeof MUSIC_TABS)[number];
 
 const LABELS: Record<MusicTab, [string, ReactNode]> = {
-  albums: ["Albums", <Disc3 size={15} aria-hidden />],
-  artists: ["Artists", <Mic2 size={15} aria-hidden />],
   tracks: ["Tracks", <Music2 size={15} aria-hidden />],
+  artists: ["Artists", <Mic2 size={15} aria-hidden />],
   playlists: ["Playlists", <ListMusic size={15} aria-hidden />],
   recent: ["Recently played", <Clock size={15} aria-hidden />],
   favorites: ["Favorites", <Heart size={15} aria-hidden />],
 };
 
-/** The tabs over a music category: albums (the library view) and the music player's own lists. */
+/** The tabs over a music category: tracks (the library view, each track an item, D-027) and the music player's own lists. */
 export function MusicTabs({ category, tab }: { category: Category; tab: MusicTab }) {
   const navigate = useNavigate();
   const { update } = usePreferences();
@@ -68,19 +67,6 @@ function Header({ category, tab }: { category: Category; tab: MusicTab }) {
   );
 }
 
-function AllTracks() {
-  const [search, setSearch] = useState("");
-  return (
-    <>
-      <label className="search-pill music-search">
-        <Search size={16} aria-hidden />
-        <input type="search" placeholder="Search by track, artist, album or genre" value={search} onChange={(event) => setSearch(event.target.value)} />
-      </label>
-      <TrackList filter={{ search: search.trim() || undefined }} empty={search ? "No tracks match." : "No music in your library yet."} />
-    </>
-  );
-}
-
 function Artists() {
   const artists = useQuery({ queryKey: ["artists"], queryFn: api.musicArtists });
   const [artist, setArtist] = useState<string | null>(null);
@@ -103,7 +89,7 @@ function Artists() {
           <span className="artist-avatar">{entry.name.slice(0, 1).toUpperCase()}</span>
           <strong>{entry.name}</strong>
           <span>
-            {entry.albums} album{entry.albums === 1 ? "" : "s"} · {entry.tracks} track{entry.tracks === 1 ? "" : "s"}
+            {entry.tracks} track{entry.tracks === 1 ? "" : "s"}
           </span>
         </button>
       ))}
@@ -282,13 +268,12 @@ function Playlists() {
   );
 }
 
-/** A music category's lists beyond albums: artists, tracks, playlists, recently played, favorites. */
-export function MusicPage({ category, tab }: { category: Category; tab: Exclude<MusicTab, "albums"> }) {
+/** A music category's lists beyond its tracks: artists, playlists, recently played, favorites. */
+export function MusicPage({ category, tab }: { category: Category; tab: Exclude<MusicTab, "tracks"> }) {
   return (
     <div className="library-view">
       <div className="music-page">
       <Header category={category} tab={tab} />
-      {tab === "tracks" && <AllTracks />}
       {tab === "artists" && <Artists />}
       {tab === "playlists" && <Playlists />}
       {tab === "recent" && <TrackList filter={{ recent: true }} empty="Nothing played yet." />}

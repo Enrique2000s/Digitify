@@ -17,7 +17,7 @@ export function duration(ms: number | null): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-function shuffled<T>(list: T[]): T[] {
+export function shuffled<T>(list: T[]): T[] {
   const copy = [...list];
   for (let i = copy.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));

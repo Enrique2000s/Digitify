@@ -19,7 +19,7 @@ export const SHORTCUTS = [
   { id: "app.search", scope: "app", label: "Search the library", keys: ["Ctrl+F"] },
   { id: "app.home", scope: "app", label: "Go to Home", keys: ["Alt+Home"] },
   { id: "app.settings", scope: "app", label: "Open Settings", keys: ["Ctrl+,"] },
-  { id: "app.musicPause", scope: "app", label: "Play or pause the music", keys: ["Ctrl+P"] },
+  { id: "app.musicPause", scope: "app", label: "Play or pause library music", keys: ["Ctrl+P"] },
   { id: "app.musicNext", scope: "app", label: "Next track", keys: ["Ctrl+Shift+ArrowRight"] },
   { id: "app.musicPrevious", scope: "app", label: "Previous track", keys: ["Ctrl+Shift+ArrowLeft"] },
 

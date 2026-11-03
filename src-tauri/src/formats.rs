@@ -280,18 +280,6 @@ pub fn read_track(path: &Path, want_cover: bool) -> TrackInfo {
     info
 }
 
-/// Album grouping key: album artist + album, or folder + album when there is no album artist
-/// (so different artists' "Greatest Hits" stay apart).
-pub fn album_key(path: &Path) -> Option<String> {
-    let info = read_track(path, false);
-    let album = info.album?.to_lowercase();
-    let owner = match info.album_artist {
-        Some(artist) => artist.to_lowercase(),
-        None => path.parent().map(|p| p.to_string_lossy().to_lowercase()).unwrap_or_default(),
-    };
-    Some(format!("{owner}\u{1f}{album}"))
-}
-
 // ---------------------------------------------------------------------------------------------
 
 #[derive(Debug, Default)]

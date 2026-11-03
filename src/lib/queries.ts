@@ -17,7 +17,7 @@ export const keys = {
 export const useAppStatus = () => useQuery({ queryKey: keys.status, queryFn: api.appStatus, staleTime: Infinity });
 export const useCategories = () => useQuery({ queryKey: keys.categories, queryFn: api.categories });
 export const useDashboard = () => useQuery({ queryKey: keys.dashboard, queryFn: api.dashboard });
-export const useItem = (id: number) => useQuery({ queryKey: keys.item(id), queryFn: () => api.item(id) });
+export const useItem = (id: number, enabled = true) => useQuery({ queryKey: keys.item(id), queryFn: () => api.item(id), enabled });
 export const useTags = () => useQuery({ queryKey: keys.tags, queryFn: api.tags });
 export const useShelves = () => useQuery({ queryKey: keys.shelves, queryFn: api.shelves });
 export const useCollections = (category: string, parent: number | null) =>

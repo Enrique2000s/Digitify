@@ -154,8 +154,8 @@ export function SettingsPage() {
           >
             <Switch checked={preferences.syncViews} label="Same view in every category" onChange={(syncViews) => update({ syncViews })} />
           </Setting>
-          <Setting title="Album covers" text="Square covers, or round CDs. Each album can also be set on its own page.">
-            <div className="segmented" role="group" aria-label="Album covers">
+          <Setting title="Music covers" text="Square covers, or round CDs. Each track can also be set on its own page.">
+            <div className="segmented" role="group" aria-label="Music covers">
               {(
                 [
                   ["square", "Square"],
@@ -168,15 +168,15 @@ export function SettingsPage() {
               ))}
             </div>
           </Setting>
-          <Setting title="Video covers" text="Vertical posters, or horizontal frames. Each film or series can also be set on its own page.">
+          <Setting title="Video covers" text="For Videos: horizontal frames, or vertical posters. Each video can also be set on its own page. Movies & Series always use vertical posters.">
             <div className="segmented" role="group" aria-label="Video covers">
               {(
                 [
-                  ["poster", "Vertical"],
                   ["landscape", "Horizontal"],
+                  ["poster", "Vertical"],
                 ] as const
               ).map(([value, label]) => (
-                <button key={value} type="button" aria-pressed={preferences.coverShapes.video === value} onClick={() => update((c) => ({ coverShapes: { ...c.coverShapes, video: value } }))}>
+                <button key={value} type="button" aria-pressed={preferences.coverShapes.videos === value} onClick={() => update((c) => ({ coverShapes: { ...c.coverShapes, videos: value } }))}>
                   {label}
                 </button>
               ))}

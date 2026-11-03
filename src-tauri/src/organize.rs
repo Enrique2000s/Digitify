@@ -579,6 +579,58 @@ pub enum BulkOp {
     SetCoverShape { shape: Option<String> },
     /// The color of a cover without artwork (`#rrggbb`); none goes back to the neutral one.
     SetCoverColor { color: Option<String> },
+    /// Every selected track to the end of a playlist (music only).
+    AddToPlaylist { playlist: i64 },
+}
+
+/// What a selection allows beyond the actions every item takes (favorites, tags, shelves, moving,
+/// the year, a cover image or color, removing). Each holds only when every selected item supports
+/// it (D-027); the bulk bar shows these, and `apply_bulk` refuses anything else.
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkActions {
+    /// Music tracks, all of them: "Add to playlist".
+    pub playlist: bool,
+    /// The cover shapes all of them can take: music square or CD, Videos horizontal or vertical;
+    /// none when Movies & Series (always vertical) or different kinds are selected.
+    pub cover_shapes: Vec<&'static str>,
+    /// Books and comics: a series name.
+    pub series: bool,
+    /// Comics and manga: the reading direction.
+    pub direction: bool,
+}
+
+pub fn bulk_actions(conn: &Connection, ids: &[i64]) -> AppResult<BulkActions> {
+    let list = serde_json::to_string(ids).map_err(|e| AppError::msg(e.to_string()))?;
+    let (total, tracks, videos, music, books, comics): (i64, i64, i64, i64, i64, i64) = conn.query_row(
+        "SELECT count(*), \
+           coalesce(sum(c.handler = 'audio' AND EXISTS (SELECT 1 FROM parts p WHERE p.item_id = i.id AND p.kind = 'track')), 0), \
+           coalesce(sum(c.handler = 'video' AND c.key <> 'video'), 0), coalesce(sum(c.handler = 'audio'), 0), \
+           coalesce(sum(c.handler IN ('book', 'comic')), 0), coalesce(sum(c.handler = 'comic'), 0) \
+         FROM items i JOIN categories c ON c.id = i.category_id WHERE i.id IN (SELECT value FROM json_each(?1))",
+        [list],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
+    )?;
+    if total == 0 {
+        return Ok(BulkActions::default());
+    }
+    Ok(BulkActions {
+        playlist: tracks == total,
+        cover_shapes: if music == total {
+            vec!["square", "disc"]
+        } else if videos == total {
+            vec!["landscape", "poster"]
+        } else {
+            Vec::new()
+        },
+        series: books == total,
+        direction: comics == total,
+    })
+}
+
+#[tauri::command]
+pub async fn items_bulk_actions(state: State<'_, AppState>, ids: Vec<i64>) -> AppResult<BulkActions> {
+    with_library(&state, move |library| library.db.with(|conn| bulk_actions(conn, &ids))).await
 }
 
 /// Applies `ops` to every item in `ids`, all or nothing.
@@ -592,6 +644,20 @@ pub async fn items_bulk(state: State<'_, AppState>, ids: Vec<i64>, ops: Vec<Bulk
 
 pub fn apply_bulk(conn: &mut Connection, ids: &[i64], ops: &[BulkOp]) -> AppResult<usize> {
     let tx = conn.transaction()?;
+    let allowed = bulk_actions(&tx, ids)?;
+    let unfit = || AppError::msg("That doesn't apply to every selected item.");
+    for op in ops {
+        let fits = match op {
+            BulkOp::SetCoverShape { shape: Some(shape) } => allowed.cover_shapes.contains(&shape.as_str()) || !["square", "disc", "poster", "landscape"].contains(&shape.as_str()),
+            BulkOp::SetSeries { .. } => allowed.series,
+            BulkOp::SetDirection { .. } => allowed.direction,
+            BulkOp::AddToPlaylist { .. } => allowed.playlist,
+            _ => true,
+        };
+        if !fits {
+            return Err(unfit());
+        }
+    }
     let touch = format!("UPDATE items SET updated_at = {NOW} WHERE id = ?1");
     let mut searchable = false;
     for op in ops {
@@ -599,6 +665,7 @@ pub fn apply_bulk(conn: &mut Connection, ids: &[i64], ops: &[BulkOp]) -> AppResu
             BulkOp::Favorite { favorite } => {
                 for id in ids {
                     tx.execute(&format!("UPDATE items SET is_favorite = ?2, updated_at = {NOW} WHERE id = ?1"), params![id, favorite])?;
+                    tx.execute("UPDATE parts SET is_favorite = ?2 WHERE item_id = ?1 AND kind = 'track'", params![id, favorite])?;
                 }
             }
             BulkOp::AddTags { names } => {
@@ -626,6 +693,11 @@ pub fn apply_bulk(conn: &mut Connection, ids: &[i64], ops: &[BulkOp]) -> AppResu
                     tx.execute(
                         &format!("UPDATE items SET category_id = ?2, collection_id = ?3, updated_at = {NOW} WHERE id = ?1"),
                         params![id, category, collection],
+                    )?;
+                    // Into Movies & Series: a horizontal cover goes back to the vertical default.
+                    tx.execute(
+                        "UPDATE items SET metadata = json_remove(metadata, '$.coverShape') WHERE id = ?1                          AND json_extract(metadata, '$.coverShape') = 'landscape' AND category_id = (SELECT id FROM categories WHERE key = 'video')",
+                        [id],
                     )?;
                 }
                 searchable = true;
@@ -664,12 +736,33 @@ pub fn apply_bulk(conn: &mut Connection, ids: &[i64], ops: &[BulkOp]) -> AppResu
                     }
                 }
                 Some(shape @ ("square" | "disc" | "poster" | "landscape")) => {
+                    // Each kind takes only its own shapes; Movies & Series covers are always vertical (D-027).
+                    let fits = match shape {
+                        "square" | "disc" => "c.handler = 'audio'",
+                        "landscape" => "c.handler = 'video' AND c.key <> 'video'",
+                        _ => "c.handler = 'video'",
+                    };
                     for id in ids {
-                        tx.execute("UPDATE items SET metadata = json_set(metadata, '$.coverShape', ?2) WHERE id = ?1", params![id, shape])?;
+                        tx.execute(
+                            &format!(
+                                "UPDATE items SET metadata = json_set(metadata, '$.coverShape', ?2) WHERE id = ?1                                  AND EXISTS (SELECT 1 FROM categories c WHERE c.id = items.category_id AND {fits})"
+                            ),
+                            params![id, shape],
+                        )?;
                     }
                 }
                 Some(_) => return Err(AppError::msg("That isn't a cover shape.")),
             },
+            BulkOp::AddToPlaylist { playlist } => {
+                let mut parts = Vec::with_capacity(ids.len());
+                for id in ids {
+                    let part: Option<i64> = tx
+                        .query_row("SELECT id FROM parts WHERE item_id = ?1 AND kind = 'track' ORDER BY position LIMIT 1", [id], |row| row.get(0))
+                        .optional()?;
+                    parts.extend(part);
+                }
+                crate::music::append_to_playlist(&tx, *playlist, &parts)?;
+            }
             BulkOp::SetCoverColor { color } => {
                 if let Some(color) = color {
                     if color.len() != 7 || !color.starts_with('#') || !color[1..].chars().all(|c| c.is_ascii_hexdigit()) {
@@ -800,5 +893,36 @@ mod tests {
             .collect::<Result<_, _>>()
             .unwrap();
         assert_eq!(order, [b, c, a]);
+    }
+
+    #[test]
+    fn selections_offer_only_what_every_item_takes() {
+        let mut conn = db::memory();
+        let songs: Vec<i64> = (0..5)
+            .map(|n| {
+                let id = item(&conn, "music", &format!("Song {n}"));
+                conn.execute("INSERT INTO parts (item_id, kind, number) VALUES (?1, 'track', 1)", [id]).unwrap();
+                id
+            })
+            .collect();
+        let clip = item(&conn, "videos", "Clip");
+        let film = item(&conn, "video", "Film");
+        let actions = bulk_actions(&conn, &songs).unwrap();
+        assert!(actions.playlist);
+        assert_eq!(actions.cover_shapes, ["square", "disc"]);
+        // One video among the songs and "Add to playlist" is gone; without it, it's back.
+        let mixed = [songs.clone(), vec![clip]].concat();
+        let actions = bulk_actions(&conn, &mixed).unwrap();
+        assert!(!actions.playlist && actions.cover_shapes.is_empty());
+        assert_eq!(bulk_actions(&conn, &[clip]).unwrap().cover_shapes, ["landscape", "poster"]);
+        assert!(bulk_actions(&conn, &[clip, film]).unwrap().cover_shapes.is_empty());
+        // The core refuses what doesn't fit, and adds what does.
+        conn.execute("INSERT INTO playlists (id, name) VALUES (1, 'Mix')", []).unwrap();
+        assert!(apply_bulk(&mut conn, &mixed, &[BulkOp::AddToPlaylist { playlist: 1 }]).is_err());
+        apply_bulk(&mut conn, &songs, &[BulkOp::AddToPlaylist { playlist: 1 }]).unwrap();
+        let count: i64 = conn.query_row("SELECT count(*) FROM playlist_tracks WHERE playlist_id = 1", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 5);
+        // General actions take any mix.
+        apply_bulk(&mut conn, &mixed, &[BulkOp::Favorite { favorite: true }]).unwrap();
     }
 }

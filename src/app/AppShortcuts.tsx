@@ -28,10 +28,10 @@ export function AppShortcuts() {
         case "app.settings":
           void navigate({ to: "/settings" });
           break;
-        // Library music when it's playing, otherwise the ambient music.
+        // Library music only: the menu music is switched on and off, not paused.
         case "app.musicPause":
-          if (music.active) music.toggle();
-          else ambient.updateMusic({ enabled: !ambient.music.enabled });
+          if (!music.active) return;
+          music.toggle();
           break;
         case "app.musicNext":
           if (music.active) music.next();

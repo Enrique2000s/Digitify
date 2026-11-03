@@ -1,4 +1,4 @@
-import { forwardRef, useState, type ComponentPropsWithoutRef, type CSSProperties, type ReactNode } from "react";
+import { useState, type ComponentPropsWithoutRef, type CSSProperties, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowDown,
@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   LibraryBig,
   Moon,
+  Music,
   Package,
   Plus,
   RotateCcw,
@@ -62,7 +63,7 @@ function greeting(): string {
 }
 
 // Pastel "screens" for the built-in sections; other categories cycle through the first five.
-const SCREENS: Record<string, number> = { books: 0, comics: 1, manga: 2, video: 3, music: 4, add: 5, favorites: 6, all: 7 };
+const SCREENS: Record<string, number> = { books: 0, comics: 1, manga: 2, video: 3, music: 4, videos: 5, favorites: 6, all: 7 };
 
 interface TileProps extends ComponentPropsWithoutRef<"button"> {
   label: string;
@@ -88,15 +89,6 @@ function TileBody({ label, screen, covers, icon, count, add }: Omit<TileProps, k
   );
 }
 
-/** The "Add to library" tile is a menu button, so it forwards its ref and props to the trigger. */
-const AddTile = forwardRef<HTMLButtonElement, ComponentPropsWithoutRef<"button">>(function AddTile(props, ref) {
-  return (
-    <button ref={ref} type="button" className="tile add" data-blip {...props}>
-      <TileBody label="Add to library" screen={SCREENS.add} covers={[]} icon={<Plus size={46} strokeWidth={2.6} aria-hidden />} add />
-    </button>
-  );
-});
-
 function SectionTile({ scope, label, screen, covers, icon, count }: { scope: string; label: string; screen: number; covers: TileCover[]; icon: ReactNode; count?: number }) {
   return (
     <Link to="/library/$scope" params={{ scope }} className="tile" data-blip>
@@ -115,9 +107,10 @@ function tileColumns(count: number): number {
 
 function Tiles({ categories, covers, total }: { categories: Category[]; covers: Record<string, TileCover[]>; total: number }) {
   const visible = categories.filter((category) => !category.isHidden);
-  const columns = tileColumns(visible.length + 3);
+  const columns = tileColumns(visible.length + 2);
   return (
     <section className="tiles" aria-label="Library sections" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+      <SectionTile scope="all" label="Everything" screen={SCREENS.all} covers={covers.all ?? []} icon={<LibraryBig size={46} strokeWidth={2.2} aria-hidden />} count={total} />
       {visible.map((category, index) => (
         <SectionTile
           key={category.key}
@@ -130,10 +123,6 @@ function Tiles({ categories, covers, total }: { categories: Category[]; covers: 
         />
       ))}
       <SectionTile scope="favorites" label="Favorites" screen={SCREENS.favorites} covers={covers.favorites ?? []} icon={<Star size={46} strokeWidth={2.2} aria-hidden />} />
-      <SectionTile scope="all" label="Everything" screen={SCREENS.all} covers={covers.all ?? []} icon={<LibraryBig size={46} strokeWidth={2.2} aria-hidden />} count={total} />
-      <AddMenu>
-        <AddTile />
-      </AddMenu>
     </section>
   );
 }
@@ -318,14 +307,30 @@ export function HomePage({ onCatalog }: { onCatalog: () => void }) {
               <LayoutDashboard size={17} strokeWidth={2.4} aria-hidden /> Customize Home
             </button>
           )}
+          <AddMenu align="end">
+            <button type="button" className="round-btn lg" aria-label="Add to library" title="Add to library">
+              <Plus size={20} strokeWidth={2.6} />
+            </button>
+          </AddMenu>
           <button
             type="button"
-            className="btn glow-when-on"
+            className="round-btn lg sound-toggle"
             aria-pressed={ambient.interfaceSounds}
+            aria-label={ambient.interfaceSounds ? "Interface sounds: on" : "Interface sounds: off"}
+            title={ambient.interfaceSounds ? "Interface sounds: on (click to turn off)" : "Interface sounds: off (click to turn on)"}
             onClick={() => ambient.setInterfaceSounds(!ambient.interfaceSounds)}
           >
-            {ambient.interfaceSounds ? <Volume2 size={17} strokeWidth={2.4} aria-hidden /> : <VolumeOff size={17} strokeWidth={2.4} aria-hidden />}
-            Interface sounds: {ambient.interfaceSounds ? "on" : "off"}
+            {ambient.interfaceSounds ? <Volume2 size={19} strokeWidth={2.4} aria-hidden /> : <VolumeOff size={19} strokeWidth={2.4} aria-hidden />}
+          </button>
+          <button
+            type="button"
+            className="round-btn lg sound-toggle menu-music-toggle"
+            aria-pressed={ambient.music.enabled}
+            aria-label={ambient.music.enabled ? "Menu music: on" : "Menu music: off"}
+            title={ambient.music.enabled ? "Menu music: on (click to turn off)" : "Menu music: off (click to turn on)"}
+            onClick={() => ambient.updateMusic({ enabled: !ambient.music.enabled })}
+          >
+            <Music size={19} strokeWidth={2.4} aria-hidden />
           </button>
           {/* Midnight is only dark: no light/night switch. */}
           {!(preferences.look === "breeze" && preferences.palette === "midnight") && (
@@ -346,7 +351,7 @@ export function HomePage({ onCatalog }: { onCatalog: () => void }) {
         <section className="welcome" aria-labelledby="welcome-title">
           <h2 id="welcome-title">Your library is ready</h2>
           <p>
-            Import ebooks, comics and manga (CBZ, PDF, EPUB, page images), films and episodes, and music albums. You can
+            Import ebooks, comics and manga (CBZ, PDF, EPUB, page images), films, episodes and videos, and music. You can
             also drop files or folders anywhere on this window. For things you own only on the shelf so far, catalog the
             physical copy and add digital files later.
           </p>

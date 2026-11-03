@@ -36,7 +36,7 @@ const routeTree = rootRoute.addChildren([
     getParentRoute: () => rootRoute,
     path: "/library/$scope",
     // `collection`: show one collection of the category, with everything inside it.
-    // `tab`: a music category's other lists (artists, tracks, playlists…); albums are the default.
+    // `tab`: a music category's other lists (artists, playlists…); its tracks are the default.
     validateSearch: (search: Record<string, unknown>): { collection?: number; tab?: string } => {
       const collection = Number(search.collection);
       const tab = typeof search.tab === "string" ? search.tab : undefined;

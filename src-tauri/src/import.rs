@@ -1,7 +1,7 @@
 //! Importing files and folders into the library, in the background with progress events.
 //!
-//! 1. Scan: expand the picked paths into candidates (one per book, comic, video, image folder or
-//!    album).
+//! 1. Scan: expand the picked paths into candidates (one per book, comic, video, image folder,
+//!    series or track; D-027: no albums).
 //! 2. For each candidate, in parallel: fingerprint its files, drop files already in the library,
 //!    read embedded metadata and artwork.
 //! 3. Save: copy into the library folder if asked, then record the item, its digital version, its
@@ -46,7 +46,7 @@ pub enum ImportMode {
 pub struct ImportRequest {
     pub paths: Vec<String>,
     pub mode: ImportMode,
-    /// Put everything into this category instead of detecting one per file.
+    /// Put what this category can hold into it instead of detecting one per file.
     pub category: Option<String>,
 }
 
@@ -121,9 +121,9 @@ fn run(
     emit(app, progress);
     log::info!("import {}: {} candidates from {} paths", progress.job_id, candidates.len(), paths.len());
 
-    let categories: HashMap<String, (i64, String)> = library.db.with(|conn| {
-        let mut stmt = conn.prepare("SELECT key, id, name FROM categories")?;
-        let rows = stmt.query_map([], |row| Ok((row.get(0)?, (row.get(1)?, row.get(2)?))))?.collect::<Result<_, _>>()?;
+    let categories: HashMap<String, (i64, String, String)> = library.db.with(|conn| {
+        let mut stmt = conn.prepare("SELECT key, id, name, handler FROM categories")?;
+        let rows = stmt.query_map([], |row| Ok((row.get(0)?, (row.get(1)?, row.get(2)?, row.get(3)?))))?.collect::<Result<_, _>>()?;
         Ok(rows)
     })?;
     if let Some(key) = &request.category {
@@ -145,8 +145,14 @@ fn run(
             let outcome = result.and_then(|prepared| match prepared {
                 Prepared::Duplicate => Ok(false),
                 Prepared::Draft(draft) => {
-                    let key = request.category.as_deref().unwrap_or(draft.category);
-                    let (category_id, category_name) = categories
+                    // A picked category applies to what it can hold (Videos or Movies & Series for
+                    // videos, say); anything else keeps the category it was detected as.
+                    let handler = |key: &str| categories.get(key).map(|c| c.2.as_str());
+                    let key = match request.category.as_deref() {
+                        Some(picked) if handler(picked) == handler(draft.category) || handler(picked) == Some("generic") => picked,
+                        _ => draft.category,
+                    };
+                    let (category_id, category_name, _) = categories
                         .get(key)
                         .cloned()
                         .ok_or_else(|| AppError::msg(format!("unknown category '{key}'")))?;
@@ -214,8 +220,8 @@ enum Candidate {
     Single { kind: Kind, path: PathBuf },
     /// Photographed pages or numbered comic pages: one folder becomes one item.
     ImageSet { dir: PathBuf, pages: Vec<PathBuf> },
-    /// Tracks sharing an album; a lone track without album tags is an album of one.
-    Album { tracks: Vec<PathBuf> },
+    /// One music track: each is an item of its own (D-027).
+    Track { path: PathBuf },
     /// Episodes of one TV series, recognized by their names (D-018).
     Series { name: String, episodes: Vec<(PathBuf, EpisodeName)> },
 }
@@ -226,7 +232,7 @@ impl Candidate {
         match self {
             Candidate::Single { path, .. } => name(path),
             Candidate::ImageSet { dir, .. } => name(dir),
-            Candidate::Album { tracks } => tracks.first().and_then(|t| t.parent()).map(name).unwrap_or_default(),
+            Candidate::Track { path } => name(path),
             Candidate::Series { name, .. } => name.clone(),
         }
     }
@@ -235,7 +241,7 @@ impl Candidate {
         match self {
             Candidate::Single { path, .. } => vec![path],
             Candidate::ImageSet { pages, .. } => pages.iter().collect(),
-            Candidate::Album { tracks } => tracks.iter().collect(),
+            Candidate::Track { path } => vec![path],
             Candidate::Series { episodes, .. } => episodes.iter().map(|(path, _)| path).collect(),
         }
     }
@@ -263,7 +269,6 @@ fn scan(paths: &[PathBuf], cancel: &AtomicBool) -> Vec<Candidate> {
     let mut candidates = Vec::new();
     let mut image_dirs: BTreeMap<PathBuf, Vec<PathBuf>> = BTreeMap::new();
     let mut av_dirs: std::collections::HashSet<PathBuf> = Default::default();
-    let mut audio = Vec::new();
     let mut series: BTreeMap<String, (String, Vec<(PathBuf, EpisodeName)>)> = BTreeMap::new();
     for file in found {
         let parent = file.parent().map(Path::to_path_buf).unwrap_or_default();
@@ -271,7 +276,7 @@ fn scan(paths: &[PathBuf], cancel: &AtomicBool) -> Vec<Candidate> {
             Some(Kind::Image) => image_dirs.entry(parent).or_default().push(file),
             Some(Kind::Audio) => {
                 av_dirs.insert(parent);
-                audio.push(file);
+                candidates.push(Candidate::Track { path: file });
             }
             Some(Kind::Video) => {
                 av_dirs.insert(parent);
@@ -293,15 +298,6 @@ fn scan(paths: &[PathBuf], cancel: &AtomicBool) -> Vec<Candidate> {
             candidates.push(Candidate::ImageSet { dir, pages });
         }
     }
-    let keyed: Vec<(Option<String>, PathBuf)> = audio.into_par_iter().map(|p| (formats::album_key(&p), p)).collect();
-    let mut albums: BTreeMap<String, Vec<PathBuf>> = BTreeMap::new();
-    for (key, path) in keyed {
-        match key {
-            Some(key) => albums.entry(key).or_default().push(path),
-            None => candidates.push(Candidate::Album { tracks: vec![path] }),
-        }
-    }
-    candidates.extend(albums.into_values().map(|tracks| Candidate::Album { tracks }));
     candidates.extend(series.into_values().map(|(name, episodes)| Candidate::Series { name, episodes }));
     candidates
 }
@@ -372,7 +368,7 @@ fn prepare(library: &Library, candidate: &Candidate) -> AppResult<Prepared> {
     let draft = match candidate {
         Candidate::Single { kind, path } => describe_single(*kind, path, files),
         Candidate::ImageSet { dir, .. } => describe_image_set(dir, files),
-        Candidate::Album { .. } => describe_album(files),
+        Candidate::Track { path } => describe_track(path, files),
         Candidate::Series { name, episodes } => describe_series(name, episodes, files),
     };
     Ok(Prepared::Draft(Box::new(draft)))
@@ -515,6 +511,10 @@ fn describe_single(kind: Kind, path: &Path, files: Vec<FileDraft>) -> Draft {
                 let at = info.duration.map_or(10.0, |duration| (duration * 0.1).clamp(1.0, 300.0));
                 d.artwork = formats::video_frame(path, at);
             }
+            // A film has a year; anything else is a video (clips, recordings), D-027.
+            if d.year.is_none() {
+                d.category = "videos";
+            }
             d
         }
         Kind::Audio | Kind::Image => draft("books", name_title, name_year, ext, files),
@@ -533,97 +533,52 @@ fn describe_image_set(dir: &Path, mut files: Vec<FileDraft>) -> Draft {
     d
 }
 
-fn describe_album(files: Vec<FileDraft>) -> Draft {
-    let mut tracks: Vec<(FileDraft, formats::TrackInfo)> = files
-        .into_iter()
-        .map(|file| {
-            let info = formats::read_track(&file.path, false);
-            (file, info)
-        })
-        .collect();
-    tracks.sort_by(|(fa, a), (fb, b)| {
-        (a.disc.unwrap_or(1), a.track.unwrap_or(u32::MAX))
-            .cmp(&(b.disc.unwrap_or(1), b.track.unwrap_or(u32::MAX)))
-            .then_with(|| natural_cmp(&fa.path.to_string_lossy(), &fb.path.to_string_lossy()))
-    });
-
-    let first_path = tracks[0].0.path.clone();
-    let first = &tracks[0].1;
-    let single = tracks.len() == 1 && first.album.is_none();
-    let (name_title, name_year) = title_from_name(&first_path);
-    let title = if single { first.title.clone().unwrap_or(name_title) } else { first.album.clone().unwrap_or(name_title) };
-    let artist = first.album_artist.clone().or_else(|| {
-        // Most common track artist; several different ones without an album artist → compilation.
-        let mut counts: HashMap<&str, usize> = HashMap::new();
-        for (_, info) in &tracks {
-            if let Some(artist) = &info.artist {
-                *counts.entry(artist.as_str()).or_default() += 1;
-            }
-        }
-        match counts.len() {
-            0 => None,
-            1 => counts.keys().next().map(|a| a.to_string()),
-            _ => Some("Various Artists".into()),
-        }
-    });
-
-    // Artwork: an embedded front cover, else a cover image in the album folder.
-    let mut artwork = tracks.iter().find_map(|(file, _)| formats::read_track(&file.path, true).cover);
+/// One track as an item of its own (D-027): its title, artist, album (kept as a detail), cover
+/// art (embedded, else a cover image in its folder) and length.
+fn describe_track(path: &Path, mut files: Vec<FileDraft>) -> Draft {
+    let info = formats::read_track(path, true);
+    let (name_title, name_year) = title_from_name(path);
+    let title = info.title.clone().unwrap_or(name_title);
+    let artist = info.artist.clone().or_else(|| info.album_artist.clone());
+    let mut artwork = info.cover;
     if artwork.is_none() {
-        if let Some(dir) = first_path.parent() {
+        if let Some(dir) = path.parent() {
             artwork = ["cover.jpg", "folder.jpg", "front.jpg", "cover.png", "folder.png", "albumart.jpg"]
                 .iter()
                 .find_map(|name| std::fs::read(dir.join(name)).ok());
         }
     }
-
-    let genre = tracks.iter().find_map(|(_, info)| info.genre.clone());
-    let year = tracks.iter().find_map(|(_, info)| info.year).or(name_year);
-    let discs = tracks.iter().filter_map(|(_, info)| info.disc).max().unwrap_or(1);
-    let total_ms: i64 = tracks.iter().filter_map(|(_, info)| info.duration_ms).sum();
-    let format = {
-        let mut counts: HashMap<String, usize> = HashMap::new();
-        for (file, _) in &tracks {
-            *counts.entry(extension(&file.path)).or_default() += 1;
-        }
-        counts.into_iter().max_by_key(|(_, n)| *n).map(|(ext, _)| ext).unwrap_or_default()
-    };
-
-    let mut parts = Vec::new();
-    let mut files = Vec::new();
-    for (index, (mut file, info)) in tracks.into_iter().enumerate() {
-        let (track_title, _) = title_from_name(&file.path);
-        parts.push(PartDraft {
-            kind: "track",
-            number: info.track.map(f64::from).or(Some(index as f64 + 1.0)),
-            title: Some(info.title.unwrap_or(track_title)),
-            duration_ms: info.duration_ms,
-            season: None,
-            artist: info.artist.filter(|track_artist| Some(track_artist) != artist.as_ref()),
-        });
-        file.part = Some(index);
-        files.push(file);
+    if let Some(file) = files.first_mut() {
+        file.part = Some(0);
     }
-
-    let mut d = draft("music", title.clone(), year, format, files);
+    let mut d = draft("music", title.clone(), info.year.or(name_year), extension(path), files);
     d.people = artist.iter().map(|a| (a.clone(), "artist")).collect();
-    d.parts = parts;
+    d.parts = vec![PartDraft {
+        kind: "track",
+        number: info.track.map(f64::from),
+        title: Some(title.clone()),
+        duration_ms: info.duration_ms,
+        season: None,
+        artist: None,
+    }];
     d.artwork = artwork;
-    d.copy_folder = Some(match &artist {
-        Some(artist) => format!("{artist} - {title}"),
-        None => title.clone(),
+    // Managed copies still sit together by album, as on disk.
+    d.copy_folder = Some(match (&info.album_artist, &info.album) {
+        (Some(artist), Some(album)) => format!("{artist} - {album}"),
+        (None, Some(album)) => album.clone(),
+        _ => artist.clone().unwrap_or_else(|| "Singles".into()),
     });
-    if !single {
-        d.metadata.insert("album".into(), json!(title));
+    for (key, value) in [("album", info.album), ("albumArtist", info.album_artist), ("genre", info.genre)] {
+        if let Some(value) = value {
+            d.metadata.insert(key.into(), json!(value));
+        }
     }
-    if let Some(artist) = artist {
-        d.metadata.insert("albumArtist".into(), json!(artist));
+    if let Some(number) = info.track {
+        d.metadata.insert("trackNumber".into(), json!(number));
     }
-    if let Some(genre) = genre {
-        d.metadata.insert("genre".into(), json!(genre));
+    if let Some(ms) = info.duration_ms {
+        d.metadata.insert("durationSec".into(), json!(ms / 1000));
     }
-    d.metadata.insert("discCount".into(), json!(discs));
-    d.metadata.insert("durationSec".into(), json!(total_ms / 1000));
     d
 }
 

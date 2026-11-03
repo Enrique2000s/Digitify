@@ -42,7 +42,7 @@ function CategoryView({ category, collection }: { category: Category; collection
       square={category.handler === "audio"}
       handler={category.handler}
       actions={<CollectionActions category={category} path={current ? path : []} />}
-      prelude={category.handler === "audio" && collection == null ? <MusicTabs category={category} tab="albums" /> : undefined}
+      prelude={category.handler === "audio" && collection == null ? <MusicTabs category={category} tab="tracks" /> : undefined}
       beforeItems={<CollectionRow category={category.key} parent={collection} />}
       empty={
         current ? (
@@ -94,7 +94,7 @@ export function LibraryPage() {
   if (!category) return null;
   // A music category opens on the tab used last time.
   const musicTab = MUSIC_TABS.find((key) => key === (tab ?? (collection == null ? preferences.musicTab : undefined))) as MusicTab | undefined;
-  if (category.handler === "audio" && musicTab && musicTab !== "albums") return <MusicPage category={category} tab={musicTab} />;
+  if (category.handler === "audio" && musicTab && musicTab !== "tracks") return <MusicPage category={category} tab={musicTab} />;
   return <CategoryView key={`${scope}:${collection ?? ""}`} category={category} collection={collection ?? null} />;
 }
 
@@ -108,7 +108,7 @@ export function SearchPage() {
       eyebrow="Search"
       title={`“${q}”`}
       icon={<Search size={26} strokeWidth={2.4} aria-hidden />}
-      empty={<div className="empty"><p>No matches for “{q}”. Search looks at titles, people, series, albums, genres, tags, collections, custom fields and track names.</p></div>}
+      empty={<div className="empty"><p>No matches for “{q}”. Search looks at titles, people, series, albums, genres, tags, collections and custom fields.</p></div>}
     />
   );
 }

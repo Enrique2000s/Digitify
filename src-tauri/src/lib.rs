@@ -26,6 +26,7 @@ mod organize;
 mod pages;
 mod pdf;
 mod player;
+mod reshape;
 mod series;
 mod setup;
 mod smart;
@@ -140,6 +141,7 @@ pub fn run() {
             library::item_create,
             library::item_set_favorite,
             library::item_set_cover,
+            library::items_set_cover,
             library::item_set_backdrop,
             library::item_remove,
             library::version_save,
@@ -160,6 +162,7 @@ pub fn run() {
             organize::collection_move,
             organize::collection_delete,
             organize::items_bulk,
+            organize::items_bulk_actions,
             pages::reader_open,
             pages::progress_save,
             ebooks::ebook_progress_save,

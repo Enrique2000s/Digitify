@@ -1,7 +1,9 @@
 import { useEffect, useId, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { FolderInput, ListMinus, ListPlus, Pencil, Tags, Trash } from "lucide-react";
-import { api, errorText, type BulkOp, type QueryParams } from "../../lib/api";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { open as openFile } from "@tauri-apps/plugin-dialog";
+import { DropdownMenu } from "radix-ui";
+import { FolderInput, ImagePlus, ListMinus, ListMusic, ListPlus, Pencil, Plus, Tags, Trash } from "lucide-react";
+import { api, errorText, type BulkActions, type BulkOp, type CoverShape, type QueryParams } from "../../lib/api";
 import { plural } from "../../lib/format";
 import { libraryChanged, useCategories } from "../../lib/queries";
 import { useSelection } from "../../lib/selection";
@@ -9,8 +11,11 @@ import { Dialog, Field } from "../../components/common";
 import { MoveDialog } from "../organize/dialogs";
 import { ShelfMenu } from "../organize/ShelfMenu";
 import { tagNames, TagSuggestions } from "../organize/TagEditor";
+import { NewPlaylistDialog, usePlaylists } from "../music/Tracks";
 
-type BulkDialog = "tags" | "move" | "edit" | "remove" | null;
+type BulkDialog = "tags" | "move" | "edit" | "cover" | "remove" | null;
+
+const SHAPE_LABELS: Record<CoverShape, string> = { square: "Square", disc: "CD", landscape: "Horizontal", poster: "Vertical" };
 
 function BulkDialogFrame({
   open,
@@ -124,7 +129,7 @@ function OptionalField({ label, enabled, onEnabled, children }: { label: string;
   );
 }
 
-function EditDialog({ ids, open, onOpenChange }: { ids: number[]; open: boolean; onOpenChange: (open: boolean) => void }) {
+function EditDialog({ ids, actions, open, onOpenChange }: { ids: number[]; actions: BulkActions | undefined; open: boolean; onOpenChange: (open: boolean) => void }) {
   const queryClient = useQueryClient();
   const [favorite, setFavorite] = useState<"" | "yes" | "no">("");
   const [yearOn, setYearOn] = useState(false);
@@ -144,7 +149,7 @@ function EditDialog({ ids, open, onOpenChange }: { ids: number[]; open: boolean;
   const ops: BulkOp[] = [];
   if (favorite) ops.push({ op: "favorite", favorite: favorite === "yes" });
   if (yearOn) ops.push({ op: "setYear", year: year.trim() ? Number(year) : null });
-  if (seriesOn) ops.push({ op: "setSeries", series: series.trim() || null });
+  if (seriesOn && actions?.series) ops.push({ op: "setSeries", series: series.trim() || null });
   const badYear = yearOn && year.trim() !== "" && !/^\d{1,4}$/.test(year.trim());
 
   return (
@@ -171,10 +176,124 @@ function EditDialog({ ids, open, onOpenChange }: { ids: number[]; open: boolean;
         <input className="input" inputMode="numeric" aria-label="Year" placeholder="Leave empty to clear" value={year} onChange={(event) => setYear(event.target.value)} />
         {badYear && <span className="hint">Year should be a whole number, like 1927.</span>}
       </OptionalField>
-      <OptionalField label="Series" enabled={seriesOn} onEnabled={setSeriesOn}>
-        <input className="input" aria-label="Series" placeholder="Leave empty to clear" value={series} onChange={(event) => setSeries(event.target.value)} />
-      </OptionalField>
+      {actions?.series && (
+        <OptionalField label="Series" enabled={seriesOn} onEnabled={setSeriesOn}>
+          <input className="input" aria-label="Series" placeholder="Leave empty to clear" value={series} onChange={(event) => setSeries(event.target.value)} />
+        </OptionalField>
+      )}
     </BulkDialogFrame>
+  );
+}
+
+/** One image as the artwork of every selected item, and the cover shape when they all take the same ones. */
+function CoverDialog({ ids, actions, open, onOpenChange }: { ids: number[]; actions: BulkActions | undefined; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const queryClient = useQueryClient();
+  const [image, setImage] = useState<string | null>(null);
+  const [shape, setShape] = useState<CoverShape | "" | "default">("");
+  useEffect(() => {
+    if (open) {
+      setImage(null);
+      setShape("");
+    }
+  }, [open]);
+  const shapes = actions?.coverShapes ?? [];
+  const pick = async () => {
+    const path = await openFile({ multiple: false, title: "Choose artwork", filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "webp", "gif", "bmp"] }] });
+    if (typeof path === "string") setImage(path);
+  };
+  return (
+    <BulkDialogFrame
+      open={open}
+      onOpenChange={onOpenChange}
+      title={`Cover for ${plural(ids.length, "item")}`}
+      description="Artwork and shape are changed only if you choose them. Your media files are never modified."
+      confirm="Apply"
+      disabled={!image && !shape}
+      onConfirm={async () => {
+        if (image) await api.itemsSetCover(ids, image);
+        if (shape) await api.itemsBulk(ids, [{ op: "setCoverShape", shape: shape === "default" ? null : shape }]);
+        libraryChanged(queryClient);
+      }}
+    >
+      <Field label="Artwork">
+        <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
+          <button type="button" className="btn btn-sm" onClick={() => void pick()}>
+            <ImagePlus size={15} /> {image ? "Another image…" : "Choose an image…"}
+          </button>
+          <span className="hint path" title={image ?? undefined}>
+            {image ? image.split(/[\\/]/).pop() : "The same image for every selected item."}
+          </span>
+        </div>
+      </Field>
+      {shapes.length > 0 ? (
+        <Field label="Shape">
+          <div className="segmented" role="group" aria-label="Cover shape">
+            <button type="button" aria-pressed={shape === ""} onClick={() => setShape("")}>
+              Leave as is
+            </button>
+            {shapes.map((value) => (
+              <button key={value} type="button" aria-pressed={shape === value} onClick={() => setShape(value)}>
+                {SHAPE_LABELS[value]}
+              </button>
+            ))}
+            <button type="button" aria-pressed={shape === "default"} onClick={() => setShape("default")}>
+              Default
+            </button>
+          </div>
+        </Field>
+      ) : (
+        <p className="hint">The shape can be changed when every selected item takes the same shapes: all music, or all Videos. Movies & Series covers are always vertical.</p>
+      )}
+    </BulkDialogFrame>
+  );
+}
+
+/** Every selected track to a playlist, or to a new one. */
+function PlaylistMenu({ ids, onError }: { ids: number[]; onError: (message: string) => void }) {
+  const queryClient = useQueryClient();
+  const playlists = usePlaylists();
+  const [creating, setCreating] = useState<number[] | null>(null);
+  const add = async (playlist: number) => {
+    try {
+      await api.itemsBulk(ids, [{ op: "addToPlaylist", playlist }]);
+      void queryClient.invalidateQueries({ queryKey: ["playlists"] });
+      void queryClient.invalidateQueries({ queryKey: ["track-playlists"] });
+      void queryClient.invalidateQueries({ queryKey: ["tracks"] });
+    } catch (reason) {
+      onError(errorText(reason));
+    }
+  };
+  const startNew = async () => {
+    try {
+      setCreating((await api.musicTracks({ items: ids })).map((track) => track.id));
+    } catch (reason) {
+      onError(errorText(reason));
+    }
+  };
+  return (
+    <>
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger asChild>
+          <button type="button" className="btn btn-sm" disabled={ids.length === 0}>
+            <ListMusic size={15} /> Add to playlist
+          </button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content className="menu" align="start" sideOffset={8}>
+            {playlists.data?.map((list) => (
+              <DropdownMenu.Item key={list.id} className="menu-item" onSelect={() => void add(list.id)}>
+                <ListMusic size={17} /> {list.name}
+              </DropdownMenu.Item>
+            ))}
+            {playlists.data?.length ? <DropdownMenu.Separator className="menu-separator" /> : null}
+            <DropdownMenu.Item className="menu-item" onSelect={() => void startNew()}>
+              <Plus size={17} /> New playlist…
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+      <NewPlaylistDialog tracks={creating ?? []} open={creating != null} onOpenChange={(open) => !open && setCreating(null)} />
+    </>
   );
 }
 
@@ -216,8 +335,16 @@ export function BulkBar({ base, total, shelf }: { base: Omit<QueryParams, "offse
   const categories = useCategories();
   const [dialog, setDialog] = useState<BulkDialog>(null);
   const [error, setError] = useState<string | null>(null);
+  const ids = selection?.active ? [...selection.selected] : [];
+  // What fits every selected item comes from the core, so the bar and the edits follow one set of rules.
+  const actions = useQuery({
+    queryKey: ["bulk-actions", [...ids].sort((a, b) => a - b).join(",")],
+    queryFn: () => api.itemsBulkActions(ids),
+    enabled: ids.length > 0,
+    placeholderData: keepPreviousData,
+  }).data;
+  const fits = ids.length > 0 ? actions : undefined;
   if (!selection?.active) return null;
-  const ids = [...selection.selected];
   const none = ids.length === 0;
   const close = (open: boolean) => !open && setDialog(null);
 
@@ -266,6 +393,7 @@ export function BulkBar({ base, total, shelf }: { base: Omit<QueryParams, "offse
             <ListMinus size={15} /> Take off this shelf
           </button>
         )}
+        {fits?.playlist && <PlaylistMenu ids={ids} onError={setError} />}
         <button type="button" className="btn btn-sm" disabled={none} onClick={() => setDialog("tags")}>
           <Tags size={15} /> Tags…
         </button>
@@ -274,6 +402,9 @@ export function BulkBar({ base, total, shelf }: { base: Omit<QueryParams, "offse
         </button>
         <button type="button" className="btn btn-sm" disabled={none} onClick={() => setDialog("edit")}>
           <Pencil size={15} /> Edit…
+        </button>
+        <button type="button" className="btn btn-sm" disabled={none} onClick={() => setDialog("cover")}>
+          <ImagePlus size={15} /> Cover…
         </button>
         <button type="button" className="btn btn-sm btn-danger" disabled={none} onClick={() => setDialog("remove")}>
           <Trash size={15} /> Remove…
@@ -284,7 +415,8 @@ export function BulkBar({ base, total, shelf }: { base: Omit<QueryParams, "offse
         {error && <div className="dialog-error bulk-error">{error}</div>}
       </div>
       <TagsDialog ids={ids} open={dialog === "tags"} onOpenChange={close} />
-      <EditDialog ids={ids} open={dialog === "edit"} onOpenChange={close} />
+      <EditDialog ids={ids} actions={fits} open={dialog === "edit"} onOpenChange={close} />
+      <CoverDialog ids={ids} actions={fits} open={dialog === "cover"} onOpenChange={close} />
       <RemoveDialog ids={ids} open={dialog === "remove"} onOpenChange={close} onRemoved={() => selection.set([])} />
       <MoveDialog
         open={dialog === "move"}
