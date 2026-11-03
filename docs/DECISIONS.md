@@ -65,6 +65,7 @@ Every product or architecture decision is recorded here with its reason. Anythin
 - **Date:** 2026-10-30 · **Approved by:** project owner
 - **Decision:**
   - Fully offline: no telemetry, no update checks and no network calls of any kind until the owner approves a specific online feature.
+  - Approved online feature: Import from URL (D-028), only when a link is pasted, while an import runs, and while an online item plays.
   - Logs stay on the local machine.
 
 ### D-009 · File safety
@@ -99,6 +100,21 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Vendored from commit `78914aef4466eb960965702401634c2cb348e9b1` into `src/vendor/foliate-js/`, with its `pdf.js` replaced by a stand-in so PDF.js (about 10 MB) isn't bundled. PDFs stay with PDFium (D-013).
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
+
+### D-028 · Import from URL: online items, and downloads only where allowed
+- **Date:** 2026-11-03 · **Approved by:** project owner (asked for Import from URL; chose links with the services' own players, downloads only where allowed, and playlists through their own API keys)
+- **Network (an approved exception to D-008):** Digitify goes online only when a link is pasted into "Import from URL", while an import runs, and while an online item plays in its service's player. Nothing else changed: no telemetry, no update checks.
+- **Services and what each allows** (checked against their current terms and APIs, November 2026):
+  - **YouTube and YouTube Music:** saved as online items and played in YouTube's embedded player (youtube-nocookie, with the app's origin, since YouTube refuses embeds that don't say where they are; "Open on YouTube" is always there for videos whose owners block embedding). Never downloaded: YouTube's terms don't allow it. Without a key a link is looked up through YouTube's public oEmbed (title, channel, thumbnail) and a playlist stays one link; with a YouTube Data API v3 key, playlists are listed video by video with lengths and availability (up to 500).
+  - **Spotify:** saved as online items and played in Spotify's embedded player (previews unless signed in to Spotify there). Never downloaded. With the owner's client ID and secret, a track's artists and length and an album's songs are listed; since February 2026 Spotify lists a playlist's songs only to its owner or collaborators, so other playlists are saved as one link. Spotify also requires the developer app's owner to have Premium.
+  - **SoundCloud:** with the owner's client ID and secret (client-credentials flow), tracks and sets are resolved and a set's tracks listed; a track whose uploader made it downloadable is downloaded; everything else is an online item played in SoundCloud's widget. Without keys a link is saved as one online item.
+  - **Direct links to audio or video files:** downloaded.
+- **Three kinds of items:** local files; downloaded media (a normal managed file in the library folder, under `<Category>\Downloads`, available offline, with where it came from recorded); online items (no files, marked with a cloud on their cover and "Online, needs a connection" on their page, played at `/online/<id>`). They're all ordinary items (favorites, tags, shelves, sorting, search, covers, selection, Big Picture). An online song isn't a playable track, so "Add to playlist" isn't offered for a selection that includes one, and the library's music player skips nothing it can't play.
+- **Duplicates:** the same thing from the same service (YouTube and YouTube Music count as one), or the same downloaded file (by its fingerprint), is skipped and pointed at the existing item; nothing is replaced, except that downloading something kept as an online item replaces that online item, carrying over its favorite mark, tags and shelves.
+- **The queue:** two workers in the background; per-item progress, cancel (no half-downloaded files left) and retry; one failure doesn't stop the rest; requests to a service are spaced and a "slow down" answer is waited out once; errors are explained (removed, private or region-locked, no connection, keys refused, rate-limited, not a media file).
+- **Playlists:** importing a music playlist can make a Digitify playlist of its songs that are available offline, in the original order.
+- **Keys:** entered in Settings › Online services, stored encrypted for the Windows account (DPAPI) in the config folder, never sent back to the interface or written to logs.
+- **Not done, on purpose:** no downloading from YouTube or Spotify, no stream capture, no scraping of web pages, no signing in to the services.
 
 ### D-027 · Tracks instead of albums, Videos apart from Movies & Series, selections that fit
 - **Date:** 2026-11-03 · **Approved by:** project owner (asked for the changes; chose "Tracks, Artists, Playlists…" tabs, moving loose videos automatically, two rounds, and links plus their own API keys for importing from URLs)

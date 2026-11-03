@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { open } from "@tauri-apps/plugin-dialog";
-import { BookOpen, FilePlus, FolderOpen, HardDrive, ImagePlus, Package, Pause, Pencil, Play, Plus, Star, Trash } from "lucide-react";
+import { BookOpen, Cloud, CloudDownload, ExternalLink, FilePlus, FolderOpen, HardDrive, ImagePlus, Package, Pause, Pencil, Play, Plus, Star, Trash } from "lucide-react";
 import { api, artworkUrl, errorText, type CoverShape, type FieldDef, type ItemDetail, type VersionInfo } from "../../lib/api";
 import { bytes, date, formatLabel, longDuration, ROLE_LABELS } from "../../lib/format";
 import { libraryChanged, useCategories, useItem } from "../../lib/queries";
@@ -239,6 +239,10 @@ export function ItemPage() {
   // A track is its own item; its one part is what the music player plays.
   const track = item.handler === "audio" ? item.parts.find((part) => part.kind === "track") : undefined;
   const trackPlaying = !!track && music.current?.id === track.id && !music.paused;
+  // Imported from a link (D-028): online only, or downloaded and available offline.
+  const source = item.online;
+  const onlineOnly = !!source && !source.downloaded;
+  const openOnline = () => void api.onlineOpen(item.id).catch((reason) => setError(errorText(reason)));
   const physical = item.versions.filter((v) => v.kind === "physical");
   const digital = item.versions.filter((v) => v.kind === "digital");
 
@@ -276,7 +280,30 @@ export function ItemPage() {
               ))}
             </div>
           )}
+          {source && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {onlineOnly ? (
+                <span className="chip online-chip" title="Plays in its service's own player and needs an internet connection">
+                  <Cloud size={12} /> {source.service} · Online, needs a connection
+                </span>
+              ) : (
+                <span className="chip" title="Downloaded into your library">
+                  <CloudDownload size={12} /> From {source.service} · Available offline
+                </span>
+              )}
+            </div>
+          )}
           <div className="hero-actions">
+            {onlineOnly && (
+              <Link to="/online/$id" params={{ id: String(item.id) }} className="btn btn-primary">
+                <Play size={16} /> Play
+              </Link>
+            )}
+            {source && (
+              <button type="button" className="btn" onClick={openOnline}>
+                <ExternalLink size={16} /> Open on {source.service}
+              </button>
+            )}
             {watchable && clip && (
               <Link to="/watch/$id" params={{ id: String(item.id) }} className="btn btn-primary">
                 <Play size={16} /> Play
@@ -410,7 +437,28 @@ export function ItemPage() {
                 </button>
               </div>
             </div>
-            {physical.length === 0 && digital.length === 0 && <p className="hint">No copies recorded yet.</p>}
+            {onlineOnly && source && (
+              <div className="copy">
+                <div className="copy-icon">
+                  <Cloud size={18} />
+                </div>
+                <div className="copy-body">
+                  <div className="copy-title">
+                    {source.service}
+                    <span className="chip online-chip">Online</span>
+                  </div>
+                  <div className="hint">Not available offline: it stays on {source.service} and plays in its own player.</div>
+                  <ul className="copy-files">
+                    <li>
+                      <span className="path" title={source.url}>
+                        {source.url}
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            )}
+            {physical.length === 0 && digital.length === 0 && !onlineOnly && <p className="hint">No copies recorded yet.</p>}
             {[...physical, ...digital].map((version) => (
               <CopyCard key={version.id} item={item} version={version} onEdit={() => setCopy(version)} />
             ))}

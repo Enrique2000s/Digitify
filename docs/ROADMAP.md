@@ -103,7 +103,7 @@ Scope chosen by the owner in D-023.
 
 ## Library refinements (D-027)
 1. ✅ Music without albums (each track an item), Videos apart from Movies & Series, sort by duration, mass edit of covers, "Add to playlist" for selections, actions that fit the whole selection, the new category order, carousel fixes, Home's + button.
-2. ⏳ Import from URL: YouTube, YouTube Music, Spotify and SoundCloud links with official players; downloads only where allowed; playlists through the owner's API keys; an import queue.
+2. ✅ Import from URL (D-028): YouTube, YouTube Music, Spotify and SoundCloud links with the services' own players; downloads only where allowed (direct file links, downloadable SoundCloud tracks); playlists through the owner's API keys; an import queue. To try: real API keys for each service.
 
 ## Release engineering (ongoing)
 NSIS installer, third-party license notices, then decisions on code signing and on an update strategy.

@@ -21,6 +21,7 @@ mod library;
 mod library_folder;
 mod media_protocol;
 mod music;
+mod online;
 mod optical;
 mod organize;
 mod pages;
@@ -101,6 +102,7 @@ pub fn run() {
             app.manage(state);
             app.manage(player::PlayerState::default());
             app.manage(music::MusicState::default());
+            app.manage(online::OnlineState::default());
             app.manage(optical::OpticalState::default());
             optical::watch(app.handle().clone());
             app.manage(ambient::AmbientState::default());
@@ -163,6 +165,15 @@ pub fn run() {
             organize::collection_delete,
             organize::items_bulk,
             organize::items_bulk_actions,
+            online::online_inspect,
+            online::online_import,
+            online::online_queue,
+            online::online_cancel,
+            online::online_retry,
+            online::online_clear,
+            online::online_keys_status,
+            online::online_keys_set,
+            online::online_open,
             pages::reader_open,
             pages::progress_save,
             ebooks::ebook_progress_save,

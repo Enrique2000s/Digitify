@@ -36,6 +36,10 @@ imagesize = "0.15"
 unrar = "0.5.8"
 sevenz-rust2 = { version = "0.24.2", default-features = false, features = ["bzip2", "deflate", "ppmd"] }
 tar = "0.4.46"
+# Import from URL (D-028): HTTPS through Windows' own TLS (SChannel), only when a link is pasted.
+ureq = { version = "2.12", default-features = false, features = ["json", "native-tls"] }
+native-tls = "0.2"
+url = "2"
 # PDF rendering through PDFium (D-013), loaded from pdfium.dll at runtime. `pdfium_latest` is the
 # PDFium API version scripts/fetch-deps.ps1 pins (chromium/7881).
 pdfium-render = { version = "0.9.4", default-features = false, features = ["pdfium_latest", "image_latest", "thread_safe"] }
@@ -49,6 +53,8 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_IO",
     "Win32_System_LibraryLoader",
     "Win32_UI_WindowsAndMessaging",
+    "Win32_Security_Cryptography",
+    "Win32_UI_Shell",
 ] }
 
 # Optimize dependencies even in debug builds: SQLite, image decoding and hashing are slow unoptimized.

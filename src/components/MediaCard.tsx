@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { Link } from "@tanstack/react-router";
-import { Check, Star } from "lucide-react";
+import { Check, Cloud, Star } from "lucide-react";
 import type { ItemCard } from "../lib/api";
 import { useSelectable } from "../lib/selection";
 import { Cover } from "./common";
@@ -25,9 +25,14 @@ export const MediaCard = memo(function MediaCard({ item, width, index, transitio
       <div className="card-art" data-shape={shape} data-vt={transitionId} style={{ aspectRatio: aspect }}>
         <Cover item={item} />
         {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
-        {(item.isFavorite || item.missing) && (
+        {(item.isFavorite || item.missing || item.online) && (
           <div className="card-badges" style={band ? { top: 28 } : undefined}>
             {item.missing && <span className="chip warning">Missing</span>}
+            {item.online && (
+              <span className="online-badge" title="Online: plays in its service's player and needs a connection" aria-label="Online">
+                <Cloud size={13} strokeWidth={2.6} />
+              </span>
+            )}
             {item.isFavorite && (
               <span className="fav" aria-label="Favorite">
                 <Star size={14} fill="currentColor" strokeWidth={0} />

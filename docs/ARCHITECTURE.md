@@ -34,6 +34,7 @@ Digitify.exe (Tauri 2)
 | `config` | Machine-specific `config.json` (library path, interface preferences) in `%LOCALAPPDATA%\com.digitify.desktop`, or `DIGITIFY_CONFIG_DIR` |
 | `library_folder` | Library folder layout and cloud-sync detection |
 | `db` | SQLite connection, WAL mode, migrations tracked by `PRAGMA user_version` (with a snapshot before upgrading an existing library), snapshots, and swapping in a restored database |
+| `online` | Import from URL (D-028): `link` recognizes links offline; `providers` asks YouTube, Spotify and SoundCloud through oEmbed or their Web APIs; `http` (ureq over Windows' TLS) spaces requests and explains failures; `queue` downloads or saves online items on two workers; `keys` keeps API keys encrypted with DPAPI |
 | `reshape` | The Rust half of a migration that SQL can't do alone (D-027: tracks out of albums, loose videos into Videos, the new category order) |
 | `backup` | Library backups in `backups\` (`library-YYYYMMDD-HHMMSS-<kind>.db`); validate and restore, keeping the current state as a backup first |
 | `library` | Catalog queries (views, dashboard, details, full-text search, "select all" ids) and edits (items, people, physical copies, favorites, artwork, removal) |
@@ -133,7 +134,7 @@ Category       Books · Comics · Manga · Movies & Series · Music · your own�
        └ Parts     optional: chapters, episodes, tracks, each with its own progress
 Shelves & tags: cross-cutting groups; one item can sit on many shelves
 ```
-The schema lives in `src-tauri/migrations/` (v3 adds `playlists`, `playlist_tracks`, `plays` and `parts.is_favorite`; v4 adds `activity`; v5 adds `custom_order`; v6 lets a track be in a playlist once; v7 adds the Videos category and turns each album's tracks into items of their own, done by `reshape::after` in the same transaction since it needs more than SQL). Tables: `categories`, `field_definitions`, `collections`, `items`, `people`, `item_people`, `parts`, `versions`, `files`, `progress`, `bookmarks`, `shelves` (a smart shelf's rules in `settings`), `shelf_items`, `tags`, `item_tags`, `activity`, `custom_order` (hand-arranged order per view), `settings` and `items_fts` (full-text index).
+The schema lives in `src-tauri/migrations/` (v3 adds `playlists`, `playlist_tracks`, `plays` and `parts.is_favorite`; v4 adds `activity`; v5 adds `custom_order`; v6 lets a track be in a playlist once; v8 adds `online_sources` (where an imported link lives and whether it was downloaded); v7 adds the Videos category and turns each album's tracks into items of their own, done by `reshape::after` in the same transaction since it needs more than SQL). Tables: `categories`, `field_definitions`, `collections`, `items`, `people`, `item_people`, `parts`, `versions`, `files`, `progress`, `bookmarks`, `shelves` (a smart shelf's rules in `settings`), `shelf_items`, `tags`, `item_tags`, `activity`, `custom_order` (hand-arranged order per view), `settings` and `items_fts` (full-text index).
 
 ## Media serving
 On Windows, the UI loads library resources from `http://digitify.localhost/<route>`:

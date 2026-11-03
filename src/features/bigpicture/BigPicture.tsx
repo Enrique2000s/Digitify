@@ -235,6 +235,11 @@ function ItemScreen({ id }: { id: number }) {
               <BookOpen size={26} /> {started ? `Continue · ${Math.round(progress * 100)}%` : "Read"}
             </button>
           )}
+          {data.online && !data.online.downloaded && (
+            <button type="button" className="bp-button primary" data-bp-focus data-bp-autofocus onClick={() => void navigate({ to: "/online/$id", params: { id: String(id) } })}>
+              <Play size={26} /> Play online
+            </button>
+          )}
           {digital && data.handler === "video" && (
             <button type="button" className="bp-button primary" data-bp-focus data-bp-autofocus onClick={() => void navigate({ to: "/watch/$id", params: { id: String(id) } })}>
               <Play size={26} /> {started ? `Resume · ${Math.round(progress * 100)}%` : "Play"}

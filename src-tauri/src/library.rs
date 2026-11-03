@@ -220,6 +220,8 @@ pub struct ItemCard {
     pub progress: Option<f64>,
     /// The item's own cover shape (`square`, `disc`, `poster` or `landscape`), if it has one.
     pub cover_shape: Option<String>,
+    /// Imported from a link and not downloaded: it plays online only (D-028).
+    pub online: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -290,7 +292,7 @@ const CARD_COLUMNS: &str = "i.id, i.title, \
     EXISTS (SELECT 1 FROM versions v WHERE v.item_id = i.id AND v.kind = 'digital'), \
     EXISTS (SELECT 1 FROM files f JOIN versions v ON v.id = f.version_id WHERE v.item_id = i.id AND f.status <> 'ok'), \
     (SELECT pr.fraction FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0), \
-    json_extract(i.metadata, '$.coverShape')";
+    json_extract(i.metadata, '$.coverShape'),     EXISTS (SELECT 1 FROM online_sources o WHERE o.item_id = i.id AND o.downloaded = 0)";
 
 fn card(row: &Row<'_>) -> rusqlite::Result<ItemCard> {
     let formats: Option<String> = row.get(9)?;
@@ -314,6 +316,7 @@ fn card(row: &Row<'_>) -> rusqlite::Result<ItemCard> {
         missing: row.get::<_, i64>(12)? != 0,
         progress: row.get(13)?,
         cover_shape: row.get(14)?,
+        online: row.get::<_, i64>(15)? != 0,
     })
 }
 
@@ -822,6 +825,8 @@ pub struct ItemDetail {
     pub collection_path: Vec<NamedRef>,
     pub shelves: Vec<NamedRef>,
     pub progress: Option<f64>,
+    /// Where it was imported from, if from a link (D-028).
+    pub online: Option<crate::online::OnlineSource>,
 }
 
 #[tauri::command]
@@ -862,6 +867,7 @@ fn item_detail(conn: &Connection, library: &Library, id: i64) -> AppResult<ItemD
                     tags: Vec::new(),
                     collection_path: Vec::new(),
                     shelves: Vec::new(),
+                    online: None,
                 }))
             },
         )
@@ -870,6 +876,7 @@ fn item_detail(conn: &Connection, library: &Library, id: i64) -> AppResult<ItemD
     if let Some(collection) = collection {
         detail.collection_path = crate::organize::collection_path(conn, collection)?;
     }
+    detail.online = crate::online::source(conn, id)?;
     detail.shelves = conn
         .prepare(
             "SELECT s.id, s.name FROM shelf_items si JOIN shelves s ON s.id = si.shelf_id \

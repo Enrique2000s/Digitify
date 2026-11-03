@@ -14,6 +14,7 @@ import { KeyboardSettings } from "./KeyboardSettings";
 import { BackupsPanel } from "./LibraryTools";
 import { Setting } from "./Setting";
 import { SoundSettings } from "./SoundSettings";
+import { OnlineServicesPanel } from "../online/OnlineServices";
 
 const LOOKS: { value: Look; name: string }[] = [
   { value: "breeze", name: "Breeze" },
@@ -193,6 +194,8 @@ export function SettingsPage() {
         <CategoriesPanel />
 
         <SoundSettings />
+
+        <OnlineServicesPanel />
 
         <KeyboardSettings />
 

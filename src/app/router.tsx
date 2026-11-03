@@ -1,6 +1,7 @@
 import { createHashHistory, createRootRoute, createRoute, createRouter, useNavigate } from "@tanstack/react-router";
 import { HomePage } from "../features/home/HomePage";
 import { ItemPage } from "../features/item/ItemPage";
+import { OnlinePlayerPage } from "../features/online/OnlinePlayer";
 import { LibraryPage, SearchPage } from "../features/library/LibraryPage";
 import { ShelfPage, ShelvesPage, TagPage, TagsPage } from "../features/organize/pages";
 import { ReaderPage } from "../features/reader/ReaderPage";
@@ -55,6 +56,8 @@ const routeTree = rootRoute.addChildren([
     component: SearchPage,
   }),
   createRoute({ getParentRoute: () => rootRoute, path: "/item/$id", component: ItemPage }),
+  // An online item (D-028), in its service's own player.
+  createRoute({ getParentRoute: () => rootRoute, path: "/online/$id", component: OnlinePlayerPage }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/read/$id",

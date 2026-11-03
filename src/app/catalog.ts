@@ -9,3 +9,8 @@ export const useOpenCatalog = () => useContext(CatalogContext);
 export const BuilderContext = createContext<() => void>(() => {});
 
 export const useOpenBuilder = () => useContext(BuilderContext);
+
+/** Opens "Import from URL" (D-028) from anywhere in the app. */
+export const ImportUrlContext = createContext<() => void>(() => {});
+
+export const useOpenImportUrl = () => useContext(ImportUrlContext);

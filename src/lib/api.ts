@@ -62,6 +62,81 @@ export interface ItemCard {
   progress: number | null;
   /** The item's own cover shape, when it has one (otherwise the default for its kind). */
   coverShape: CoverShape | null;
+  /** Imported from a link and not downloaded: it plays online only (D-028). */
+  online: boolean;
+}
+
+/** Where an item imported from a link lives (D-028). */
+export interface OnlineSource {
+  provider: "youtube" | "spotify" | "soundcloud" | "web";
+  service: string;
+  kind: "video" | "track" | "playlist" | "album" | "file";
+  externalId: string;
+  url: string;
+  /** A copy is in the library (available offline); otherwise it needs a connection. */
+  downloaded: boolean;
+}
+
+/** One thing a pasted link holds. */
+export interface OnlineEntry {
+  provider: string;
+  service: string;
+  kind: string;
+  externalId: string;
+  url: string;
+  title: string;
+  creator: string | null;
+  durationSec: number | null;
+  thumbnail: string | null;
+  audio: boolean;
+  /** The service allows downloading it; otherwise it can only be an online item. */
+  downloadable: boolean;
+  download: string | null;
+  available: boolean;
+  reason: string | null;
+  /** The library item it already is. */
+  existing: number | null;
+}
+
+export interface OnlinePreview {
+  provider: string;
+  service: string;
+  kind: string;
+  collection: boolean;
+  title: string;
+  creator: string | null;
+  thumbnail: string | null;
+  audio: boolean;
+  entries: OnlineEntry[];
+  notes: string[];
+}
+
+export interface OnlineImportRequest {
+  entries: OnlineEntry[];
+  musicCategory: string;
+  videoCategory: string;
+  download: boolean;
+  playlistName: string | null;
+}
+
+export interface OnlineJob {
+  id: number;
+  batch: number;
+  title: string;
+  creator: string | null;
+  service: string;
+  audio: boolean;
+  action: "download" | "link";
+  state: "pending" | "working" | "done" | "skipped" | "failed" | "cancelled";
+  progress: number | null;
+  error: string | null;
+  itemId: number | null;
+}
+
+export interface OnlineKeysStatus {
+  youtube: boolean;
+  spotify: boolean;
+  soundcloud: boolean;
 }
 
 /** Music as square covers or round CDs; videos as vertical posters or horizontal frames (Movies & Series: vertical only). */
@@ -417,6 +492,8 @@ export interface ItemDetail {
   collectionPath: NamedRef[];
   shelves: NamedRef[];
   progress: number | null;
+  /** Where it was imported from, if from a link (D-028). */
+  online: OnlineSource | null;
 }
 
 export interface Tag {
@@ -626,6 +703,16 @@ export const api = {
   collectionDelete: (id: number) => invoke<void>("collection_delete", { id }),
   itemsBulk: (ids: number[], ops: BulkOp[]) => invoke<number>("items_bulk", { ids, ops }),
   itemsBulkActions: (ids: number[]) => invoke<BulkActions>("items_bulk_actions", { ids }),
+  onlineInspect: (url: string) => invoke<OnlinePreview>("online_inspect", { url }),
+  onlineImport: (request: OnlineImportRequest) => invoke<number>("online_import", { request }),
+  onlineQueue: () => invoke<OnlineJob[]>("online_queue"),
+  onlineCancel: (id: number | null) => invoke<void>("online_cancel", { id }),
+  onlineRetry: (id: number) => invoke<void>("online_retry", { id }),
+  onlineClear: () => invoke<void>("online_clear"),
+  onlineKeysStatus: () => invoke<OnlineKeysStatus>("online_keys_status"),
+  onlineKeysSet: (service: "youtube" | "spotify" | "soundcloud", first: string | null, second: string | null) =>
+    invoke<OnlineKeysStatus>("online_keys_set", { service, first, second }),
+  onlineOpen: (id: number) => invoke<void>("online_open", { id }),
   readerOpen: (id: number) => invoke<Opened>("reader_open", { id }),
   ebookProgressSave: (id: number, cfi: string, fraction: number, finished: boolean) =>
     invoke<void>("ebook_progress_save", { id, cfi, fraction, finished }),

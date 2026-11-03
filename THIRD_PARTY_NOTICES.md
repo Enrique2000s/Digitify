@@ -177,5 +177,6 @@ SOFTWARE.
 | zip, trash, tokio | MIT |
 | blake3 | CC0-1.0 or Apache-2.0 |
 | walkdir | Unlicense or MIT |
+| ureq, native-tls, url (Import from URL; TLS is Windows' own SChannel) | MIT or Apache-2.0 |
 
 These are the direct dependencies. A complete, machine-generated list covering every transitive dependency (Rust crates and npm packages), plus a written offer for GPL source code with a contact address, will be produced before the first public release.

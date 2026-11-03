@@ -403,20 +403,20 @@ pub async fn playlist_remove(state: State<'_, AppState>, id: i64, track: i64) ->
 /// Replaces a playlist's tracks with these, in this order (reordering and removing).
 #[tauri::command]
 pub async fn playlist_set(state: State<'_, AppState>, id: i64, tracks: Vec<i64>) -> AppResult<()> {
-    let tracks = once_each(tracks);
-    with_library(&state, move |library| {
-        library.db.with(|conn| {
-            let tx = conn.transaction()?;
-            tx.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?1", [id])?;
-            for (position, part) in tracks.iter().enumerate() {
-                tx.execute("INSERT INTO playlist_tracks (playlist_id, part_id, position) VALUES (?1, ?2, ?3)", params![id, part, position as i64])?;
-            }
-            tx.execute("UPDATE playlists SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1", [id])?;
-            tx.commit()?;
-            Ok(())
-        })
-    })
-    .await
+    with_library(&state, move |library| library.db.with(|conn| replace_playlist(conn, id, &tracks))).await
+}
+
+/// A playlist's tracks become exactly these (part ids), in this order, each once.
+pub fn replace_playlist(conn: &mut Connection, id: i64, tracks: &[i64]) -> AppResult<()> {
+    let tracks = once_each(tracks.to_vec());
+    let tx = conn.transaction()?;
+    tx.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?1", [id])?;
+    for (position, part) in tracks.iter().enumerate() {
+        tx.execute("INSERT INTO playlist_tracks (playlist_id, part_id, position) VALUES (?1, ?2, ?3)", params![id, part, position as i64])?;
+    }
+    tx.execute("UPDATE playlists SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1", [id])?;
+    tx.commit()?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------------------------

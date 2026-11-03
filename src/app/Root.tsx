@@ -13,8 +13,9 @@ import { TitleBar } from "../components/TitleBar";
 import { DropOverlay, ImportPanel, ImportReviewDialog } from "../features/import/ImportUI";
 import { CatalogDialog } from "../features/item/forms";
 import { BookBuilderDialog } from "../features/builder/BookBuilder";
+import { ImportUrlDialog, OnlineQueuePanel } from "../features/online/ImportUrl";
 import { Onboarding } from "../features/onboarding/Onboarding";
-import { BuilderContext, CatalogContext } from "./catalog";
+import { BuilderContext, CatalogContext, ImportUrlContext } from "./catalog";
 import { AppShortcuts } from "./AppShortcuts";
 import { BigPictureCursor, BigPictureLauncher } from "../features/bigpicture/Launcher";
 
@@ -28,6 +29,7 @@ export function Root() {
   const bigPictureRoute = useRouterState({ select: (state) => state.matches.some((match) => match.routeId === "/bp") });
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [builderOpen, setBuilderOpen] = useState(false);
+  const [importUrlOpen, setImportUrlOpen] = useState(false);
   useLibraryEvents();
 
   // Automated video-lab runs (DIGITIFY_POC=video:<path>) open the lab directly.
@@ -57,6 +59,7 @@ export function Root() {
           <ImporterProvider enabled={libraryOpen}>
             <CatalogContext.Provider value={() => setCatalogOpen(true)}>
             <BuilderContext.Provider value={() => setBuilderOpen(true)}>
+            <ImportUrlContext.Provider value={() => setImportUrlOpen(true)}>
               <div className="app">
                 <TitleBar searchEnabled={libraryOpen} />
                 {libraryOpen ? (
@@ -74,9 +77,12 @@ export function Root() {
                   <DropOverlay />
                   <CatalogDialog open={catalogOpen} onOpenChange={setCatalogOpen} />
                   <BookBuilderDialog open={builderOpen} onOpenChange={setBuilderOpen} />
+                  <ImportUrlDialog open={importUrlOpen} onOpenChange={setImportUrlOpen} />
+                  <OnlineQueuePanel />
                   <DiscNotice />
                 </>
               )}
+            </ImportUrlContext.Provider>
             </BuilderContext.Provider>
             </CatalogContext.Provider>
           </ImporterProvider>
