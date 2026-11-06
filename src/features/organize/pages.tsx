@@ -2,38 +2,13 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { DropdownMenu } from "radix-ui";
-import { ChevronDown, ChevronRight, Library, Pencil, Plus, Sparkles, Tag as TagIcon, Trash } from "lucide-react";
-import { api, type Shelf, type Tag } from "../../lib/api";
+import { ChevronDown, Pencil, Tag as TagIcon, Trash } from "lucide-react";
+import { api, type Tag } from "../../lib/api";
 import { plural } from "../../lib/format";
-import { libraryChanged, useShelves, useTags } from "../../lib/queries";
+import { libraryChanged, useTags } from "../../lib/queries";
 import { CategoryStrip } from "../../components/CategoryStrip";
-import { Collage } from "../../components/Collage";
 import { LibraryView } from "../library/LibraryView";
-import { ConfirmDialog, NameDialog, ShelfDialog } from "./dialogs";
-import { SmartShelfDialog } from "./SmartShelf";
-
-/** A shelf as a tile with the first covers on it (Shelves page and Home). */
-export function ShelfCard({ shelf }: { shelf: Shelf }) {
-  return (
-    <Link to="/shelf/$id" params={{ id: String(shelf.id) }} className="tile" data-blip>
-      <div className={`tile-screen screen-${shelf.id % 8}`}>
-        {shelf.covers.length > 0 ? (
-          <Collage covers={shelf.covers} />
-        ) : (
-          <div className="tile-icon">
-            {shelf.rules ? <Sparkles size={40} strokeWidth={2.2} aria-hidden /> : <Library size={40} strokeWidth={2.2} aria-hidden />}
-          </div>
-        )}
-      </div>
-      <div className="tile-label">
-        {shelf.rules && <Sparkles size={16} strokeWidth={2.6} aria-label="Smart shelf" />}
-        <strong>{shelf.name}</strong>
-        <span className="count">{shelf.itemCount.toLocaleString()}</span>
-        <ChevronRight size={18} strokeWidth={2.8} aria-hidden />
-      </div>
-    </Link>
-  );
-}
+import { ConfirmDialog, NameDialog } from "./dialogs";
 
 function PageTitle({ icon, title, count, children }: { icon: React.ReactNode; title: string; count: string; children?: React.ReactNode }) {
   return (
@@ -50,48 +25,6 @@ function PageTitle({ icon, title, count, children }: { icon: React.ReactNode; ti
   );
 }
 
-export function ShelvesPage() {
-  const shelves = useShelves();
-  const [creating, setCreating] = useState(false);
-  const [creatingSmart, setCreatingSmart] = useState(false);
-  const list = shelves.data ?? [];
-  return (
-    <div className="page">
-      <CategoryStrip />
-      <PageTitle icon={<Library size={26} strokeWidth={2.2} aria-hidden />} title="Shelves" count={shelves.data ? plural(list.length, "shelf", "shelves") : " "}>
-        <button type="button" className="btn" onClick={() => setCreatingSmart(true)}>
-          <Sparkles size={16} strokeWidth={2.4} /> New smart shelf
-        </button>
-        <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
-          <Plus size={17} strokeWidth={2.6} /> New shelf
-        </button>
-      </PageTitle>
-      {shelves.data && list.length === 0 ? (
-        <div className="empty">
-          <h2 className="display">No shelves yet</h2>
-          <p>
-            Shelves are your own lists across categories: “Read this summer”, “Signed editions”, “Movie night”. An item can
-            sit on as many shelves as you like, and removing it from a shelf never removes it from your library. Smart shelves
-            fill themselves from rules, like “Manga I haven't started” or “Added this month”.
-          </p>
-          <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
-            <Plus size={16} /> New shelf
-          </button>
-        </div>
-      ) : (
-        <div className="card-grid">
-          {list.map((shelf) => (
-            <ShelfCard key={shelf.id} shelf={shelf} />
-          ))}
-        </div>
-      )}
-      <ShelfDialog open={creating} onOpenChange={setCreating} />
-      <SmartShelfDialog open={creatingSmart} onOpenChange={setCreatingSmart} />
-    </div>
-  );
-}
-
-/** A menu of actions for the thing a page shows (a shelf or a tag). */
 function ThingMenu({
   label,
   onRename,
@@ -124,85 +57,6 @@ function ThingMenu({
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
-  );
-}
-
-export function ShelfPage() {
-  const { id } = useParams({ from: "/shelf/$id" });
-  const shelves = useShelves();
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const [dialog, setDialog] = useState<"rename" | "delete" | null>(null);
-  const shelf = shelves.data?.find((s) => s.id === Number(id));
-  if (!shelf) {
-    return shelves.isPending ? null : (
-      <div className="page">
-        <div className="empty">
-          <h2 className="display">This shelf is gone</h2>
-          <Link to="/shelves" className="btn">
-            All shelves
-          </Link>
-        </div>
-      </div>
-    );
-  }
-  const close = (open: boolean) => !open && setDialog(null);
-  return (
-    <>
-      <LibraryView
-        key={`shelf:${shelf.id}`}
-        viewKey="shelf"
-        base={{ shelf: shelf.id }}
-        title={shelf.name}
-        eyebrow={
-          <Link to="/shelves" className="crumbs">
-            Shelves
-          </Link>
-        }
-        icon={shelf.rules ? <Sparkles size={26} strokeWidth={2.2} aria-hidden /> : <Library size={26} strokeWidth={2.2} aria-hidden />}
-        description={shelf.rules ? [shelf.description, "Smart shelf"].filter(Boolean).join(" · ") : shelf.description}
-        smart={!!shelf.rules}
-        actions={
-          <ThingMenu
-            label="Shelf"
-            onRename={() => setDialog("rename")}
-            renameLabel={shelf.rules ? "Edit rules…" : "Rename…"}
-            onDelete={() => setDialog("delete")}
-            deleteLabel="Delete shelf…"
-          />
-        }
-        empty={
-          <div className="empty">
-            {shelf.rules ? (
-              <p>Nothing matches this shelf's rules yet. It fills itself as items that match are added or change.</p>
-            ) : (
-              <p>
-                Nothing on this shelf yet. Add items from their page (Organize › Add to shelf), or select several items in
-                any view and choose “Add to shelf”.
-              </p>
-            )}
-          </div>
-        }
-      />
-      {shelf.rules ? (
-        <SmartShelfDialog open={dialog === "rename"} onOpenChange={close} shelf={shelf} />
-      ) : (
-        <ShelfDialog open={dialog === "rename"} onOpenChange={close} shelf={shelf} />
-      )}
-      <ConfirmDialog
-        open={dialog === "delete"}
-        onOpenChange={close}
-        title={`Delete the shelf “${shelf.name}”?`}
-        description="Only the shelf goes; everything on it stays in your library."
-        confirm="Delete shelf"
-        danger
-        onConfirm={async () => {
-          await api.shelfDelete(shelf.id);
-          libraryChanged(queryClient);
-          await navigate({ to: "/shelves" });
-        }}
-      />
-    </>
   );
 }
 

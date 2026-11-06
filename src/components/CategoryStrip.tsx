@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Library, LibraryBig, Star, Tag } from "lucide-react";
+import { LibraryBig, Star, Tag } from "lucide-react";
 import { useCategories, useDashboard } from "../lib/queries";
 import { CategoryIcon } from "./common";
 
@@ -34,10 +34,6 @@ export function CategoryStrip() {
       <Link to="/library/$scope" params={{ scope: "favorites" }} className="strip-pill" data-blip>
         <Star size={17} strokeWidth={2.2} aria-hidden />
         Favorites
-      </Link>
-      <Link to="/shelves" className="strip-pill" data-blip>
-        <Library size={17} strokeWidth={2.2} aria-hidden />
-        Shelves
       </Link>
       <Link to="/tags" className="strip-pill" data-blip>
         <Tag size={17} strokeWidth={2.2} aria-hidden />

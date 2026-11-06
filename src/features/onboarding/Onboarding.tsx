@@ -45,11 +45,11 @@ export function Onboarding({ status }: { status: AppStatus }) {
       <div>
         <div className="eyebrow" style={{ fontSize: 15 }}>Welcome to Digitify!</div>
         <h1 className="display onboarding-title" style={{ marginTop: 12 }}>
-          Your physical collection, digitally preserved.
+          Your collection, all in one place.
         </h1>
         <p className="onboarding-lede">
-          Books, comics, manga, films, series and music, together with the physical copies you own, in one library
-          that lives on your own computer. No accounts, no cloud, nothing leaves your PC.
+          Books, comics, manga, films, series, videos and music in one library that lives on your own computer. No
+          accounts, no cloud, nothing leaves your PC.
         </p>
       </div>
       <form

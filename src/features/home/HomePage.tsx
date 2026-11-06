@@ -15,7 +15,6 @@ import {
   LibraryBig,
   Moon,
   Music,
-  Package,
   Plus,
   RotateCcw,
   Star,
@@ -30,12 +29,11 @@ import { useImporter } from "../../lib/importer";
 import { arrayMove, useReorder } from "../../lib/reorder";
 import { HOME_SECTIONS, useCoverShape, usePreferences, type HomeSection } from "../../lib/preferences";
 import { useAmbient } from "../../lib/ambient/AmbientProvider";
-import { useDashboard, useShelves } from "../../lib/queries";
+import { useDashboard } from "../../lib/queries";
 import { AddMenu } from "../../components/AddMenu";
 import { Collage } from "../../components/Collage";
 import { CategoryIcon, Cover } from "../../components/common";
 import { MediaCard } from "../../components/MediaCard";
-import { ShelfCard } from "../organize/pages";
 import { useRelink } from "../settings/LibraryTools";
 import { Featured } from "./Featured";
 import { DiscsBanner } from "./DiscsBanner";
@@ -46,7 +44,6 @@ const SECTION_NAMES: Record<HomeSection, string> = {
   featured: "Featured today",
   continueWatching: "Continue watching",
   continueReading: "Pick up where you left off",
-  shelves: "Your shelves",
   recentlyOpened: "Recently opened",
   recentlyAdded: "Recently added",
   favorites: "Favorites",
@@ -216,13 +213,12 @@ function EditBar({
   );
 }
 
-export function HomePage({ onCatalog }: { onCatalog: () => void }) {
+export function HomePage() {
   const dashboard = useDashboard();
   const importer = useImporter();
   const relink = useRelink();
   const { preferences, resolvedTheme, update } = usePreferences();
   const ambient = useAmbient();
-  const shelves = useShelves();
   const [editing, setEditing] = useState(false);
   const reorder = useReorder((from, to) => update((current) => ({ home: { ...current.home, order: arrayMove(current.home.order, from, to) } })));
   const data = dashboard.data;
@@ -258,19 +254,6 @@ export function HomePage({ onCatalog }: { onCatalog: () => void }) {
         <div className="continue-grid">
           {data.continueItems.map((item) => (
             <ContinueCard key={item.id} item={item} />
-          ))}
-        </div>
-      </section>
-    ),
-    shelves: shelves.data && shelves.data.length > 0 && (
-      <section className="section">
-        <div className="section-head">
-          <h2>Your shelves</h2>
-          <Link to="/shelves">See all</Link>
-        </div>
-        <div className="shelf-row">
-          {shelves.data.slice(0, 8).map((shelf) => (
-            <ShelfCard key={shelf.id} shelf={shelf} />
           ))}
         </div>
       </section>
@@ -352,8 +335,7 @@ export function HomePage({ onCatalog }: { onCatalog: () => void }) {
           <h2 id="welcome-title">Your library is ready</h2>
           <p>
             Import ebooks, comics and manga (CBZ, PDF, EPUB, page images), films, episodes and videos, and music. You can
-            also drop files or folders anywhere on this window. For things you own only on the shelf so far, catalog the
-            physical copy and add digital files later.
+            also drop files or folders anywhere on this window, or import from a link with “Add”.
           </p>
           <div className="actions">
             <button type="button" className="btn btn-primary btn-lg" onClick={() => void importer.pickFolder()}>
@@ -361,9 +343,6 @@ export function HomePage({ onCatalog }: { onCatalog: () => void }) {
             </button>
             <button type="button" className="btn btn-lg" onClick={() => void importer.pickFiles()}>
               <FilePlus size={18} /> Import files
-            </button>
-            <button type="button" className="btn btn-lg" onClick={onCatalog}>
-              <Package size={18} /> Catalog a physical item
             </button>
           </div>
         </section>
@@ -421,8 +400,7 @@ export function HomePage({ onCatalog }: { onCatalog: () => void }) {
       )}
       {data.totals.items > 0 && (
         <p className="home-totals">
-          {plural(data.totals.items, "item")} · {data.totals.physical.toLocaleString()} with a physical copy ·{" "}
-          {data.totals.digital.toLocaleString()} with digital files
+          {plural(data.totals.items, "item")} · {data.totals.digital.toLocaleString()} with files in your library
         </p>
       )}
     </div>

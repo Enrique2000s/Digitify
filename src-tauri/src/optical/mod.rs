@@ -21,11 +21,10 @@ use std::time::Duration;
 
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
 use crate::error::{AppError, AppResult};
-use crate::library::{blocking, category_id, reindex, sort_key, upsert_person};
+use crate::library::blocking;
 use crate::player::{self, PlayerState};
 use crate::{files, import, tools, AppState};
 use cd::{CdText, SectorSource};
@@ -722,87 +721,21 @@ pub fn disc_import(app: AppHandle, letter: String, title: u32) -> AppResult<u64>
         progress.phase = "importing";
         emit(progress);
         let ids = import::import_in_place(&library, &[out])?;
+        // A title from a disc is a film: in Movies & Series, with the disc's format (D-029).
+        if let Some(&item) = ids.first() {
+            let format = if is_dvd { "dvd" } else { "bluray" };
+            library.db.with(|conn| {
+                conn.execute(
+                    "UPDATE items SET category_id = (SELECT id FROM categories WHERE key = 'video'), \
+                     metadata = json_set(metadata, '$.discFormat', ?2) WHERE id = ?1",
+                    params![item, format],
+                )?;
+                crate::library::reindex(conn, item)?;
+                Ok(())
+            })?;
+        }
         Ok(ids.first().copied())
     }))
-}
-
-// ---------------------------------------------------------------------------------------------
-// Cataloging
-
-/// Records the disc in the drive as physical items in one click: an audio CD's tracks (each its own
-/// item, D-027), a DVD or Blu-ray as a film, protected or not (D-007). Returns the first item.
-#[tauri::command]
-pub async fn disc_catalog(app: AppHandle, letter: String) -> AppResult<i64> {
-    blocking(move || {
-        let library = app.state::<AppState>().library()?;
-        let drive = find(&letter)?;
-        let media = describe(&app.state::<OpticalState>(), &drive).media.ok_or_else(|| AppError::msg("There's no disc in the drive."))?;
-        let (category, format, title, artist, tracks, seconds): (&str, &str, String, Option<String>, Vec<(u32, String, f64)>, Option<f64>) = match media.kind {
-            "audio" => {
-                let disc = audio_disc(&drive)?;
-                let of = |n: u32| disc.text.titles.iter().find(|(t, _)| *t == n).map(|(_, v)| v.clone());
-                let tracks = disc.tracks.iter().filter(|t| t.audio).map(|t| (t.number, of(t.number).unwrap_or_else(|| format!("Track {}", t.number)), t.seconds())).collect();
-                ("music", "CD", disc.text.album.clone().unwrap_or_else(|| "Audio CD".into()), disc.text.artist.clone(), tracks, None)
-            }
-            "dvd" | "bluray" => {
-                let root = drive.root();
-                let longest = if media.kind == "dvd" {
-                    dvd::titles(&root.join("VIDEO_TS")).unwrap_or_default().iter().map(|t| t.seconds).fold(0.0, f64::max)
-                } else {
-                    bluray::titles(&root).unwrap_or_default().iter().map(|t| t.seconds).fold(0.0, f64::max)
-                };
-                ("video", if media.kind == "dvd" { "DVD" } else { "Blu-ray" }, media.label.clone().unwrap_or_else(|| "Untitled disc".into()), None, Vec::new(), (longest > 0.0).then_some(longest))
-            }
-            _ => return Err(AppError::msg("Only audio CDs, DVDs and Blu-rays can be cataloged from the drive. Import a data disc's files instead.")),
-        };
-        let notes = media.protection.as_ref().map(|p| format!("Copy-protected ({p}): cataloged only."));
-        library.db.with(|conn| {
-            let tx = conn.transaction()?;
-            let category_id = category_id(&tx, category)?;
-            // A film is one item; an audio CD's tracks are items of their own (D-027), each noting
-            // the CD it's on.
-            let entries: Vec<(String, Option<(u32, f64)>)> = if tracks.is_empty() {
-                vec![(title.clone(), None)]
-            } else {
-                tracks.iter().map(|(number, name, seconds)| (name.clone(), Some((*number, *seconds)))).collect()
-            };
-            let mut first = None;
-            for (name, track) in entries {
-                let mut metadata = serde_json::Map::new();
-                if let Some(seconds) = seconds.or(track.map(|(_, s)| s)) {
-                    metadata.insert("durationSec".into(), json!(seconds.round() as i64));
-                }
-                if let Some((number, _)) = track {
-                    metadata.insert("album".into(), json!(title));
-                    metadata.insert("trackNumber".into(), json!(number));
-                }
-                tx.execute(
-                    "INSERT INTO items (category_id, title, sort_title, metadata) VALUES (?1, ?2, ?3, ?4)",
-                    params![category_id, name, sort_key(&name), serde_json::Value::Object(metadata).to_string()],
-                )?;
-                let item = tx.last_insert_rowid();
-                first.get_or_insert(item);
-                if let Some(artist) = &artist {
-                    let person = upsert_person(&tx, artist)?;
-                    tx.execute("INSERT INTO item_people (item_id, person_id, role, position) VALUES (?1, ?2, 'artist', 0)", params![item, person])?;
-                }
-                if let Some((number, seconds)) = track {
-                    tx.execute(
-                        "INSERT INTO parts (item_id, kind, number, title, duration_ms, position) VALUES (?1, 'track', ?2, ?3, ?4, 0)",
-                        params![item, number as f64, name, (seconds * 1000.0) as i64],
-                    )?;
-                }
-                tx.execute(
-                    "INSERT INTO versions (item_id, kind, format, label, notes, is_primary) VALUES (?1, 'physical', ?2, ?3, ?4, 1)",
-                    params![item, format, track.map(|_| title.clone()), notes],
-                )?;
-                reindex(&tx, item)?;
-            }
-            tx.commit()?;
-            first.ok_or_else(|| AppError::msg("The disc has no tracks."))
-        })
-    })
-    .await
 }
 
 // ---------------------------------------------------------------------------------------------

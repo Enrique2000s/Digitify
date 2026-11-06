@@ -2,14 +2,13 @@ import { useEffect, useId, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { open as openFile } from "@tauri-apps/plugin-dialog";
 import { DropdownMenu } from "radix-ui";
-import { FolderInput, ImagePlus, ListMinus, ListMusic, ListPlus, Pencil, Plus, Tags, Trash } from "lucide-react";
+import { FolderInput, ImagePlus, ListMusic, Pencil, Plus, Tags, Trash } from "lucide-react";
 import { api, errorText, type BulkActions, type BulkOp, type CoverShape, type QueryParams } from "../../lib/api";
 import { plural } from "../../lib/format";
 import { libraryChanged, useCategories } from "../../lib/queries";
 import { useSelection } from "../../lib/selection";
 import { Dialog, Field } from "../../components/common";
 import { MoveDialog } from "../organize/dialogs";
-import { ShelfMenu } from "../organize/ShelfMenu";
 import { tagNames, TagSuggestions } from "../organize/TagEditor";
 import { NewPlaylistDialog, usePlaylists } from "../music/Tracks";
 
@@ -329,9 +328,8 @@ function RemoveDialog({ ids, open, onOpenChange, onRemoved }: { ids: number[]; o
 }
 
 /** The floating bar while selecting: what to do with the selected items. */
-export function BulkBar({ base, total, shelf }: { base: Omit<QueryParams, "offset" | "limit">; total: number; shelf?: number }) {
+export function BulkBar({ base, total }: { base: Omit<QueryParams, "offset" | "limit">; total: number }) {
   const selection = useSelection();
-  const queryClient = useQueryClient();
   const categories = useCategories();
   const [dialog, setDialog] = useState<BulkDialog>(null);
   const [error, setError] = useState<string | null>(null);
@@ -357,18 +355,6 @@ export function BulkBar({ base, total, shelf }: { base: Omit<QueryParams, "offse
     }
   };
 
-  const removeFromShelf = async () => {
-    if (shelf == null) return;
-    setError(null);
-    try {
-      await api.itemsBulk(ids, [{ op: "removeFromShelf", shelf }]);
-      selection.set([]);
-      libraryChanged(queryClient);
-    } catch (reason) {
-      setError(errorText(reason));
-    }
-  };
-
   return (
     <>
       <div className="bulk-bar" role="toolbar" aria-label="Selected items">
@@ -383,16 +369,6 @@ export function BulkBar({ base, total, shelf }: { base: Omit<QueryParams, "offse
           </button>
         )}
         <span className="bulk-sep" aria-hidden />
-        <ShelfMenu ids={ids} onError={setError}>
-          <button type="button" className="btn btn-sm" disabled={none}>
-            <ListPlus size={15} /> Add to shelf
-          </button>
-        </ShelfMenu>
-        {shelf != null && (
-          <button type="button" className="btn btn-sm" disabled={none} onClick={() => void removeFromShelf()}>
-            <ListMinus size={15} /> Take off this shelf
-          </button>
-        )}
         {fits?.playlist && <PlaylistMenu ids={ids} onError={setError} />}
         <button type="button" className="btn btn-sm" disabled={none} onClick={() => setDialog("tags")}>
           <Tags size={15} /> Tags…

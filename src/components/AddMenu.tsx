@@ -1,14 +1,13 @@
 import type { ReactNode } from "react";
 import { DropdownMenu } from "radix-ui";
 import { useNavigate } from "@tanstack/react-router";
-import { BookImage, Disc3, FilePlus, FolderPlus, Link2, Package } from "lucide-react";
-import { useOpenBuilder, useOpenCatalog, useOpenImportUrl } from "../app/catalog";
+import { BookImage, Disc3, FilePlus, FolderPlus, Link2 } from "lucide-react";
+import { useOpenBuilder, useOpenImportUrl } from "../app/catalog";
 import { useImporter } from "../lib/importer";
 
-/** "Add to library": import local files or a folder, import from a URL, or catalog a physical item. `children` is the trigger. */
+/** "Add to library": import local files or a folder, import from a URL, a book from images, or a disc. `children` is the trigger. */
 export function AddMenu({ children, align = "start" }: { children: ReactNode; align?: "start" | "center" | "end" }) {
   const importer = useImporter();
-  const openCatalog = useOpenCatalog();
   const openBuilder = useOpenBuilder();
   const openImportUrl = useOpenImportUrl();
   const navigate = useNavigate();
@@ -31,10 +30,6 @@ export function AddMenu({ children, align = "start" }: { children: ReactNode; al
           </DropdownMenu.Item>
           <DropdownMenu.Item className="menu-item" onSelect={() => void navigate({ to: "/discs" })}>
             <Disc3 size={17} /> From a disc (CD, DVD, Blu-ray)…
-          </DropdownMenu.Item>
-          <DropdownMenu.Separator className="menu-separator" />
-          <DropdownMenu.Item className="menu-item" onSelect={openCatalog}>
-            <Package size={17} /> Catalog a physical item…
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

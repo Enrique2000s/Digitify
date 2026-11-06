@@ -11,10 +11,10 @@ export function DiscsBanner() {
   const withDisc = drives.filter((drive) => drive.media);
   const text =
     drives.length === 0
-      ? "Connect a CD, DVD or Blu-ray drive (an external USB one works) to play discs, rip audio CDs into your library, import home-made DVDs and Blu-rays, and catalog any disc you own."
+      ? "Connect a CD, DVD or Blu-ray drive (an external USB one works) to play discs, rip audio CDs into your library, and import home-made DVDs and Blu-rays."
       : withDisc.length
-        ? `A disc is in drive ${withDisc.map((d) => `${d.letter}:`).join(", ")}. Play it, rip it or catalog it.`
-        : `Drive ${drives.map((d) => `${d.letter}:`).join(", ")} is ready. Put in a CD, DVD or Blu-ray to play it, rip it into your library or catalog it.`;
+        ? `A disc is in drive ${withDisc.map((d) => `${d.letter}:`).join(", ")}. Play it or rip it into your library.`
+        : `Drive ${drives.map((d) => `${d.letter}:`).join(", ")} is ready. Put in a CD, DVD or Blu-ray to play it or rip it into your library.`;
   return (
     <Link to="/discs" className="discs-banner" data-blip>
       <span className={`discs-banner-icon${withDisc.length ? " spinning" : ""}`} aria-hidden>

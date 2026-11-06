@@ -151,7 +151,7 @@ export function SettingsPage() {
           </Setting>
           <Setting
             title="Same view in every category"
-            text="The layout (grid, shelf, list, detailed, carousel) and the All / On the shelf / Digital / Not digitized filter stay as you left them everywhere. Turn off to keep a different one per category."
+            text="The layout (grid, shelf, list, detailed, carousel) and the All / Digital / Online filter stay as you left them everywhere. Turn off to keep a different one per category."
           >
             <Switch checked={preferences.syncViews} label="Same view in every category" onChange={(syncViews) => update({ syncViews })} />
           </Setting>
@@ -183,7 +183,7 @@ export function SettingsPage() {
               ))}
             </div>
           </Setting>
-          <Setting title="Shelves" text="What the shelves in the shelf view are made of.">
+          <Setting title="Shelf view" text="What the shelves in the shelf view are made of.">
             <ShelfLookPicker />
           </Setting>
           <Setting title="Cover size" text="Width of covers in the grid, shelf and detailed views.">

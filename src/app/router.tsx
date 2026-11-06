@@ -3,7 +3,7 @@ import { HomePage } from "../features/home/HomePage";
 import { ItemPage } from "../features/item/ItemPage";
 import { OnlinePlayerPage } from "../features/online/OnlinePlayer";
 import { LibraryPage, SearchPage } from "../features/library/LibraryPage";
-import { ShelfPage, ShelvesPage, TagPage, TagsPage } from "../features/organize/pages";
+import { TagPage, TagsPage } from "../features/organize/pages";
 import { ReaderPage } from "../features/reader/ReaderPage";
 import { DiscPlayPage, WatchPage } from "../features/player/VideoPlayer";
 import { DiscsPage } from "../features/discs/DiscsPage";
@@ -13,13 +13,12 @@ import { VideoPoc } from "../poc/VideoPoc";
 import { api } from "../lib/api";
 import { useAmbientHold } from "../lib/ambient/AmbientProvider";
 import { useQuery } from "@tanstack/react-query";
-import { useOpenCatalog } from "./catalog";
 import { Root } from "./Root";
 
 const rootRoute = createRootRoute({ component: Root });
 
 function Home() {
-  return <HomePage onCatalog={useOpenCatalog()} />;
+  return <HomePage />;
 }
 
 function Lab() {
@@ -45,8 +44,6 @@ const routeTree = rootRoute.addChildren([
     },
     component: LibraryPage,
   }),
-  createRoute({ getParentRoute: () => rootRoute, path: "/shelves", component: ShelvesPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: "/shelf/$id", component: ShelfPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/tags", component: TagsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/tag/$id", component: TagPage }),
   createRoute({

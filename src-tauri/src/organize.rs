@@ -2,13 +2,12 @@
 //! single home inside a category; shelves, hand-picked lists that cut across categories; and
 //! tags. Also the edits applied to many selected items at once.
 
-use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::error::{AppError, AppResult};
 use crate::library::{category_id, reindex, sort_key, with_library, TileCover};
-use crate::smart::{self, SmartRules};
 use crate::AppState;
 
 const NOW: &str = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
@@ -174,178 +173,6 @@ pub async fn tag_delete(state: State<'_, AppState>, id: i64) -> AppResult<()> {
         })
     })
     .await
-}
-
-// ---------------------------------------------------------------------------------------------
-// Shelves
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Shelf {
-    pub id: i64,
-    pub name: String,
-    pub description: Option<String>,
-    pub item_count: i64,
-    /// The first few covers, in shelf order.
-    pub covers: Vec<TileCover>,
-    /// A smart shelf's rules (Phase 5); a smart shelf fills itself and can't be added to.
-    pub rules: Option<SmartRules>,
-}
-
-#[tauri::command]
-pub async fn shelves_list(state: State<'_, AppState>) -> AppResult<Vec<Shelf>> {
-    with_library(&state, |library| library.db.with(|conn| shelves(conn))).await
-}
-
-pub fn shelves(conn: &Connection) -> AppResult<Vec<Shelf>> {
-    let mut list: Vec<Shelf> = conn
-        .prepare(
-            "SELECT s.id, s.name, s.description, (SELECT count(*) FROM shelf_items si WHERE si.shelf_id = s.id), s.settings \
-             FROM shelves s ORDER BY s.sort_order, s.name COLLATE NOCASE",
-        )?
-        .query_map([], |row| {
-            Ok(Shelf {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                description: row.get(2)?,
-                item_count: row.get(3)?,
-                covers: Vec::new(),
-                rules: smart::parse(&row.get::<_, String>(4)?),
-            })
-        })?
-        .collect::<Result<_, _>>()?;
-    let mut covers = conn.prepare(
-        "SELECT i.cover_key, i.cover_color, c.handler FROM shelf_items si JOIN items i ON i.id = si.item_id \
-         JOIN categories c ON c.id = i.category_id WHERE si.shelf_id = ?1 AND i.cover_key IS NOT NULL \
-         ORDER BY si.position, si.added_at LIMIT 3",
-    )?;
-    for shelf in &mut list {
-        match &shelf.rules {
-            Some(rules) => {
-                let mut args = Vec::new();
-                let sql = rules.sql(&mut args);
-                shelf.item_count =
-                    conn.query_row(&format!("SELECT count(*) FROM items i WHERE {sql}"), params_from_iter(args.iter()), |row| row.get(0))?;
-                shelf.covers = conn
-                    .prepare(&format!(
-                        "SELECT i.cover_key, i.cover_color, c.handler FROM items i JOIN categories c ON c.id = i.category_id \
-                         WHERE {sql} AND i.cover_key IS NOT NULL ORDER BY {} LIMIT 3",
-                        smart::order(rules.sort.as_deref())
-                    ))?
-                    .query_map(params_from_iter(args.iter()), cover)?
-                    .collect::<Result<_, _>>()?;
-            }
-            None => shelf.covers = covers.query_map([shelf.id], cover)?.collect::<Result<_, _>>()?,
-        }
-    }
-    Ok(list)
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ShelfInput {
-    pub name: String,
-    pub description: Option<String>,
-    /// Rules make it a smart shelf.
-    #[serde(default)]
-    pub rules: Option<SmartRules>,
-}
-
-impl ShelfInput {
-    /// The name, the description, and the settings to store (with the rules of a smart shelf).
-    fn cleaned(&self) -> AppResult<(String, Option<String>, String)> {
-        let name = clean_name(&self.name, 80).ok_or_else(|| AppError::msg("A shelf needs a name."))?;
-        let description = self.description.as_deref().map(str::trim).filter(|d| !d.is_empty()).map(str::to_string);
-        let settings = match &self.rules {
-            Some(rules) => {
-                rules.validate()?;
-                serde_json::json!({ "rules": rules }).to_string()
-            }
-            None => "{}".to_string(),
-        };
-        Ok((name, description, settings))
-    }
-}
-
-#[tauri::command]
-pub async fn shelf_create(state: State<'_, AppState>, shelf: ShelfInput) -> AppResult<i64> {
-    let (name, description, settings) = shelf.cleaned()?;
-    with_library(&state, move |library| {
-        library.db.with(|conn| {
-            conn.execute(
-                "INSERT INTO shelves (name, description, settings, sort_order) \
-                 VALUES (?1, ?2, ?3, (SELECT COALESCE(max(sort_order), 0) + 1 FROM shelves))",
-                params![name, description, settings],
-            )?;
-            Ok(conn.last_insert_rowid())
-        })
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn shelf_update(state: State<'_, AppState>, id: i64, shelf: ShelfInput) -> AppResult<()> {
-    let (name, description, settings) = shelf.cleaned()?;
-    with_library(&state, move |library| {
-        library.db.with(|conn| {
-            conn.execute("UPDATE shelves SET name = ?2, description = ?3, settings = ?4 WHERE id = ?1", params![id, name, description, settings])?;
-            Ok(())
-        })
-    })
-    .await
-}
-
-/// Deletes a shelf. The items on it stay in the library.
-#[tauri::command]
-pub async fn shelf_delete(state: State<'_, AppState>, id: i64) -> AppResult<()> {
-    with_library(&state, move |library| {
-        library.db.with(|conn| {
-            conn.execute("DELETE FROM shelves WHERE id = ?1", [id])?;
-            Ok(())
-        })
-    })
-    .await
-}
-
-/// Puts a shelf's items in this order (from "Arrange"). Items not listed keep their place after them.
-pub fn set_shelf_order(conn: &mut Connection, shelf: i64, ids: &[i64]) -> AppResult<()> {
-    let tx = conn.transaction()?;
-    let rest: Vec<i64> = {
-        let mut stmt = tx.prepare("SELECT item_id FROM shelf_items WHERE shelf_id = ?1 ORDER BY position, added_at")?;
-        let rows = stmt.query_map([shelf], |row| row.get(0))?.collect::<Result<Vec<i64>, _>>()?;
-        rows.into_iter().filter(|id| !ids.contains(id)).collect()
-    };
-    for (position, id) in ids.iter().chain(rest.iter()).enumerate() {
-        tx.execute("UPDATE shelf_items SET position = ?3 WHERE shelf_id = ?1 AND item_id = ?2", params![shelf, id, position as i64 + 1])?;
-    }
-    tx.commit()?;
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn shelf_order_set(state: State<'_, AppState>, shelf: i64, ids: Vec<i64>) -> AppResult<()> {
-    with_library(&state, move |library| library.db.with(|conn| set_shelf_order(conn, shelf, &ids))).await
-}
-
-/// Adds items to the end of a shelf, in the given order; items already on it stay where they are.
-fn add_to_shelf(conn: &Connection, shelf: i64, ids: &[i64]) -> AppResult<()> {
-    let exists: bool = conn.query_row("SELECT EXISTS (SELECT 1 FROM shelves WHERE id = ?1)", [shelf], |row| row.get(0))?;
-    if !exists {
-        return Err(AppError::msg("That shelf no longer exists."));
-    }
-    if smart::rules_of(conn, shelf)?.is_some() {
-        return Err(AppError::msg("That's a smart shelf: it fills itself from its rules, so items can't be added by hand."));
-    }
-    let mut position: i64 =
-        conn.query_row("SELECT COALESCE(max(position), 0) FROM shelf_items WHERE shelf_id = ?1", [shelf], |row| row.get(0))?;
-    for id in ids {
-        position += 1;
-        conn.execute(
-            "INSERT OR IGNORE INTO shelf_items (shelf_id, item_id, position) VALUES (?1, ?2, ?3)",
-            params![shelf, id, position],
-        )?;
-    }
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -567,8 +394,6 @@ pub enum BulkOp {
     Favorite { favorite: bool },
     AddTags { names: Vec<String> },
     RemoveTags { names: Vec<String> },
-    AddToShelf { shelf: i64 },
-    RemoveFromShelf { shelf: i64 },
     /// A new home: a category, optionally inside one of its collections.
     Move { category: String, collection: Option<i64> },
     SetYear { year: Option<i64> },
@@ -675,12 +500,6 @@ pub fn apply_bulk(conn: &mut Connection, ids: &[i64], ops: &[BulkOp]) -> AppResu
             BulkOp::RemoveTags { names } => {
                 remove_tags(&tx, ids, names)?;
                 searchable = true;
-            }
-            BulkOp::AddToShelf { shelf } => add_to_shelf(&tx, *shelf, ids)?,
-            BulkOp::RemoveFromShelf { shelf } => {
-                for id in ids {
-                    tx.execute("DELETE FROM shelf_items WHERE shelf_id = ?1 AND item_id = ?2", params![shelf, id])?;
-                }
             }
             BulkOp::Move { category, collection } => {
                 let category = category_id(&tx, category)?;
@@ -863,36 +682,6 @@ mod tests {
         apply_bulk(&mut conn, &[a, b], &[BulkOp::RemoveTags { names: vec!["To read".into()] }]).unwrap();
         let count: i64 = conn.query_row("SELECT count(*) FROM tags", [], |row| row.get(0)).unwrap();
         assert_eq!(count, 0);
-    }
-
-    #[test]
-    fn shelves_keep_their_order_and_ignore_repeats() {
-        let mut conn = db::memory();
-        conn.execute("INSERT INTO shelves (name) VALUES ('Summer reading')", []).unwrap();
-        let shelf = conn.last_insert_rowid();
-        let [a, b, c] = ["A", "B", "C"].map(|t| item(&conn, "books", t));
-        apply_bulk(&mut conn, &[c, a], &[BulkOp::AddToShelf { shelf }]).unwrap();
-        apply_bulk(&mut conn, &[b, a], &[BulkOp::AddToShelf { shelf }]).unwrap();
-        let order: Vec<i64> = conn
-            .prepare("SELECT item_id FROM shelf_items WHERE shelf_id = ?1 ORDER BY position")
-            .unwrap()
-            .query_map([shelf], |row| row.get(0))
-            .unwrap()
-            .collect::<Result<_, _>>()
-            .unwrap();
-        assert_eq!(order, [c, a, b]);
-        assert!(apply_bulk(&mut conn, &[a], &[BulkOp::AddToShelf { shelf: shelf + 1 }]).is_err());
-        assert_eq!(shelves(&conn).unwrap()[0].item_count, 3);
-        // Arranging by hand: the listed items first, the others after them in their old order.
-        set_shelf_order(&mut conn, shelf, &[b]).unwrap();
-        let order: Vec<i64> = conn
-            .prepare("SELECT item_id FROM shelf_items WHERE shelf_id = ?1 ORDER BY position")
-            .unwrap()
-            .query_map([shelf], |row| row.get(0))
-            .unwrap()
-            .collect::<Result<_, _>>()
-            .unwrap();
-        assert_eq!(order, [b, c, a]);
     }
 
     #[test]

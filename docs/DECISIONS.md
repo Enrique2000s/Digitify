@@ -101,6 +101,17 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-029 · One item per file; no shelves, physical copies or catalog; where a link came from
+- **Date:** 2026-11-06 · **Approved by:** project owner (asked for the changes; chose keeping physical-only items, shelves into collections, one item per file, and a disc format field)
+- **Downloads from YouTube and Spotify:** asked for and declined (YouTube's terms forbid it and its files sit behind technical protection; Spotify's are DRM-protected, D-007). The owner then kept links as online items (D-028) and turned down the lawful alternatives offered (replacing an online item with an owned file, Internet Archive, Vimeo downloads the author allows, Google Takeout).
+- **Removed:** "On the shelf" and "Not digitized" filters, Shelves (page, Home section, "Add to shelf", smart shelves), "Catalog a physical item" (Add menu, Home, and "Catalog this disc" on the Discs page) and "Your copies" (with "Add physical copy" and "Add files to this item"). The shelf view layout stays.
+- **Each file is its own item** (a series keeps its episodes, and a book of images is one file set). An item's page shows its file in a "File" panel (where it is, Show in folder, Arrange pages for image books).
+- **Migration (schema 9):** each hand-filled shelf became a collection of the same name in each of its items' categories; an item already in a collection kept it and got the shelf's name as a tag. Smart shelves were rules, not lists, so nothing moved (their rows stay in the database, unused). Every digital copy past an item's first became an item of its own with the same details, cover, people, tags and collection, told apart by its format. A film's DVD or Blu-ray physical copy became its disc format. Items recorded only as physical copies stay as items without files. Nothing is deleted; the library is backed up before upgrading.
+- **Disc format:** "Disc format" in Edit details for Movies & Series (None, DVD, Blu-ray, 4K UHD Blu-ray, 3D Blu-ray), shown as the case band on the cover; a title imported from a DVD or Blu-ray goes to Movies & Series with it set.
+- **Filters:** All and Digital everywhere; Online too in Music and Videos (items added from a link that play online).
+- **Where a link came from:** items from YouTube, YouTube Music, Spotify or SoundCloud wear the service's color as their cover's border and its name as a tag, in every view, on the item page and in Big Picture (YouTube red, YouTube Music coral, Spotify green, SoundCloud orange).
+- **Menu music toggle:** its slash runs the same way as the interface sounds' off icon.
+
 ### D-028 · Import from URL: online items, and downloads only where allowed
 - **Date:** 2026-11-03 · **Approved by:** project owner (asked for Import from URL; chose links with the services' own players, downloads only where allowed, and playlists through their own API keys)
 - **Network (an approved exception to D-008):** Digitify goes online only when a link is pasted into "Import from URL", while an import runs, and while an online item plays in its service's player. Nothing else changed: no telemetry, no update checks.

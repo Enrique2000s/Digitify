@@ -1742,3 +1742,66 @@ body:has(.import-panel) .online-queue {
 .online-key-fields .input {
   width: 100%;
 }
+
+/* ---------------------------------------------------------------- where a link came from (D-029) */
+
+[data-source="youtube"] {
+  --source: #ff0000;
+}
+[data-source="youtube-music"] {
+  --source: #f03c5a;
+}
+[data-source="spotify"] {
+  --source: #1db954;
+}
+[data-source="soundcloud"] {
+  --source: #ff5500;
+}
+/* The cover's box wears the service's color as its border. */
+.card-art[data-source],
+.thumb[data-source],
+.shelf-cover[data-source],
+.detail-cover[data-source],
+.carousel-item[data-source],
+.bp-tile-art[data-source],
+.hero-cover[data-source] {
+  outline: 3px solid var(--source);
+  outline-offset: 1px;
+}
+.card-art[data-source] {
+  border-color: var(--source);
+}
+/* Its name, in the corner of the cover. */
+.source-tag {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 3;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  padding: 2px 8px;
+  border-radius: var(--pill);
+  background: var(--source);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+.source-tag[data-source="spotify"] {
+  color: #04140a;
+}
+.carousel-item .source-tag,
+.hero-cover .source-tag,
+.bp-tile-art .source-tag {
+  font-size: 12px;
+  padding: 3px 10px;
+}
+.hero-cover[data-source],
+.detail-cover[data-source] {
+  position: relative;
+}

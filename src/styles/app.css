@@ -996,7 +996,8 @@ span.music-play {
   height: 2.4px;
   border-radius: 2px;
   background: currentColor;
-  transform: rotate(-45deg);
+  /* The same way as the interface sounds' off icon: from top left to bottom right. */
+  transform: rotate(45deg);
 }
 .btn[aria-pressed="true"].glow-when-on {
   box-shadow: var(--glow);

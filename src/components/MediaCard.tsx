@@ -5,13 +5,12 @@ import type { ItemCard } from "../lib/api";
 import { useSelectable } from "../lib/selection";
 import { Cover } from "./common";
 import { useCoverShape } from "../lib/preferences";
+import { SourceTag, sourceProps } from "./SourceTag";
 
-/** The physical case band (Blu-ray blue, DVD black) shown on video covers you own on disc. */
+/** The case band (Blu-ray blue, DVD black) on a film or series that came from a disc (its disc format, D-029). */
 export function caseBand(item: ItemCard): "bluray" | "dvd" | null {
-  if (!item.hasPhysical) return null;
-  if (item.formats.some((f) => f === "bluray" || f === "uhd-bluray" || f === "bluray-3d")) return "bluray";
-  if (item.formats.includes("dvd")) return "dvd";
-  return null;
+  if (!item.discFormat) return null;
+  return item.discFormat === "dvd" ? "dvd" : "bluray";
 }
 
 /** A cover card. In a library view (`index` given) it also takes part in multi-select. */
@@ -22,8 +21,9 @@ export const MediaCard = memo(function MediaCard({ item, width, index, transitio
   const { shape, aspect } = useCoverShape()(item);
   return (
     <Link to="/item/$id" params={{ id: String(item.id) }} className="card" style={width ? { width } : undefined} data-blip {...props}>
-      <div className="card-art" data-shape={shape} data-vt={transitionId} style={{ aspectRatio: aspect }}>
+      <div className="card-art" data-shape={shape} data-vt={transitionId} style={{ aspectRatio: aspect }} {...sourceProps(item.source)}>
         <Cover item={item} />
+        <SourceTag service={item.source} />
         {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
         {(item.isFavorite || item.missing || item.online) && (
           <div className="card-badges" style={band ? { top: 28 } : undefined}>

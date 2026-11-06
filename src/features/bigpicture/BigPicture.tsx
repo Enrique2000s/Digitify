@@ -26,6 +26,7 @@ import { controllerKind, onControllerChange, usePad, useSticks, type PadAction }
 import { Cursor } from "./Cursor";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { useCoverShape, usePreferences } from "../../lib/preferences";
+import { SourceTag, sourceProps } from "../../components/SourceTag";
 import { libraryChanged, useCategories, useDashboard } from "../../lib/queries";
 import { CategoryIcon, Cover } from "../../components/common";
 
@@ -70,8 +71,9 @@ function Tile({ item, autofocus, height = 300 }: { item: ItemCard; autofocus?: b
       data-bp-autofocus={autofocus || undefined}
       onClick={() => void navigate({ to: "/bp", search: { screen: "item", id: item.id } })}
     >
-      <span className="bp-tile-art" data-shape={shape} style={{ width, height }}>
+      <span className="bp-tile-art" data-shape={shape} style={{ width, height }} {...sourceProps(item.source)}>
         <Cover item={item} size="cover" />
+        <SourceTag service={item.source} />
         {item.progress != null && item.progress > 0 && item.progress < 1 && (
           <span className="bp-tile-progress">
             <span style={{ width: `${Math.round(item.progress * 100)}%` }} />
@@ -152,7 +154,7 @@ function LibraryScreen({ scope }: { scope: string }) {
   const sort = preferences.sorts[scope] ?? "title";
   const items = useQuery({
     queryKey: ["bp-items", scope, sort, limit],
-    queryFn: () => api.query({ ...base, sort: sort === "shelf" ? "title" : sort, custom: sort === "custom" ? scope : null, offset: 0, limit }),
+    queryFn: () => api.query({ ...base, sort, custom: sort === "custom" ? scope : null, offset: 0, limit }),
   });
   const tabs = [
     { key: "all", name: "Everything" },

@@ -727,61 +727,6 @@ fn discard_copies(library: &Library, stored: &[Stored]) {
     }
 }
 
-/// Adds files as a new digital copy of an existing item, e.g. the scan of a book owned on paper.
-#[tauri::command]
-pub async fn item_attach_files(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    item_id: i64,
-    paths: Vec<String>,
-    mode: ImportMode,
-) -> AppResult<usize> {
-    let library = state.library()?;
-    let added = crate::library::blocking(move || attach(&library, item_id, &paths, mode)).await?;
-    let _ = app.emit("library-changed", ());
-    Ok(added)
-}
-
-fn attach(library: &Library, item_id: i64, paths: &[String], mode: ImportMode) -> AppResult<usize> {
-    let (title, category_name, has_cover, has_parts): (String, String, bool, bool) = library.db.with(|conn| {
-        Ok(conn.query_row(
-            "SELECT i.title, c.name, i.cover_key IS NOT NULL, EXISTS (SELECT 1 FROM parts p WHERE p.item_id = i.id) \
-             FROM items i JOIN categories c ON c.id = i.category_id WHERE i.id = ?1",
-            [item_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-        )?)
-    })?;
-    let paths: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
-    let mut added = 0;
-    for candidate in scan(&paths, &AtomicBool::new(false)) {
-        let Prepared::Draft(draft) = prepare(library, &candidate)? else { continue };
-        let mut draft = *draft;
-        draft.copy_folder = Some(title.clone());
-        let stored = store_files(library, &draft, mode, &category_name)?;
-        let art = if has_cover { None } else { store_artwork(library, &draft) };
-        let result = library.db.with(|conn| {
-            let tx = conn.transaction()?;
-            insert_version(&tx, item_id, &draft, !has_parts, &stored)?;
-            if let Some(art) = &art {
-                tx.execute("UPDATE items SET cover_key = ?2, cover_color = ?3 WHERE id = ?1", params![item_id, art.key, art.color])?;
-            }
-            tx.execute("UPDATE items SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1", [item_id])?;
-            reindex(&tx, item_id)?;
-            tx.commit()?;
-            Ok(())
-        });
-        if result.is_err() {
-            discard_copies(library, &stored);
-        }
-        result?;
-        added += draft.files.len();
-    }
-    if added == 0 {
-        return Err(AppError::msg("Those files are already in your library, or aren't a supported format."));
-    }
-    Ok(added)
-}
-
 /// Adds files Digitify itself made inside the library folder (ripped CDs, imported discs) as
 /// managed copies, without copying them again. Returns the new items' ids.
 pub fn import_in_place(library: &Library, paths: &[PathBuf]) -> AppResult<Vec<i64>> {

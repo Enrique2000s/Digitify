@@ -170,36 +170,20 @@ pub struct QueryParams {
     pub category: Option<String>,
     /// A collection and everything inside it.
     pub collection: Option<i64>,
-    pub shelf: Option<i64>,
     pub tag: Option<i64>,
     pub search: Option<String>,
     pub favorites: bool,
-    /// `physical`, `digital`, `physicalOnly` or `digitalOnly`.
+    /// `digital` (files in the library) or `online` (from a link, played online), D-029.
     pub ownership: Option<String>,
-    /// `title` (default), `added`, `year`, `creator`, `relevance` when searching, or `shelf` (the
-    /// shelf's own order, the default for a shelf).
+    /// `title` (default), `added`, `year`, `creator`, `durationAsc`, `durationDesc`, `custom`, or
+    /// `relevance` when searching.
     pub sort: Option<String>,
     pub offset: i64,
     pub limit: i64,
     /// The view whose hand-arranged order `sort: "custom"` uses ("books", "all", "collection:3"…).
     pub custom: Option<String>,
-    /// A smart shelf's rules, filled in from `shelf` by `resolve` (never sent by the UI).
-    #[serde(skip)]
-    pub smart: Option<crate::smart::SmartRules>,
 }
 
-/// A smart shelf (Phase 5) is shown through its rules rather than its list.
-fn resolve(conn: &Connection, params: &QueryParams) -> AppResult<Option<QueryParams>> {
-    let Some(shelf) = params.shelf else { return Ok(None) };
-    let Some(rules) = crate::smart::rules_of(conn, shelf)? else { return Ok(None) };
-    let mut resolved = params.clone();
-    resolved.shelf = None;
-    if matches!(resolved.sort.as_deref(), None | Some("shelf")) {
-        resolved.sort = Some(rules.sort.clone().unwrap_or_else(|| "title".into()));
-    }
-    resolved.smart = Some(rules);
-    Ok(Some(resolved))
-}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -222,6 +206,10 @@ pub struct ItemCard {
     pub cover_shape: Option<String>,
     /// Imported from a link and not downloaded: it plays online only (D-028).
     pub online: bool,
+    /// The service it came from (YouTube, YouTube Music, Spotify, SoundCloud), for its tag.
+    pub source: Option<String>,
+    /// A film's disc format (`dvd`, `bluray`, `uhd-bluray`, `bluray-3d`), for the case band.
+    pub disc_format: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -246,8 +234,7 @@ pub async fn library_query(state: State<'_, AppState>, params: QueryParams) -> A
 pub async fn library_query_shapes(state: State<'_, AppState>, params: QueryParams) -> AppResult<String> {
     with_library(&state, move |library| {
         library.db.with(|conn| {
-            let resolved = resolve(conn, &params)?;
-            let QueryParts { joins, filter, args, order, .. } = QueryParts::new(resolved.as_ref().unwrap_or(&params));
+                        let QueryParts { joins, filter, args, order, .. } = QueryParts::new(&params);
             let mut stmt = conn.prepare(&format!(
                 "SELECT (SELECT CASE c.key WHEN 'video' THEN 'm' ELSE substr(c.handler, 1, 1) END FROM categories c WHERE c.id = i.category_id),                  coalesce(substr(json_extract(i.metadata, '$.coverShape'), 1, 1), '-')                  FROM items i{joins}{filter} ORDER BY {order} LIMIT 100000"
             ))?;
@@ -268,8 +255,7 @@ pub async fn library_query_shapes(state: State<'_, AppState>, params: QueryParam
 pub async fn library_query_ids(state: State<'_, AppState>, params: QueryParams) -> AppResult<Vec<i64>> {
     with_library(&state, move |library| {
         library.db.with(|conn| {
-            let resolved = resolve(conn, &params)?;
-            let QueryParts { joins, filter, args, order, .. } = QueryParts::new(resolved.as_ref().unwrap_or(&params));
+                        let QueryParts { joins, filter, args, order, .. } = QueryParts::new(&params);
             ids(conn, &format!("SELECT i.id FROM items i{joins}{filter} ORDER BY {order} LIMIT 100000"), &args)
         })
     })
@@ -292,7 +278,9 @@ const CARD_COLUMNS: &str = "i.id, i.title, \
     EXISTS (SELECT 1 FROM versions v WHERE v.item_id = i.id AND v.kind = 'digital'), \
     EXISTS (SELECT 1 FROM files f JOIN versions v ON v.id = f.version_id WHERE v.item_id = i.id AND f.status <> 'ok'), \
     (SELECT pr.fraction FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0), \
-    json_extract(i.metadata, '$.coverShape'),     EXISTS (SELECT 1 FROM online_sources o WHERE o.item_id = i.id AND o.downloaded = 0)";
+    json_extract(i.metadata, '$.coverShape'),     EXISTS (SELECT 1 FROM online_sources o WHERE o.item_id = i.id AND o.downloaded = 0), \
+    (SELECT o.service FROM online_sources o WHERE o.item_id = i.id AND o.provider <> 'web'), \
+    json_extract(i.metadata, '$.discFormat')";
 
 fn card(row: &Row<'_>) -> rusqlite::Result<ItemCard> {
     let formats: Option<String> = row.get(9)?;
@@ -317,6 +305,8 @@ fn card(row: &Row<'_>) -> rusqlite::Result<ItemCard> {
         progress: row.get(13)?,
         cover_shape: row.get(14)?,
         online: row.get::<_, i64>(15)? != 0,
+        source: row.get(16)?,
+        disc_format: row.get(17)?,
     })
 }
 
@@ -364,14 +354,6 @@ impl QueryParts {
             args.push(SqlValue::Text(expr.clone()));
             conditions.push(format!("items_fts MATCH ?{}", args.len()));
         }
-        if let Some(rules) = &params.smart {
-            let sql = rules.sql(&mut args);
-            conditions.push(sql);
-        }
-        if let Some(shelf) = params.shelf {
-            args.push(SqlValue::Integer(shelf));
-            joins.push_str(&format!(" JOIN shelf_items si ON si.item_id = i.id AND si.shelf_id = ?{}", args.len()));
-        }
         if let Some(category) = &params.category {
             args.push(SqlValue::Text(category.clone()));
             conditions.push(format!("i.category_id = (SELECT id FROM categories WHERE key = ?{})", args.len()));
@@ -391,13 +373,10 @@ impl QueryParts {
         if params.favorites {
             conditions.push("i.is_favorite = 1".into());
         }
-        const PHYSICAL: &str = "EXISTS (SELECT 1 FROM versions v WHERE v.item_id = i.id AND v.kind = 'physical')";
-        const DIGITAL: &str = "EXISTS (SELECT 1 FROM versions v WHERE v.item_id = i.id AND v.kind = 'digital')";
+        // Digital: files in the library; Online: imported from a link and played online (D-029).
         match params.ownership.as_deref() {
-            Some("physical") => conditions.push(PHYSICAL.into()),
-            Some("digital") => conditions.push(DIGITAL.into()),
-            Some("physicalOnly") => conditions.extend([PHYSICAL.to_string(), format!("NOT {DIGITAL}")]),
-            Some("digitalOnly") => conditions.extend([DIGITAL.to_string(), format!("NOT {PHYSICAL}")]),
+            Some("digital") => conditions.push("EXISTS (SELECT 1 FROM versions v WHERE v.item_id = i.id AND v.kind = 'digital')".into()),
+            Some("online") => conditions.push("EXISTS (SELECT 1 FROM online_sources o WHERE o.item_id = i.id AND o.downloaded = 0)".into()),
             _ => {}
         }
         let filter = if conditions.is_empty() { String::new() } else { format!(" WHERE {}", conditions.join(" AND ")) };
@@ -416,7 +395,6 @@ impl QueryParts {
                 format!("{position} IS NULL, {position}, i.sort_title, i.id")
             }
             None | Some("relevance") if search.is_some() => "f.rank".to_string(),
-            None | Some("shelf") if params.shelf.is_some() => "si.position, si.added_at, i.id".to_string(),
             Some("added") => "i.added_at DESC, i.id DESC".to_string(),
             Some("opened") => "i.last_opened_at IS NULL, i.last_opened_at DESC, i.id DESC".to_string(),
             Some("year") => "i.year IS NULL, i.year DESC, i.sort_title".to_string(),
@@ -432,8 +410,7 @@ impl QueryParts {
 
 fn query(conn: &Connection, params: &QueryParams) -> AppResult<QueryResult> {
     let started = Instant::now();
-    let resolved = resolve(conn, params)?;
-    let params = resolved.as_ref().unwrap_or(params);
+        let params = params;
     let QueryParts { joins, filter, args, counted, order } = QueryParts::new(params);
     let total: i64 = conn.query_row(
         &format!("SELECT count(*) FROM items i{joins}{filter}"),
@@ -823,7 +800,6 @@ pub struct ItemDetail {
     pub tags: Vec<NamedRef>,
     /// The collections it sits in, from the category root down (empty when it has none).
     pub collection_path: Vec<NamedRef>,
-    pub shelves: Vec<NamedRef>,
     pub progress: Option<f64>,
     /// Where it was imported from, if from a link (D-028).
     pub online: Option<crate::online::OnlineSource>,
@@ -866,7 +842,6 @@ fn item_detail(conn: &Connection, library: &Library, id: i64) -> AppResult<ItemD
                     parts: Vec::new(),
                     tags: Vec::new(),
                     collection_path: Vec::new(),
-                    shelves: Vec::new(),
                     online: None,
                 }))
             },
@@ -877,13 +852,6 @@ fn item_detail(conn: &Connection, library: &Library, id: i64) -> AppResult<ItemD
         detail.collection_path = crate::organize::collection_path(conn, collection)?;
     }
     detail.online = crate::online::source(conn, id)?;
-    detail.shelves = conn
-        .prepare(
-            "SELECT s.id, s.name FROM shelf_items si JOIN shelves s ON s.id = si.shelf_id \
-             WHERE si.item_id = ?1 ORDER BY s.sort_order, s.name COLLATE NOCASE",
-        )?
-        .query_map([id], |row| Ok(NamedRef { id: row.get(0)?, name: row.get(1)? }))?
-        .collect::<Result<_, _>>()?;
 
     detail.people = conn
         .prepare(

@@ -38,7 +38,7 @@ Digitify.exe (Tauri 2)
 | `reshape` | The Rust half of a migration that SQL can't do alone (D-027: tracks out of albums, loose videos into Videos, the new category order) |
 | `backup` | Library backups in `backups\` (`library-YYYYMMDD-HHMMSS-<kind>.db`); validate and restore, keeping the current state as a backup first |
 | `library` | Catalog queries (views, dashboard, details, full-text search, "select all" ids) and edits (items, people, physical copies, favorites, artwork, removal) |
-| `organize` | Nested collections (tree queries with recursive CTEs, moving without cycles, deleting by moving contents up), shelves, tags (merge on rename, pruned when unused), and bulk edits applied in one transaction, limited to what fits every selected item (`bulk_actions`, D-027) |
+| `organize` | Nested collections (tree queries with recursive CTEs, moving without cycles, deleting by moving contents up), tags (merge on rename, pruned when unused), and bulk edits applied in one transaction, limited to what fits every selected item (`bulk_actions`, D-027) |
 | `categories` | The user's own categories and custom fields (`field_definitions`; values in `metadata.custom`), category order and visibility |
 | `import` | Background import jobs: scan, then in parallel fingerprint, skip duplicates and extract metadata, then save. Also attaches files to existing items. |
 | `formats` | Embedded metadata readers: EPUB OPF, ComicInfo.xml in any comic archive, audio tags (lofty), ffprobe |
@@ -59,7 +59,6 @@ Digitify.exe (Tauri 2)
 | `watch` | Films and episodes in the player (Phase 3): the file and start position for an item or episode, the next episode, progress every few seconds, watched marks, and a series' summed-up progress (part 0) |
 | `episodes` | Episode names at import (D-018): "S01E02", "1x02", season folders |
 | `optical` | Discs (Phase 4, D-022): `win` (Windows drive calls: drives, media, TOC, CD-Text, raw audio sectors, DVD copyright descriptor, eject), `cd` (TOC and CD-Text parsing, verified ripping), `dvd` (IFO titles, chapters, languages; CSS scrambling check), `bluray` (MPLS playlists; AACS/BD+), and the service: drive watcher (`drives-changed`), contents, playing titles through mpv (EDL plus a chapters file), CD audio over the media server, rip and import jobs (`disc-job`), cataloging. `DIGITIFY_FAKE_DRIVES` adds simulated drives for testing. |
-| `smart` | Smart shelves (D-023): rules stored in a shelf's `settings`, checked when saved and turned into one SQL condition with bound values; `library_query` shows a smart shelf through its rules |
 | `stats` | Recorded time (`activity`: day, item, read/watch/listen, seconds) and Home's statistics |
 | `music` | The music player (D-020): a second, audio-only mpv whose playlist is the queue (gapless), tracks and artists, favorites, playlists, recently played, track edits |
 | `dev` | Phase 0 video lab harness (Settings › Developer) |
@@ -98,7 +97,7 @@ React + TypeScript via Vite, organized by feature:
 | `lib/music/` | The music provider: the queue and playback state from `music-event`s, shared by every screen |
 | `features/builder/` | "Book from images…" and "Arrange pages": the page grid with pointer dragging (the window's file drop takes over HTML drag and drop) |
 | `vendor/foliate-js/` | foliate-js at a pinned commit (D-014; see its README), loaded only when an ebook opens |
-| `features/` | Home (category tiles, your shelves), library views (virtualized grid/list/shelf with multi-select and the bulk bar), organize (collections, shelves, tags, move dialogs), item page and forms (with custom fields), import UI, onboarding, settings (Categories, Sound) |
+| `features/` | Home (category tiles), library views (virtualized grid/list/shelf with multi-select and the bulk bar), organize (collections, tags, move dialogs), item page and forms (with custom fields), import UI, onboarding, settings (Categories, Sound) |
 | `lib/` | Typed API, TanStack Query hooks, paged item cache, preferences (look, palette, theme, accent, motion, music, shelf material, Home's layout, shortcuts), accent contrast math, formatting, `shortcuts.ts` (every keyboard action, its default keys and the user's), `activity.ts` (recording time for Statistics), `reorder.ts` (dragging rows into a new order, for short lists and virtualized ones) |
 | `lib/ambient/` | Ambient music and interface sounds: the "Morning Lounge" composition and synth, the playback engine, and its React provider |
 | `styles/` | Breeze tokens and app styles (D-016); `looks.css` (Cinematic and the Breeze palettes, as token overrides) and `views.css` (shelf materials, detailed and carousel views, smart shelves, Home's widgets) (D-023). Nunito, Inter and Archivo are bundled via Fontsource, never loaded online |
@@ -132,9 +131,9 @@ Category       Books · Comics · Manga · Movies & Series · Music · your own�
        ├ Versions  physical: hardcover, DVD, 4K Blu-ray, CD (edition, condition, location)
        │           digital: CBZ, MKV, FLAC (files, referenced or copied)
        └ Parts     optional: chapters, episodes, tracks, each with its own progress
-Shelves & tags: cross-cutting groups; one item can sit on many shelves
+Tags: cross-cutting labels (shelves were removed in D-029 and became collections)
 ```
-The schema lives in `src-tauri/migrations/` (v3 adds `playlists`, `playlist_tracks`, `plays` and `parts.is_favorite`; v4 adds `activity`; v5 adds `custom_order`; v6 lets a track be in a playlist once; v8 adds `online_sources` (where an imported link lives and whether it was downloaded); v7 adds the Videos category and turns each album's tracks into items of their own, done by `reshape::after` in the same transaction since it needs more than SQL). Tables: `categories`, `field_definitions`, `collections`, `items`, `people`, `item_people`, `parts`, `versions`, `files`, `progress`, `bookmarks`, `shelves` (a smart shelf's rules in `settings`), `shelf_items`, `tags`, `item_tags`, `activity`, `custom_order` (hand-arranged order per view), `settings` and `items_fts` (full-text index).
+The schema lives in `src-tauri/migrations/` (v3 adds `playlists`, `playlist_tracks`, `plays` and `parts.is_favorite`; v4 adds `activity`; v5 adds `custom_order`; v6 lets a track be in a playlist once; v9 turns shelves into collections, splits extra copies into items and moves disc formats into items (`reshape::d029`); v8 adds `online_sources` (where an imported link lives and whether it was downloaded); v7 adds the Videos category and turns each album's tracks into items of their own, done by `reshape::after` in the same transaction since it needs more than SQL). Tables: `categories`, `field_definitions`, `collections`, `items`, `people`, `item_people`, `parts`, `versions`, `files`, `progress`, `bookmarks`, `shelves` (a smart shelf's rules in `settings`), `shelf_items`, `tags`, `item_tags`, `activity`, `custom_order` (hand-arranged order per view), `settings` and `items_fts` (full-text index).
 
 ## Media serving
 On Windows, the UI loads library resources from `http://digitify.localhost/<route>`:

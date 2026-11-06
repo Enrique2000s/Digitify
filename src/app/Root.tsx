@@ -11,11 +11,10 @@ import { PreferencesProvider } from "../lib/preferences";
 import { useAppStatus, useLibraryEvents } from "../lib/queries";
 import { TitleBar } from "../components/TitleBar";
 import { DropOverlay, ImportPanel, ImportReviewDialog } from "../features/import/ImportUI";
-import { CatalogDialog } from "../features/item/forms";
 import { BookBuilderDialog } from "../features/builder/BookBuilder";
 import { ImportUrlDialog, OnlineQueuePanel } from "../features/online/ImportUrl";
 import { Onboarding } from "../features/onboarding/Onboarding";
-import { BuilderContext, CatalogContext, ImportUrlContext } from "./catalog";
+import { BuilderContext, ImportUrlContext } from "./catalog";
 import { AppShortcuts } from "./AppShortcuts";
 import { BigPictureCursor, BigPictureLauncher } from "../features/bigpicture/Launcher";
 
@@ -27,7 +26,6 @@ export function Root() {
   // progress the address already changed, and deciding from it would mount the old page again.
   const fullWindow = useRouterState({ select: (state) => state.matches.some((match) => match.routeId === "/lab" || match.routeId === "/read/$id" || match.routeId === "/watch/$id" || match.routeId === "/disc/$letter/$title" || match.routeId === "/bp") });
   const bigPictureRoute = useRouterState({ select: (state) => state.matches.some((match) => match.routeId === "/bp") });
-  const [catalogOpen, setCatalogOpen] = useState(false);
   const [builderOpen, setBuilderOpen] = useState(false);
   const [importUrlOpen, setImportUrlOpen] = useState(false);
   useLibraryEvents();
@@ -57,7 +55,6 @@ export function Root() {
           </>
         ) : (
           <ImporterProvider enabled={libraryOpen}>
-            <CatalogContext.Provider value={() => setCatalogOpen(true)}>
             <BuilderContext.Provider value={() => setBuilderOpen(true)}>
             <ImportUrlContext.Provider value={() => setImportUrlOpen(true)}>
               <div className="app">
@@ -75,7 +72,6 @@ export function Root() {
                   <ImportReviewDialog />
                   <ImportPanel />
                   <DropOverlay />
-                  <CatalogDialog open={catalogOpen} onOpenChange={setCatalogOpen} />
                   <BookBuilderDialog open={builderOpen} onOpenChange={setBuilderOpen} />
                   <ImportUrlDialog open={importUrlOpen} onOpenChange={setImportUrlOpen} />
                   <OnlineQueuePanel />
@@ -84,7 +80,6 @@ export function Root() {
               )}
             </ImportUrlContext.Provider>
             </BuilderContext.Provider>
-            </CatalogContext.Provider>
           </ImporterProvider>
         )}
         </DiscsProvider>

@@ -2,11 +2,12 @@ import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { open } from "@tauri-apps/plugin-dialog";
-import { BookOpen, Cloud, CloudDownload, ExternalLink, FilePlus, FolderOpen, HardDrive, ImagePlus, Package, Pause, Pencil, Play, Plus, Star, Trash } from "lucide-react";
+import { BookOpen, Cloud, CloudDownload, ExternalLink, FolderOpen, HardDrive, ImagePlus, Pause, Pencil, Play, Star, Trash } from "lucide-react";
 import { api, artworkUrl, errorText, type CoverShape, type FieldDef, type ItemDetail, type VersionInfo } from "../../lib/api";
 import { bytes, date, formatLabel, longDuration, ROLE_LABELS } from "../../lib/format";
 import { libraryChanged, useCategories, useItem } from "../../lib/queries";
 import { Cover } from "../../components/common";
+import { SourceTag, sourceProps } from "../../components/SourceTag";
 import { coverShapeOf, FILMS, SHAPE_ASPECT, usePreferences } from "../../lib/preferences";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { duration } from "../music/Tracks";
@@ -16,7 +17,7 @@ import { ChaptersPanel, SeriesPanel } from "./SeriesPanels";
 import { canWatch, EpisodesPanel, WatchButton, WatchedButton } from "./WatchPanels";
 import { ArrangePagesDialog } from "../builder/BookBuilder";
 import { customValues, formatCustom } from "./customFields";
-import { AttachFilesDialog, EditItemDialog, PhysicalCopyDialog, RemoveItemDialog } from "./forms";
+import { EditItemDialog, RemoveItemDialog } from "./forms";
 
 function meta(item: ItemDetail, key: string): string | null {
   const value = item.metadata?.[key];
@@ -83,40 +84,28 @@ function facts(item: ItemDetail, fields: FieldDef[]): [string, ReactNode][] {
   return rows;
 }
 
-function CopyCard({ item, version, onEdit }: { item: ItemDetail; version: VersionInfo; onEdit: () => void }) {
-  const queryClient = useQueryClient();
-  const [confirming, setConfirming] = useState(false);
+/** Where an item's file is (D-029: each file is its own item; a series or a book of images holds several). */
+function FilePanel({ item, version }: { item: ItemDetail; version: VersionInfo }) {
   const [arranging, setArranging] = useState(false);
-  const imageBook = version.kind === "digital" && version.format === "images" && version.files.length > 1;
   const [error, setError] = useState<string | null>(null);
-  const physical = version.kind === "physical";
-  const remove = async () => {
-    try {
-      await api.versionDelete(version.id);
-      libraryChanged(queryClient);
-    } catch (reason) {
-      setError(errorText(reason));
-    }
-  };
+  const imageBook = version.format === "images" && version.files.length > 1;
   const missing = version.files.filter((f) => f.status !== "ok").length;
   const managed = version.files.some((f) => f.storage === "managed");
   const size = version.files.reduce((sum, f) => sum + (f.size ?? 0), 0);
-  const details = physical
-    ? [version.edition, version.condition && `Condition: ${version.condition}`, version.location, version.acquiredAt && `Acquired ${date(version.acquiredAt)}`]
-    : [version.files.length > 1 ? `${version.files.length} files` : null, bytes(size)];
-
   return (
-    <div className="copy">
-      <div className="copy-icon">{physical ? <Package size={18} /> : <HardDrive size={18} />}</div>
-      <div className="copy-body">
-        <div className="copy-title">
-          {formatLabel(version.format)}
-          <span className="chip">{physical ? "Physical" : managed ? "In library folder" : "Referenced"}</span>
-          {missing > 0 && <span className="chip warning">{missing === version.files.length ? "Missing" : `${missing} missing`}</span>}
+    <section className="panel">
+      <h2>{version.files.length > 1 ? "Files" : "File"}</h2>
+      <div className="copy">
+        <div className="copy-icon">
+          <HardDrive size={18} />
         </div>
-        <div className="hint">{details.filter(Boolean).join(" · ")}</div>
-        {version.notes && <div className="hint">{version.notes}</div>}
-        {!physical && version.files.length > 0 && (
+        <div className="copy-body">
+          <div className="copy-title">
+            {formatLabel(version.format)}
+            <span className="chip">{managed ? "In library folder" : "Where you keep it"}</span>
+            {missing > 0 && <span className="chip warning">{missing === version.files.length ? "Missing" : `${missing} missing`}</span>}
+          </div>
+          <div className="hint">{[version.files.length > 1 ? `${version.files.length} files` : null, bytes(size)].filter(Boolean).join(" · ")}</div>
           <ul className="copy-files">
             {version.files.slice(0, 4).map((file) => (
               <li key={file.id}>
@@ -130,38 +119,18 @@ function CopyCard({ item, version, onEdit }: { item: ItemDetail; version: Versio
             ))}
             {version.files.length > 4 && <li>and {version.files.length - 4} more files</li>}
           </ul>
-        )}
-        <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-          {physical && (
-            <button type="button" className="btn btn-sm" onClick={onEdit}>
-              Edit
-            </button>
-          )}
           {imageBook && (
-            <button type="button" className="btn btn-sm" onClick={() => setArranging(true)}>
-              Arrange pages
-            </button>
-          )}
-          {confirming ? (
-            <>
-              <button type="button" className="btn btn-sm btn-danger" onClick={() => void remove()}>
-                {physical ? "Remove copy" : "Forget these files"}
+            <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+              <button type="button" className="btn btn-sm" onClick={() => setArranging(true)}>
+                Arrange pages
               </button>
-              <button type="button" className="btn btn-sm btn-ghost" onClick={() => setConfirming(false)}>
-                Keep
-              </button>
-            </>
-          ) : (
-            <button type="button" className="btn btn-sm btn-ghost" onClick={() => setConfirming(true)}>
-              Remove
-            </button>
+            </div>
           )}
+          {error && <div className="dialog-error">{error}</div>}
         </div>
-        {confirming && !physical && <div className="hint">The files stay on your computer; Digitify just stops tracking them for “{item.title}”.</div>}
-        {error && <div className="dialog-error">{error}</div>}
+        {imageBook && <ArrangePagesDialog item={item} version={version} open={arranging} onOpenChange={setArranging} />}
       </div>
-      {imageBook && <ArrangePagesDialog item={item} version={version} open={arranging} onOpenChange={setArranging} />}
-    </div>
+    </section>
   );
 }
 
@@ -177,8 +146,6 @@ export function ItemPage() {
   const music = useMusic();
   const [editing, setEditing] = useState(false);
   const [removing, setRemoving] = useState(false);
-  const [copy, setCopy] = useState<VersionInfo | "new" | null>(null);
-  const [attaching, setAttaching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const item = query.data;
 
@@ -243,8 +210,7 @@ export function ItemPage() {
   const source = item.online;
   const onlineOnly = !!source && !source.downloaded;
   const openOnline = () => void api.onlineOpen(item.id).catch((reason) => setError(errorText(reason)));
-  const physical = item.versions.filter((v) => v.kind === "physical");
-  const digital = item.versions.filter((v) => v.kind === "digital");
+  const file = item.versions.find((v) => v.kind === "digital" && v.files.length > 0);
 
   return (
     <div className="page">
@@ -254,8 +220,9 @@ export function ItemPage() {
       ) : (
         item.coverKey && <div className="hero-backdrop" style={{ backgroundImage: `url(${artworkUrl(item.coverKey)})` }} />
       )}
-        <div className="hero-cover" data-shape={shape} style={{ flexBasis: shape === "landscape" ? 360 : 220, aspectRatio: SHAPE_ASPECT[shape] }}>
+        <div className="hero-cover" data-shape={shape} style={{ flexBasis: shape === "landscape" ? 360 : 220, aspectRatio: SHAPE_ASPECT[shape] }} {...sourceProps(source?.provider === "web" ? null : source?.service)}>
           <Cover item={item} size="cover" />
+          <SourceTag service={source?.provider === "web" ? null : source?.service} />
         </div>
         <div className="hero-body">
           <span className="eyebrow">
@@ -425,19 +392,10 @@ export function ItemPage() {
         </div>
         <aside>
           <OrganizePanel item={item} />
-          <section className="panel">
-            <div className="panel-head">
-              <h2>Your copies</h2>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button type="button" className="btn btn-sm" onClick={() => setCopy("new")}>
-                  <Plus size={14} /> Physical
-                </button>
-                <button type="button" className="btn btn-sm" onClick={() => setAttaching(true)}>
-                  <FilePlus size={14} /> Files
-                </button>
-              </div>
-            </div>
-            {onlineOnly && source && (
+          {file && <FilePanel item={item} version={file} />}
+          {onlineOnly && source && (
+            <section className="panel">
+              <h2>Online</h2>
               <div className="copy">
                 <div className="copy-icon">
                   <Cloud size={18} />
@@ -457,24 +415,13 @@ export function ItemPage() {
                   </ul>
                 </div>
               </div>
-            )}
-            {physical.length === 0 && digital.length === 0 && !onlineOnly && <p className="hint">No copies recorded yet.</p>}
-            {[...physical, ...digital].map((version) => (
-              <CopyCard key={version.id} item={item} version={version} onEdit={() => setCopy(version)} />
-            ))}
-            {digital.length === 0 && physical.length > 0 && (
-              <p className="hint" style={{ marginTop: 12 }}>
-                Not digitized yet. Use “Files” to add a scan, ebook or rip as its digital copy.
-              </p>
-            )}
-          </section>
+            </section>
+          )}
         </aside>
       </div>
 
       <EditItemDialog item={item} open={editing} onOpenChange={setEditing} />
-      <PhysicalCopyDialog item={item} version={copy} onClose={() => setCopy(null)} />
       <RemoveItemDialog item={item} open={removing} onOpenChange={setRemoving} />
-      <AttachFilesDialog item={item} open={attaching} onOpenChange={setAttaching} />
     </div>
   );
 }

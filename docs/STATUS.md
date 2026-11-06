@@ -255,6 +255,18 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 | Smart shelves | ✅ | "New smart shelf" on the Shelves page: rules on category, kind of media, tags, year, creator, title, format, progress, favorite, copies, when added or last opened; match all or any; an order and "only the first N". A live count shows how many items match, and a rule that doesn't make sense says why. Smart shelves show a sparkle, fill and order themselves, aren't offered in "Add to shelf", and their menu has "Edit rules…". |
 | Keyboard shortcuts | ✅ | Settings › Keyboard lists every shortcut by where it works (Everywhere, Library views, Readers, Video player). "+" records a new key (Esc cancels); a key already in use asks "Use it here instead?"; keys can be removed, and one action or all reset. Buttons' tooltips and the search box show the current keys. New everywhere: Alt+Home (Home), Ctrl+, (Settings), Ctrl+P (music play/pause), Ctrl+Shift+→/← (next/previous track). |
 
+### One item per file, fewer features, link sources (D-029, 2026-11-06)
+| Change | Status | Notes |
+|---|---|---|
+| Source tag and border | ✅ | YouTube, YouTube Music, Spotify and SoundCloud items show the service's color around the cover and its name in the corner (grid, list, shelf, detailed, carousel, item page, Big Picture). |
+| Filters | ✅ | All / Digital; Music and Videos also have Online. "On the shelf" and "Not digitized" are gone. |
+| Shelves | Removed | Existing shelves became collections (schema 9); smart shelves are gone. The shelf view stays. |
+| Catalog a physical item, Your copies | Removed | Also "Catalog this disc" on the Discs page and adding files or physical copies to an item; an item's page shows its file instead. |
+| One item per file | ✅ | Items with several digital copies were split; a series stays one item. |
+| Disc format | ✅ | Edit details › Disc format for Movies & Series, shown as the DVD/BLU-RAY band; set when importing a disc title. |
+| Menu music toggle | ✅ | The slash runs like the interface sounds' one. |
+- **Tested** (`check-d029`, on the test library with a shelf, a Blu-ray copy and a book in two files added before upgrading): the "Weekend" shelf became a "Weekend" collection in Movies & Series and in Books holding its items, and no shelves remain; the book became two items (EPUB and PDF); the film got the Blu-ray disc format and its band; Music and Videos show All / Digital / Online and Books All / Digital; Online in Music lists the Spotify song, with a green border and a "Spotify" tag; the YouTube item's page shows a red border and a "YouTube" tag; the Add menu has no catalog entry; an item page shows Details, Organize and File, Organize has only Home and Tags; Edit details offers the disc format; `/shelves` shows nothing; Home has no shelves section; the menu-music slash is rotated 45° like the sounds icon's. A backup was saved before the upgrade.
+
 ### Import from URL (D-028, 2026-11-03)
 | Feature | Status | Notes |
 |---|---|---|

@@ -11,6 +11,120 @@ pub fn after(conn: &Connection, version: i64) -> AppResult<()> {
     if version == 7 {
         d027(conn)?;
     }
+    if version == 9 {
+        d029(conn)?;
+    }
+    Ok(())
+}
+
+/// D-029: shelves become collections, every file its own item (a series and a book of images
+/// aside), and a film's DVD or Blu-ray copy its disc format.
+fn d029(conn: &Connection) -> AppResult<()> {
+    disc_formats(conn)?;
+    shelves_to_collections(conn)?;
+    one_item_per_file(conn)?;
+    Ok(())
+}
+
+/// The format of a film's or series' physical disc copy becomes a detail of the item itself
+/// (`metadata.discFormat`), shown as the case band on its cover.
+fn disc_formats(conn: &Connection) -> AppResult<()> {
+    conn.execute(
+        "UPDATE items SET metadata = json_set(metadata, '$.discFormat', \
+           (SELECT lower(v.format) FROM versions v WHERE v.item_id = items.id AND v.kind = 'physical' \
+            AND lower(v.format) IN ('dvd', 'bluray', 'blu-ray', 'uhd-bluray', 'bluray-3d') ORDER BY v.is_primary DESC, v.id LIMIT 1)) \
+         WHERE category_id IN (SELECT id FROM categories WHERE handler = 'video') \
+         AND EXISTS (SELECT 1 FROM versions v WHERE v.item_id = items.id AND v.kind = 'physical' \
+                     AND lower(v.format) IN ('dvd', 'bluray', 'blu-ray', 'uhd-bluray', 'bluray-3d'))",
+        [],
+    )?;
+    conn.execute("UPDATE items SET metadata = json_set(metadata, '$.discFormat', 'bluray') WHERE json_extract(metadata, '$.discFormat') = 'blu-ray'", [])?;
+    Ok(())
+}
+
+/// Each hand-filled shelf becomes a collection of the same name in each of its items' categories.
+/// An item already in a collection stays there and gets the shelf's name as a tag instead, so no
+/// grouping is lost. Smart shelves (rules, not lists) are left in the database, unused.
+fn shelves_to_collections(conn: &Connection) -> AppResult<()> {
+    let shelves: Vec<(i64, String)> = conn
+        .prepare("SELECT id, name FROM shelves WHERE coalesce(json_extract(settings, '$.rules'), '') = '' ORDER BY sort_order, id")?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    for (shelf, name) in shelves {
+        let members: Vec<(i64, i64, Option<i64>)> = conn
+            .prepare("SELECT i.id, i.category_id, i.collection_id FROM shelf_items si JOIN items i ON i.id = si.item_id WHERE si.shelf_id = ?1 ORDER BY si.position, si.added_at")?
+            .query_map([shelf], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .collect::<Result<_, _>>()?;
+        for (position, (item, category, collection)) in members.into_iter().enumerate() {
+            if collection.is_some() {
+                conn.execute("INSERT OR IGNORE INTO tags (name) VALUES (?1)", [&name])?;
+                conn.execute("INSERT OR IGNORE INTO item_tags (item_id, tag_id) SELECT ?1, id FROM tags WHERE name = ?2", params![item, name])?;
+            } else {
+                let existing: Option<i64> = conn
+                    .query_row(
+                        "SELECT id FROM collections WHERE category_id = ?1 AND parent_id IS NULL AND lower(name) = lower(?2) LIMIT 1",
+                        params![category, name],
+                        |row| row.get(0),
+                    )
+                    .ok();
+                let target = match existing {
+                    Some(id) => id,
+                    None => {
+                        conn.execute(
+                            "INSERT INTO collections (category_id, parent_id, kind, name, sort_name) VALUES (?1, NULL, 'folder', ?2, ?3)",
+                            params![category, name, sort_key(&name)],
+                        )?;
+                        conn.last_insert_rowid()
+                    }
+                };
+                conn.execute("UPDATE items SET collection_id = ?2, position = ?3 WHERE id = ?1", params![item, target, position as f64])?;
+            }
+            reindex(conn, item)?;
+        }
+        conn.execute("DELETE FROM shelves WHERE id = ?1", [shelf])?;
+    }
+    Ok(())
+}
+
+/// Every digital copy past an item's first becomes an item of its own, with the same details,
+/// cover, people, tags and collection. A series keeps its episodes together.
+fn one_item_per_file(conn: &Connection) -> AppResult<()> {
+    let extra: Vec<(i64, i64)> = conn
+        .prepare(
+            "SELECT v.item_id, v.id FROM versions v JOIN items i ON i.id = v.item_id \
+             WHERE v.kind = 'digital' AND coalesce(json_extract(i.metadata, '$.kind'), '') <> 'series' \
+             AND v.id <> (SELECT v2.id FROM versions v2 WHERE v2.item_id = v.item_id AND v2.kind = 'digital' ORDER BY v2.is_primary DESC, v2.id LIMIT 1) \
+             ORDER BY v.item_id, v.id",
+        )?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    for (item, version) in extra {
+        conn.execute(
+            "INSERT INTO items (category_id, collection_id, title, sort_title, subtitle, year, description, position, cover_key, \
+             cover_color, is_favorite, rating, metadata, added_at, updated_at, last_opened_at) \
+             SELECT category_id, collection_id, title, sort_title, subtitle, year, description, position, cover_key, \
+             cover_color, is_favorite, rating, metadata, added_at, updated_at, last_opened_at FROM items WHERE id = ?1",
+            [item],
+        )?;
+        let copy = conn.last_insert_rowid();
+        conn.execute("INSERT INTO item_people (item_id, person_id, role, position) SELECT ?2, person_id, role, position FROM item_people WHERE item_id = ?1", params![item, copy])?;
+        conn.execute("INSERT INTO item_tags (item_id, tag_id) SELECT ?2, tag_id FROM item_tags WHERE item_id = ?1", params![item, copy])?;
+        conn.execute("UPDATE versions SET item_id = ?2, is_primary = 1 WHERE id = ?1", params![version, copy])?;
+        // Parts its files point at (a track, a chapter) go with them.
+        conn.execute(
+            "UPDATE parts SET item_id = ?2 WHERE id IN (SELECT part_id FROM files WHERE version_id = ?1 AND part_id IS NOT NULL)",
+            params![version, copy],
+        )?;
+        let format: Option<String> = conn.query_row("SELECT format FROM versions WHERE id = ?1", [version], |row| row.get(0))?;
+        if let Some(format) = format {
+            // Different copies of one title stay told apart: "Title (PDF)".
+            conn.execute(
+                "UPDATE items SET subtitle = coalesce(subtitle, ?2) WHERE id = ?1",
+                params![copy, format.to_uppercase()],
+            )?;
+        }
+        reindex(conn, copy)?;
+    }
     Ok(())
 }
 
@@ -192,6 +306,48 @@ mod tests {
         let key = |id: i64| conn.query_row("SELECT c.key FROM items i JOIN categories c ON c.id = i.category_id WHERE i.id = ?1", [id], |row| row.get::<_, String>(0)).unwrap();
         assert_eq!(key(10), "videos");
         assert_eq!(key(11), "video");
+    }
+
+    #[test]
+    fn shelves_copies_and_disc_formats() {
+        let conn = crate::db::memory();
+        let add = |category: &str, title: &str| {
+            conn.execute("INSERT INTO items (category_id, title, sort_title) VALUES ((SELECT id FROM categories WHERE key = ?1), ?2, ?2)", params![category, title]).unwrap();
+            conn.last_insert_rowid()
+        };
+        let film = add("video", "Film");
+        let book = add("books", "Book");
+        let kept = add("books", "Kept");
+        conn.execute("INSERT INTO collections (id, category_id, name, sort_name) VALUES (50, (SELECT id FROM categories WHERE key = 'books'), 'Old', 'old')", []).unwrap();
+        conn.execute("UPDATE items SET collection_id = 50 WHERE id = ?1", [kept]).unwrap();
+        conn.execute("INSERT INTO versions (item_id, kind, format, is_primary) VALUES (?1, 'physical', 'Blu-ray', 1)", [film]).unwrap();
+        for (format, primary) in [("epub", 1), ("pdf", 0)] {
+            conn.execute("INSERT INTO versions (item_id, kind, format, is_primary) VALUES (?1, 'digital', ?2, ?3)", params![book, format, primary]).unwrap();
+            conn.execute("INSERT INTO files (version_id, path, storage) VALUES (?1, ?2, 'referenced')", params![conn.last_insert_rowid(), format!("C:/b.{format}")]).unwrap();
+        }
+        conn.execute("INSERT INTO shelves (id, name) VALUES (1, 'Summer')", []).unwrap();
+        conn.execute("INSERT INTO shelf_items (shelf_id, item_id, position) VALUES (1, ?1, 0), (1, ?2, 1), (1, ?3, 2)", params![film, book, kept]).unwrap();
+
+        d029(&conn).unwrap();
+
+        let format: String = conn.query_row("SELECT json_extract(metadata, '$.discFormat') FROM items WHERE id = ?1", [film], |row| row.get(0)).unwrap();
+        assert_eq!(format, "bluray");
+        // The shelf is a collection in each category, and its items are in it; one already in a collection got a tag.
+        let in_summer: i64 = conn.query_row("SELECT count(*) FROM items i JOIN collections c ON c.id = i.collection_id WHERE c.name = 'Summer'", [], |row| row.get(0)).unwrap();
+        // The film, the book, and the book's PDF (now its own item, in the same collection).
+        assert_eq!(in_summer, 3);
+        let tagged: i64 = conn.query_row("SELECT count(*) FROM item_tags it JOIN tags t ON t.id = it.tag_id WHERE t.name = 'Summer' AND it.item_id = ?1", [kept], |row| row.get(0)).unwrap();
+        assert_eq!(tagged, 1);
+        assert_eq!(conn.query_row("SELECT count(*) FROM shelves", [], |row| row.get::<_, i64>(0)).unwrap(), 0);
+        // The book's PDF is an item of its own, in the same collection, told apart by its format.
+        let books: Vec<(String, Option<String>, i64)> = conn
+            .prepare("SELECT i.title, i.subtitle, (SELECT count(*) FROM versions v WHERE v.item_id = i.id) FROM items i WHERE i.title = 'Book' ORDER BY i.id")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(books, [("Book".into(), None, 1), ("Book".into(), Some("PDF".into()), 1)]);
     }
 
     #[test]

@@ -1,14 +1,20 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { FilePlus, FolderPlus, Plus, X } from "lucide-react";
-import { api, errorText, type Handler, type ImportMode, type ItemDetail, type PersonInput, type VersionInfo, type VersionInput } from "../../lib/api";
-import { usePreferences } from "../../lib/preferences";
-import { CONDITIONS, CREATOR_ROLE, formatLabel, PHYSICAL_FORMATS } from "../../lib/format";
+import { Plus, X } from "lucide-react";
+import { api, errorText, type Handler, type ItemDetail, type PersonInput } from "../../lib/api";
 import { libraryChanged, useCategories } from "../../lib/queries";
 import { Dialog, Field } from "../../components/common";
 import { CustomFieldInputs, customValues, fromText, toText } from "./customFields";
+
+/** Disc formats a film or series in Movies & Series can come from (D-029). */
+export const DISC_FORMATS: [string, string][] = [
+  ["", "None"],
+  ["dvd", "DVD"],
+  ["bluray", "Blu-ray"],
+  ["uhd-bluray", "4K UHD Blu-ray"],
+  ["bluray-3d", "3D Blu-ray"],
+];
 
 const ROLES = ["author", "writer", "artist", "director", "translator", "editor", "narrator", "creator"];
 
@@ -107,6 +113,7 @@ export function EditItemDialog({ item, open, onOpenChange }: { item: ItemDetail;
     setFields({
       ...Object.fromEntries(Object.values(METADATA_FIELDS).flat().map(({ key }) => [key, str(metadata[key])])),
       readingDirection: str(metadata.readingDirection),
+      discFormat: str(metadata.discFormat),
     });
     const stored = customValues(item.metadata);
     const definitions = categories.data?.flatMap((c) => c.fields) ?? [];
@@ -126,6 +133,8 @@ export function EditItemDialog({ item, open, onOpenChange }: { item: ItemDetail;
       else metadata[key] = value;
     }
     if (handler === "comic") metadata.readingDirection = fields.readingDirection || defaultDirection;
+    if (category === "video" && fields.discFormat) metadata.discFormat = fields.discFormat;
+    else delete metadata.discFormat;
     const values = { ...customValues(item.metadata) };
     try {
       for (const field of customFields) {
@@ -223,6 +232,17 @@ export function EditItemDialog({ item, open, onOpenChange }: { item: ItemDetail;
           </select>
         </Field>
       )}
+      {category === "video" && (
+        <Field label="Disc format" hint="The disc this copy came from; shown as the case band on its cover.">
+          <select className="select" value={fields.discFormat ?? ""} onChange={(e) => setFields({ ...fields, discFormat: e.target.value })}>
+            {DISC_FORMATS.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
       <CustomFieldInputs fields={customFields} values={custom} onChange={setCustom} />
       <Field label="Description">
         <textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} />
@@ -232,328 +252,6 @@ export function EditItemDialog({ item, open, onOpenChange }: { item: ItemDetail;
   );
 }
 
-interface CopyFields {
-  format: string;
-  edition: string;
-  condition: string;
-  location: string;
-  acquiredAt: string;
-  notes: string;
-}
-
-const EMPTY_COPY: CopyFields = { format: "", edition: "", condition: "", location: "", acquiredAt: "", notes: "" };
-
-function CopyEditor({ handler, value, onChange }: { handler: Handler; value: CopyFields; onChange: (value: CopyFields) => void }) {
-  const set = (key: keyof CopyFields) => (event: { target: { value: string } }) => onChange({ ...value, [key]: event.target.value });
-  return (
-    <>
-      <div className="field-row">
-        <Field label="Format">
-          <select className="select" value={value.format} onChange={set("format")}>
-            {PHYSICAL_FORMATS[handler].map((format) => (
-              <option key={format} value={format}>
-                {formatLabel(format)}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Edition">
-          <input className="input" placeholder="e.g. First edition, Steelbook" value={value.edition} onChange={set("edition")} />
-        </Field>
-      </div>
-      <div className="field-row">
-        <Field label="Condition">
-          <select className="select" value={value.condition} onChange={set("condition")}>
-            <option value="">Not recorded</option>
-            {CONDITIONS.map((condition) => (
-              <option key={condition} value={condition}>
-                {condition}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Acquired">
-          <input className="input" type="date" value={value.acquiredAt} onChange={set("acquiredAt")} />
-        </Field>
-      </div>
-      <Field label="Storage location">
-        <input className="input" placeholder="e.g. Living room, shelf B2" value={value.location} onChange={set("location")} />
-      </Field>
-      <Field label="Notes">
-        <textarea className="textarea" style={{ minHeight: 70 }} value={value.notes} onChange={set("notes")} />
-      </Field>
-    </>
-  );
-}
-
-function toInput(fields: CopyFields): Omit<VersionInput, "kind" | "id" | "itemId"> {
-  return {
-    format: blankToNull(fields.format),
-    edition: blankToNull(fields.edition),
-    condition: blankToNull(fields.condition),
-    location: blankToNull(fields.location),
-    acquiredAt: blankToNull(fields.acquiredAt),
-    notes: blankToNull(fields.notes),
-  };
-}
-
-/** Add or edit a physical copy (format, edition, condition, location). */
-export function PhysicalCopyDialog({
-  item,
-  version,
-  onClose,
-}: {
-  item: ItemDetail;
-  version: VersionInfo | "new" | null;
-  onClose: () => void;
-}) {
-  const queryClient = useQueryClient();
-  const [fields, setFields] = useState<CopyFields>(EMPTY_COPY);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (version === null) return;
-    setError(null);
-    setFields(
-      version === "new"
-        ? { ...EMPTY_COPY, format: PHYSICAL_FORMATS[item.handler][0] }
-        : {
-            format: version.format ?? PHYSICAL_FORMATS[item.handler][0],
-            edition: version.edition ?? "",
-            condition: version.condition ?? "",
-            location: version.location ?? "",
-            acquiredAt: version.acquiredAt ?? "",
-            notes: version.notes ?? "",
-          },
-    );
-  }, [version, item.handler]);
-
-  const save = async () => {
-    try {
-      await api.versionSave({
-        id: version === "new" || version === null ? null : version.id,
-        itemId: item.id,
-        kind: "physical",
-        ...toInput(fields),
-      });
-      libraryChanged(queryClient);
-      onClose();
-    } catch (reason) {
-      setError(errorText(reason));
-    }
-  };
-
-  return (
-    <Dialog
-      open={version !== null}
-      onOpenChange={(open) => !open && onClose()}
-      title={version === "new" ? "Add a physical copy" : "Edit physical copy"}
-      description={`A copy of “${item.title}” that you own on the shelf.`}
-      footer={
-        <>
-          <button type="button" className="btn" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="button" className="btn btn-primary" onClick={() => void save()}>
-            Save copy
-          </button>
-        </>
-      }
-    >
-      <CopyEditor handler={item.handler} value={fields} onChange={setFields} />
-      {error && <div className="dialog-error">{error}</div>}
-    </Dialog>
-  );
-}
-
-/** Catalog an item you own physically, before (or without) any digital copy. */
-export function CatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const categories = useCategories();
-  const [category, setCategory] = useState("books");
-  const [title, setTitle] = useState("");
-  const [creator, setCreator] = useState("");
-  const [year, setYear] = useState("");
-  const [copy, setCopy] = useState<CopyFields>(EMPTY_COPY);
-  const [error, setError] = useState<string | null>(null);
-  const handler = categories.data?.find((c) => c.key === category)?.handler ?? "book";
-
-  useEffect(() => {
-    if (open) {
-      setTitle("");
-      setCreator("");
-      setYear("");
-      setError(null);
-    }
-  }, [open]);
-
-  useEffect(() => setCopy((current) => ({ ...current, format: PHYSICAL_FORMATS[handler][0] })), [handler]);
-
-  const save = async () => {
-    const parsedYear = year.trim() ? Number(year) : null;
-    if (parsedYear !== null && !Number.isInteger(parsedYear)) {
-      setError("Year should be a whole number, like 1927.");
-      return;
-    }
-    try {
-      const id = await api.itemCreate(
-        {
-          title,
-          subtitle: null,
-          year: parsedYear,
-          description: null,
-          category,
-          people: creator.trim() ? [{ name: creator, role: CREATOR_ROLE[handler].role }] : [],
-          metadata: {},
-        },
-        { kind: "physical", ...toInput(copy) },
-      );
-      libraryChanged(queryClient);
-      onOpenChange(false);
-      void navigate({ to: "/item/$id", params: { id: String(id) } });
-    } catch (reason) {
-      setError(errorText(reason));
-    }
-  };
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      wide
-      title="Catalog a physical item"
-      description="Record something you own on the shelf. You can add its digital files later from the item's page."
-      footer={
-        <>
-          <button type="button" className="btn" onClick={() => onOpenChange(false)}>
-            Cancel
-          </button>
-          <button type="button" className="btn btn-primary" disabled={!title.trim()} onClick={() => void save()}>
-            Add to library
-          </button>
-        </>
-      }
-    >
-      <div className="field-row three">
-        <Field label="Category">
-          <select className="select" value={category} onChange={(e) => setCategory(e.target.value)}>
-            {categories.data?.map((c) => (
-              <option key={c.key} value={c.key}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label={CREATOR_ROLE[handler].label}>
-          <input className="input" value={creator} onChange={(e) => setCreator(e.target.value)} />
-        </Field>
-        <Field label="Year">
-          <input className="input" inputMode="numeric" value={year} onChange={(e) => setYear(e.target.value)} />
-        </Field>
-      </div>
-      <Field label="Title">
-        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
-      </Field>
-      <div className="eyebrow" style={{ marginTop: 6 }}>
-        Your copy
-      </div>
-      <CopyEditor handler={handler} value={copy} onChange={setCopy} />
-      {error && <div className="dialog-error">{error}</div>}
-    </Dialog>
-  );
-}
-
-/** Adds files (a scan, an ebook, a rip) as a digital copy of this item. */
-export function AttachFilesDialog({ item, open, onOpenChange }: { item: ItemDetail; open: boolean; onOpenChange: (open: boolean) => void }) {
-  const queryClient = useQueryClient();
-  const { preferences } = usePreferences();
-  const [paths, setPaths] = useState<string[]>([]);
-  const [mode, setMode] = useState<ImportMode>("reference");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (open) {
-      setPaths([]);
-      setMode(preferences.importMode === "copy" ? "copy" : "reference");
-      setError(null);
-      setBusy(false);
-    }
-  }, [open, preferences.importMode]);
-
-  const pick = async (directory: boolean) => {
-    const selected = await openDialog({ multiple: true, directory, title: directory ? "Choose a folder" : "Choose files" });
-    const list = Array.isArray(selected) ? selected : selected ? [selected] : [];
-    if (list.length) setPaths(list);
-  };
-
-  const attach = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.itemAttachFiles(item.id, paths, mode);
-      libraryChanged(queryClient);
-      onOpenChange(false);
-    } catch (reason) {
-      setError(errorText(reason));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const names = paths.map((path) => path.split(/[\\/]/).filter(Boolean).pop() ?? path);
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Add digital files"
-      description={`Files you choose become a digital copy of “${item.title}”, next to any physical copies.`}
-      footer={
-        <>
-          <button type="button" className="btn" onClick={() => onOpenChange(false)}>
-            Cancel
-          </button>
-          <button type="button" className="btn btn-primary" disabled={busy || paths.length === 0} onClick={() => void attach()}>
-            {busy ? "Adding…" : "Add files"}
-          </button>
-        </>
-      }
-    >
-      <div style={{ display: "flex", gap: 8 }}>
-        <button type="button" className="btn" onClick={() => void pick(false)}>
-          <FilePlus size={16} /> Choose files…
-        </button>
-        <button type="button" className="btn" onClick={() => void pick(true)}>
-          <FolderPlus size={16} /> Choose a folder…
-        </button>
-      </div>
-      {paths.length > 0 && (
-        <p className="hint">
-          {names.slice(0, 4).join(", ")}
-          {names.length > 4 ? ` and ${names.length - 4} more` : ""}
-        </p>
-      )}
-      <label className="choice">
-        <input type="radio" name="attach-mode" checked={mode === "reference"} onChange={() => setMode("reference")} />
-        <span>
-          <strong>Keep files where they are</strong>
-          <span className="hint">Nothing is copied or moved.</span>
-        </span>
-      </label>
-      <label className="choice">
-        <input type="radio" name="attach-mode" checked={mode === "copy"} onChange={() => setMode("copy")} />
-        <span>
-          <strong>Copy into the library folder</strong>
-          <span className="hint">The originals stay untouched.</span>
-        </span>
-      </label>
-      {error && <div className="dialog-error">{error}</div>}
-    </Dialog>
-  );
-}
-
-/** Removing never deletes files on its own; copies inside the library folder can optionally go to the Recycle Bin (D-009). */
 export function RemoveItemDialog({ item, open, onOpenChange }: { item: ItemDetail; open: boolean; onOpenChange: (open: boolean) => void }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();

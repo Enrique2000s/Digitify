@@ -97,12 +97,13 @@ Scope chosen by the owner in D-023.
 2. ✅ **Shelf appearance:** Wood, Glass and Dark metal besides Breeze.
 3. ✅ **Custom dashboard:** Home's sections reordered and hidden; Featured today; Statistics (with recorded reading, watching and listening time).
 4. ✅ **More layouts:** Detailed and Carousel, besides Grid, Shelf and List.
-5. ✅ **Advanced organization:** smart shelves that fill themselves from rules.
+5. ✅ **Advanced organization:** smart shelves that fill themselves from rules (removed with shelves in D-029; collections and tags remain).
 6. ✅ **Keyboard-shortcut editor.**
 7. ✅ Backup and restore, custom categories and fields were already done in Phase 1.
 
 ## Library refinements (D-027)
 1. ✅ Music without albums (each track an item), Videos apart from Movies & Series, sort by duration, mass edit of covers, "Add to playlist" for selections, actions that fit the whole selection, the new category order, carousel fixes, Home's + button.
+3. ✅ One item per file, no shelves, physical copies or catalog, disc formats, link sources (D-029).
 2. ✅ Import from URL (D-028): YouTube, YouTube Music, Spotify and SoundCloud links with the services' own players; downloads only where allowed (direct file links, downloadable SoundCloud tracks); playlists through the owner's API keys; an import queue. To try: real API keys for each service.
 
 ## Release engineering (ongoing)

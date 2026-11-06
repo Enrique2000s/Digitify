@@ -76,32 +76,6 @@ function JobRow({ job }: { job: DiscJob }) {
   );
 }
 
-function CatalogButton({ letter }: { letter: string }) {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <>
-      <button
-        type="button"
-        className="btn"
-        onClick={() =>
-          void api.discCatalog(letter).then(
-            (id) => {
-              libraryChanged(queryClient);
-              void navigate({ to: "/item/$id", params: { id: String(id) } });
-            },
-            (reason) => setError(errorText(reason)),
-          )
-        }
-      >
-        <Disc3 size={16} /> Catalog this disc
-      </button>
-      {error && <div className="dialog-error">{error}</div>}
-    </>
-  );
-}
-
 function AudioDisc({ letter, contents }: { letter: string; contents: Extract<DiscContents, { kind: "audio" }> }) {
   const music = useMusic();
   const audio = useRef<HTMLAudioElement>(null);
@@ -214,7 +188,6 @@ function AudioDisc({ letter, contents }: { letter: string; contents: Extract<Dis
             <option value="wav">WAV (uncompressed)</option>
           </select>
         </label>
-        <CatalogButton letter={letter} />
       </div>
       <p className="hint">Every part of the disc is read twice and compared; parts that differ are read again until two reads agree.</p>
       {error && <div className="dialog-error">{error}</div>}
@@ -251,7 +224,6 @@ function VideoDisc({ letter, titles }: { letter: string; titles: DiscTitle[] }) 
         ))}
       </ol>
       <div className="disc-actions">
-        <CatalogButton letter={letter} />
       </div>
       <p className="hint">Titles play and import straight from the disc. Disc menus aren't shown. Import copies the title into your library as an MKV with its chapters, audio and subtitles, without re-encoding.</p>
       {error && <div className="dialog-error">{error}</div>}
@@ -365,7 +337,6 @@ function DiscContentsView({ drive }: { drive: DriveInfo }) {
             </span>
           </div>
           <div className="disc-actions">
-            <CatalogButton letter={drive.letter} />
           </div>
         </div>
       );
@@ -439,7 +410,7 @@ export function DiscsPage() {
           drives.map((drive) => <DriveCard key={drive.letter} drive={drive} />)
         )}
         <p className="hint discs-note">
-          Audio CDs, home-made DVDs and Blu-rays, and data discs play and import. Commercial DVDs and Blu-rays are usually copy-protected; Digitify recognizes them and can catalog them, but
+          Audio CDs, home-made DVDs and Blu-rays, and data discs play and import. Commercial DVDs and Blu-rays are usually copy-protected; Digitify recognizes them, but
           never works around the protection.
         </p>
       </div>

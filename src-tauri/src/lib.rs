@@ -30,7 +30,6 @@ mod player;
 mod reshape;
 mod series;
 mod setup;
-mod smart;
 mod stats;
 mod tools;
 mod watch;
@@ -133,8 +132,6 @@ pub fn run() {
             library::items_blurbs,
             library::custom_order_set,
             library::items_cards,
-            organize::shelf_order_set,
-            smart::smart_count,
             stats::activity_add,
             stats::library_stats,
             library::dashboard_get,
@@ -153,10 +150,6 @@ pub fn run() {
             organize::item_tags_set,
             organize::tag_rename,
             organize::tag_delete,
-            organize::shelves_list,
-            organize::shelf_create,
-            organize::shelf_update,
-            organize::shelf_delete,
             organize::collections_list,
             organize::collection_tree,
             organize::collection_create,
@@ -214,7 +207,6 @@ pub fn run() {
             optical::cd_rip,
             optical::disc_import,
             optical::disc_job_cancel,
-            optical::disc_catalog,
             optical::dev_write_sample_discs,
             builder::pages_arrange,
             import::book_from_images,
@@ -224,7 +216,6 @@ pub fn run() {
             categories::categories_arrange,
             import::import_start,
             import::import_cancel,
-            import::item_attach_files,
             player::player_open,
             player::player_command,
             player::player_set_rect,

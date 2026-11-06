@@ -21,6 +21,7 @@ import { CardSizeSlider, Cover } from "../../components/common";
 import { CardSkeleton, caseBand, MediaCard } from "../../components/MediaCard";
 import { SHELF_LOOKS, ShelfLookPicker } from "../../components/ShelfLookPicker";
 import { BulkBar } from "./BulkBar";
+import { SourceTag, sourceProps } from "../../components/SourceTag";
 import { ArrangeDialog } from "./ArrangeDialog";
 import type { CoverShape } from "../../lib/api";
 
@@ -208,7 +209,7 @@ function ListRow({ item, index, top }: { item: ItemCard; index: number; top: num
                 style={{ top, height: 54 }}
                 {...props}
               >
-                <span className="thumb" data-shape={shapeOf(item).shape} {...vt(item.id)}>
+                <span className="thumb" data-shape={shapeOf(item).shape} {...vt(item.id)} {...sourceProps(item.source)}>
                   {selecting ? (
                     <span className={`row-check${checked ? " on" : ""}`} aria-hidden>
                       {checked && <Check size={16} strokeWidth={3.2} />}
@@ -273,8 +274,9 @@ function ShelfItem({ item, index, height, spines }: { item: ItemCard; index: num
   return (
     <Link to="/item/$id" params={{ id: String(item.id) }} className="shelf-item" title={item.title} data-blip {...props}>
       {/* Sized by width: if a full shelf narrows its covers, they shrink whole and keep their shape. */}
-      <div className="shelf-cover" data-shape={shape} style={{ width: shelfBox(shape, height).width, aspectRatio: aspect, position: "relative" }} {...vt(item.id)}>
+      <div className="shelf-cover" data-shape={shape} style={{ width: shelfBox(shape, height).width, aspectRatio: aspect, position: "relative" }} {...vt(item.id)} {...sourceProps(item.source)}>
         <Cover item={item} />
+        <SourceTag service={item.source} />
         {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
       </div>
       {check}
@@ -358,11 +360,12 @@ function DetailedRow({ item, index, top, height, blurb }: { item: ItemCard; inde
   const { selecting, checked, props } = useSelectable(item.id, index);
   const { shape, aspect } = useCoverShape()(item);
   const progress = item.progress ?? 0;
-  const ownership = item.hasPhysical && item.hasDigital ? "On the shelf and digital" : item.hasPhysical ? "On the shelf" : "Digital";
+  const availability = item.online ? `Online on ${item.source ?? "the web"}` : item.hasDigital ? "Digital" : null;
   return (
     <Link to="/item/$id" params={{ id: String(item.id) }} className="detail-row" style={{ top, height }} data-blip {...props}>
-      <div className="detail-cover" data-shape={shape} style={{ height: height - 26, aspectRatio: aspect }} {...vt(item.id)}>
+      <div className="detail-cover" data-shape={shape} style={{ height: height - 26, aspectRatio: aspect }} {...vt(item.id)} {...sourceProps(item.source)}>
         <Cover item={item} />
+        <SourceTag service={item.source} />
         {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
         {selecting && (
           <span className={`card-check${checked ? " on" : ""}`} aria-hidden>
@@ -389,7 +392,7 @@ function DetailedRow({ item, index, top, height, blurb }: { item: ItemCard; inde
               {fact}
             </span>
           ))}
-          <span className="detail-fact">{ownership}</span>
+          {availability && <span className="detail-fact">{availability}</span>}
         </div>
         {blurb?.description ? <p className="detail-description">{blurb.description}</p> : blurb && <p className="detail-description none">No description yet.</p>}
         {blurb && blurb.tags.length > 0 && (
@@ -619,6 +622,7 @@ function CarouselCover({ item, index, front, shape, style, onPick }: { item: Ite
       data-shape={shape}
       style={style}
       {...vt(item.id)}
+      {...sourceProps(item.source)}
       title={item.title}
       draggable={false}
       tabIndex={front ? 0 : -1}
@@ -634,6 +638,7 @@ function CarouselCover({ item, index, front, shape, style, onPick }: { item: Ite
       }}
     >
       <Cover item={item} />
+      <SourceTag service={item.source} />
       {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
       {selecting && (
         <span className={`card-check${checked ? " on" : ""}`} aria-hidden>
@@ -644,7 +649,6 @@ function CarouselCover({ item, index, front, shape, style, onPick }: { item: Ite
   );
 }
 
-const SHELF_SORT = { value: "shelf" as SortKey, label: "Shelf order" };
 const CUSTOM_SORT = { value: "custom" as SortKey, label: "Custom order" };
 
 const SORTS: { value: SortKey; label: string }[] = [
@@ -687,11 +691,11 @@ function PlayAll({ params }: { params: Omit<QueryParams, "offset" | "limit"> }) 
   );
 }
 
+/** All, what has files in the library, and (in Music and Videos) what was added from a link and plays online (D-029). */
 const OWNERSHIP: { value: Ownership | ""; label: string }[] = [
   { value: "", label: "All" },
-  { value: "physical", label: "On the shelf" },
   { value: "digital", label: "Digital" },
-  { value: "physicalOnly", label: "Not digitized" },
+  { value: "online", label: "Online" },
 ];
 
 /** The "Select" toggle; Ctrl+A selects everything and Esc stops selecting. */
@@ -733,7 +737,6 @@ export function LibraryView({
   beforeItems,
   square,
   handler,
-  smart,
   empty,
 }: {
   viewKey: string;
@@ -742,7 +745,7 @@ export function LibraryView({
   eyebrow?: ReactNode;
   icon?: ReactNode;
   description?: string | null;
-  /** Extra buttons next to "Add" (shelf, tag or collection actions). */
+  /** Extra buttons next to "Add" (tag or collection actions). */
   actions?: ReactNode;
   /** Shown between the header and the toolbar (music tabs). */
   prelude?: ReactNode;
@@ -751,36 +754,34 @@ export function LibraryView({
   square?: boolean;
   /** The kind of media of a category's view, for its usual cover shape. */
   handler?: string;
-  /** A smart shelf: it orders and fills itself, so nothing can be taken off it by hand. */
-  smart?: boolean;
   empty: ReactNode;
 }) {
   const { preferences, update } = usePreferences();
-  const onShelf = base.shelf != null;
-  const manualShelf = onShelf && !smart;
-  // Layout and the copies filter are shared by every view unless Settings says otherwise.
+  // Layout and the filter are shared by every view unless Settings says otherwise.
   const shared = preferences.syncViews ? "*" : viewKey;
   const other = preferences.syncViews ? viewKey : "*";
   const layout: Layout = preferences.layouts[shared] ?? preferences.layouts[other] ?? "grid";
-  const ownership: Ownership | "" = preferences.ownership[shared] ?? preferences.ownership[other] ?? "";
+  // "Online" is offered where links are imported to: Music and Videos.
+  const withOnline = handler === "audio" || base.category === "videos";
+  const filters = withOnline ? OWNERSHIP : OWNERSHIP.filter((option) => option.value !== "online");
+  const remembered: Ownership | "" = preferences.ownership[shared] ?? preferences.ownership[other] ?? "";
+  const ownership: Ownership | "" = filters.some((option) => option.value === remembered) ? remembered : "";
   // The sort is remembered per view; a custom order belongs to its view too.
   const orderKey = base.search
     ? null
-    : onShelf
-      ? `shelf:${base.shelf}`
-      : base.collection != null
-        ? `collection:${base.collection}`
-        : base.tag != null
-          ? `tag:${base.tag}`
-          : base.favorites
-            ? "favorites"
-            : (base.category ?? "all");
+    : base.collection != null
+      ? `collection:${base.collection}`
+      : base.tag != null
+        ? `tag:${base.tag}`
+        : base.favorites
+          ? "favorites"
+          : (base.category ?? "all");
   // A view of books or comics alone has nothing to time.
   const timed = handler !== "book" && handler !== "comic" ? [...SORTS, ...DURATION_SORTS] : SORTS;
-  const sorts = manualShelf ? [SHELF_SORT, ...timed] : base.search ? timed : [...timed, CUSTOM_SORT];
+  const sorts = base.search ? timed : [...timed, CUSTOM_SORT];
   const [searchSort, setSearchSort] = useState<SortKey | "">("");
   const saved = orderKey ? preferences.sorts[orderKey] : undefined;
-  const sort: SortKey | "" = base.search ? searchSort : saved && sorts.some((s) => s.value === saved) ? saved : manualShelf ? "shelf" : "title";
+  const sort: SortKey | "" = base.search ? searchSort : saved && sorts.some((s) => s.value === saved) ? saved : "title";
   const setSort = (next: SortKey | "") => {
     if (!orderKey) setSearchSort(next);
     else if (next) update((current) => ({ sorts: { ...current.sorts, [orderKey]: next } }));
@@ -789,7 +790,7 @@ export function LibraryView({
   const { cache, total, error } = usePagedItems(params);
   const selection = useSelectionState(cache);
   const shape = coverShapeOf({ handler: handler ?? "book", category: base.category }, preferences.coverShapes);
-  const arrangeable = !!orderKey && (sort === "custom" || (manualShelf && sort === "shelf"));
+  const arrangeable = !!orderKey && sort === "custom";
   const [arranging, setArranging] = useState(false);
 
   // Switching layouts moves each cover from its old place to its new one (a view transition).
@@ -852,7 +853,7 @@ export function LibraryView({
               ))}
             </div>
             <div className="segmented" role="group" aria-label="Ownership">
-              {OWNERSHIP.map((option) => (
+              {filters.map((option) => (
                 <button key={option.value} type="button" aria-pressed={ownership === option.value} onClick={() => setOwnership(option.value)}>
                   {option.label}
                 </button>
@@ -926,12 +927,11 @@ export function LibraryView({
           <ArrangeDialog
             base={{ ...base, ownership: null }}
             view={orderKey}
-            shelf={manualShelf ? (base.shelf ?? undefined) : undefined}
             title={title}
             onClose={() => setArranging(false)}
           />
         )}
-        {total != null && <BulkBar base={params} total={total} shelf={smart ? undefined : (base.shelf ?? undefined)} />}
+        {total != null && <BulkBar base={params} total={total} />}
       </div>
     </SelectionProvider>
   );

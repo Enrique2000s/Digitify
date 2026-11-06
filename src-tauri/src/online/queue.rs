@@ -285,14 +285,13 @@ fn work(app: AppHandle, fallback: Arc<Library>, shared: Arc<Shared>) {
     }
 }
 
-/// A download replacing an online-only item: the new item keeps its favorite mark, tags and
-/// shelves, and the online-only one goes.
+/// A download replacing an online-only item: the new item keeps its favorite mark and tags, and
+/// the online-only one goes.
 fn take_over(library: &Library, old: i64, new: i64) -> AppResult<()> {
     library.db.with(|conn| {
         let tx = conn.transaction()?;
         tx.execute("UPDATE items SET is_favorite = is_favorite OR (SELECT is_favorite FROM items WHERE id = ?1) WHERE id = ?2", params![old, new])?;
         tx.execute("INSERT OR IGNORE INTO item_tags (item_id, tag_id) SELECT ?2, tag_id FROM item_tags WHERE item_id = ?1", params![old, new])?;
-        tx.execute("INSERT OR IGNORE INTO shelf_items (shelf_id, item_id, position, added_at) SELECT shelf_id, ?2, position, added_at FROM shelf_items WHERE item_id = ?1", params![old, new])?;
         tx.execute("DELETE FROM items_fts WHERE rowid = ?1", [old])?;
         tx.execute("DELETE FROM items WHERE id = ?1", [old])?;
         crate::library::reindex(&tx, new)?;

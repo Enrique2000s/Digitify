@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { FolderPlus } from "lucide-react";
-import { api, errorText, type CollectionNode, type SmartRules } from "../../lib/api";
+import { api, errorText, type CollectionNode } from "../../lib/api";
 import { libraryChanged, useCategories, useCollectionTree } from "../../lib/queries";
 import { Dialog, Field } from "../../components/common";
 
@@ -132,75 +132,6 @@ export function ConfirmDialog({
   );
 }
 
-/** Creates a shelf, or renames one. Resolves with the shelf's id. */
-export function ShelfDialog({
-  open,
-  onOpenChange,
-  shelf,
-  onSaved,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  shelf?: { id: number; name: string; description: string | null; rules?: SmartRules | null };
-  onSaved?: (id: number) => Promise<unknown> | void;
-}) {
-  const queryClient = useQueryClient();
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const { busy, error, setError, run } = useAction(onOpenChange);
-  useEffect(() => {
-    if (open) {
-      setName(shelf?.name ?? "");
-      setDescription(shelf?.description ?? "");
-      setError(null);
-    }
-  }, [open, shelf, setError]);
-  const save = () =>
-    void run(async () => {
-      const input = { name: name.trim(), description: description.trim() || null, rules: shelf?.rules ?? null };
-      let id = shelf?.id;
-      if (id == null) id = await api.shelfCreate(input);
-      else await api.shelfUpdate(id, input);
-      await onSaved?.(id);
-      libraryChanged(queryClient);
-    });
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={shelf ? "Rename shelf" : "New shelf"}
-      description={shelf ? undefined : "Your own list across categories, like “Read this summer” or “Movie night”."}
-      footer={
-        <>
-          <button type="button" className="btn" onClick={() => onOpenChange(false)}>
-            Cancel
-          </button>
-          <button type="button" className="btn btn-primary" disabled={busy || !name.trim()} onClick={save}>
-            {shelf ? "Save" : "Create shelf"}
-          </button>
-        </>
-      }
-    >
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (name.trim()) save();
-        }}
-        style={{ display: "flex", flexDirection: "column", gap: 14 }}
-      >
-        <Field label="Name">
-          <input className="input" value={name} onChange={(event) => setName(event.target.value)} autoFocus />
-        </Field>
-        <Field label="Description (optional)">
-          <textarea className="textarea" style={{ minHeight: 70 }} value={description} onChange={(event) => setDescription(event.target.value)} />
-        </Field>
-      </form>
-      {error && <div className="dialog-error">{error}</div>}
-    </Dialog>
-  );
-}
-
-/** Indented options for a category's collections. */
 function CollectionOptions({ nodes, exclude }: { nodes: CollectionNode[]; exclude?: Set<number> }) {
   return nodes
     .filter((node) => !exclude?.has(node.id))

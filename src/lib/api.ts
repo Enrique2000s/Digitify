@@ -1,8 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export type Handler = "book" | "comic" | "video" | "audio" | "generic";
-export type Ownership = "physical" | "digital" | "physicalOnly" | "digitalOnly";
-export type SortKey = "title" | "added" | "year" | "creator" | "durationAsc" | "durationDesc" | "relevance" | "shelf" | "custom";
+/** The library filter (D-029): with files in the library, or added from a link and played online. */
+export type Ownership = "digital" | "online";
+export type SortKey = "title" | "added" | "year" | "creator" | "durationAsc" | "durationDesc" | "relevance" | "custom";
 export type ImportMode = "reference" | "copy";
 export type FieldKind = "text" | "longtext" | "number" | "date" | "rating" | "boolean" | "choice" | "url";
 
@@ -64,6 +65,10 @@ export interface ItemCard {
   coverShape: CoverShape | null;
   /** Imported from a link and not downloaded: it plays online only (D-028). */
   online: boolean;
+  /** The service it came from (YouTube, YouTube Music, Spotify, SoundCloud), for its tag. */
+  source: string | null;
+  /** A film's disc format (`dvd`, `bluray`, `uhd-bluray`, `bluray-3d`), for the case band. */
+  discFormat: string | null;
 }
 
 /** Where an item imported from a link lives (D-028). */
@@ -181,7 +186,6 @@ export interface QueryParams {
   category?: string | null;
   /** A collection and everything inside it. */
   collection?: number | null;
-  shelf?: number | null;
   tag?: number | null;
   search?: string | null;
   favorites?: boolean;
@@ -490,7 +494,6 @@ export interface ItemDetail {
   tags: NamedRef[];
   /** From the category root down; empty when the item isn't in a collection. */
   collectionPath: NamedRef[];
-  shelves: NamedRef[];
   progress: number | null;
   /** Where it was imported from, if from a link (D-028). */
   online: OnlineSource | null;
@@ -500,39 +503,6 @@ export interface Tag {
   id: number;
   name: string;
   itemCount: number;
-}
-
-/** A smart shelf's rule (Phase 5), e.g. `{ field: "progress", op: "is", value: "notStarted" }`. */
-export interface SmartCondition {
-  field: string;
-  op: string;
-  value: string;
-  value2?: string | null;
-}
-
-export interface SmartRules {
-  /** Any one rule is enough (otherwise all must match). */
-  any: boolean;
-  conditions: SmartCondition[];
-  /** Only the first this many, in `sort` order. */
-  limit: number | null;
-  sort: string | null;
-}
-
-export interface Shelf {
-  id: number;
-  name: string;
-  description: string | null;
-  itemCount: number;
-  covers: TileCover[];
-  /** Set for a smart shelf, which fills itself. */
-  rules: SmartRules | null;
-}
-
-export interface ShelfInput {
-  name: string;
-  description: string | null;
-  rules?: SmartRules | null;
 }
 
 export interface Collection {
@@ -561,8 +531,6 @@ export type BulkOp =
   | { op: "favorite"; favorite: boolean }
   | { op: "addTags"; names: string[] }
   | { op: "removeTags"; names: string[] }
-  | { op: "addToShelf"; shelf: number }
-  | { op: "removeFromShelf"; shelf: number }
   | { op: "move"; category: string; collection: number | null }
   | { op: "setYear"; year: number | null }
   | { op: "setSeries"; series: string | null }
@@ -683,18 +651,12 @@ export const api = {
   queryShapes: (params: Omit<QueryParams, "offset" | "limit">) => invoke<string>("library_query_shapes", { params: { ...params, offset: 0, limit: 0 } }),
   cards: (ids: number[]) => invoke<ItemCard[]>("items_cards", { ids }),
   customOrderSet: (view: string, ids: number[]) => invoke<void>("custom_order_set", { view, ids }),
-  shelfOrderSet: (shelf: number, ids: number[]) => invoke<void>("shelf_order_set", { shelf, ids }),
   activityAdd: (item: number, kind: "read" | "watch" | "listen", seconds: number) => invoke<void>("activity_add", { item, kind, seconds }),
   stats: () => invoke<LibraryStats>("library_stats"),
   tags: () => invoke<Tag[]>("tags_list"),
   itemTagsSet: (id: number, names: string[]) => invoke<void>("item_tags_set", { id, names }),
   tagRename: (id: number, name: string) => invoke<void>("tag_rename", { id, name }),
   tagDelete: (id: number) => invoke<void>("tag_delete", { id }),
-  shelves: () => invoke<Shelf[]>("shelves_list"),
-  shelfCreate: (shelf: ShelfInput) => invoke<number>("shelf_create", { shelf }),
-  shelfUpdate: (id: number, shelf: ShelfInput) => invoke<void>("shelf_update", { id, shelf }),
-  smartCount: (rules: SmartRules) => invoke<number>("smart_count", { rules }),
-  shelfDelete: (id: number) => invoke<void>("shelf_delete", { id }),
   collections: (category: string, parent: number | null) => invoke<CollectionLevel>("collections_list", { category, parent }),
   collectionTree: (category: string) => invoke<CollectionNode[]>("collection_tree", { category }),
   collectionCreate: (category: string, parent: number | null, name: string) => invoke<number>("collection_create", { category, parent, name }),
@@ -748,8 +710,6 @@ export const api = {
   importStart: (paths: string[], mode: ImportMode, category: string | null) =>
     invoke<number>("import_start", { request: { paths, mode, category } }),
   importCancel: (jobId: number) => invoke<void>("import_cancel", { jobId }),
-  itemAttachFiles: (itemId: number, paths: string[], mode: ImportMode) =>
-    invoke<number>("item_attach_files", { itemId, paths, mode }),
 
   playerOpen: (path: string) => invoke<void>("player_open", { path }),
   playerCommand: (args: unknown[]) => invoke<void>("player_command", { args }),
@@ -764,7 +724,6 @@ export const api = {
   cdRip: (letter: string, request: RipRequest) => invoke<number>("cd_rip", { letter, request }),
   discImport: (letter: string, title: number) => invoke<number>("disc_import", { letter, title }),
   discJobCancel: (id: number) => invoke<void>("disc_job_cancel", { id }),
-  discCatalog: (letter: string) => invoke<number>("disc_catalog", { letter }),
   musicTracks: (filter: TrackFilter) => invoke<Track[]>("music_tracks", { filter }),
   musicArtists: () => invoke<Artist[]>("music_artists"),
   musicSetFavorite: (id: number, favorite: boolean) => invoke<void>("music_set_favorite", { id, favorite }),

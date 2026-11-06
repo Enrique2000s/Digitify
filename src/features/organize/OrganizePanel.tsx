@@ -1,9 +1,8 @@
 import { Fragment, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ChevronRight, FolderInput, ListPlus } from "lucide-react";
+import { ChevronRight, FolderInput } from "lucide-react";
 import type { ItemDetail } from "../../lib/api";
 import { MoveDialog } from "./dialogs";
-import { ShelfMenu } from "./ShelfMenu";
 import { TagEditor } from "./TagEditor";
 
 /** Category › collection links for an item's home. */
@@ -25,11 +24,9 @@ export function HomePath({ item }: { item: ItemDetail }) {
   );
 }
 
-/** Where an item lives (category and collection), the shelves it's on, and its tags. */
+/** Where an item lives (category and collection), and its tags. */
 export function OrganizePanel({ item }: { item: ItemDetail }) {
   const [moving, setMoving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const member = new Set(item.shelves.map((shelf) => shelf.id));
   return (
     <section className="panel organize">
       <h2>Organize</h2>
@@ -43,25 +40,9 @@ export function OrganizePanel({ item }: { item: ItemDetail }) {
         </div>
       </div>
       <div className="organize-row">
-        <span className="organize-label">Shelves</span>
-        <div className="organize-value">
-          {item.shelves.map((shelf) => (
-            <Link key={shelf.id} to="/shelf/$id" params={{ id: String(shelf.id) }} className="chip">
-              {shelf.name}
-            </Link>
-          ))}
-          <ShelfMenu ids={[item.id]} member={member} onError={setError}>
-            <button type="button" className="btn btn-sm">
-              <ListPlus size={14} /> {item.shelves.length ? "Shelves" : "Add to shelf"}
-            </button>
-          </ShelfMenu>
-        </div>
-      </div>
-      <div className="organize-row">
         <span className="organize-label">Tags</span>
         <TagEditor item={item} />
       </div>
-      {error && <div className="dialog-error">{error}</div>}
       <MoveDialog
         open={moving}
         onOpenChange={setMoving}

@@ -20,7 +20,6 @@ export const HOME_SECTIONS = [
   "tiles",
   "featured",
   "favorites",
-  "shelves",
   "continueWatching",
   "continueReading",
   "recentlyOpened",
@@ -29,8 +28,9 @@ export const HOME_SECTIONS = [
 ] as const;
 /** Earlier default orders: a Home still in one of them moves to the current default. */
 const OLD_HOME_ORDERS = [
-  "tiles,featured,continueWatching,continueReading,shelves,recentlyOpened,recentlyAdded,favorites,discs,stats",
-  "tiles,featured,continueWatching,continueReading,shelves,recentlyOpened,recentlyAdded,favorites,stats",
+  // (Shelves, D-029, left Home; these read as they are once their "shelves" is dropped.)
+  "tiles,featured,continueWatching,continueReading,recentlyOpened,recentlyAdded,favorites,discs,stats",
+  "tiles,featured,continueWatching,continueReading,recentlyOpened,recentlyAdded,favorites,stats",
 ];
 export type HomeSection = (typeof HOME_SECTIONS)[number];
 export interface HomeLayout {
@@ -104,7 +104,7 @@ export interface Preferences {
   layouts: Record<string, Layout>;
   /** The same layout and copies filter in every view (under "*"), rather than one per view. */
   syncViews: boolean;
-  /** Last copies filter (All, On the shelf, Digital, Not digitized) per view, or under "*". */
+  /** Last filter (All, Digital, Online) per view, or under "*". */
   ownership: Record<string, Ownership | "">;
   /** Last sort per view ("books", "all", "collection:3", "shelf:5"…). */
   sorts: Record<string, SortKey>;
@@ -339,7 +339,10 @@ function sanitize(raw: unknown): Preferences {
     cardSize: pick("cardSize", (v) => typeof v === "number" && v >= 110 && v <= 260),
     layouts: pick("layouts", (v) => !!v && typeof v === "object"),
     syncViews: pick("syncViews", isBoolean),
-    ownership: pick("ownership", (v) => !!v && typeof v === "object"),
+    // Only Digital and Online are left (D-029); "On the shelf" and "Not digitized" fall back to All.
+    ownership: Object.fromEntries(
+      Object.entries(pick("ownership", (v) => !!v && typeof v === "object") as Record<string, unknown>).filter(([, v]) => v === "digital" || v === "online"),
+    ) as Record<string, Ownership | "">,
     sorts: pick("sorts", (v) => !!v && typeof v === "object"),
     coverShapes: sanitizeShapes((raw as Raw<Preferences>)?.coverShapes),
     // "albums" (D-024) became the Tracks view (D-027).

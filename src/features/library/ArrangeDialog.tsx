@@ -39,20 +39,17 @@ const STARTS: [SortKey, string][] = [
 ];
 
 /**
- * "Arrange…": a view's items in their custom order (or a shelf's own order), to drag into place,
+ * "Arrange…": a view's items in their custom order, to drag into place,
  * send to the top or bottom, or start again from another sort.
  */
 export function ArrangeDialog({
   base,
   view,
-  shelf,
   title,
   onClose,
 }: {
   base: Omit<QueryParams, "offset" | "limit">;
   view: string;
-  /** A hand-made shelf: its own order is what's arranged. */
-  shelf?: number;
   title: string;
   onClose: () => void;
 }) {
@@ -70,7 +67,7 @@ export function ArrangeDialog({
       (reason) => setError(errorText(reason)),
     );
   useEffect(() => {
-    void load(shelf != null ? "shelf" : "custom");
+    void load("custom");
   }, []);
 
   const list = order ?? [];
@@ -98,8 +95,7 @@ export function ArrangeDialog({
     if (!order) return;
     setBusy(true);
     try {
-      if (shelf != null) await api.shelfOrderSet(shelf, order);
-      else await api.customOrderSet(view, order);
+      await api.customOrderSet(view, order);
       libraryChanged(queryClient);
       onClose();
     } catch (reason) {
