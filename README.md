@@ -1,75 +1,113 @@
 # Digitify
 
-> Your physical collection, digitally preserved and beautifully organized.
+> Your whole media collection, in one place.
 
-Digitify is an offline-first Windows desktop app. It brings your books, comics and manga, movies and series, music, and the physical media you own into one library, with built-in readers and players. See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for the full brief.
+Digitify is an offline-first desktop app for **Windows and Linux**. It brings your books, comics and manga, music, videos, movies and series into one library that lives on your own computer, with built-in readers and players. No accounts, no cloud, no telemetry: it goes online only when you import from a link (D-008, D-028). See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for the original brief.
 
-**Status:** Phase 1 (core library) is feature-complete, in the Breeze visual identity (D-016).
-- **Works today:**
-  - first-run library setup, and import (reference or copy) with metadata and artwork
-  - Grid, List and Shelf views, search, item details, physical and digital copies
-  - nested collections, shelves, tags, multi-select bulk edits
-  - your own categories with custom fields
-  - ambient music (Digitify's own "Morning Lounge", or your own music) with interface sounds
-- **Next:** readers in Phase 2, then players in Phase 3.
+## What it does
+- **One library** for Books, Comics, Manga, Music, Videos and Movies & Series, plus categories of your own with custom fields. Each file is its own item (a series keeps its episodes together).
+- **Import** files and folders (kept where they are, or copied into the library folder), with their metadata and artwork; duplicates are recognized by content.
+- **Import from URL:** YouTube, YouTube Music, Spotify and SoundCloud links are saved as online items that play in the services' own players; files are downloaded only where the service allows it (direct file links, SoundCloud tracks their uploader made downloadable). An import queue shows progress, with cancel and retry.
+- **Views:** Grid, Shelf (with wood, glass or metal shelves), List, Detailed and a 3D Carousel; sort by title, date, year, creator, duration or your own order; filter by All, Digital, Online (Music and Videos) and Collections.
+- **Organize:** nested collections, tags, favorites, and multi-select edits that offer only what fits every selected item (cover image and shape, add to playlist, tags, move…).
+- **Readers:** ebooks (EPUB and more), PDFs, comics and manga (CBZ, CBR, CB7, CBT, image folders) with right-to-left reading, page-turn effects and bookmarks.
+- **Players:** video through mpv (subtitles, audio tracks, chapters, resume for films and series), music with a queue, playlists and a mini-player, and the menu music (Digitify's own theme or your music).
+- **Discs:** play and rip audio CDs (verified), play and import home-made DVDs and Blu-rays. Copy-protected discs are recognized and never worked around (D-007).
+- **Big Picture:** a full-screen TV interface for Xbox and PlayStation controllers (or the mouse), with its own Home, library, search with an on-screen keyboard, and players.
+- **Make it yours:** Breeze and Cinematic looks, palettes, accent colors, a customizable Home with statistics, keyboard shortcuts, animations you can turn off, and a light mode for slower computers.
 
-Progress and test results are in [docs/STATUS.md](docs/STATUS.md).
+Progress, test results and known limits are in [docs/STATUS.md](docs/STATUS.md); every decision is in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## Documentation
 | Document | Contents |
 |---|---|
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | The original project brief, verbatim |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | Every approved product and architecture decision |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | Every approved product and architecture decision (D-001…) |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phases, milestones and open decisions |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the app is put together |
-| [docs/STATUS.md](docs/STATUS.md) | Feature status and known limitations |
+| [docs/STATUS.md](docs/STATUS.md) | Feature status, test results and known limitations |
+| [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) | Licenses of the helper programs and libraries |
 
-## Prerequisites (Windows 11 x64)
-- [Node.js](https://nodejs.org) LTS
-- [Rust](https://rustup.rs) stable (MSVC toolchain)
+## Installing
+
+### Windows 11 (x64)
+Run `Digitify_0.1.0_x64-setup.exe`. It installs for the current user in `%LOCALAPPDATA%\Digitify` without admin rights, and adds Start menu and desktop shortcuts. Uninstall it from Settings › Apps; that removes the program, never your library folder, settings or logs.
+
+### Linux (x64)
+Two packages, both built by GitHub Actions:
+- **`.deb`** (Ubuntu, Debian, Linux Mint, Pop!_OS…): `sudo apt install ./Digitify_0.1.0_amd64.deb`. It brings in `mpv`, `ffmpeg` and `udisks2` from the distribution. Digitify then appears in the applications menu. Uninstall with `sudo apt remove digitify`.
+- **AppImage** (any distribution): install `mpv` and `ffmpeg` with your package manager first, then `chmod +x Digitify_0.1.0_amd64.AppImage` and run it. Nothing is installed; delete the file to remove it.
+
+On Wayland desktops Digitify runs through XWayland (needed to show video inside its window). Disc drives appear as `sr0`, `sr1`…; your user needs read access to them (usually the `cdrom` or `optical` group).
+
+### Giving Digitify to someone
+Send the file itself (a USB stick, Google Drive, WeTransfer, a chat app): the Windows installer, or for Linux the `.deb` (simplest on Ubuntu-like systems) or the AppImage (any distribution). The GitHub repository is private, so they can't download it from there themselves.
+
+## Getting the installers
+| Platform | How | Where it ends up |
+|---|---|---|
+| Windows | `npm run installer` on this PC | `installer\Digitify_0.1.0_x64-setup.exe` |
+| Linux | GitHub builds it on every push to `main` (or Actions › **Build installers** › **Run workflow**); then `npm run installer:linux` downloads the latest one (needs the [GitHub CLI](https://cli.github.com), signed in with `gh auth login`) | `installer\linux\*.deb` and `*.AppImage` |
+
+Without the GitHub CLI: open the repository's **Actions** tab, the latest **Build installers** run, and download **digitify-linux** (and **digitify-windows**) under **Artifacts**. The `installer` folder isn't committed.
+
+## Building from source
+
+### Windows 11 x64
+- [Node.js](https://nodejs.org) LTS, [Rust](https://rustup.rs) stable (MSVC toolchain)
 - Visual Studio 2022 or newer with the **Desktop development with C++** workload
 - Microsoft Edge WebView2 Runtime (preinstalled on Windows 11)
 
-## Setup
 ```powershell
 npm install
-powershell -ExecutionPolicy Bypass -File scripts\fetch-deps.ps1    # pinned mpv + FFmpeg, hash- and DRM-checked
-powershell -ExecutionPolicy Bypass -File scripts\make-samples.ps1  # synthetic test video in samples\
+powershell -ExecutionPolicy Bypass -File scripts\fetch-deps.ps1    # pinned mpv, FFmpeg and PDFium, hash- and DRM-checked
+powershell -ExecutionPolicy Bypass -File scripts\make-samples.ps1  # synthetic test media in samples\
+npm run tauri dev                                                  # development build with hot reload
+npm run installer                                                  # optimized build + installer, copied to installer\
 ```
 
-## Run
+### Linux x64 (Ubuntu 22.04 or newer)
+```bash
+sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
+  libxdo-dev libssl-dev libdbus-1-dev libx11-dev pkg-config patchelf file mpv ffmpeg
+npm install
+bash scripts/fetch-deps.sh     # pinned PDFium, hash- and DRM-checked
+npm run tauri dev              # development build
+npm run tauri build            # .deb and AppImage in src-tauri/target/release/bundle/
+```
+
+The workflow in [.github/workflows/build.yml](.github/workflows/build.yml) does the same on GitHub for both platforms. Every change is made for Windows and Linux together (D-031).
+
+## Trying it
+1. On first launch, choose a library folder. The suggestion is `Digitify Library` in your user folder.
+2. Use **Add** › **Import a folder…** and pick `samples\import-test` (or drag it onto the window): an EPUB, a PDF, page photos, a manga and a comic, music and videos, all synthetic.
+3. Browse with the Grid, Shelf, List, Detailed and Carousel views, open an item, play or read it.
+4. Try **Add** › **Import from URL…** with a YouTube or SoundCloud link, and **Big Picture** from the controller button in the title bar.
+
+| | Windows | Linux |
+|---|---|---|
+| Settings and library location | `%LOCALAPPDATA%\com.digitify.desktop\config.json` | `~/.local/share/com.digitify.desktop/config.json` |
+| Logs | `%LOCALAPPDATA%\com.digitify.desktop\logs\` | `~/.local/share/com.digitify.desktop/logs/` |
+| Online-service keys | encrypted with DPAPI in the config folder | the desktop keyring |
+
+Set `DIGITIFY_CONFIG_DIR` to use another config folder, for example for a throwaway test library.
+
+## Tests
 ```powershell
-npm run tauri dev                      # development build with hot reload
-npm run tauri build -- --no-bundle     # optimized build: src-tauri\target\release\digitify.exe
-npm run tauri build                    # optimized build plus NSIS installer (per-user, no admin):
-                                       #   src-tauri\target\release\bundle\nsis\Digitify_0.1.0_x64-setup.exe
+cd src-tauri; cargo test --release
 ```
-
-### Installing
-The installer puts Digitify in `%LOCALAPPDATA%\Digitify` without needing admin rights, and adds Start menu and desktop shortcuts. Uninstall it from Windows Settings › Apps. Uninstalling removes the program, but never your library folder, settings or logs.
-
-### Trying it
-1. On first launch, choose a library folder. The suggested one is `%USERPROFILE%\Digitify Library`.
-2. Use **Add to library** › **Import a folder…** and pick `samples\import-test`, or drag that folder onto the window. It contains synthetic test media: an EPUB, a PDF, page photos, a manga and a comic CBZ, a FLAC album and a video.
-3. Browse in Grid, Shelf (covers or spines) and List. Open an item to see its details and copies, and to edit it.
-4. Use **Add to library** › **Catalog a physical item…** for something you own only on paper or disc. Then on its page, use **Files** to add a scan, e.g. `samples\attach-test\Scan of my hardcover.pdf`.
-
-Logs: `%LOCALAPPDATA%\com.digitify.desktop\logs\`. Interface preferences and the library location: `%LOCALAPPDATA%\com.digitify.desktop\config.json`. Set `DIGITIFY_CONFIG_DIR` to use a different config folder, for example for a throwaway test library.
-
-### Tests
-```powershell
-cd src-tauri; cargo test
-```
-The Phase 0 video lab (mpv under the web UI) is under **Settings › Developer**.
+GitHub Actions runs them on Windows with every build.
 
 ## Project layout
 ```
 src/                  React + TypeScript UI
-src-tauri/src/        Rust core (database, media protocol, player, …)
+src-tauri/src/        Rust core (database, import, readers, players, discs, online import…)
 src-tauri/migrations/ SQLite schema migrations
-scripts/              Dependency fetching and sample generation
+scripts/              Dependency fetching, sample generation, installer helpers
+.github/workflows/    Installer builds for Windows and Linux
 docs/                 Requirements, decisions, roadmap, architecture, status
 ```
 
 ## Licensing
-Digitify's own license is not decided yet (D-003). The helper engines run as separate programs: mpv (GPLv2+) and FFmpeg (LGPL build). Their notices will ship with the installer. No copyrighted media is included; test media is generated by `scripts\make-samples.ps1`.
+Digitify's own license isn't decided yet (D-003). The helper engines run as separate programs: mpv (GPLv2+) and FFmpeg (LGPL build); PDFium (BSD) is loaded as a library. Their notices ship with the app ([THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). No copyrighted media is included; test media is generated by `scripts\make-samples.ps1`.
+

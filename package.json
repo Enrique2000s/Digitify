@@ -9,7 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
-    "installer": "tauri build && node scripts/copy-installer.mjs"
+    "installer": "tauri build && node scripts/copy-installer.mjs",
+    "installer:linux": "node scripts/get-linux-installer.mjs"
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.3.0",
