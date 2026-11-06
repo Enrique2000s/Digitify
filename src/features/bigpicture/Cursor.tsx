@@ -7,8 +7,11 @@ const CLICKABLE = "button, a, input, select, label, [data-bp-focus], [role=butto
  * The round pointer of Big Picture (D-025): the left stick moves it, the right stick scrolls what's
  * under it, A clicks. The mouse moves it too, replacing the system pointer inside the window. While
  * it's shown, the left stick moves only the cursor (it doesn't also step a selection).
+ *
+ * `mouseOnly` (selection mode): the controller keeps its selection, and the round cursor is the
+ * mouse's alone. It shows when the mouse moves and goes when a controller button is pressed.
  */
-export function Cursor({ speed, autoHide = false }: { speed: number; autoHide?: boolean }) {
+export function Cursor({ speed, autoHide = false, mouseOnly = false }: { speed: number; autoHide?: boolean; mouseOnly?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   // Over a reader or the player, the cursor hides with the bars when it's left alone.
   const idle = useRef(0);
@@ -20,6 +23,8 @@ export function Cursor({ speed, autoHide = false }: { speed: number; autoHide?: 
   };
   const position = useRef({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
   const lastHover = useRef<Element | null>(null);
+  // Set while the cursor itself moves the selection, so that isn't taken for the controller's.
+  const ownFocus = useRef(false);
 
   const place = (x: number, y: number) => {
     position.current = { x, y };
@@ -34,20 +39,37 @@ export function Cursor({ speed, autoHide = false }: { speed: number; autoHide?: 
     if (under === lastHover.current) return;
     lastHover.current = under;
     const target = under?.closest<HTMLElement>("[data-bp-focus]");
-    if (target && document.activeElement !== target) target.focus({ preventScroll: true });
+    if (target && document.activeElement !== target) {
+      ownFocus.current = true;
+      target.focus({ preventScroll: true });
+      ownFocus.current = false;
+    }
+  };
+
+  // In selection mode the cursor is shown only while the mouse is in use.
+  const show = (on: boolean) => {
+    ref.current?.classList.toggle("hidden", !on);
+    document.documentElement.classList.toggle("bp-cursor-on", on);
   };
 
   useEffect(() => {
-    const release = claimSticksForCursor();
+    const release = mouseOnly ? () => {} : claimSticksForCursor();
     wake();
-    document.documentElement.classList.add("bp-cursor-on");
+    show(!mouseOnly);
     // The mouse drives the same cursor.
     const onMouse = (event: MouseEvent) => {
       if (!event.isTrusted) return;
+      if (mouseOnly) show(true);
       place(event.clientX, event.clientY);
       hover(false);
     };
     window.addEventListener("mousemove", onMouse, { passive: true });
+    // In selection mode, the selection moving any other way (the controller, the keyboard) puts the
+    // mouse's cursor away.
+    const onFocus = () => {
+      if (mouseOnly && !ownFocus.current) show(false);
+    };
+    document.addEventListener("focusin", onFocus);
     // Lets automated tests put the cursor somewhere without a controller.
     const w = window as unknown as { __digitifyCursor?: (x: number, y: number) => void };
     w.__digitifyCursor = (x, y) => {
@@ -59,11 +81,13 @@ export function Cursor({ speed, autoHide = false }: { speed: number; autoHide?: 
       window.clearTimeout(idle.current);
       document.documentElement.classList.remove("bp-cursor-on");
       window.removeEventListener("mousemove", onMouse);
+      document.removeEventListener("focusin", onFocus);
       delete w.__digitifyCursor;
     };
   }, []);
 
   useSticks((sticks, dt) => {
+    if (mouseOnly) return;
     if (sticks.lx || sticks.ly) {
       const p = position.current;
       place(Math.max(0, Math.min(window.innerWidth - 2, p.x + sticks.lx * speed * dt)), Math.max(0, Math.min(window.innerHeight - 2, p.y + sticks.ly * speed * dt)));
@@ -78,6 +102,11 @@ export function Cursor({ speed, autoHide = false }: { speed: number; autoHide?: 
   });
 
   usePad((action) => {
+    // With the selection in charge, a button hands back from the mouse to the selection.
+    if (mouseOnly) {
+      show(false);
+      return;
+    }
     // Any button brings a hidden cursor back, like the bars.
     wake();
     if (action !== "accept") return;
@@ -118,5 +147,5 @@ export function Cursor({ speed, autoHide = false }: { speed: number; autoHide?: 
     return true;
   });
 
-  return <div ref={ref} className="bp-cursor" aria-hidden style={{ transform: `translate(${position.current.x}px, ${position.current.y}px)` }} />;
+  return <div ref={ref} className={`bp-cursor${mouseOnly ? " hidden" : ""}`} aria-hidden style={{ transform: `translate(${position.current.x}px, ${position.current.y}px)` }} />;
 }

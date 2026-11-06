@@ -13,8 +13,8 @@ export function embedUrl(source: OnlineSource, origin: string): string | null {
     case "youtube":
       // youtube-nocookie and an explicit origin: YouTube refuses embeds that don't say where they are.
       return source.kind === "playlist"
-        ? `https://www.youtube-nocookie.com/embed/videoseries?list=${id}&autoplay=1&rel=0&origin=${encodeURIComponent(origin)}`
-        : `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&origin=${encodeURIComponent(origin)}`;
+        ? `https://www.youtube-nocookie.com/embed/videoseries?list=${id}&autoplay=1&rel=0&enablejsapi=1&origin=${encodeURIComponent(origin)}`
+        : `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&enablejsapi=1&origin=${encodeURIComponent(origin)}`;
     case "spotify":
       return `https://open.spotify.com/embed/${source.kind}/${id}`;
     case "soundcloud":

@@ -393,10 +393,13 @@ export function HomePage() {
           ))}
         </ol>
       ) : (
-        order.map((section) => {
-          const body = content[section] || null;
-          return preferences.home.hidden.includes(section) || !body ? null : <div key={section}>{body}</div>;
-        })
+        order
+          .filter((section) => !preferences.home.hidden.includes(section) && content[section])
+          .map((section, index) => (
+            <div key={section} className="home-section" style={{ ["--i" as string]: index }}>
+              {content[section]}
+            </div>
+          ))
       )}
       {data.totals.items > 0 && (
         <p className="home-totals">

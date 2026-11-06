@@ -274,10 +274,12 @@ export function MusicPage({ category, tab }: { category: Category; tab: Exclude<
     <div className="library-view">
       <div className="music-page">
       <Header category={category} tab={tab} />
-      {tab === "artists" && <Artists />}
-      {tab === "playlists" && <Playlists />}
-      {tab === "recent" && <TrackList filter={{ recent: true }} empty="Nothing played yet." />}
-      {tab === "favorites" && <TrackList filter={{ favorites: true }} empty="No favorite tracks yet. Use the heart next to a track." />}
+      <div className="view-stage music-stage" key={tab}>
+        {tab === "artists" && <Artists />}
+        {tab === "playlists" && <Playlists />}
+        {tab === "recent" && <TrackList filter={{ recent: true }} empty="Nothing played yet." />}
+        {tab === "favorites" && <TrackList filter={{ favorites: true }} empty="No favorite tracks yet. Use the heart next to a track." />}
+      </div>
       </div>
     </div>
   );

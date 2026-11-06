@@ -255,6 +255,17 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 | Smart shelves | ✅ | "New smart shelf" on the Shelves page: rules on category, kind of media, tags, year, creator, title, format, progress, favorite, copies, when added or last opened; match all or any; an order and "only the first N". A live count shows how many items match, and a rule that doesn't make sense says why. Smart shelves show a sparkle, fill and order themselves, aren't offered in "Add to shelf", and their menu has "Edit rules…". |
 | Keyboard shortcuts | ✅ | Settings › Keyboard lists every shortcut by where it works (Everywhere, Library views, Readers, Video player). "+" records a new key (Esc cancels); a key already in use asks "Use it here instead?"; keys can be removed, and one action or all reset. Buttons' tooltips and the search box show the current keys. New everywhere: Alt+Home (Home), Ctrl+, (Settings), Ctrl+P (music play/pause), Ctrl+Shift+→/← (next/previous track). |
 
+### Big Picture of its own, collections, motion, light mode (D-030, 2026-11-06)
+| Change | Status | Notes |
+|---|---|---|
+| Big Picture mouse cursor | ✅ | In selection mode the mouse drives the round cursor; the controller takes back over. Real controllers still untested. |
+| Big Picture online player | 🟡 | Its own screen with big buttons for YouTube, YouTube Music, SoundCloud and Spotify. YouTube's play/pause and position work (tested); SoundCloud's and Spotify's buttons use their embeds' messages, not yet tried with those services. |
+| Big Picture Home | ✅ | Home's sections (with Statistics and its charts) in Home's order; arrows on every row. |
+| Collections filter | ✅ | All shows collections first among the items, in every layout; Collections shows them alone. |
+| Animations | ✅ | Entrances for views, filters, sorts, categories, tabs, Home and Big Picture; switchable in Settings. |
+| Light mode | ✅ | Settings › Appearance › "Light mode for slower computers". |
+- **Tested** (`check-d030`, `check-d030b`): Books shows All / Digital / Collections with no row above, "6 items · 1 collection", and the "Weekend" collection first (427×240, beside 160×240 books); Collections shows it alone and opens it; it leads the list and carousel views too; right after a filter change the covers run "pop-in" and the stage "view-in", and it stops after a moment; light mode turns off the hero's animation and backdrop and comes off again; Big Picture's Home lists Library, Featured today, Favorites, Continue watching, Pick up where you left off, Recently opened, Recently added, Statistics, and its right arrow scrolled a row 438 px and brought a left arrow; the mouse showed the round cursor in selection mode and the D-pad put it away; "Play online" stayed in Big Picture with its top bar, the YouTube embed reported 0:03 / 0:19, and X paused it.
+
 ### One item per file, fewer features, link sources (D-029, 2026-11-06)
 | Change | Status | Notes |
 |---|---|---|

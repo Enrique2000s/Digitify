@@ -2,7 +2,11 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
+  Award,
   BookOpen,
+  ChartColumn,
+  ChevronLeft,
+  ChevronRight,
   Delete,
   Gamepad2,
   Heart,
@@ -24,13 +28,15 @@ import { api, type ItemCard } from "../../lib/api";
 import { exitBigPicture, focusFirst, moveFocus } from "../../lib/bigpicture";
 import { controllerKind, onControllerChange, usePad, useSticks, type PadAction } from "../../lib/gamepad";
 import { Cursor } from "./Cursor";
+import { OnlineScreen } from "./OnlineScreen";
 import { useMusic } from "../../lib/music/MusicProvider";
-import { useCoverShape, usePreferences } from "../../lib/preferences";
+import { useCoverShape, usePreferences, type HomeSection } from "../../lib/preferences";
+import { StatsPanel } from "../home/Stats";
 import { SourceTag, sourceProps } from "../../components/SourceTag";
 import { libraryChanged, useCategories, useDashboard } from "../../lib/queries";
 import { CategoryIcon, Cover } from "../../components/common";
 
-export type BigPictureScreen = "home" | "library" | "item" | "search";
+export type BigPictureScreen = "home" | "library" | "item" | "search" | "online";
 export interface BigPictureSearch {
   screen?: BigPictureScreen;
   scope?: string;
@@ -85,36 +91,109 @@ function Tile({ item, autofocus, height = 300 }: { item: ItemCard; autofocus?: b
   );
 }
 
+/**
+ * A row that scrolls sideways, with arrows at its ends for the mouse and the cursor (the selection
+ * scrolls it by itself). An arrow shows only while there's more that way.
+ */
+function Scroller({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [ends, setEnds] = useState({ left: false, right: false });
+  useEffect(() => {
+    const row = ref.current;
+    if (!row) return;
+    const update = () => setEnds({ left: row.scrollLeft > 4, right: row.scrollLeft + row.clientWidth < row.scrollWidth - 4 });
+    update();
+    row.addEventListener("scroll", update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(row);
+    return () => {
+      row.removeEventListener("scroll", update);
+      observer.disconnect();
+    };
+  }, []);
+  const by = (direction: number) => ref.current?.scrollBy({ left: direction * ref.current.clientWidth * 0.8, behavior: "smooth" });
+  return (
+    <div className="bp-scroller">
+      <div ref={ref} className="bp-row-items">
+        {children}
+      </div>
+      {ends.left && (
+        <button type="button" className="bp-round bp-arrow left" aria-label="Scroll left" onClick={() => by(-1)}>
+          <ChevronLeft size={30} />
+        </button>
+      )}
+      {ends.right && (
+        <button type="button" className="bp-round bp-arrow right" aria-label="Scroll right" onClick={() => by(1)}>
+          <ChevronRight size={30} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function Row({ title, items, first, height }: { title: string; items: ItemCard[]; first?: boolean; height?: number }) {
   if (!items.length) return null;
   return (
     <section className="bp-row">
       <h2>{title}</h2>
-      <div className="bp-row-items">
+      <Scroller>
         {items.map((item, index) => (
           <Tile key={item.id} item={item} height={height} autofocus={first && index === 0} />
         ))}
-      </div>
+      </Scroller>
     </section>
   );
 }
 
+/** "Featured today", as on Home: one item, big, with its description. */
+function FeaturedCard({ item }: { item: ItemCard }) {
+  const navigate = useNavigate();
+  const blurb = useQuery({ queryKey: ["blurb", item.id], queryFn: () => api.blurbs([item.id]).then((list) => list[0] ?? null) });
+  const { shape, aspect } = useCoverShape()(item);
+  return (
+    <section className="bp-row">
+      <h2>
+        <Award size={26} /> Featured today
+      </h2>
+      <button type="button" className="bp-featured" data-bp-focus onClick={() => void navigate({ to: "/bp", search: { screen: "item", id: item.id } })}>
+        {item.coverKey && (
+          <span className="bp-featured-backdrop" aria-hidden>
+            <Cover item={item} size="cover" />
+          </span>
+        )}
+        <span className="bp-featured-art" data-shape={shape} style={{ ["--a" as string]: aspect }} {...sourceProps(item.source)}>
+          <Cover item={item} size="cover" />
+          <SourceTag service={item.source} />
+        </span>
+        <span className="bp-featured-body">
+          <strong>{item.title}</strong>
+          {(item.subtitle || item.year) && <span className="bp-featured-sub">{[item.subtitle, item.year].filter(Boolean).join(" · ")}</span>}
+          {blurb.data && blurb.data.facts.length > 0 && <span className="bp-featured-facts">{blurb.data.facts.join(" · ")}</span>}
+          {blurb.data?.description && <span className="bp-featured-description">{blurb.data.description}</span>}
+        </span>
+      </button>
+    </section>
+  );
+}
+
+/** Home in Big Picture: the same sections as Home, in the order (and with the ones hidden) set in "Customize Home". */
 function HomeScreen() {
   const dashboard = useDashboard();
   const categories = useCategories();
   const navigate = useNavigate();
+  const { preferences } = usePreferences();
   const data = dashboard.data;
   if (!data) return null;
-  const going = [...data.continueWatching, ...data.continueItems];
-  return (
-    <>
+  const sections: Partial<Record<HomeSection, ReactNode>> = {
+    tiles: (
       <section className="bp-row">
         <h2>Library</h2>
-        <div className="bp-row-items">
+        <Scroller>
           {/* The same order as everywhere: Everything, the categories, then Favorites. */}
           <button type="button" className="bp-category" data-bp-focus data-bp-autofocus onClick={() => void navigate({ to: "/bp", search: { screen: "library", scope: "all" } })}>
             <LibraryBig size={46} />
             <strong>Everything</strong>
+            <span>{data.totals.items.toLocaleString()}</span>
           </button>
           {categories.data
             ?.filter((c) => !c.isHidden)
@@ -135,12 +214,30 @@ function HomeScreen() {
             <Star size={46} />
             <strong>Favorites</strong>
           </button>
-        </div>
+        </Scroller>
       </section>
-      {/* Under the categories, and smaller than the other rows. */}
-      <Row title="Continue" items={going} height={190} />
-      <Row title="Recently added" items={data.recent} />
-      <Row title="Favorites" items={data.favorites} />
+    ),
+    featured: data.featured && <FeaturedCard item={data.featured} />,
+    favorites: <Row title="Favorites" items={data.favorites} />,
+    // Smaller than the other rows, as before.
+    continueWatching: <Row title="Continue watching" items={data.continueWatching} height={190} />,
+    continueReading: <Row title="Pick up where you left off" items={data.continueItems} height={190} />,
+    recentlyOpened: <Row title="Recently opened" items={data.recentlyOpened} />,
+    recentlyAdded: <Row title="Recently added" items={data.recent} />,
+    stats: data.totals.items > 0 && (
+      <section className="bp-row bp-stats">
+        <h2>
+          <ChartColumn size={26} /> Statistics
+        </h2>
+        <StatsPanel />
+      </section>
+    ),
+  };
+  return (
+    <>
+      {preferences.home.order
+        .filter((section) => !preferences.home.hidden.includes(section))
+        .map((section) => (sections[section] ? <div key={section}>{sections[section]}</div> : null))}
     </>
   );
 }
@@ -238,7 +335,7 @@ function ItemScreen({ id }: { id: number }) {
             </button>
           )}
           {data.online && !data.online.downloaded && (
-            <button type="button" className="bp-button primary" data-bp-focus data-bp-autofocus onClick={() => void navigate({ to: "/online/$id", params: { id: String(id) } })}>
+            <button type="button" className="bp-button primary" data-bp-focus data-bp-autofocus onClick={() => void navigate({ to: "/bp", search: { screen: "online", id } })}>
               <Play size={26} /> Play online
             </button>
           )}
@@ -508,7 +605,8 @@ export function BigPicturePage() {
         void navigate({ to: "/bp", search: { screen: "search" } });
         break;
       case "x":
-        if (screen === "search" || !music.active) return;
+        // The online player plays and pauses its own media with X.
+        if (screen === "search" || screen === "online" || !music.active) return;
         music.toggle();
         break;
       case "start":
@@ -537,7 +635,7 @@ export function BigPicturePage() {
       {icon} {label}
     </button>
   );
-  const title = useMemo(() => ({ home: "Home", library: "Library", item: "", search: "Search" })[screen], [screen]);
+  const title = useMemo(() => ({ home: "Home", library: "Library", item: "", search: "Search", online: "" })[screen], [screen]);
 
   return (
     <div ref={shell} className={`bp${cursor ? " bp-cursor-mode" : ""}`}>
@@ -568,6 +666,7 @@ export function BigPicturePage() {
         {screen === "library" && <LibraryScreen scope={search.scope ?? "all"} />}
         {screen === "item" && search.id != null && <ItemScreen id={search.id} />}
         {screen === "search" && <SearchScreen />}
+        {screen === "online" && search.id != null && <OnlineScreen id={search.id} />}
       </main>
       <footer className="bp-hints">
         <span>
@@ -589,11 +688,22 @@ export function BigPicturePage() {
             <b>LB</b> <b>RB</b> Categories
           </span>
         )}
+        {screen === "online" && (
+          <>
+            <span>
+              <b>{buttons.x}</b> Play / pause
+            </span>
+            <span>
+              <b>LB</b> <b>RB</b> 10 s back / ahead
+            </span>
+          </>
+        )}
         <span>
           <b>{buttons.start}</b> Menu
         </span>
       </footer>
-      {cursor && <Cursor speed={preferences.bigPicture.cursorSpeed} />}
+      {/* In selection mode the mouse still gets Big Picture's round cursor (the selection stays the controller's). */}
+      <Cursor key={cursor ? "cursor" : "mouse"} speed={preferences.bigPicture.cursorSpeed} mouseOnly={!cursor} />
       {menu && <Menu onClose={() => setMenu(false)} />}
     </div>
   );

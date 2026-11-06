@@ -5,7 +5,7 @@ import { useImporter } from "../../lib/importer";
 import { useCategories, useCollections } from "../../lib/queries";
 import { usePreferences } from "../../lib/preferences";
 import { CategoryIcon } from "../../components/common";
-import { CollectionActions, CollectionCrumbs, CollectionRow } from "../organize/collections";
+import { CollectionActions, CollectionCrumbs } from "../organize/collections";
 import { LibraryView } from "./LibraryView";
 import { MUSIC_TABS, MusicPage, MusicTabs, type MusicTab } from "../music/MusicPage";
 
@@ -43,7 +43,7 @@ function CategoryView({ category, collection }: { category: Category; collection
       handler={category.handler}
       actions={<CollectionActions category={category} path={current ? path : []} />}
       prelude={category.handler === "audio" && collection == null ? <MusicTabs category={category} tab="tracks" /> : undefined}
-      beforeItems={<CollectionRow category={category.key} parent={collection} />}
+      collections={{ category: category.key, parent: collection }}
       empty={
         current ? (
           <div className="empty">

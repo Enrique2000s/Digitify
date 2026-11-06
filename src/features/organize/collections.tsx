@@ -2,39 +2,10 @@ import { Fragment, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { DropdownMenu } from "radix-ui";
-import { ChevronDown, ChevronRight, Folder, FolderInput, FolderPlus, Pencil, Trash } from "lucide-react";
+import { ChevronDown, ChevronRight, FolderInput, FolderPlus, Pencil, Trash } from "lucide-react";
 import { api, type Category, type NamedRef } from "../../lib/api";
-import { libraryChanged, useCollections } from "../../lib/queries";
-import { Collage } from "../../components/Collage";
+import { libraryChanged } from "../../lib/queries";
 import { ConfirmDialog, MoveCollectionDialog, NameDialog } from "./dialogs";
-
-/** The collections directly inside a category or collection, as tiles. */
-export function CollectionRow({ category, parent }: { category: string; parent: number | null }) {
-  const level = useCollections(category, parent);
-  const children = level.data?.children ?? [];
-  if (children.length === 0) return null;
-  return (
-    <section className="collection-row" aria-label="Collections">
-      {children.map((collection) => (
-        <Link key={collection.id} to="/library/$scope" params={{ scope: category }} search={{ collection: collection.id }} className="tile collection-tile" data-blip>
-          <div className={`tile-screen screen-${collection.id % 5}`}>
-            {collection.covers.length > 0 ? (
-              <Collage covers={collection.covers} />
-            ) : (
-              <div className="tile-icon">
-                <Folder size={34} strokeWidth={2.2} aria-hidden />
-              </div>
-            )}
-          </div>
-          <div className="tile-label">
-            <strong>{collection.name}</strong>
-            <span className="count">{collection.itemCount.toLocaleString()}</span>
-          </div>
-        </Link>
-      ))}
-    </section>
-  );
-}
 
 /** "Books › One Piece ›" above a collection's title. */
 export function CollectionCrumbs({ category, path }: { category: Category; path: NamedRef[] }) {

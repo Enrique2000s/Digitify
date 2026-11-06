@@ -549,6 +549,234 @@ html.bp-cursor-on * {
 .bp-cursor {
   transition: opacity 220ms var(--ease);
 }
-.bp-cursor.idle {
+.bp-cursor.idle,
+.bp-cursor.hidden {
   opacity: 0;
+}
+
+/* ---------------------------------------------------------------- rows that scroll, Home's other sections */
+
+.bp-scroller {
+  position: relative;
+}
+.bp-row h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* For the mouse and the cursor: the selection scrolls a row by itself. */
+.bp-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 5;
+  width: 64px;
+  height: 64px;
+  margin-top: -40px;
+  background: rgba(11, 15, 22, 0.86);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55), 0 0 0 2px rgba(255, 255, 255, 0.14);
+  animation: bp-arrow-in 200ms var(--ease) both;
+}
+.bp-arrow:hover {
+  background: color-mix(in srgb, var(--accent-bright) 40%, rgba(11, 15, 22, 0.9));
+}
+.bp-arrow.left {
+  left: -18px;
+}
+.bp-arrow.right {
+  right: -18px;
+}
+@keyframes bp-arrow-in {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+
+.bp-featured {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 34px;
+  width: 100%;
+  min-height: 300px;
+  overflow: hidden;
+  padding: 28px 34px;
+  border: 0;
+  border-radius: 28px;
+  background: var(--bp-panel);
+  text-align: left;
+  cursor: pointer;
+}
+.bp-featured-backdrop {
+  position: absolute;
+  inset: -40px;
+  filter: blur(40px) brightness(0.4) saturate(1.3);
+  opacity: 0.9;
+}
+.bp-featured-backdrop .cover-img,
+.bp-featured-backdrop img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.bp-featured-art {
+  position: relative;
+  flex: 0 0 auto;
+  height: 250px;
+  aspect-ratio: var(--a);
+  overflow: hidden;
+  border-radius: 18px;
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.55);
+}
+.bp-featured-art[data-shape="disc"] {
+  border-radius: 50%;
+}
+.bp-featured-body {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.bp-featured-body strong {
+  font-size: 38px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+.bp-featured-sub,
+.bp-featured-facts {
+  color: var(--bp-muted);
+  font-weight: 700;
+}
+.bp-featured-description {
+  display: -webkit-box;
+  overflow: hidden;
+  max-width: 900px;
+  font-size: 19px;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+/* Home's statistics, in Big Picture's colors and sizes. */
+.bp-stats .stats.panel {
+  --panel: var(--bp-panel);
+  --line: rgba(255, 255, 255, 0.12);
+  --text: var(--bp-text);
+  --muted: var(--bp-muted);
+  padding: 24px 28px;
+  border: 0;
+  border-radius: 28px;
+  background: var(--bp-panel);
+  box-shadow: none;
+  color: var(--bp-text);
+  font-size: 18px;
+}
+.bp-stats .stat-value {
+  font-size: 34px;
+}
+.bp-stats .stat-tile {
+  background: var(--bp-panel-strong);
+  border-color: transparent;
+}
+
+/* ---------------------------------------------------------------- the online player (D-028), Big Picture's own */
+
+.bp-online {
+  display: grid;
+  gap: 22px;
+  max-width: 1500px;
+  margin: 0 auto;
+}
+.bp-online-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.bp-online-head h1 {
+  margin: 0;
+  font-size: 42px;
+  font-weight: 900;
+}
+.bp-online-source {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--bp-muted);
+  font-weight: 800;
+}
+.bp-online-source > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.bp-online-source .source-tag {
+  position: static;
+  font-size: 16px;
+  padding: 5px 14px;
+}
+.bp-online-stage {
+  overflow: hidden;
+  width: 100%;
+  max-height: calc(100vh - 360px);
+  aspect-ratio: 16 / 9;
+  margin: 0 auto;
+  border-radius: 28px;
+  background: #000;
+  box-shadow: 0 0 0 4px var(--source, transparent), 0 30px 70px rgba(0, 0, 0, 0.6);
+}
+.bp-online-stage.audio {
+  aspect-ratio: auto;
+  height: min(480px, calc(100vh - 360px));
+  background: var(--bp-panel);
+}
+.bp-online-stage iframe,
+.bp-online-stage video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.bp-online-stage audio {
+  width: 80%;
+  margin: 40px 10%;
+}
+.bp-online-controls {
+  align-items: center;
+  justify-content: center;
+}
+.bp-online-time {
+  min-width: 140px;
+  color: var(--bp-muted);
+  font-size: 22px;
+  font-weight: 800;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- motion (D-030) */
+
+/* Each screen arrives with a soft zoom, its rows one after another. */
+@keyframes bp-screen-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985) translateY(var(--rise, 14px));
+  }
+}
+.bp-main {
+  animation: bp-screen-in 340ms var(--ease) both;
+}
+.bp-main > div > .bp-row,
+.bp-main > .bp-row,
+.bp-item,
+.bp-online {
+  animation: view-in 420ms var(--ease) both;
+}
+.bp-main > div:nth-child(2) > .bp-row { animation-delay: 60ms; }
+.bp-main > div:nth-child(3) > .bp-row { animation-delay: 120ms; }
+.bp-main > div:nth-child(4) > .bp-row { animation-delay: 180ms; }
+.bp-main > div:nth-child(n + 5) > .bp-row { animation-delay: 240ms; }
+.bp-tile,
+.bp-category {
+  animation: pop-in 380ms var(--spring) both;
 }

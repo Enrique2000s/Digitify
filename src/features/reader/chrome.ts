@@ -6,6 +6,8 @@ const appWindow = getCurrentWindow();
 
 /** Whether animations may play: the app's motion setting, or the system's when it follows it. */
 export function motionAllowed(): boolean {
+  // Light mode (slower computers) plays no animations either.
+  if (document.documentElement.dataset.perf === "light") return false;
   const choice = document.documentElement.dataset.motion;
   if (choice === "reduced" || choice === "off") return false;
   return choice === "full" || !window.matchMedia("(prefers-reduced-motion: reduce)").matches;

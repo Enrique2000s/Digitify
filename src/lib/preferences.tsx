@@ -98,14 +98,16 @@ export interface Preferences {
   theme: ThemeChoice;
   accent: string;
   motion: MotionChoice;
+  /** Light mode for slower computers: no blur, reflections, heavy shadows or animations (D-030). */
+  lightMode: boolean;
   /** Cover width in the grid and shelf views, in pixels. */
   cardSize: number;
   /** Last layout used per view (all, favorites, a category key, search), or for every view under "*". */
   layouts: Record<string, Layout>;
   /** The same layout and copies filter in every view (under "*"), rather than one per view. */
   syncViews: boolean;
-  /** Last filter (All, Digital, Online) per view, or under "*". */
-  ownership: Record<string, Ownership | "">;
+  /** Last filter (All, Digital, Online, Collections) per view, or under "*". */
+  ownership: Record<string, Ownership | "" | "collections">;
   /** Last sort per view ("books", "all", "collection:3", "shelf:5"…). */
   sorts: Record<string, SortKey>;
   /** How albums and videos are shown unless an item has its own shape. */
@@ -188,6 +190,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   theme: "light",
   accent: "#1592d0",
   motion: "system",
+  lightMode: false,
   cardSize: 160,
   layouts: {},
   syncViews: true,
@@ -290,7 +293,9 @@ function sanitizeShapes(raw: unknown): Preferences["coverShapes"] {
 export const FILMS = "video";
 
 /** The shape an item's cover is shown in: its own, or the default for its kind. */
-export function coverShapeOf(item: { handler: string; category?: string | null; coverShape?: CoverShape | null }, defaults: Preferences["coverShapes"]): CoverShape | "book" {
+export function coverShapeOf(item: { handler: string; category?: string | null; coverShape?: CoverShape | null; collection?: unknown }, defaults: Preferences["coverShapes"]): CoverShape | "book" {
+  // A collection among the items is as wide as a horizontal video (D-030).
+  if (item.collection) return "landscape";
   if (item.handler === "audio") return item.coverShape === "disc" || item.coverShape === "square" ? item.coverShape : defaults.audio;
   if (item.handler === "video") {
     if (item.category === FILMS) return "poster";
@@ -304,7 +309,7 @@ export const SHAPE_ASPECT: Record<CoverShape | "book", number> = { square: 1, di
 /** The cover shape of an item, with the user's defaults. */
 export function useCoverShape() {
   const { preferences } = usePreferences();
-  return (item: { handler: string; category?: string | null; coverShape?: CoverShape | null }) => {
+  return (item: { handler: string; category?: string | null; coverShape?: CoverShape | null; collection?: unknown }) => {
     const shape = coverShapeOf(item, preferences.coverShapes);
     return { shape, aspect: SHAPE_ASPECT[shape] };
   };
@@ -336,13 +341,14 @@ function sanitize(raw: unknown): Preferences {
     theme: breeze ? pick("theme", (v) => v === "dark" || v === "light" || v === "system") : DEFAULT_PREFERENCES.theme,
     accent: breeze ? pick("accent", (v) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v)) : DEFAULT_PREFERENCES.accent,
     motion: pick("motion", (v) => ["system", "full", "reduced", "off"].includes(v as string)),
+    lightMode: pick("lightMode", isBoolean),
     cardSize: pick("cardSize", (v) => typeof v === "number" && v >= 110 && v <= 260),
     layouts: pick("layouts", (v) => !!v && typeof v === "object"),
     syncViews: pick("syncViews", isBoolean),
     // Only Digital and Online are left (D-029); "On the shelf" and "Not digitized" fall back to All.
     ownership: Object.fromEntries(
-      Object.entries(pick("ownership", (v) => !!v && typeof v === "object") as Record<string, unknown>).filter(([, v]) => v === "digital" || v === "online"),
-    ) as Record<string, Ownership | "">,
+      Object.entries(pick("ownership", (v) => !!v && typeof v === "object") as Record<string, unknown>).filter(([, v]) => v === "digital" || v === "online" || v === "collections"),
+    ) as Record<string, Ownership | "" | "collections">,
     sorts: pick("sorts", (v) => !!v && typeof v === "object"),
     coverShapes: sanitizeShapes((raw as Raw<Preferences>)?.coverShapes),
     // "albums" (D-024) became the Tracks view (D-027).
@@ -399,12 +405,13 @@ export function PreferencesProvider({ initial, children }: { initial: unknown; c
     root.dataset.look = preferences.look;
     root.dataset.palette = breezePalette;
     root.dataset.motion = preferences.motion === "system" ? "" : preferences.motion;
+    root.dataset.perf = preferences.lightMode ? "light" : "";
     const page = PAGE_BACKGROUNDS[preferences.look === "cinematic" ? "cinematic" : breezePalette][resolvedTheme];
     const ratio = breezePalette === "contrast" ? 7 : 4.5;
     for (const [name, value] of Object.entries(accentVariables(preferences.accent, resolvedTheme, page, ratio))) {
       root.style.setProperty(name, value);
     }
-  }, [resolvedTheme, preferences.look, breezePalette, preferences.motion, preferences.accent]);
+  }, [resolvedTheme, preferences.look, breezePalette, preferences.motion, preferences.lightMode, preferences.accent]);
 
   const update = useCallback((change: Change) => {
     setPreferences((current) => {

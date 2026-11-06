@@ -12,13 +12,14 @@ import { formatLabel } from "../../lib/format";
 import { coverShapeOf, FILMS, SHAPE_ASPECT, useCoverShape, usePreferences, type Layout } from "../../lib/preferences";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { shuffled } from "../music/Tracks";
-import { usePagedItems, type PageCache } from "../../lib/queries";
+import { useCollections, usePagedItems, type PageCache } from "../../lib/queries";
 import { actionFor, isTyping } from "../../lib/shortcuts";
 import { SelectionProvider, useSelectable, useSelection, useSelectionState } from "../../lib/selection";
 import { AddMenu } from "../../components/AddMenu";
 import { CategoryStrip } from "../../components/CategoryStrip";
 import { CardSizeSlider, Cover } from "../../components/common";
 import { CardSkeleton, caseBand, MediaCard } from "../../components/MediaCard";
+import { CollectionCard, collectionCard, CollectionCarouselItem, CollectionDetailRow, CollectionRowItem, CollectionShelfItem } from "../../components/CollectionCard";
 import { SHELF_LOOKS, ShelfLookPicker } from "../../components/ShelfLookPicker";
 import { BulkBar } from "./BulkBar";
 import { SourceTag, sourceProps } from "../../components/SourceTag";
@@ -49,8 +50,29 @@ function useWidth(ref: React.RefObject<HTMLElement | null>): number {
   return useSize(ref).width;
 }
 
+/** What a view shows, by position: a page cache, possibly led by collections. */
+interface CardSource {
+  get(index: number): ItemCard | undefined;
+  ensure(first: number, last: number): void;
+}
+
+/** A view's collections (D-030) first, then the query's items. */
+class LedSource implements CardSource {
+  constructor(
+    private readonly lead: ItemCard[],
+    private readonly items: PageCache | null,
+  ) {}
+  get(index: number): ItemCard | undefined {
+    return index < this.lead.length ? this.lead[index] : this.items?.get(index - this.lead.length);
+  }
+  ensure(first: number, last: number): void {
+    const n = this.lead.length;
+    if (this.items && last >= n) this.items.ensure(Math.max(0, first - n), last - n);
+  }
+}
+
 /** Keeps the pages for the rendered rows loaded. */
-function useEnsureRows(cache: PageCache, total: number, perRow: number, rows: { index: number }[]) {
+function useEnsureRows(cache: CardSource, total: number, perRow: number, rows: { index: number }[]) {
   const first = rows.length ? rows[0].index * perRow : 0;
   const last = rows.length ? Math.min(total, (rows[rows.length - 1].index + 1) * perRow) - 1 : -1;
   useEffect(() => {
@@ -59,8 +81,10 @@ function useEnsureRows(cache: PageCache, total: number, perRow: number, rows: { 
 }
 
 interface ViewProps {
-  cache: PageCache;
+  cache: CardSource;
   total: number;
+  /** How many collections lead the view. */
+  lead: number;
   square: boolean;
   /** The view's usual cover shape (an item may have its own). */
   shape: CoverShape | "book";
@@ -107,7 +131,7 @@ function aspectsOf(codes: string, total: number, fallback: number, defaults: Par
  * at one height, each as wide as its shape needs (the view's kinds and shapes come from the core,
  * so every row is known before its cards load).
  */
-function GridView({ cache, total, shape, params }: ViewProps) {
+function GridView({ cache, total, lead, shape, params }: ViewProps) {
   const { preferences } = usePreferences();
   const scroll = useRef<HTMLDivElement>(null);
   const width = useWidth(scroll);
@@ -117,7 +141,7 @@ function GridView({ cache, total, shape, params }: ViewProps) {
   const artHeight = Math.round(preferences.cardSize * 1.5);
   const viewAspect = SHAPE_ASPECT[shape];
   const layout = useMemo(() => {
-    const widths = aspectsOf(shapes.data ?? "", total, viewAspect, preferences.coverShapes).map((aspect) => Math.round(artHeight * aspect));
+    const widths = [...Array<number>(lead).fill(16 / 9), ...aspectsOf(shapes.data ?? "", total - lead, viewAspect, preferences.coverShapes)].map((aspect) => Math.round(artHeight * aspect));
     const rows: number[] = [0];
     let used = 0;
     widths.forEach((w, i) => {
@@ -131,10 +155,11 @@ function GridView({ cache, total, shape, params }: ViewProps) {
     });
     rows.push(total);
     return { widths, starts: rows };
-  }, [shapes.data, total, width, artHeight, viewAspect, preferences.coverShapes]);
+  }, [shapes.data, total, lead, width, artHeight, viewAspect, preferences.coverShapes]);
   const rowCount = Math.max(0, layout.starts.length - 1);
   const rowHeight = artHeight + 44 + GAP + 10;
-  const virtualizer = useVirtualizer({ count: rowCount, getScrollElement: () => scroll.current, estimateSize: () => rowHeight, overscan: 3 });
+  // Light mode draws fewer rows ahead of the scroll.
+  const virtualizer = useVirtualizer({ count: rowCount, getScrollElement: () => scroll.current, estimateSize: () => rowHeight, overscan: preferences.lightMode ? 1 : 3 });
   useEffect(() => virtualizer.measure(), [virtualizer, rowHeight]);
   const rows = virtualizer.getVirtualItems();
   const first = rows.length ? layout.starts[rows[0].index] : 0;
@@ -151,12 +176,14 @@ function GridView({ cache, total, shape, params }: ViewProps) {
             const from = layout.starts[row.index];
             const to = layout.starts[row.index + 1];
             return (
-              <div key={row.key} className="grid-row flow" style={{ transform: `translateY(${row.start}px)`, columnGap: GAP }}>
+              <div key={row.key} className="grid-row flow" style={{ transform: `translateY(${row.start}px)`, columnGap: GAP, ["--row" as string]: row.index }}>
                 {Array.from({ length: to - from }, (_, k) => {
                   const index = from + k;
                   const item = cache.get(index);
                   const w = layout.widths[index];
-                  return item ? (
+                  return item?.collection ? (
+                    <CollectionCard key={`c${item.id}`} item={item} width={w} />
+                  ) : item ? (
                     <MediaCard key={index} item={item} index={index} width={w} transitionId={item.id} />
                   ) : (
                     <CardSkeleton key={index} width={w} aspect={w / artHeight} />
@@ -190,6 +217,7 @@ function ListView({ cache, total }: ViewProps) {
           {rows.map((row) => {
             const item = cache.get(row.index);
             if (!item) return <div key={row.key} className="list-row" style={{ top: row.start, height: 54 }} />;
+            if (item.collection) return <CollectionRowItem key={`c${item.id}`} item={item} top={row.start} />;
             return <ListRow key={row.key} item={item} index={row.index} top={row.start} />;
           })}
         </div>
@@ -311,6 +339,7 @@ function ShelfView({ cache, total, square, shape }: ViewProps) {
           <div
             key={row.key}
             className={`shelf${row.index === 0 ? " first" : ""}${row.index === shelves - 1 ? " last" : ""}`}
+            data-row={row.index}
             style={{ top: row.start, height: shelfHeight, paddingTop: 22 }}
           >
             <div className="shelf-items" style={{ height, gap: spines ? 4 : 16 }}>
@@ -318,6 +347,7 @@ function ShelfView({ cache, total, square, shape }: ViewProps) {
                 const index = row.index * perShelf + i;
                 if (index >= total) return null;
                 const item = cache.get(index);
+                if (item?.collection) return <CollectionShelfItem key={`c${item.id}`} item={item} height={height * 0.78} />;
                 return item ? <ShelfItem key={index} item={item} index={index} height={height} spines={spines} /> : null;
               })}
             </div>
@@ -423,13 +453,14 @@ function DetailedView({ cache, total }: ViewProps) {
   useEffect(() => virtualizer.measure(), [virtualizer, rowHeight]);
   const rows = virtualizer.getVirtualItems();
   useEnsureRows(cache, total, 1, rows);
-  const blurbs = useBlurbs(rows.map((row) => cache.get(row.index)?.id).filter((id): id is number => id != null));
+  const blurbs = useBlurbs(rows.map((row) => cache.get(row.index)?.id).filter((id): id is number => id != null && id > 0));
   return (
     <div ref={scroll} className="view-scroll">
       <div className="view-canvas" style={{ height: virtualizer.getTotalSize() }}>
         {rows.map((row) => {
           const item = cache.get(row.index);
           if (!item) return <div key={row.key} className="detail-row skeleton" style={{ top: row.start, height: rowHeight }} />;
+          if (item.collection) return <CollectionDetailRow key={`c${item.id}`} item={item} top={row.start} height={rowHeight} />;
           return <DetailedRow key={row.key} item={item} index={row.index} top={row.start} height={rowHeight} blurb={blurbs.get(item.id)} />;
         })}
       </div>
@@ -443,7 +474,7 @@ function DetailedView({ cache, total }: ViewProps) {
  * dragging, clicking a cover or the slider move along; Enter or a click on the front cover opens it.
  * Every cover's shape is known before its card loads (from the core), so posters, squares, CDs and
  * horizontal frames keep their places and sizes as they come in. */
-function CarouselView({ cache, total, shape, params }: ViewProps) {
+function CarouselView({ cache, total, lead, shape, params }: ViewProps) {
   const navigate = useNavigate();
   const { preferences } = usePreferences();
   const shapeOf = useCoverShape();
@@ -459,7 +490,10 @@ function CarouselView({ cache, total, shape, params }: ViewProps) {
   const latest = useRef(current);
   latest.current = current;
   const shapes = useQuery({ queryKey: ["shapes", params], queryFn: () => api.queryShapes(params), staleTime: 30_000 });
-  const aspects = useMemo(() => aspectsOf(shapes.data ?? "", total, SHAPE_ASPECT[shape], preferences.coverShapes), [shapes.data, total, shape, preferences.coverShapes]);
+  const aspects = useMemo(
+    () => [...Array<number>(lead).fill(16 / 9), ...aspectsOf(shapes.data ?? "", total - lead, SHAPE_ASPECT[shape], preferences.coverShapes)],
+    [shapes.data, total, lead, shape, preferences.coverShapes],
+  );
 
   // A new sort or filter starts at the beginning; a shorter list keeps the index in range.
   const viewKey = JSON.stringify(params);
@@ -476,6 +510,7 @@ function CarouselView({ cache, total, shape, params }: ViewProps) {
       const front = latest.current;
       if (action === "library.carouselPrevious") step(-1);
       else if (action === "library.carouselNext") step(1);
+      else if (action === "library.carouselOpen" && front?.collection) void navigate({ to: "/library/$scope", params: { scope: front.category }, search: { collection: front.collection.id } });
       else if (action === "library.carouselOpen" && front) void navigate({ to: "/item/$id", params: { id: String(front.id) } });
       else return;
       event.preventDefault();
@@ -526,7 +561,7 @@ function CarouselView({ cache, total, shape, params }: ViewProps) {
     }
   };
 
-  const reach = Math.min(9, Math.ceil(width / 2 / spacing) + 1);
+  const reach = Math.min(preferences.lightMode ? 5 : 9, Math.ceil(width / 2 / spacing) + 1);
   const shown: number[] = [];
   for (let i = Math.max(0, index - reach); i <= Math.min(last, index + reach); i++) shown.push(i);
   // Covers keep one height; each sits clear of the one before it by both their turned widths, so a
@@ -576,7 +611,9 @@ function CarouselView({ cache, total, shape, params }: ViewProps) {
               width: Math.round(widthAt(i)),
               bottom: Math.max(40, (height - coverHeight) / 2 + 10),
             } as CSSProperties;
-            return item ? (
+            return item?.collection ? (
+              <CollectionCarouselItem key={`c${item.id}`} item={item} front={d === 0} style={style} onPick={() => go(i)} />
+            ) : item ? (
               <CarouselCover key={i} item={item} index={i} front={d === 0} shape={look.shape} style={style} onPick={() => go(i)} />
             ) : (
               <div key={i} className="carousel-item skeleton" style={style} />
@@ -692,10 +729,13 @@ function PlayAll({ params }: { params: Omit<QueryParams, "offset" | "limit"> }) 
 }
 
 /** All, what has files in the library, and (in Music and Videos) what was added from a link and plays online (D-029). */
-const OWNERSHIP: { value: Ownership | ""; label: string }[] = [
+type Filter = Ownership | "" | "collections";
+const OWNERSHIP: { value: Filter; label: string }[] = [
   { value: "", label: "All" },
   { value: "digital", label: "Digital" },
   { value: "online", label: "Online" },
+  // Where the view has collections (D-030): "All" shows them first, "Collections" alone.
+  { value: "collections", label: "Collections" },
 ];
 
 /** The "Select" toggle; Ctrl+A selects everything and Esc stops selecting. */
@@ -737,6 +777,7 @@ export function LibraryView({
   beforeItems,
   square,
   handler,
+  collections,
   empty,
 }: {
   viewKey: string;
@@ -754,6 +795,8 @@ export function LibraryView({
   square?: boolean;
   /** The kind of media of a category's view, for its usual cover shape. */
   handler?: string;
+  /** A category (or collection) whose collections lead its items, and can be shown alone. */
+  collections?: { category: string; parent: number | null };
   empty: ReactNode;
 }) {
   const { preferences, update } = usePreferences();
@@ -763,9 +806,10 @@ export function LibraryView({
   const layout: Layout = preferences.layouts[shared] ?? preferences.layouts[other] ?? "grid";
   // "Online" is offered where links are imported to: Music and Videos.
   const withOnline = handler === "audio" || base.category === "videos";
-  const filters = withOnline ? OWNERSHIP : OWNERSHIP.filter((option) => option.value !== "online");
-  const remembered: Ownership | "" = preferences.ownership[shared] ?? preferences.ownership[other] ?? "";
-  const ownership: Ownership | "" = filters.some((option) => option.value === remembered) ? remembered : "";
+  const filters = OWNERSHIP.filter((option) => (option.value !== "online" || withOnline) && (option.value !== "collections" || !!collections));
+  const remembered: Filter = preferences.ownership[shared] ?? preferences.ownership[other] ?? "";
+  const filter: Filter = filters.some((option) => option.value === remembered) ? remembered : "";
+  const ownership: Ownership | "" = filter === "collections" ? "" : filter;
   // The sort is remembered per view; a custom order belongs to its view too.
   const orderKey = base.search
     ? null
@@ -787,8 +831,27 @@ export function LibraryView({
     else if (next) update((current) => ({ sorts: { ...current.sorts, [orderKey]: next } }));
   };
   const params = { ...base, sort: sort || null, ownership: ownership || null, custom: sort === "custom" ? orderKey : null };
-  const { cache, total, error } = usePagedItems(params);
-  const selection = useSelectionState(cache);
+  const { cache, total: itemTotal, error } = usePagedItems(params);
+  // The view's collections lead its items in "All", and are all there is in "Collections".
+  const level = useCollections(collections?.category ?? "", collections?.parent ?? null, !!collections && (filter === "" || filter === "collections"));
+  const leadCards = useMemo(
+    () => (collections && (filter === "" || filter === "collections") ? (level.data?.children ?? []).map((c) => collectionCard(c, collections.category)) : []),
+    [collections, filter, level.data],
+  );
+  const onlyCollections = filter === "collections";
+  const source = useMemo(() => new LedSource(leadCards, onlyCollections ? null : cache), [leadCards, onlyCollections, cache]);
+  const waiting = itemTotal == null || (!!collections && (filter === "" || onlyCollections) && !level.data);
+  const total = waiting ? null : leadCards.length + (onlyCollections ? 0 : itemTotal);
+  const lead = leadCards.length;
+  const selection = useSelectionState(source);
+  // Entrance animations play for a moment after the view, filter or sort changes, not while scrolling.
+  const stageKey = `${viewKey}:${filter}:${sort}`;
+  const [entering, setEntering] = useState(true);
+  useEffect(() => {
+    setEntering(true);
+    const timer = window.setTimeout(() => setEntering(false), 1100);
+    return () => window.clearTimeout(timer);
+  }, [stageKey, layout]);
   const shape = coverShapeOf({ handler: handler ?? "book", category: base.category }, preferences.coverShapes);
   const arrangeable = !!orderKey && sort === "custom";
   const [arranging, setArranging] = useState(false);
@@ -804,7 +867,7 @@ export function LibraryView({
     });
     void transition.finished.finally(clearCoverNames);
   };
-  const setOwnership = (next: Ownership | "") => update((current) => ({ ownership: { ...current.ownership, [shared]: next } }));
+  const setOwnership = (next: Filter) => update((current) => ({ ownership: { ...current.ownership, [shared]: next } }));
   const [materials, setMaterials] = useState(false);
 
   return (
@@ -819,7 +882,8 @@ export function LibraryView({
                 {eyebrow && <div className="eyebrow">{eyebrow}</div>}
                 <h1 className="display">{title}</h1>
                 <div className="count">
-                  {total == null ? " " : `${total.toLocaleString()} ${total === 1 ? "item" : "items"}`}
+                  {itemTotal == null ? " " : onlyCollections ? `${lead.toLocaleString()} ${lead === 1 ? "collection" : "collections"}` : `${itemTotal.toLocaleString()} ${itemTotal === 1 ? "item" : "items"}`}
+                  {!onlyCollections && lead > 0 && ` · ${lead.toLocaleString()} ${lead === 1 ? "collection" : "collections"}`}
                   {description && <span className="view-description"> · {description}</span>}
                 </div>
               </div>
@@ -854,13 +918,13 @@ export function LibraryView({
             </div>
             <div className="segmented" role="group" aria-label="Ownership">
               {filters.map((option) => (
-                <button key={option.value} type="button" aria-pressed={ownership === option.value} onClick={() => setOwnership(option.value)}>
+                <button key={option.value} type="button" aria-pressed={filter === option.value} onClick={() => setOwnership(option.value)}>
                   {option.label}
                 </button>
               ))}
             </div>
             <div className="spacer" />
-            {total != null && total > 0 && <SelectToggle base={params} />}
+            {itemTotal != null && itemTotal > 0 && !onlyCollections && <SelectToggle base={params} />}
             {layout === "shelf" && (
               <>
                 <div className="segmented" role="group" aria-label="Shelf style">
@@ -910,19 +974,22 @@ export function LibraryView({
         </div>
         {beforeItems && <div className="before-items">{beforeItems}</div>}
         {error && <div className="notice danger" style={{ margin: "0 40px" }}>{error}</div>}
+        {/* A new view, filter or sort comes in with its items rising into place (D-030). */}
+        <div className={`view-stage${entering ? " entering" : ""}`} key={stageKey}>
         {total === 0 ? (
           <div style={{ padding: "8px 40px" }}>{empty}</div>
         ) : total != null && layout === "list" ? (
-          <ListView cache={cache} total={total} square={!!square} shape={shape} params={params} />
+          <ListView cache={source} total={total} lead={lead} square={!!square} shape={shape} params={params} />
         ) : total != null && layout === "shelf" ? (
-          <ShelfView cache={cache} total={total} square={!!square} shape={shape} params={params} />
+          <ShelfView cache={source} total={total} lead={lead} square={!!square} shape={shape} params={params} />
         ) : total != null && layout === "detailed" ? (
-          <DetailedView cache={cache} total={total} square={!!square} shape={shape} params={params} />
+          <DetailedView cache={source} total={total} lead={lead} square={!!square} shape={shape} params={params} />
         ) : total != null && layout === "carousel" ? (
-          <CarouselView cache={cache} total={total} square={!!square} shape={shape} params={params} />
+          <CarouselView cache={source} total={total} lead={lead} square={!!square} shape={shape} params={params} />
         ) : total != null ? (
-          <GridView cache={cache} total={total} square={!!square} shape={shape} params={params} />
+          <GridView cache={source} total={total} lead={lead} square={!!square} shape={shape} params={params} />
         ) : null}
+        </div>
         {arranging && orderKey && (
           <ArrangeDialog
             base={{ ...base, ownership: null }}
@@ -931,7 +998,7 @@ export function LibraryView({
             onClose={() => setArranging(false)}
           />
         )}
-        {total != null && <BulkBar base={params} total={total} />}
+        {itemTotal != null && <BulkBar base={params} total={itemTotal} />}
       </div>
     </SelectionProvider>
   );

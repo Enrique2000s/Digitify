@@ -69,6 +69,8 @@ export interface ItemCard {
   source: string | null;
   /** A film's disc format (`dvd`, `bluray`, `uhd-bluray`, `bluray-3d`), for the case band. */
   discFormat: string | null;
+  /** Set when this stands for a collection among a view's items (D-030); its id is then negative. */
+  collection?: { id: number; covers: TileCover[]; itemCount: number; childCount: number };
 }
 
 /** Where an item imported from a link lives (D-028). */

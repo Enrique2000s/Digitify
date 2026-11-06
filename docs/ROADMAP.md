@@ -104,6 +104,7 @@ Scope chosen by the owner in D-023.
 ## Library refinements (D-027)
 1. ✅ Music without albums (each track an item), Videos apart from Movies & Series, sort by duration, mass edit of covers, "Add to playlist" for selections, actions that fit the whole selection, the new category order, carousel fixes, Home's + button.
 3. ✅ One item per file, no shelves, physical copies or catalog, disc formats, link sources (D-029).
+4. ✅ Big Picture's own online player and full Home, collections among the items, motion everywhere, light mode (D-030).
 2. ✅ Import from URL (D-028): YouTube, YouTube Music, Spotify and SoundCloud links with the services' own players; downloads only where allowed (direct file links, downloadable SoundCloud tracks); playlists through the owner's API keys; an import queue. To try: real API keys for each service.
 
 ## Release engineering (ongoing)

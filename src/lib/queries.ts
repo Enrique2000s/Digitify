@@ -19,8 +19,8 @@ export const useCategories = () => useQuery({ queryKey: keys.categories, queryFn
 export const useDashboard = () => useQuery({ queryKey: keys.dashboard, queryFn: api.dashboard });
 export const useItem = (id: number, enabled = true) => useQuery({ queryKey: keys.item(id), queryFn: () => api.item(id), enabled });
 export const useTags = () => useQuery({ queryKey: keys.tags, queryFn: api.tags });
-export const useCollections = (category: string, parent: number | null) =>
-  useQuery({ queryKey: keys.collections(category, parent), queryFn: () => api.collections(category, parent) });
+export const useCollections = (category: string, parent: number | null, enabled = true) =>
+  useQuery({ queryKey: keys.collections(category, parent), queryFn: () => api.collections(category, parent), enabled });
 export const useCollectionTree = (category: string | null) =>
   useQuery({ queryKey: keys.collectionTree(category ?? ""), queryFn: () => api.collectionTree(category!), enabled: !!category });
 

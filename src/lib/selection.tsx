@@ -1,5 +1,4 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
-import type { PageCache } from "./queries";
 
 /** Multi-select in the library views, for bulk edits. */
 export interface Selection {
@@ -19,7 +18,7 @@ export const SelectionProvider = Context.Provider;
 /** The current view's selection, or null outside a library view. */
 export const useSelection = () => useContext(Context);
 
-export function useSelectionState(cache: PageCache): Selection {
+export function useSelectionState(cache: { get(index: number): { id: number } | undefined }): Selection {
   const [active, setActive] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   const anchor = useRef<number | null>(null);
@@ -33,7 +32,8 @@ export function useSelectionState(cache: PageCache): Selection {
           const [first, last] = from < index ? [from, index] : [index, from];
           for (let i = first; i <= last; i++) {
             const item = cache.get(i);
-            if (item) next.add(item.id);
+            // Collections among the items (negative ids) aren't selectable.
+            if (item && item.id > 0) next.add(item.id);
           }
         } else if (next.has(id)) next.delete(id);
         else next.add(id);

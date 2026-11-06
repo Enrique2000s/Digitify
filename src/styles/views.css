@@ -1805,3 +1805,181 @@ body:has(.import-panel) .online-queue {
 .detail-cover[data-source] {
   position: relative;
 }
+
+/* ---------------------------------------------------------------- collections among the items (D-030) */
+
+.collection-art {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  border-radius: inherit;
+  background: var(--screen, var(--screen-5));
+}
+.card-art .collection-art {
+  inset: 5px;
+  border-radius: 11px;
+}
+.collection-art::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 46%;
+  background: var(--screen-gloss);
+  pointer-events: none;
+}
+.collection-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--accent-bright);
+}
+.collection-badge {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--pill);
+  background: rgba(10, 16, 24, 0.72);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 900;
+  line-height: 16px;
+}
+.collection-card:hover .tile-cover,
+.collection-card:focus-visible .tile-cover {
+  transform: translateY(-4px) rotate(var(--tilt, 0deg));
+}
+.list-row .thumb[data-shape="landscape"] .collection-badge,
+.list-row .thumb[data-shape="landscape"] .tile-cover {
+  display: none;
+}
+.list-row .thumb .collection-art {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.collection-carousel,
+.collection-shelf {
+  overflow: hidden;
+}
+
+/* ---------------------------------------------------------------- motion (D-030) */
+
+:root {
+  --rise: 14px;
+  --pop: 0.95;
+}
+:root[data-motion="reduced"] {
+  --rise: 0px;
+  --pop: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) {
+    --rise: 0px;
+    --pop: 1;
+  }
+}
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--rise));
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--rise)) scale(var(--pop));
+  }
+}
+/* A new view, filter or sort: the content fades up, and its covers pop in row by row. */
+.view-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  animation: view-in 300ms var(--ease) both;
+}
+.view-stage.entering .grid-row > *,
+.view-stage.entering .shelf-items > *,
+.view-stage.entering .list-row,
+.view-stage.entering .detail-row {
+  animation: pop-in 420ms var(--spring) both;
+  animation-delay: calc(min(var(--row, 0), 6) * 55ms + var(--col, 0) * 28ms);
+}
+.view-stage.entering .grid-row > :nth-child(2),
+.view-stage.entering .shelf-items > :nth-child(2) { --col: 1; }
+.view-stage.entering .grid-row > :nth-child(3),
+.view-stage.entering .shelf-items > :nth-child(3) { --col: 2; }
+.view-stage.entering .grid-row > :nth-child(4),
+.view-stage.entering .shelf-items > :nth-child(4) { --col: 3; }
+.view-stage.entering .grid-row > :nth-child(5),
+.view-stage.entering .shelf-items > :nth-child(5) { --col: 4; }
+.view-stage.entering .grid-row > :nth-child(6),
+.view-stage.entering .shelf-items > :nth-child(6) { --col: 5; }
+.view-stage.entering .grid-row > :nth-child(n + 7),
+.view-stage.entering .shelf-items > :nth-child(n + 7) { --col: 6; }
+.view-stage.entering .shelf[data-row="1"] { --row: 1; }
+.view-stage.entering .shelf[data-row="2"] { --row: 2; }
+.view-stage.entering .shelf[data-row="3"] { --row: 3; }
+.view-stage.entering .carousel-item {
+  animation: view-in 520ms var(--ease) both;
+}
+.music-stage {
+  min-height: 0;
+}
+/* A category's or a collection's title slides in with it. */
+.library-view .page-header .title-row {
+  animation: view-in 320ms var(--ease) both;
+}
+/* Home's sections, one after another; any page arrives with a fade. */
+.home-section {
+  animation: view-in 440ms var(--ease) both;
+  animation-delay: calc(min(var(--i, 0), 8) * 70ms);
+}
+.app-main > .page {
+  animation: view-in 300ms var(--ease) both;
+}
+.hero-cover {
+  animation: pop-in 480ms var(--spring) both;
+}
+
+/* ---------------------------------------------------------------- light mode for slower computers (D-030) */
+
+:root[data-perf="light"] *,
+:root[data-perf="light"] *::before,
+:root[data-perf="light"] *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-box-reflect: unset !important;
+  transition-duration: 0ms !important;
+}
+/* Decorative motion stops; spinners keep turning so waiting still shows. */
+:root[data-perf="light"] *:not(.spin),
+:root[data-perf="light"] *::before,
+:root[data-perf="light"] *::after {
+  animation: none !important;
+}
+/* Big blurred pictures behind pages are the heaviest thing to draw: they go. */
+:root[data-perf="light"] .hero-backdrop,
+:root[data-perf="light"] .featured-backdrop,
+:root[data-perf="light"] .bp-featured-backdrop,
+:root[data-perf="light"] .watch-curtain-backdrop {
+  display: none !important;
+}
+:root[data-perf="light"] {
+  --raise: 0 1px 2px rgba(0, 0, 0, 0.18);
+  --raise-sm: 0 1px 2px rgba(0, 0, 0, 0.14);
+  --cover-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  --pop-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --glow: 0 0 0 2px var(--accent-bright);
+  --glow-sm: 0 0 0 2px var(--accent-bright);
+}

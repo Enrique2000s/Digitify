@@ -141,13 +141,22 @@ export function SettingsPage() {
               </label>
             </div>
           </Setting>
-          <Setting title="Animations" text="System follows Windows' “Animation effects” setting.">
+          <Setting
+            title="Animations"
+            text="Transitions when you change category, view, filter or sort, covers popping into place, sections fading in. “Follow Windows” uses its “Animation effects” setting; “Reduced” keeps only gentle fades."
+          >
             <select className="select" style={{ width: 180 }} value={preferences.motion} onChange={(event) => update({ motion: event.target.value as MotionChoice })}>
-              <option value="system">System</option>
-              <option value="full">Full</option>
+              <option value="system">On (follow Windows)</option>
+              <option value="full">On</option>
               <option value="reduced">Reduced</option>
               <option value="off">Off</option>
             </select>
+          </Setting>
+          <Setting
+            title="Light mode for slower computers"
+            text="Turns off blurred backgrounds, reflections, heavy shadows, glows and animations, and draws fewer covers ahead, so Digitify stays smooth on older or low-power PCs."
+          >
+            <Switch checked={preferences.lightMode} label="Light mode for slower computers" onChange={(lightMode) => update({ lightMode })} />
           </Setting>
           <Setting
             title="Same view in every category"
