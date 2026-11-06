@@ -9,7 +9,15 @@
 pub mod bluray;
 pub mod cd;
 pub mod dvd;
+// The drives themselves: Windows' and Linux's calls behind one interface (`drive_io`).
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(windows)]
 mod win;
+#[cfg(target_os = "linux")]
+use linux as drive_io;
+#[cfg(windows)]
+use win as drive_io;
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -54,14 +62,17 @@ impl Drive {
 
     fn root(&self) -> PathBuf {
         match self {
+            #[cfg(windows)]
             Drive::Real(l) => PathBuf::from(format!("{l}:\\")),
+            #[cfg(target_os = "linux")]
+            Drive::Real(l) => drive_io::root(*l),
             Drive::Fake(_, path) => path.clone(),
         }
     }
 
     fn has_media(&self) -> bool {
         match self {
-            Drive::Real(l) => win::Device::open(*l).map(|d| d.has_media()).unwrap_or(false),
+            Drive::Real(l) => drive_io::Device::open(*l).map(|d| d.has_media()).unwrap_or(false),
             Drive::Fake(_, path) => std::fs::read_dir(path).map(|mut e| e.next().is_some()).unwrap_or(false),
         }
     }
@@ -72,9 +83,9 @@ impl Drive {
             return String::new();
         }
         match self {
-            Drive::Real(l) => match win::volume(*l) {
+            Drive::Real(l) => match drive_io::volume(*l) {
                 Some((label, serial)) => format!("{label}:{serial:08X}"),
-                None => win::Device::open(*l).and_then(|d| d.read_toc()).map(|toc| format!("toc:{}", blake3::hash(&toc).to_hex())).unwrap_or_default(),
+                None => drive_io::Device::open(*l).and_then(|d| d.read_toc()).map(|toc| format!("toc:{}", blake3::hash(&toc).to_hex())).unwrap_or_default(),
             },
             // Every file and its size: a simulated disc can be written into its folder while
             // Digitify runs, which a real disc never does.
@@ -99,14 +110,14 @@ impl Drive {
 
     fn sectors(&self) -> AppResult<Box<dyn SectorSource>> {
         Ok(match self {
-            Drive::Real(l) => Box::new(win::Device::open(*l)?),
+            Drive::Real(l) => Box::new(drive_io::Device::open(*l)?),
             Drive::Fake(_, path) => Box::new(cd::ImageSource(std::fs::File::open(path.join("audio.bin"))?)),
         })
     }
 }
 
 fn drives() -> Vec<Drive> {
-    let mut list: Vec<Drive> = win::optical_letters().into_iter().map(Drive::Real).collect();
+    let mut list: Vec<Drive> = drive_io::optical_letters().into_iter().map(Drive::Real).collect();
     if let Some(root) = std::env::var_os("DIGITIFY_FAKE_DRIVES").map(PathBuf::from) {
         if let Ok(entries) = std::fs::read_dir(&root) {
             let mut fakes: Vec<Drive> = entries
@@ -174,7 +185,7 @@ fn audio_disc(drive: &Drive) -> AppResult<FakeAudioCd> {
         return Ok(fake);
     }
     let Drive::Real(letter) = drive else { return Err(AppError::msg("This isn't an audio CD.")) };
-    let device = win::Device::open(*letter)?;
+    let device = drive_io::Device::open(*letter)?;
     let tracks = cd::parse_toc(&device.read_toc()?);
     if !tracks.iter().any(|t| t.audio) {
         return Err(AppError::msg("This disc has no audio tracks."));
@@ -185,7 +196,7 @@ fn audio_disc(drive: &Drive) -> AppResult<FakeAudioCd> {
 
 fn dvd_protected(drive: &Drive) -> bool {
     if let Drive::Real(letter) = drive {
-        if let Some(kind) = win::Device::open(*letter).ok().and_then(|d| d.dvd_protection()) {
+        if let Some(kind) = drive_io::Device::open(*letter).ok().and_then(|d| d.dvd_protection()) {
             return kind != 0;
         }
     }
@@ -200,7 +211,7 @@ fn classify(drive: &Drive) -> Option<Media> {
     }
     let root = drive.root();
     let volume = match drive {
-        Drive::Real(l) => win::volume(*l).map(|(label, _)| label),
+        Drive::Real(l) => drive_io::volume(*l).map(|(label, _)| label),
         Drive::Fake(_, path) => path.file_name().map(|n| n.to_string_lossy().into_owned()),
     };
     let label = volume.clone().filter(|l| !l.trim().is_empty() && l.len() > 1).map(|l| pretty_label(&l));
@@ -214,10 +225,10 @@ fn classify(drive: &Drive) -> Option<Media> {
         return Some(Media { kind: "bluray", label, protection: bluray::protection(&root).map(str::to_string) });
     }
     if let Drive::Real(letter) = drive {
-        if let Ok(toc) = win::Device::open(*letter).and_then(|d| d.read_toc()) {
+        if let Ok(toc) = drive_io::Device::open(*letter).and_then(|d| d.read_toc()) {
             let tracks = cd::parse_toc(&toc);
             if tracks.first().is_some_and(|t| t.audio) {
-                let album = win::Device::open(*letter).ok().and_then(|d| d.read_cd_text()).and_then(|raw| cd::parse_cd_text(&raw).album);
+                let album = drive_io::Device::open(*letter).ok().and_then(|d| d.read_cd_text()).and_then(|raw| cd::parse_cd_text(&raw).album);
                 return Some(Media { kind: "audio", label: album.or(Some("Audio CD".into())), protection: None });
             }
         }
@@ -244,7 +255,7 @@ fn describe(state: &OpticalState, drive: &Drive) -> DriveInfo {
         media
     });
     let name = match drive {
-        Drive::Real(l) => win::Device::open(*l).ok().and_then(|d| d.product()),
+        Drive::Real(l) => drive_io::Device::open(*l).ok().and_then(|d| d.product()),
         Drive::Fake(..) => Some("Simulated drive".into()),
     };
     DriveInfo { letter: drive.letter().to_string(), name, media, simulated: matches!(drive, Drive::Fake(..)) }
@@ -262,7 +273,7 @@ pub async fn drives_list(app: AppHandle) -> AppResult<Vec<DriveInfo>> {
 #[tauri::command]
 pub async fn drive_eject(letter: String) -> AppResult<()> {
     blocking(move || match find(&letter)? {
-        Drive::Real(l) => win::Device::open(l)?.eject().map_err(|e| AppError::msg(format!("The drive didn't eject: {e}"))),
+        Drive::Real(l) => drive_io::Device::open(l)?.eject().map_err(|e| AppError::msg(format!("The drive didn't eject: {e}"))),
         Drive::Fake(..) => Ok(()),
     })
     .await
@@ -449,7 +460,7 @@ pub fn cd_stream(letter: &str, track: u32, range: Option<(u64, u64)>) -> AppResu
     let drive = find(letter)?;
     let disc = audio_disc(&drive)?;
     let track = disc.tracks.into_iter().find(|t| t.number == track && t.audio).ok_or_else(|| AppError::msg("No such track."))?;
-    let data = track.sectors as u64 * win::SECTOR as u64;
+    let data = track.sectors as u64 * drive_io::SECTOR as u64;
     let total = 44 + data;
     let (start, end) = range.unwrap_or((0, total - 1));
     let end = end.min(total - 1).min(start + 1024 * 1024 - 1);
@@ -461,8 +472,8 @@ pub fn cd_stream(letter: &str, track: u32, range: Option<(u64, u64)>) -> AppResu
     if end >= 44 {
         let from = start.max(44) - 44;
         let to = end - 44;
-        let first = (from / win::SECTOR as u64) as u32;
-        let last = (to / win::SECTOR as u64) as u32;
+        let first = (from / drive_io::SECTOR as u64) as u32;
+        let last = (to / drive_io::SECTOR as u64) as u32;
         let mut source = drive.sectors()?;
         let mut sector = first;
         let mut pcm = Vec::new();
@@ -471,7 +482,7 @@ pub fn cd_stream(letter: &str, track: u32, range: Option<(u64, u64)>) -> AppResu
             pcm.extend(source.read(track.start + sector, count)?);
             sector += count;
         }
-        let skip = (from - first as u64 * win::SECTOR as u64) as usize;
+        let skip = (from - first as u64 * drive_io::SECTOR as u64) as usize;
         out.extend_from_slice(&pcm[skip..skip + (to - from + 1) as usize]);
     }
     Ok((out, total))
@@ -767,7 +778,7 @@ pub fn dev_write_sample_discs() -> AppResult<String> {
     let mut start = 0;
     for (number, (hz, seconds)) in [(330.0f64, 6u32), (440.0, 5), (550.0, 4)].iter().enumerate() {
         let sectors = seconds * 75;
-        let samples = sectors as usize * win::SECTOR / 4;
+        let samples = sectors as usize * drive_io::SECTOR / 4;
         let mut pcm = Vec::with_capacity(samples * 4);
         for i in 0..samples {
             let value = ((i as f64 / 44_100.0 * hz * std::f64::consts::TAU).sin() * 9000.0) as i16;
@@ -807,6 +818,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(windows)]
     fn data_disc_paths_stay_on_the_disc() {
         let root = Path::new(r"E:\");
         assert!(within(root, r"Photos\2019").is_ok());
@@ -815,6 +827,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(windows)]
     fn edl_and_chapters() {
         let streams = [PathBuf::from(r"E:\VIDEO_TS\VTS_01_1.VOB"), PathBuf::from(r"E:\VIDEO_TS\VTS_01_2.VOB")];
         assert_eq!(edl(&streams), r"edl://%24%E:\VIDEO_TS\VTS_01_1.VOB;%24%E:\VIDEO_TS\VTS_01_2.VOB");

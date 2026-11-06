@@ -61,9 +61,9 @@ impl LibraryFolder {
 /// Default suggestion at first launch: a folder in the user's profile, outside Documents, which
 /// cloud backup tools often redirect.
 pub fn suggested_path() -> PathBuf {
-    std::env::var_os("USERPROFILE")
+    std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("C:\\"))
+        .unwrap_or_else(|| PathBuf::from(if cfg!(windows) { "C:\\" } else { "/" }))
         .join("Digitify Library")
 }
 

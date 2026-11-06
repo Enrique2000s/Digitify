@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { AudioLines, ChevronRight, Disc3, Download, FileIcon, Folder, HardDriveDownload, Pause, Play, ShieldAlert, Square, Upload, X } from "lucide-react";
-import { api, cdTrackUrl, errorText, type DiscContents, type DiscJob, type DiscTitle, type DriveInfo } from "../../lib/api";
+import { api, cdTrackUrl, errorText, type DiscContents, type DiscJob, type DiscTitle, type DriveInfo, driveName, onLinux } from "../../lib/api";
 import { useAmbientHold } from "../../lib/ambient/AmbientProvider";
 import { DISC_KINDS, useDiscs } from "../../lib/discs";
 import { useMusic } from "../../lib/music/MusicProvider";
@@ -237,7 +237,9 @@ function DataDisc({ letter, contents, onOpen }: { letter: string; contents: Extr
   const [message, setMessage] = useState<string | null>(null);
   useEffect(() => setSelected(new Set()), [contents.path]);
   const crumbs = contents.path ? contents.path.split(/[\\/]/) : [];
-  const join = (path: string) => `${contents.root.replace(/[\\/]$/, "")}\\${path}`;
+  // The disc's own separator: "\" on Windows, "/" on Linux.
+  const separator = onLinux ? "/" : "\\";
+  const join = (path: string) => `${contents.root.replace(/[\\/]$/, "")}${separator}${path}`;
   const importSelected = async () => {
     try {
       await api.importStart([...selected].map(join), "copy", null);
@@ -252,12 +254,12 @@ function DataDisc({ letter, contents, onOpen }: { letter: string; contents: Extr
     <div className="disc-body">
       <nav className="disc-crumbs" aria-label="Folder">
         <button type="button" className="btn btn-sm btn-ghost" onClick={() => onOpen("")}>
-          {letter}:
+          {driveName(letter)}
         </button>
         {crumbs.map((part, index) => (
           <span key={index}>
             <ChevronRight size={14} aria-hidden />
-            <button type="button" className="btn btn-sm btn-ghost" onClick={() => onOpen(crumbs.slice(0, index + 1).join("\\"))}>
+            <button type="button" className="btn btn-sm btn-ghost" onClick={() => onOpen(crumbs.slice(0, index + 1).join(onLinux ? "/" : "\\"))}>
               {part}
             </button>
           </span>
@@ -355,7 +357,7 @@ function DriveCard({ drive }: { drive: DriveInfo }) {
         </span>
         <div className="disc-name">
           <span className="eyebrow">
-            Drive {drive.letter}: {drive.name ? `· ${drive.name}` : ""}
+            Drive {driveName(drive.letter)} {drive.name ? `· ${drive.name}` : ""}
           </span>
           <h2>{media ? (media.label ?? DISC_KINDS[media.kind]) : "No disc"}</h2>
           {media && (
@@ -434,7 +436,7 @@ export function DiscNotice() {
       <div>
         <strong>{DISC_KINDS[inserted.media.kind]} inserted</strong>
         <span>
-          {inserted.media.label ?? "Untitled"} · Drive {inserted.letter}:
+          {inserted.media.label ?? "Untitled"} · Drive {driveName(inserted.letter)}
         </span>
       </div>
       <button

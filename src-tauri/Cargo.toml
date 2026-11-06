@@ -57,6 +57,15 @@ windows-sys = { version = "0.61", features = [
     "Win32_UI_Shell",
 ] }
 
+# Linux (D-031): drive ioctls, the X11 video host inside the GTK window, and the desktop keyring.
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+x11-dl = "2.21"
+gtk = "0.18"
+gdkx11 = "0.18"
+# Pure-Rust D-Bus (zbus), so the packages need no libdbus.
+keyring = { version = "3", features = ["async-secret-service", "async-io", "crypto-rust"] }
+
 # Optimize dependencies even in debug builds: SQLite, image decoding and hashing are slow unoptimized.
 [profile.dev.package."*"]
 opt-level = 2

@@ -4,7 +4,9 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{self, Read, Seek, SeekFrom};
+#[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
+#[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -49,8 +51,38 @@ pub fn modified_unix(metadata: &fs::Metadata) -> Option<i64> {
     Some(since.as_secs() as i64)
 }
 
+/// The id of the file system holding `path` (its UUID, else its device number). Lets moved
+/// external drives be recognized even when they're mounted somewhere else.
+#[cfg(target_os = "linux")]
+pub fn volume_serial(path: &Path) -> Option<String> {
+    let path = fs::canonicalize(path).ok()?;
+    // The mount holding the path: the longest mount point it's under.
+    let mounts = fs::read_to_string("/proc/self/mounts").ok()?;
+    let source = mounts
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let source = fields.next()?;
+            let target = fields.next()?.replace("\\040", " ");
+            path.starts_with(&target).then(|| (target.len(), source.to_string()))
+        })
+        .max_by_key(|(length, _)| *length)
+        .map(|(_, source)| source)?;
+    let device = fs::canonicalize(&source).ok();
+    if let (Some(device), Ok(entries)) = (&device, fs::read_dir("/dev/disk/by-uuid")) {
+        for entry in entries.filter_map(Result::ok) {
+            if fs::canonicalize(entry.path()).ok().as_ref() == Some(device) {
+                return Some(entry.file_name().to_string_lossy().into_owned());
+            }
+        }
+    }
+    use std::os::unix::fs::MetadataExt;
+    fs::metadata(&path).ok().map(|m| format!("dev{:X}", m.dev()))
+}
+
 /// Serial number of the volume holding `path`. Lets moved external drives be recognized even when
 /// their drive letter changes.
+#[cfg(windows)]
 pub fn volume_serial(path: &Path) -> Option<String> {
     use windows_sys::Win32::Storage::FileSystem::{GetVolumeInformationW, GetVolumePathNameW};
     let wide: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
@@ -142,16 +174,26 @@ pub fn natural_cmp(a: &str, b: &str) -> Ordering {
     }
 }
 
-/// Opens File Explorer with `path` selected.
+/// Opens File Explorer with `path` selected (on Linux, the file manager on its folder).
 pub fn reveal(path: &Path) -> AppResult<()> {
     if !path.exists() {
         return Err(AppError::msg(format!("{} no longer exists", path.display())));
     }
-    Command::new("explorer")
+    #[cfg(windows)]
+    return Command::new("explorer")
         .raw_arg(format!("/select,\"{}\"", path.display()))
         .spawn()
         .map(|_| ())
-        .map_err(|e| AppError::msg(format!("could not open File Explorer: {e}")))
+        .map_err(|e| AppError::msg(format!("could not open File Explorer: {e}")));
+    #[cfg(not(windows))]
+    {
+        let folder = if path.is_dir() { path } else { path.parent().unwrap_or(path) };
+        Command::new("xdg-open")
+            .arg(folder)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| AppError::msg(format!("could not open the file manager: {e}")))
+    }
 }
 
 /// Marks files as missing (or found again). Returns how many statuses changed.

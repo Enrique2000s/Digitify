@@ -464,7 +464,7 @@ async fn session(app: &AppHandle, state: &MusicState, volume: f64) -> AppResult<
             *guard = None;
         }
     }
-    let pipe = format!(r"\\.\pipe\digitify-music-{}-{}", std::process::id(), NEXT_PIPE.fetch_add(1, Ordering::Relaxed));
+    let pipe = player::ipc_name("music", NEXT_PIPE.fetch_add(1, Ordering::Relaxed));
     let log_file = app.path().app_log_dir()?.join("mpv-music.log");
     let mut child = Command::new(player::mpv_path()?)
         .args([

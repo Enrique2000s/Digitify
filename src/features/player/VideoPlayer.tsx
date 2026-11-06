@@ -22,7 +22,7 @@ import {
   VolumeX,
   RotateCcw,
 } from "lucide-react";
-import { api, artworkUrl, errorText, type WatchTarget } from "../../lib/api";
+import { api, artworkUrl, errorText, onLinux, type WatchTarget } from "../../lib/api";
 import { useAmbientHold } from "../../lib/ambient/AmbientProvider";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { accentVariables } from "../../lib/color";
@@ -215,6 +215,8 @@ function VideoPlayer({ source }: { source: Source }) {
   const [fullscreen, toggleFullscreen] = useFullscreen();
 
   const root = useRef<HTMLDivElement>(null);
+  const latestLayout = useRef({ shown: true, menu: false, ready: false });
+  const placeRef = useRef<(() => void) | null>(null);
   const surface = useRef<HTMLDivElement>(null);
   const [target, setTarget] = useState<WatchTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -318,10 +320,30 @@ function VideoPlayer({ source }: { source: Source }) {
     const place = () => {
       const r = element.getBoundingClientRect();
       const scale = window.devicePixelRatio;
+      let { left, top, width, height } = r;
+      // On Linux the video window covers the page (D-031): it waits behind the curtain, gives way
+      // to an open menu, and leaves room for the bars while they show.
+      if (onLinux) {
+        const bars = latestLayout.current;
+        if (!bars.ready || bars.menu) {
+          left = -10;
+          top = -10;
+          width = 1;
+          height = 1;
+        } else if (bars.shown && root.current) {
+          const upper = root.current.querySelector(".reader-bar.top")?.getBoundingClientRect();
+          const lower = root.current.querySelector(".watch-bar")?.getBoundingClientRect();
+          const from = upper ? Math.max(top, upper.bottom) : top;
+          const to = lower ? Math.min(top + height, lower.top - 8) : top + height;
+          top = from;
+          height = Math.max(1, to - from);
+        }
+      }
       void api
-        .playerSetRect({ x: Math.round(r.left * scale), y: Math.round(r.top * scale), width: Math.round(r.width * scale), height: Math.round(r.height * scale) })
+        .playerSetRect({ x: Math.round(left * scale), y: Math.round(top * scale), width: Math.round(width * scale), height: Math.round(height * scale) })
         .catch(() => {});
     };
+    placeRef.current = place;
     place();
     const observer = new ResizeObserver(place);
     observer.observe(element);
@@ -458,6 +480,11 @@ function VideoPlayer({ source }: { source: Source }) {
   const audio = playback.tracks.filter((t) => t.type === "audio");
   const subs = playback.tracks.filter((t) => t.type === "sub");
   const showBars = shown || playback.paused || menu !== null || !target || countdown !== null;
+  // What the Linux video window keeps clear of (see `place`), read when it's placed again.
+  latestLayout.current = { shown: showBars, menu: menu !== null, ready: ready && !leaving };
+  useEffect(() => {
+    if (onLinux) placeRef.current?.();
+  }, [showBars, menu, ready, leaving]);
   // Picking an option closes its menu.
   const choose = (_: void) => setMenu(null);
   // At the end, the play button starts the video again from the beginning.

@@ -13,13 +13,16 @@ use crate::formats::year_of;
 
 static PDFIUM: OnceLock<Result<Pdfium, String>> = OnceLock::new();
 
-/// `pdfium.dll`: next to the app (installed), or in `src-tauri/binaries` for builds run from the
-/// source tree.
+/// `pdfium.dll` (Windows) or `libpdfium.so` (Linux): next to the app, among its installed
+/// resources (Linux packages put them in `../lib/Digitify`), or in `src-tauri/binaries` for builds
+/// run from the source tree.
 fn library_path() -> Option<PathBuf> {
+    let name = if cfg!(windows) { "pdfium.dll" } else { "libpdfium.so" };
     let exe = std::env::current_exe().ok()?;
     let dir = exe.parent()?;
-    std::iter::once(dir.join("pdfium.dll"))
-        .chain(dir.ancestors().take(5).map(|ancestor| ancestor.join("src-tauri").join("binaries").join("pdfium.dll")))
+    [dir.join(name), dir.join("../lib/Digitify").join(name), dir.join("../lib/digitify").join(name)]
+        .into_iter()
+        .chain(dir.ancestors().take(5).map(|ancestor| ancestor.join("src-tauri").join("binaries").join(name)))
         .find(|candidate| candidate.exists())
 }
 

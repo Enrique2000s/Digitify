@@ -1,8 +1,10 @@
 //! Video playback through mpv, which runs as a separate helper program (D-002).
 //!
-//! mpv draws into a child "video host" window kept underneath the transparent WebView, so the
-//! React controls float over the picture. Commands and events travel as JSON lines over mpv's
-//! IPC named pipe; every message mpv sends is forwarded to the UI as a `player-event`.
+//! mpv draws into a child "video host" window. On Windows it's kept underneath the transparent
+//! WebView, so the React controls float over the picture; on Linux (X11) it sits above the page,
+//! which keeps the video clear of the controls while they show. Commands and events travel as JSON
+//! lines over mpv's IPC channel (a named pipe on Windows, a Unix socket on Linux); every message mpv
+//! sends is forwarded to the UI as a `player-event`.
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
@@ -13,7 +15,25 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader};
+#[cfg(windows)]
 use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient};
+
+/// mpv's IPC connection.
+#[cfg(windows)]
+pub(crate) type Ipc = NamedPipeClient;
+#[cfg(unix)]
+pub(crate) type Ipc = tokio::net::UnixStream;
+
+/// A fresh name for an mpv IPC channel (`kind`: "mpv" or "music").
+pub(crate) fn ipc_name(kind: &str, n: u32) -> String {
+    #[cfg(windows)]
+    return format!(r"\\.\pipe\digitify-{kind}-{}-{n}", std::process::id());
+    #[cfg(unix)]
+    {
+        let dir = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
+        dir.join(format!("digitify-{kind}-{}-{n}.sock", std::process::id())).to_string_lossy().into_owned()
+    }
+}
 use tokio::sync::{mpsc, oneshot};
 
 use crate::error::{AppError, AppResult};
@@ -72,16 +92,12 @@ pub async fn start_with(
     stop(app, state);
     let app = app.clone();
 
-    let parent = window.hwnd()?.0 as isize;
-    let host = on_main_thread(&app, move || video_host::create(parent))
+    let window = window.clone();
+    let host = on_main_thread(&app, move || video_host::parent(&window).and_then(video_host::create))
         .await?
         .ok_or_else(|| AppError::msg("could not create the video surface"))?;
 
-    let pipe = format!(
-        r"\\.\pipe\digitify-mpv-{}-{}",
-        std::process::id(),
-        NEXT_PIPE.fetch_add(1, Ordering::Relaxed)
-    );
+    let pipe = ipc_name("mpv", NEXT_PIPE.fetch_add(1, Ordering::Relaxed));
     let log_file = app.path().app_log_dir()?.join("mpv.log");
     let spawned = Command::new(mpv_path()?)
         .args([
@@ -286,24 +302,42 @@ fn lock(state: &PlayerState) -> AppResult<std::sync::MutexGuard<'_, Option<Sessi
     state.session.lock().map_err(|_| AppError::msg("player state is unavailable"))
 }
 
+/// mpv: shipped next to the app on Windows; on Linux next to the app, else the system's.
 pub(crate) fn mpv_path() -> AppResult<PathBuf> {
     let exe = std::env::current_exe()?;
-    let path = exe
-        .parent()
-        .ok_or_else(|| AppError::msg("cannot locate the app folder"))?
-        .join("mpv.exe");
-    if path.exists() {
-        Ok(path)
-    } else {
-        Err(AppError::msg(format!(
-            "mpv was not found at {}. Run scripts/fetch-deps.ps1, then rebuild.",
-            path.display()
-        )))
+    let dir = exe.parent().ok_or_else(|| AppError::msg("cannot locate the app folder"))?;
+    #[cfg(windows)]
+    {
+        let path = dir.join("mpv.exe");
+        if path.exists() {
+            return Ok(path);
+        }
+        Err(AppError::msg(format!("mpv was not found at {}. Run scripts/fetch-deps.ps1, then rebuild.", path.display())))
+    }
+    #[cfg(unix)]
+    {
+        crate::tools::find_in(dir, "mpv").ok_or_else(|| AppError::msg("mpv isn't installed. Install it from your distribution (for example `sudo apt install mpv`), then open Digitify again."))
     }
 }
 
+/// mpv creates its control socket shortly after starting; retry until it appears.
+#[cfg(unix)]
+pub(crate) async fn connect(pipe: &str) -> AppResult<Ipc> {
+    for _ in 0..200 {
+        match tokio::net::UnixStream::connect(pipe).await {
+            Ok(client) => return Ok(client),
+            Err(e) if matches!(e.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused) => {
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Err(AppError::msg("mpv did not open its control socket within 5 seconds"))
+}
+
 /// mpv creates its control pipe shortly after starting; retry until it appears.
-pub(crate) async fn connect(pipe: &str) -> AppResult<NamedPipeClient> {
+#[cfg(windows)]
+pub(crate) async fn connect(pipe: &str) -> AppResult<Ipc> {
     const ERROR_FILE_NOT_FOUND: i32 = 2;
     const ERROR_PIPE_BUSY: i32 = 231;
     for _ in 0..200 {
@@ -331,7 +365,13 @@ async fn on_main_thread<T: Send + 'static>(
 
 /// The child window mpv renders into. It stays at the bottom of the z-order, underneath the
 /// WebView, whose transparent areas let the video show through.
+#[cfg(windows)]
 mod video_host {
+    /// The window the host goes in: the app window itself.
+    pub fn parent(window: &tauri::WebviewWindow) -> Option<isize> {
+        window.hwnd().ok().map(|h| h.0 as isize)
+    }
+
     use windows_sys::w;
     use windows_sys::Win32::Foundation::{HWND, LPARAM};
     use windows_sys::Win32::Graphics::Gdi::{GetStockObject, BLACK_BRUSH};
@@ -401,5 +441,74 @@ mod video_host {
         let (width, height) = ((packed >> 32) as i32, (packed & 0xFFFF_FFFF) as i32);
         SetWindowPos(child, std::ptr::null_mut(), 0, 0, width, height, SWP_NOACTIVATE | SWP_NOZORDER);
         1
+    }
+}
+
+/// The child window mpv renders into on Linux: an X11 window inside the app window (Digitify runs
+/// on X11, through XWayland on Wayland desktops). mpv's `--wid` puts its picture in it and follows
+/// its size. It sits above the page, so the player keeps it clear of its controls.
+#[cfg(target_os = "linux")]
+mod video_host {
+    use std::sync::OnceLock;
+
+    use gtk::prelude::*;
+    use x11_dl::xlib::{Display, Xlib};
+
+    struct X {
+        lib: Xlib,
+        display: *mut Display,
+    }
+    // Only the main thread (the window thread) touches it.
+    unsafe impl Send for X {}
+    unsafe impl Sync for X {}
+
+    fn x() -> Option<&'static X> {
+        static X11: OnceLock<Option<X>> = OnceLock::new();
+        X11.get_or_init(|| {
+            let lib = Xlib::open().ok()?;
+            let display = unsafe { (lib.XOpenDisplay)(std::ptr::null()) };
+            (!display.is_null()).then_some(X { lib, display })
+        })
+        .as_ref()
+    }
+
+    /// The app window's X11 id.
+    pub fn parent(window: &tauri::WebviewWindow) -> Option<isize> {
+        let gtk_window = window.gtk_window().ok()?;
+        let gdk_window = gtk_window.window()?;
+        let x11 = gdk_window.downcast::<gdkx11::X11Window>().ok()?;
+        Some(x11.xid() as isize)
+    }
+
+    pub fn create(parent: isize) -> Option<isize> {
+        let x = x()?;
+        unsafe {
+            let black = (x.lib.XBlackPixel)(x.display, (x.lib.XDefaultScreen)(x.display));
+            let window = (x.lib.XCreateSimpleWindow)(x.display, parent as u64, 0, 0, 1, 1, 0, black, black);
+            if window == 0 {
+                return None;
+            }
+            (x.lib.XMapWindow)(x.display, window);
+            (x.lib.XFlush)(x.display);
+            Some(window as isize)
+        }
+    }
+
+    /// Moves and sizes the host; mpv's own window inside follows it.
+    pub fn place(host: isize, x_pos: i32, y: i32, width: i32, height: i32) {
+        let Some(x) = x() else { return };
+        unsafe {
+            (x.lib.XMoveResizeWindow)(x.display, host as u64, x_pos, y, width.max(1) as u32, height.max(1) as u32);
+            (x.lib.XRaiseWindow)(x.display, host as u64);
+            (x.lib.XFlush)(x.display);
+        }
+    }
+
+    pub fn destroy(host: isize) {
+        let Some(x) = x() else { return };
+        unsafe {
+            (x.lib.XDestroyWindow)(x.display, host as u64);
+            (x.lib.XFlush)(x.display);
+        }
     }
 }

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["deb", "appimage"],
+    "externalBin": [],
+    "resources": {
+      "binaries/vulkan-1.dll": null,
+      "binaries/pdfium.dll": null,
+      "../tools/ffmpeg/*": null,
+      "binaries/libpdfium.so": "libpdfium.so",
+      "binaries/licenses/pdfium/*": "licenses/pdfium/",
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
+    },
+    "linux": {
+      "deb": {
+        "depends": ["mpv", "ffmpeg", "udisks2"],
+        "section": "video"
+      }
+    }
+  }
+}

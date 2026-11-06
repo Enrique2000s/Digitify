@@ -754,29 +754,40 @@ export const api = {
   devExit: () => invoke<void>("dev_exit"),
 };
 
-/** Artwork served by the core's private `digitify` scheme (Windows form of the URL). */
+/** Running on Linux (WebKitGTK), where some things differ from Windows (D-031). */
+export const onLinux = typeof navigator !== "undefined" && /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
+
+/** The core's private `digitify` scheme: `http://digitify.localhost` on Windows, `digitify://localhost` elsewhere. */
+const MEDIA = onLinux ? "digitify://localhost" : "http://digitify.localhost";
+
+/** How a disc drive is named: "E:" on Windows, "sr0" on Linux (its device, `/dev/sr0`). */
+export function driveName(letter: string): string {
+  return /^\d$/.test(letter) ? `sr${letter}` : `${letter}:`;
+}
+
+/** Artwork served by the core's private `digitify` scheme. */
 export function artworkUrl(key: string, size: "thumb" | "cover" = "thumb"): string {
-  return `http://digitify.localhost/${size}/${key}`;
+  return `${MEDIA}/${size}/${key}`;
 }
 
 /** A page of an open book, at least `width` device pixels wide (the core rounds widths up). */
 /** An audio CD track straight from the disc, as WAV. */
 export function cdTrackUrl(letter: string, track: number): string {
-  return `http://digitify.localhost/cd/${letter}/${track}`;
+  return `${MEDIA}/cd/${letter}/${track}`;
 }
 
 /** The ebook file of a digital copy, for the ebook reader. */
 export function bookUrl(versionId: number): string {
-  return `http://digitify.localhost/book/${versionId}`;
+  return `${MEDIA}/book/${versionId}`;
 }
 
 export function pageUrl(versionId: number, index: number, width: number): string {
-  return `http://digitify.localhost/page/${versionId}/${index}?w=${Math.round(width)}`;
+  return `${MEDIA}/page/${versionId}/${index}?w=${Math.round(width)}`;
 }
 
 /** A track of the current ambient playlist (only files the user chose are served). */
 export function ambientUrl(generation: number, id: number): string {
-  return `http://digitify.localhost/ambient/${generation}/${id}`;
+  return `${MEDIA}/ambient/${generation}/${id}`;
 }
 
 /** Tauri rejects with plain strings from Rust errors; normalize for display. */

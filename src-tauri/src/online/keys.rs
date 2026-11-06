@@ -1,6 +1,7 @@
-//! API keys for online services (D-028), entered by the owner in Settings. They're kept in the
-//! config folder encrypted with Windows' data protection for the signed-in user (DPAPI), never
-//! sent to the UI once saved, and never written to logs.
+//! API keys for online services (D-028), entered by the owner in Settings. On Windows they're kept
+//! in the config folder encrypted with Windows' data protection for the signed-in user (DPAPI); on
+//! Linux in the desktop's keyring (the Secret Service: GNOME Keyring, KWallet). They're never sent
+//! to the UI once saved, and never written to logs.
 
 use std::path::{Path, PathBuf};
 
@@ -33,10 +34,12 @@ impl Keys {
     }
 }
 
+#[cfg(windows)]
 pub fn file(config_dir: &Path) -> PathBuf {
     config_dir.join("online-keys.bin")
 }
 
+#[cfg(windows)]
 pub fn load(config_dir: &Path) -> Keys {
     let Ok(sealed) = std::fs::read(file(config_dir)) else { return Keys::default() };
     match unprotect(&sealed).and_then(|plain| serde_json::from_slice(&plain).map_err(|e| AppError::msg(e.to_string()))) {
@@ -48,6 +51,7 @@ pub fn load(config_dir: &Path) -> Keys {
     }
 }
 
+#[cfg(windows)]
 pub fn save(config_dir: &Path, keys: &Keys) -> AppResult<()> {
     let target = file(config_dir);
     if keys.youtube.is_none() && keys.spotify.is_none() && keys.soundcloud.is_none() {
@@ -94,13 +98,31 @@ fn unprotect(data: &[u8]) -> AppResult<Vec<u8>> {
 }
 
 #[cfg(not(windows))]
-fn protect(_: &[u8]) -> AppResult<Vec<u8>> {
-    Err(AppError::msg("Saving keys needs Windows."))
+fn entry() -> AppResult<keyring::Entry> {
+    keyring::Entry::new("Digitify", "online-service-keys").map_err(|e| AppError::msg(format!("Your desktop's keyring isn't available: {e}")))
 }
 
 #[cfg(not(windows))]
-fn unprotect(_: &[u8]) -> AppResult<Vec<u8>> {
-    Err(AppError::msg("Saving keys needs Windows."))
+pub fn load(_config_dir: &Path) -> Keys {
+    let stored = entry().and_then(|entry| entry.get_password().map_err(|e| AppError::msg(e.to_string())));
+    match stored {
+        Ok(text) => serde_json::from_str(&text).unwrap_or_else(|e| {
+            log::warn!("the saved online-service keys couldn't be read ({e}); they need entering again");
+            Keys::default()
+        }),
+        Err(_) => Keys::default(),
+    }
+}
+
+#[cfg(not(windows))]
+pub fn save(_config_dir: &Path, keys: &Keys) -> AppResult<()> {
+    let entry = entry()?;
+    if keys.youtube.is_none() && keys.spotify.is_none() && keys.soundcloud.is_none() {
+        let _ = entry.delete_credential();
+        return Ok(());
+    }
+    let text = serde_json::to_string(keys).map_err(|e| AppError::msg(e.to_string()))?;
+    entry.set_password(&text).map_err(|e| AppError::msg(format!("Your desktop's keyring didn't keep the keys: {e}")))
 }
 
 #[cfg(all(test, windows))]

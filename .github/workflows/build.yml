@@ -1,0 +1,87 @@
+# Builds Digitify's installers (D-031): the Windows installer (NSIS) and, for Linux, a .deb package
+# and an AppImage. Runs when run by hand (Actions › Build installers › Run workflow) and on pushes
+# to main; the installers are attached to each run as downloadable artifacts.
+name: Build installers
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  linux:
+    name: Linux (.deb, AppImage)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
+            libxdo-dev libssl-dev libdbus-1-dev libx11-dev pkg-config patchelf file
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Helper engines (PDFium)
+        run: bash scripts/fetch-deps.sh
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npx tauri build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digitify-linux
+          path: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+
+  windows:
+    name: Windows (installer)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Helper engines (mpv, FFmpeg, PDFium)
+        shell: pwsh
+        run: ./scripts/fetch-deps.ps1
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npx tauri build
+
+      - name: Tests
+        working-directory: src-tauri
+        run: cargo test --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digitify-windows
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error

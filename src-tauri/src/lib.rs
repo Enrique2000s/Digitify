@@ -82,6 +82,18 @@ impl AppState {
 }
 
 pub fn run() {
+    // Linux: the video player embeds mpv in an X11 window, so Digitify runs on X11 (XWayland on
+    // Wayland desktops). WebKitGTK's DMA-BUF renderer draws blank windows on some GPUs; it's
+    // turned off unless asked for.
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var_os("GDK_BACKEND").is_none() {
+            std::env::set_var("GDK_BACKEND", "x11");
+        }
+        if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+    }
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::new().level(log::LevelFilter::Info).build())
         .plugin(tauri_plugin_dialog::init())

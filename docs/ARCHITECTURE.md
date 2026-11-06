@@ -35,6 +35,7 @@ Digitify.exe (Tauri 2)
 | `library_folder` | Library folder layout and cloud-sync detection |
 | `db` | SQLite connection, WAL mode, migrations tracked by `PRAGMA user_version` (with a snapshot before upgrading an existing library), snapshots, and swapping in a restored database |
 | `online` | Import from URL (D-028): `link` recognizes links offline; `providers` asks YouTube, Spotify and SoundCloud through oEmbed or their Web APIs; `http` (ureq over Windows' TLS) spaces requests and explains failures; `queue` downloads or saves online items on two workers; `keys` keeps API keys encrypted with DPAPI |
+| `optical::linux` / `optical::win` | The drives behind one interface (`drive_io`): Linux's CD-ROM ioctls and SG_IO, or Windows' DeviceIoControl (D-031) |
 | `reshape` | The Rust half of a migration that SQL can't do alone (D-027: tracks out of albums, loose videos into Videos, the new category order) |
 | `backup` | Library backups in `backups\` (`library-YYYYMMDD-HHMMSS-<kind>.db`); validate and restore, keeping the current state as a backup first |
 | `library` | Catalog queries (views, dashboard, details, full-text search, "select all" ids) and edits (items, people, physical copies, favorites, artwork, removal) |

@@ -255,6 +255,15 @@ A feature is only marked ✅ after it has been implemented and tested. "Tested" 
 | Smart shelves | ✅ | "New smart shelf" on the Shelves page: rules on category, kind of media, tags, year, creator, title, format, progress, favorite, copies, when added or last opened; match all or any; an order and "only the first N". A live count shows how many items match, and a rule that doesn't make sense says why. Smart shelves show a sparkle, fill and order themselves, aren't offered in "Add to shelf", and their menu has "Edit rules…". |
 | Keyboard shortcuts | ✅ | Settings › Keyboard lists every shortcut by where it works (Everywhere, Library views, Readers, Video player). "+" records a new key (Esc cancels); a key already in use asks "Use it here instead?"; keys can be removed, and one action or all reset. Buttons' tooltips and the search box show the current keys. New everywhere: Alt+Home (Home), Ctrl+, (Settings), Ctrl+P (music play/pause), Ctrl+Shift+→/← (next/previous track). |
 
+### Linux (D-031, 2026-11-06)
+| Part | Status | Notes |
+|---|---|---|
+| Linux build | 🟡 | `.github/workflows/build.yml` builds a `.deb` and an AppImage on Ubuntu 22.04 (and the Windows installer); download them from the run's artifacts. Not run yet. |
+| Video on Linux | 🟡 | mpv in an X11 window inside Digitify's, kept clear of the player's bars and menus. Untested on Linux. |
+| Disc drives on Linux | 🟡 | `/dev/sr*` through the kernel's CD-ROM calls. Untested (needs a real drive). |
+| Keys, browser, file manager | 🟡 | Desktop keyring, `xdg-open`. Untested. |
+- **Checked on Windows:** the app still builds and its 58 core tests pass with the Linux changes in place (the Linux code is compiled only on Linux).
+
 ### Big Picture of its own, collections, motion, light mode (D-030, 2026-11-06)
 | Change | Status | Notes |
 |---|---|---|

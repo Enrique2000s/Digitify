@@ -83,7 +83,7 @@ Every product or architecture decision is recorded here with its reason. Anythin
 
 ### D-011 · Platform target
 - **Date:** 2026-10-30 · **Approved by:** project owner
-- **Decision:** Windows 11 x64 first. Windows 10 22H2 is best effort, since it is past end of support.
+- **Decision:** Windows 11 x64 first. Windows 10 22H2 is best effort, since it is past end of support. Linux x64 was added in D-031.
 
 ### D-012 · Language
 - **Date:** 2026-10-30 · **Approved by:** project owner
@@ -100,6 +100,17 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Vendored from commit `78914aef4466eb960965702401634c2cb348e9b1` into `src/vendor/foliate-js/`, with its `pdf.js` replaced by a stand-in so PDF.js (about 10 MB) isn't bundled. PDFs stay with PDFium (D-013).
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
+
+### D-031 · Linux, built by GitHub Actions
+- **Date:** 2026-11-06 · **Approved by:** project owner (asked for a Linux installer; chose GitHub Actions to build it, and the whole app, disc drives included). Widens D-011: Windows 11 stays the main target, Linux x64 is now built too.
+- **Packages:** a `.deb` (it depends on the distribution's `mpv`, `ffmpeg` and `udisks2`) and an AppImage (which needs `mpv` and `ffmpeg` installed), built on Ubuntu 22.04 by `.github/workflows/build.yml`, which also builds the Windows installer. PDFium ships with the app (`scripts/fetch-deps.sh`, pinned and hash-checked, scanned for decryption code like on Windows).
+- **What differs on Linux:**
+  - **Video:** mpv draws into an X11 window inside Digitify's (`--wid`); Digitify runs on X11, through XWayland on Wayland desktops. That window sits above the page, so the player keeps the video clear of its bars while they show, out of the way while a menu is open, and behind the opening curtain until the first frame.
+  - **mpv's control channel** is a Unix socket instead of a named pipe.
+  - **Disc drives:** `/dev/sr0`… (shown as "sr0"), through Linux's CD-ROM calls: disc present, table of contents, CD-Text, raw audio sectors, the DVD copyright descriptor (to detect protection only, D-007), eject; a data disc is mounted through udisks when the desktop hasn't.
+  - **API keys** go to the desktop's keyring (Secret Service) instead of DPAPI.
+  - **The browser and the file manager** open through `xdg-open`; external drives are recognized by their file system's UUID; the private media scheme is `digitify://localhost`.
+- **Not verified yet:** none of this has run on a real Linux machine; the first builds are the check. Disc drives can only be tried with real hardware.
 
 ### D-030 · Big Picture of its own, collections among the items, motion, light mode
 - **Date:** 2026-11-06 · **Approved by:** project owner (asked for the changes)

@@ -1,3 +1,4 @@
+import { driveName } from "../../lib/api";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, Disc3 } from "lucide-react";
 import { useDiscs } from "../../lib/discs";
@@ -13,8 +14,8 @@ export function DiscsBanner() {
     drives.length === 0
       ? "Connect a CD, DVD or Blu-ray drive (an external USB one works) to play discs, rip audio CDs into your library, and import home-made DVDs and Blu-rays."
       : withDisc.length
-        ? `A disc is in drive ${withDisc.map((d) => `${d.letter}:`).join(", ")}. Play it or rip it into your library.`
-        : `Drive ${drives.map((d) => `${d.letter}:`).join(", ")} is ready. Put in a CD, DVD or Blu-ray to play it or rip it into your library.`;
+        ? `A disc is in drive ${withDisc.map((d) => driveName(d.letter)).join(", ")}. Play it or rip it into your library.`
+        : `Drive ${drives.map((d) => driveName(d.letter)).join(", ")} is ready. Put in a CD, DVD or Blu-ray to play it or rip it into your library.`;
   return (
     <Link to="/discs" className="discs-banner" data-blip>
       <span className={`discs-banner-icon${withDisc.length ? " spinning" : ""}`} aria-hidden>

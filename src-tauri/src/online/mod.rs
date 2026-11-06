@@ -243,8 +243,12 @@ fn open_in_browser(url: &str) -> AppResult<()> {
 }
 
 #[cfg(not(windows))]
-fn open_in_browser(_: &str) -> AppResult<()> {
-    Err(AppError::msg("Opening the browser needs Windows."))
+fn open_in_browser(url: &str) -> AppResult<()> {
+    std::process::Command::new("xdg-open")
+        .arg(url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| AppError::msg(format!("couldn't open the browser: {e}")))
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -108,7 +108,7 @@ Scope chosen by the owner in D-023.
 2. ✅ Import from URL (D-028): YouTube, YouTube Music, Spotify and SoundCloud links with the services' own players; downloads only where allowed (direct file links, downloadable SoundCloud tracks); playlists through the owner's API keys; an import queue. To try: real API keys for each service.
 
 ## Release engineering (ongoing)
-NSIS installer, third-party license notices, then decisions on code signing and on an update strategy.
+NSIS installer, third-party license notices, then decisions on code signing and on an update strategy. Linux packages (.deb, AppImage) are built by GitHub Actions (D-031); they need trying on real Linux machines.
 
 ---
 

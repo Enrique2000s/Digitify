@@ -8,7 +8,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use super::win::SECTOR;
+use super::drive_io::SECTOR;
 
 /// Sectors read per request (about 61 KB), within what drives accept.
 pub const BLOCK: u32 = 24;
@@ -110,7 +110,7 @@ pub trait SectorSource: Send {
     fn read(&mut self, lba: u32, count: u32) -> std::io::Result<Vec<u8>>;
 }
 
-impl SectorSource for super::win::Device {
+impl SectorSource for super::drive_io::Device {
     fn read(&mut self, lba: u32, count: u32) -> std::io::Result<Vec<u8>> {
         self.read_audio(lba, count)
     }
