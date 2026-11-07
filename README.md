@@ -35,9 +35,9 @@ Run `Digitify_0.1.0_x64-setup.exe`. It installs for the current user in `%LOCALA
 
 ### Linux (x64)
 Built by GitHub Actions:
-- **`.deb`** (Ubuntu, Debian, Linux Mint, Pop!_OS…): `sudo apt install ./Digitify_0.1.0_amd64.deb`. It brings in `mpv`, `ffmpeg` and `udisks2` from the distribution. Digitify then appears in the applications menu. Uninstall with `sudo apt remove digitify`.
+- **`.deb`** (Ubuntu, Debian, Linux Mint, Pop!_OS…): `sudo apt install ./Digitify_0.1.0_amd64.deb`. It brings in `mpv`, `ffmpeg`, `udisks2` and GStreamer (the web view's sound) from the distribution. Digitify then appears in the applications menu. Uninstall with `sudo apt remove digitify`.
 - **Arch Linux and Arch-based** (Manjaro, EndeavourOS, CachyOS…): put `install-arch.sh` next to the `.deb` and run `bash install-arch.sh` as your normal user. It installs only the missing packages Digitify needs (never `pacman -Syu`), turns the `.deb` into a pacman package and installs it. Uninstall with `sudo pacman -R digitify`. If pacman reports missing files (404), your package lists are out of date: update your system as you normally do, then run it again.
-- **AppImage** (any distribution): install `mpv` and `ffmpeg` with your package manager first, then `chmod +x Digitify_0.1.0_amd64.AppImage` and run it. Nothing is installed; delete the file to remove it.
+- **AppImage** (any distribution; it carries its own GStreamer for the app's sounds): install `mpv` and `ffmpeg` with your package manager first, then `chmod +x Digitify_0.1.0_amd64.AppImage` and run it. Nothing is installed; delete the file to remove it.
 
 On Wayland desktops Digitify runs through XWayland (needed to show video inside its window). Disc drives appear as `sr0`, `sr1`…; your user needs read access to them (usually the `cdrom` or `optical` group).
 
@@ -70,7 +70,7 @@ npm run installer                                                  # optimized b
 ### Linux x64 (Ubuntu 22.04 or newer)
 ```bash
 sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
-  libxdo-dev libssl-dev libdbus-1-dev libx11-dev pkg-config patchelf file mpv ffmpeg
+  libxdo-dev libssl-dev libdbus-1-dev libx11-dev pkg-config patchelf file mpv ffmpeg \n  gstreamer1.0-plugins-base gstreamer1.0-plugins-good
 npm install
 bash scripts/fetch-deps.sh     # pinned PDFium, hash- and DRM-checked
 npm run tauri dev              # development build

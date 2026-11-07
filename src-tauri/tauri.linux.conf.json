@@ -13,8 +13,11 @@
     },
     "linux": {
       "deb": {
-        "depends": ["mpv", "ffmpeg", "udisks2"],
+        "depends": ["mpv", "ffmpeg", "udisks2", "gstreamer1.0-plugins-base", "gstreamer1.0-plugins-good"],
         "section": "video"
+      },
+      "appimage": {
+        "bundleMediaFramework": true
       }
     }
   }

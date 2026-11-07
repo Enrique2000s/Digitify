@@ -3,7 +3,7 @@
 //! Linux in the desktop's keyring (the Secret Service: GNOME Keyring, KWallet). They're never sent
 //! to the UI once saved, and never written to logs.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
@@ -35,7 +35,7 @@ impl Keys {
 }
 
 #[cfg(windows)]
-pub fn file(config_dir: &Path) -> PathBuf {
+pub fn file(config_dir: &Path) -> std::path::PathBuf {
     config_dir.join("online-keys.bin")
 }
 
