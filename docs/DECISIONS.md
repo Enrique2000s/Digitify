@@ -101,6 +101,12 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-038 · Arcade's views: their order, which show, one "All games" or two
+- **Date:** 2026-11-07 · **Approved by:** project owner (asked for this order and these settings)
+- **Views, in their default order:** All PC games, All ROM games, Steam, Epic Games, Xbox, Wii, GameCube, Nintendo 64, Favorites. A store's view shows only where the store exists: Epic Games and Xbox on Windows, Heroic (after Xbox) on Linux. Big Picture's tabs (LB/RB) follow the same list.
+- **Settings › Arcade:** the views are put in order by dragging or with the arrows, and each can be switched off. A switch combines All PC games and All ROM games into one "All games" view, at the first of the two places; separating them again puts both back there. Off by default.
+- **Saved views:** the order is kept with every view, those of the other system included, so a settings file moved between Windows and Linux keeps its order. A view saved before D-038 as "PC" opens as All PC games; a hidden or missing view falls back to the first one shown.
+
 ### D-037 · Arcade: PC store games; reordering per console; sizes; a centered grid
 - **Date:** 2026-11-07 · **Approved by:** project owner (asked for these; chose Steam + Heroic on Linux, watching for the game's own program, and local art first then Steam's)
 - **PC games:** installed games only, read from each store's own files: Steam (Windows and Linux: `libraryfolders.vdf`, `appmanifest_*.acf` with the fully-installed flag; its software and tools left out by the type in `appcache/appinfo.vdf`), Epic Games (Windows: the launcher's `.item` manifests, add-ons and unfinished installs left out), the Xbox app (Windows: `.GamingRoot` / `XboxGames` folders, `MicrosoftGame.config` and the package identity → `shell:AppsFolder\<family>!<app>`), Heroic Games Launcher (Linux: its Epic and GOG `installed.json`). Console `pc` (migration 14). The list follows installs and removals by itself: a light check of the stores' records every 20 seconds.

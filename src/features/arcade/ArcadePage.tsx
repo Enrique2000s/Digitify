@@ -7,7 +7,7 @@ import { api, errorText, onLinux, type ArcadeEmulatorStatus, type ArcadeFolder, 
 import { usePreferences } from "../../lib/preferences";
 import { GridDragProvider, useGridDragProps } from "../../lib/gridDrag";
 import { CardSizeSlider, Dialog, Switch } from "../../components/common";
-import { badgeOf, consoleOf, GameCover, lastPlayed, PLATFORM_ASPECT, PLATFORM_FILTERS, PLATFORM_NAMES, playTime, reorderWithin, SORTS, useArcade, useLaunch, useShownGames } from "./shared";
+import { badgeOf, consoleOf, FILTER_LABELS, GameCover, lastPlayed, PLATFORM_ASPECT, PLATFORM_NAMES, playTime, reorderWithin, SORTS, useArcade, useArcadeFilters, useLaunch, useShownGames } from "./shared";
 
 /** `/arcade` (D-034, D-035, D-037): the games of the emulators and stores on this computer, started the way they start. */
 export function ArcadePage() {
@@ -23,6 +23,7 @@ export function ArcadePage() {
   const [picked, setPicked] = useState<ReadonlySet<number>>(new Set());
   const { launch, error, clearError } = useLaunch();
   const shown = useShownGames(games.data, search);
+  const view = useArcadeFilters();
   const arcade = preferences.arcade;
   const setArcade = (change: Partial<typeof arcade>) => update((current) => ({ arcade: { ...current.arcade, ...change } }));
   const anyEmulator = (status.data?.emulators.some((e) => e.found) || status.data?.stores.some((s) => s.found)) ?? false;
@@ -166,9 +167,9 @@ export function ArcadePage() {
 
       <div className="arcade-toolbar">
         <div className="segmented" role="group" aria-label="Console">
-          {PLATFORM_FILTERS.map((filter) => (
-            <button key={filter.key} type="button" aria-pressed={arcade.platform === filter.key} onClick={() => setArcade({ platform: filter.key })}>
-              {filter.label}
+          {view.filters.map((filter) => (
+            <button key={filter} type="button" aria-pressed={view.current === filter} onClick={() => view.choose(filter)}>
+              {FILTER_LABELS[filter]}
             </button>
           ))}
         </div>
@@ -192,7 +193,7 @@ export function ArcadePage() {
           </select>
         </label>
       </div>
-      {canArrange && shown.length > 1 && <p className="arcade-hint">Drag the games into the order you like{arcade.platform === "all" && !search.trim() ? "" : "; the others keep their places"}.</p>}
+      {canArrange && shown.length > 1 && <p className="arcade-hint">Drag the games into the order you like{view.current === "all" && !search.trim() ? "" : "; the others keep their places"}.</p>}
 
       {games.data && shown.length === 0 ? (
         <div className="empty arcade-empty">

@@ -1,8 +1,7 @@
 import { CircleAlert, Heart, Joystick } from "lucide-react";
 import type { ArcadeGame } from "../../lib/api";
 import { usePad } from "../../lib/gamepad";
-import { usePreferences } from "../../lib/preferences";
-import { badgeOf, GameCover, PLATFORM_ASPECT, PLATFORM_FILTERS, playTime, useArcade, useLaunch, useShownGames } from "./shared";
+import { badgeOf, FILTER_LABELS, GameCover, PLATFORM_ASPECT, playTime, useArcade, useArcadeFilters, useLaunch, useShownGames } from "./shared";
 
 /**
  * Arcade in Big Picture (D-034): the games as big tiles a controller reaches. A plays, LB and RB
@@ -10,16 +9,13 @@ import { badgeOf, GameCover, PLATFORM_ASPECT, PLATFORM_FILTERS, playTime, useArc
  */
 export function ArcadeScreen() {
   const { status, games, starting } = useArcade();
-  const { preferences, update } = usePreferences();
   const shown = useShownGames(games.data, "");
   const { launch, error } = useLaunch();
-  const platform = preferences.arcade.platform;
-  const setPlatform = (key: typeof platform) => update((c) => ({ arcade: { ...c.arcade, platform: key } }));
+  const view = useArcadeFilters();
   usePad((action) => {
-    if (action === "lb" || action === "rb") {
-      const at = PLATFORM_FILTERS.findIndex((f) => f.key === platform);
-      const next = PLATFORM_FILTERS[(at + (action === "rb" ? 1 : -1) + PLATFORM_FILTERS.length) % PLATFORM_FILTERS.length];
-      setPlatform(next.key);
+    if ((action === "lb" || action === "rb") && view.filters.length) {
+      const at = view.filters.indexOf(view.current);
+      view.choose(view.filters[(at + (action === "rb" ? 1 : -1) + view.filters.length) % view.filters.length]);
       return true;
     }
     return;
@@ -29,9 +25,9 @@ export function ArcadeScreen() {
     <>
       <div className="bp-tabs" role="tablist">
         <span className="bp-hint-key">LB</span>
-        {PLATFORM_FILTERS.map((filter) => (
-          <button key={filter.key} type="button" role="tab" aria-selected={filter.key === platform} className="bp-tab" data-bp-focus onClick={() => setPlatform(filter.key)}>
-            {filter.label}
+        {view.filters.map((filter) => (
+          <button key={filter} type="button" role="tab" aria-selected={filter === view.current} className="bp-tab" data-bp-focus onClick={() => view.choose(filter)}>
+            {FILTER_LABELS[filter]}
           </button>
         ))}
         <span className="bp-hint-key">RB</span>

@@ -9,6 +9,7 @@ import { LOOK_ACCENTS, PALETTE_ACCENTS, usePreferences, type Look, type MotionCh
 import { keys, libraryChanged, useAppStatus } from "../../lib/queries";
 import { CardSizeSlider, Switch } from "../../components/common";
 import { ShelfLookPicker } from "../../components/ShelfLookPicker";
+import { ArcadeSettings } from "./ArcadeSettings";
 import { CategoriesPanel } from "./CategoriesPanel";
 import { KeyboardSettings } from "./KeyboardSettings";
 import { BackupsPanel } from "./LibraryTools";
@@ -201,6 +202,8 @@ export function SettingsPage() {
         </section>
 
         <CategoriesPanel />
+
+        <ArcadeSettings />
 
         <SoundSettings />
 

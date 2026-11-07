@@ -139,10 +139,22 @@ export interface Preferences {
   arcade: ArcadePreferences;
 }
 
+/** Arcade's views (D-038): everything, PC or ROM games, one store, one console, favorites. */
+export type ArcadeFilter = "all" | "all-pc" | "all-roms" | "steam" | "epic" | "xbox" | "heroic" | "wii" | "gamecube" | "n64" | "favorites";
+
+/** Their default order; "all" stands in for "all-pc" and "all-roms" when they're combined. */
+export const ARCADE_FILTER_ORDER: ArcadeFilter[] = ["all-pc", "all-roms", "steam", "epic", "xbox", "heroic", "wii", "gamecube", "n64", "favorites"];
+
 export interface ArcadePreferences {
   downloadCovers: boolean;
   n64: "project64" | "rmg";
-  platform: "all" | "gamecube" | "wii" | "n64" | "pc" | "favorites";
+  /** The view shown. */
+  platform: ArcadeFilter;
+  /** The views' order and the hidden ones (Settings › Arcade). */
+  filterOrder: ArcadeFilter[];
+  hiddenFilters: ArcadeFilter[];
+  /** "All PC games" and "All ROM games" as one "All games" view. */
+  combineAll: boolean;
   sort: "title" | "played" | "most" | "added" | "custom";
   /** Box width in Arcade, like the Library's cover size (D-037). */
   cardSize: number;
@@ -226,7 +238,16 @@ export const DEFAULT_PREFERENCES: Preferences = {
   home: { order: [...HOME_SECTIONS], hidden: [] },
   homeWallpaper: null,
   slideshowSeconds: 5,
-  arcade: { downloadCovers: true, n64: "project64", platform: "all", sort: "title", cardSize: 160 },
+  arcade: {
+    downloadCovers: true,
+    n64: "project64",
+    platform: "all-pc",
+    filterOrder: [...ARCADE_FILTER_ORDER],
+    hiddenFilters: [],
+    combineAll: false,
+    sort: "title",
+    cardSize: 160,
+  },
 };
 
 type Raw<T> = { [K in keyof T]?: unknown };
@@ -302,12 +323,24 @@ function sanitizeBigPicture(raw: unknown): Preferences["bigPicture"] {
   };
 }
 
+const isArcadeFilter = (v: unknown): v is ArcadeFilter => v === "all" || ARCADE_FILTER_ORDER.includes(v as ArcadeFilter);
+
 function sanitizeArcade(raw: unknown): ArcadePreferences {
   const pick = picker(raw, DEFAULT_PREFERENCES.arcade);
+  const value = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  // Views saved before D-038: "pc" is now All PC games.
+  const saved = value.platform === "pc" ? "all-pc" : value.platform;
+  let order = Array.isArray(value.filterOrder) ? [...new Set(value.filterOrder.filter((f): f is ArcadeFilter => isArcadeFilter(f) && f !== "all"))] : [];
+  // Views added later join at their default place.
+  for (const [index, filter] of ARCADE_FILTER_ORDER.entries()) if (!order.includes(filter)) order.splice(Math.min(index, order.length), 0, filter);
+  order = order.filter((f) => ARCADE_FILTER_ORDER.includes(f));
   return {
     downloadCovers: pick("downloadCovers", isBoolean),
     n64: pick("n64", (v) => v === "project64" || v === "rmg"),
-    platform: pick("platform", (v) => ["all", "gamecube", "wii", "n64", "pc", "favorites"].includes(v as string)),
+    platform: isArcadeFilter(saved) ? saved : DEFAULT_PREFERENCES.arcade.platform,
+    filterOrder: order,
+    hiddenFilters: Array.isArray(value.hiddenFilters) ? [...new Set(value.hiddenFilters.filter(isArcadeFilter))] : [],
+    combineAll: pick("combineAll", isBoolean),
     sort: pick("sort", (v) => ["title", "played", "most", "added", "custom"].includes(v as string)),
     cardSize: pick("cardSize", (v) => typeof v === "number" && v >= 110 && v <= 260),
   };

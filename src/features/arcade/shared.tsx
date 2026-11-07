@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
-import { api, artworkUrl, errorText, type ArcadeGame, type ArcadePlatform, type ArcadeStore } from "../../lib/api";
-import { usePreferences, type ArcadePreferences } from "../../lib/preferences";
+import { api, artworkUrl, errorText, onLinux, type ArcadeGame, type ArcadePlatform, type ArcadeStore } from "../../lib/api";
+import { usePreferences, type ArcadeFilter, type ArcadePreferences } from "../../lib/preferences";
 
 export const PLATFORM_NAMES: Record<ArcadePlatform, string> = { gamecube: "GameCube", wii: "Wii", n64: "Nintendo 64", pc: "PC" };
 export const PLATFORM_SHORT: Record<ArcadePlatform, string> = { gamecube: "GC", wii: "Wii", n64: "N64", pc: "PC" };
@@ -21,14 +21,71 @@ export function badgeOf(game: ArcadeGame): string {
   return game.platform === "pc" && game.store ? (game.store === "epic" ? "Epic" : STORE_NAMES[game.store]) : PLATFORM_SHORT[game.platform];
 }
 
-export const PLATFORM_FILTERS: { key: ArcadePreferences["platform"]; label: string }[] = [
-  { key: "all", label: "All games" },
-  { key: "gamecube", label: "GameCube" },
-  { key: "wii", label: "Wii" },
-  { key: "n64", label: "Nintendo 64" },
-  { key: "pc", label: "PC" },
-  { key: "favorites", label: "Favorites" },
-];
+/** Arcade's views (D-038), with what each one holds. */
+export const FILTER_LABELS: Record<ArcadeFilter, string> = {
+  all: "All games",
+  "all-pc": "All PC games",
+  "all-roms": "All ROM games",
+  steam: "Steam",
+  epic: "Epic Games",
+  xbox: "Xbox",
+  heroic: "Heroic",
+  wii: "Wii",
+  gamecube: "GameCube",
+  n64: "Nintendo 64",
+  favorites: "Favorites",
+};
+
+export function inFilter(game: ArcadeGame, filter: ArcadeFilter): boolean {
+  switch (filter) {
+    case "all":
+      return true;
+    case "all-pc":
+      return game.platform === "pc";
+    case "all-roms":
+      return game.platform !== "pc";
+    case "steam":
+    case "epic":
+    case "xbox":
+    case "heroic":
+      return game.store === filter;
+    case "favorites":
+      return game.isFavorite;
+    default:
+      return game.platform === filter;
+  }
+}
+
+/** Whether a view exists on this system (Epic and Xbox are Windows-only; Heroic is for Linux). */
+export function filterAvailable(filter: ArcadeFilter): boolean {
+  if (filter === "epic" || filter === "xbox") return !onLinux;
+  if (filter === "heroic") return onLinux;
+  return true;
+}
+
+/** The views in their order: on this system, hidden ones left out, PC and ROM combined if asked. */
+export function arcadeFilters(arcade: ArcadePreferences, withHidden = false): ArcadeFilter[] {
+  const out: ArcadeFilter[] = [];
+  for (const filter of arcade.filterOrder) {
+    if (!filterAvailable(filter)) continue;
+    if (arcade.combineAll && (filter === "all-pc" || filter === "all-roms")) {
+      if (!out.includes("all") && (withHidden || !arcade.hiddenFilters.includes("all"))) out.push("all");
+      continue;
+    }
+    if (!withHidden && arcade.hiddenFilters.includes(filter)) continue;
+    out.push(filter);
+  }
+  return out;
+}
+
+/** The views shown and the one in use (the saved one, or the first shown when it isn't). */
+export function useArcadeFilters() {
+  const { preferences, update } = usePreferences();
+  const filters = arcadeFilters(preferences.arcade);
+  const current: ArcadeFilter = filters.includes(preferences.arcade.platform) ? preferences.arcade.platform : (filters[0] ?? "all");
+  const choose = (filter: ArcadeFilter) => update((c) => ({ arcade: { ...c.arcade, platform: filter } }));
+  return { filters, current, choose };
+}
 
 export const SORTS: { key: ArcadePreferences["sort"]; label: string }[] = [
   { key: "title", label: "Title" },
@@ -74,13 +131,14 @@ export function useArcade() {
 /** The games shown, filtered, searched and sorted as the preferences say. */
 export function useShownGames(games: ArcadeGame[] | undefined, search: string) {
   const { preferences } = usePreferences();
-  const { platform, sort } = preferences.arcade;
+  const { sort } = preferences.arcade;
+  const { current: platform } = useArcadeFilters();
   return useMemo(() => {
     const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const list = (games ?? []).filter(
       (game) =>
         !game.missing &&
-        (platform === "all" || (platform === "favorites" ? game.isFavorite : game.platform === platform)) &&
+        inFilter(game, platform) &&
         words.every((word) => game.title.toLowerCase().includes(word) || game.gameId?.toLowerCase() === word),
     );
     const byTitle = (a: ArcadeGame, b: ArcadeGame) => a.title.localeCompare(b.title, undefined, { sensitivity: "base", numeric: true });
