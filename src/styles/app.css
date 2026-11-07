@@ -2665,41 +2665,6 @@ span.music-play {
   background: var(--gloss);
   color: var(--accent-bright);
 }
-.icon-picker {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.icon-picker button {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  background: var(--gloss);
-  color: var(--muted);
-  box-shadow: var(--raise-sm);
-  cursor: pointer;
-}
-.icon-picker button:hover {
-  color: var(--accent-text);
-}
-.icon-picker button[aria-checked="true"] {
-  border-color: var(--accent-edge);
-  background: var(--gel);
-  color: var(--accent-ink);
-}
-.field-editor {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 200px repeat(3, 36px);
-  align-items: center;
-  gap: 6px;
-}
-.field-editor .choices {
-  grid-column: 1 / -1;
-}
 
 /* ---------------------------------------------------------------- reader (Phase 2) */
 

@@ -101,6 +101,13 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-039 · Fixed categories; Epic games found; Default cover
+- **Date:** 2026-11-07 · **Approved by:** project owner (asked for fixed categories; chose built-in names back, custom fields out of view and Default cover for every game)
+- **Categories are fixed:** Settings › Categories only puts them in order and shows or hides them, like Arcade's views. They can't be renamed, re-iconed, created or deleted, and custom fields can't be added, so the library keeps its structure. Migration 15 gives the built-in categories their own names, icons and reading directions back; categories made earlier by the user stay, fixed. Custom fields are no longer shown, edited or searched; their values stay in each item's metadata. Supersedes the category editing of D-004 and D-005.
+- **Epic games:** a main game's `MainGameAppName` is empty in Epic's manifests, which was taken for add-on content, so no Epic game was found. Fixed.
+- **Launcher art:** a PC game's cover comes from its launcher: Steam's cache and the Xbox app's logos on this computer; with "Download covers", the art Epic's catalog cache (`catcache.bin`) or Heroic's library cache names, and Steam's by app id.
+- **Default cover** (a game's panel and Select): puts the game's own cover back after a picture of the user's: its launcher's for PC games, Dolphin's, GameTDB's or libretro's for the others.
+
 ### D-038 · Arcade's views: their order, which show, one "All games" or two
 - **Date:** 2026-11-07 · **Approved by:** project owner (asked for this order and these settings)
 - **Views, in their default order:** All PC games, All ROM games, Steam, Epic Games, Xbox, Wii, GameCube, Nintendo 64, Favorites. A store's view shows only where the store exists: Epic Games and Xbox on Windows, Heroic (after Xbox) on Linux. Big Picture's tabs (LB/RB) follow the same list.

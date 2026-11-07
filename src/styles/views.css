@@ -981,19 +981,6 @@ html.reordering * {
   color: var(--muted);
 }
 
-.field-editors {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.field-editor {
-  grid-template-columns: 26px minmax(0, 1fr) 200px repeat(3, 36px);
-  background: var(--panel);
-  border-radius: 12px;
-}
-.field-editor .choices {
-  grid-column: 2 / -1;
-}
 .category-list li {
   background: var(--field);
 }

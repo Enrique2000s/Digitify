@@ -3,9 +3,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { open } from "@tauri-apps/plugin-dialog";
 import { BookOpen, Cloud, CloudDownload, ExternalLink, FolderOpen, HardDrive, ImagePlus, Pause, Pencil, Play, Star, Trash, Eye } from "lucide-react";
-import { api, artworkUrl, errorText, type CoverShape, type FieldDef, type ItemDetail, type VersionInfo } from "../../lib/api";
+import { api, artworkUrl, errorText, type CoverShape, type ItemDetail, type VersionInfo } from "../../lib/api";
 import { bytes, date, formatLabel, longDuration, ROLE_LABELS } from "../../lib/format";
-import { libraryChanged, useCategories, useItem } from "../../lib/queries";
+import { libraryChanged, useItem } from "../../lib/queries";
 import { Cover } from "../../components/common";
 import { SourceTag, sourceProps } from "../../components/SourceTag";
 import { coverShapeOf, FILMS, SHAPE_ASPECT, usePreferences } from "../../lib/preferences";
@@ -16,7 +16,6 @@ import { canRead } from "../reader/ReaderPage";
 import { ChaptersPanel, SeriesPanel } from "./SeriesPanels";
 import { canWatch, EpisodesPanel, WatchButton, WatchedButton } from "./WatchPanels";
 import { ArrangePagesDialog } from "../builder/BookBuilder";
-import { customValues, formatCustom } from "./customFields";
 import { EditItemDialog, RemoveItemDialog } from "./forms";
 
 function meta(item: ItemDetail, key: string): string | null {
@@ -36,7 +35,7 @@ function trackLabel(track: Track): string {
   return [track.title || track.language?.toUpperCase(), track.codec?.toUpperCase(), channels].filter(Boolean).join(" · ");
 }
 
-function facts(item: ItemDetail, fields: FieldDef[]): [string, ReactNode][] {
+function facts(item: ItemDetail): [string, ReactNode][] {
   const rows: [string, ReactNode][] = [["Category", item.categoryName]];
   if (item.year) rows.push(["Year", item.year]);
   const add = (label: string, value: ReactNode) => value && rows.push([label, value]);
@@ -78,8 +77,6 @@ function facts(item: ItemDetail, fields: FieldDef[]): [string, ReactNode][] {
       add("Length", duration(Number(meta(item, "durationSec")) * 1000 || null));
       break;
   }
-  const custom = customValues(item.metadata);
-  for (const field of fields) add(field.label, formatCustom(field, custom[field.key]));
   rows.push(["Added", date(item.addedAt)]);
   return rows;
 }
@@ -141,7 +138,6 @@ export function ItemPage() {
   const { id } = useParams({ from: "/item/$id" });
   const queryClient = useQueryClient();
   const query = useItem(Number(id));
-  const categories = useCategories();
   const { preferences } = usePreferences();
   const music = useMusic();
   const [editing, setEditing] = useState(false);
@@ -388,7 +384,7 @@ export function ItemPage() {
           <section className="panel">
             <h2>Details</h2>
             <dl className="facts">
-              {facts(item, categories.data?.find((c) => c.key === item.category)?.fields ?? []).map(([label, value]) => (
+              {facts(item).map(([label, value]) => (
                 <div key={label} style={{ display: "contents" }}>
                   <dt>{label}</dt>
                   <dd>{value}</dd>

@@ -11,7 +11,7 @@ use tauri::State;
 
 use crate::error::{AppError, AppResult};
 use crate::organize::NamedRef;
-use crate::{artwork, categories as custom, files, AppState, Library};
+use crate::{artwork, files, AppState, Library};
 
 // ---------------------------------------------------------------------------------------------
 // Shared helpers
@@ -71,7 +71,7 @@ pub fn upsert_person(conn: &Connection, name: &str) -> rusqlite::Result<i64> {
 }
 
 /// Rebuilds an item's full-text entry: title, people, tags, category, the collections it sits in,
-/// series/album, genre, custom field values and part titles (so tracks and chapters are searchable).
+/// series/album, genre and part titles (so tracks and chapters are searchable).
 pub fn reindex(conn: &Connection, item_id: i64) -> rusqlite::Result<()> {
     conn.execute("DELETE FROM items_fts WHERE rowid = ?1", [item_id])?;
     conn.execute(
@@ -85,7 +85,6 @@ pub fn reindex(conn: &Connection, item_id: i64) -> rusqlite::Result<()> {
                SELECT id, parent_id, name FROM collections WHERE id = i.collection_id \
                UNION ALL SELECT k.id, k.parent_id, k.name FROM collections k JOIN up ON k.id = up.parent_id) \
              SELECT group_concat(name, ' ') FROM up), '') || ' ' || \
-           COALESCE((SELECT group_concat(value, ' ') FROM json_each(i.metadata, '$.custom') WHERE type IN ('text', 'integer', 'real')), '') || ' ' || \
            COALESCE((SELECT group_concat(pt.title, ' ') FROM parts pt WHERE pt.item_id = i.id), '') \
          FROM items i JOIN categories c ON c.id = i.category_id WHERE i.id = ?1",
         [item_id],
@@ -129,8 +128,6 @@ pub struct Category {
     pub item_count: i64,
     /// Kind-specific settings, such as `readingDirection` for comics.
     pub settings: Value,
-    /// The category's custom fields, in order.
-    pub fields: Vec<custom::FieldDef>,
 }
 
 #[tauri::command]
@@ -144,7 +141,7 @@ pub fn categories(conn: &Connection) -> AppResult<Vec<Category>> {
          (SELECT count(*) FROM items i WHERE i.category_id = c.id), c.settings \
          FROM categories c ORDER BY c.sort_order, c.name",
     )?;
-    let mut rows: Vec<Category> = stmt
+    let rows: Vec<Category> = stmt
         .query_map([], |row| {
             let settings: String = row.get(10)?;
             Ok(Category {
@@ -159,13 +156,9 @@ pub fn categories(conn: &Connection) -> AppResult<Vec<Category>> {
                 is_builtin: row.get::<_, i64>(8)? != 0,
                 item_count: row.get(9)?,
                 settings: serde_json::from_str(&settings).unwrap_or_else(|_| Value::Object(Default::default())),
-                fields: Vec::new(),
             })
         })?
         .collect::<Result<_, _>>()?;
-    for category in &mut rows {
-        category.fields = custom::fields_for(conn, category.id)?;
-    }
     Ok(rows)
 }
 

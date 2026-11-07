@@ -108,7 +108,7 @@ export function SearchPage() {
       eyebrow="Search"
       title={`“${q}”`}
       icon={<Search size={26} strokeWidth={2.4} aria-hidden />}
-      empty={<div className="empty"><p>No matches for “{q}”. Search looks at titles, people, series, albums, genres, tags, collections and custom fields.</p></div>}
+      empty={<div className="empty"><p>No matches for “{q}”. Search looks at titles, people, series, albums, genres, tags and collections.</p></div>}
     />
   );
 }

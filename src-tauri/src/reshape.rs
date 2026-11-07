@@ -20,6 +20,13 @@ pub fn after(conn: &Connection, version: i64) -> AppResult<()> {
     if version == 14 {
         widen_check(conn, "arcade_games", "CHECK (platform IN ('gamecube', 'wii', 'n64'))", "CHECK (platform IN ('gamecube', 'wii', 'n64', 'pc'))")?;
     }
+    if version == 15 {
+        // D-039: category names back and custom field values out of search.
+        let items: Vec<i64> = conn.prepare("SELECT id FROM items")?.query_map([], |row| row.get(0))?.collect::<Result<_, _>>()?;
+        for item in items {
+            reindex(conn, item)?;
+        }
+    }
     Ok(())
 }
 

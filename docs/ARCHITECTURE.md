@@ -40,7 +40,7 @@ Digitify.exe (Tauri 2)
 | `backup` | Library backups in `backups\` (`library-YYYYMMDD-HHMMSS-<kind>.db`); validate and restore, keeping the current state as a backup first |
 | `library` | Catalog queries (views, dashboard, details, full-text search, "select all" ids) and edits (items, people, physical copies, favorites, artwork, removal) |
 | `organize` | Nested collections (tree queries with recursive CTEs, moving without cycles, deleting by moving contents up), tags (merge on rename, pruned when unused), and bulk edits applied in one transaction, limited to what fits every selected item (`bulk_actions`, D-027) |
-| `categories` | The user's own categories and custom fields (`field_definitions`; values in `metadata.custom`), category order and visibility |
+| `categories` | Category order and visibility (categories are fixed, D-039; old custom field values stay in `metadata.custom`) |
 | `import` | Background import jobs: scan, then in parallel fingerprint, skip duplicates and extract metadata, then save. Also attaches files to existing items. |
 | `formats` | Embedded metadata readers: EPUB OPF, ComicInfo.xml in any comic archive, audio tags (lofty), ffprobe |
 | `artwork` | Artwork cache: cover (≤1400 px) and thumb (400 px wide) JPEGs keyed by content hash, plus average color |
@@ -101,7 +101,7 @@ React + TypeScript via Vite, organized by feature:
 | `lib/music/` | The music provider: the queue and playback state from `music-event`s, shared by every screen |
 | `features/builder/` | "Book from images…" and "Arrange pages": the page grid with pointer dragging (the window's file drop takes over HTML drag and drop) |
 | `vendor/foliate-js/` | foliate-js at a pinned commit (D-014; see its README), loaded only when an ebook opens |
-| `features/` | Home (category tiles), library views (virtualized grid/list/shelf with multi-select and the bulk bar), organize (collections, tags, move dialogs), item page and forms (with custom fields), import UI, onboarding, settings (Categories, Sound) |
+| `features/` | Home (category tiles), library views (virtualized grid/list/shelf with multi-select and the bulk bar), organize (collections, tags, move dialogs), item page and forms, import UI, onboarding, settings (Categories, Sound) |
 | `lib/` | Typed API, TanStack Query hooks, paged item cache, preferences (look, palette, theme, accent, motion, music, shelf material, Home's layout, shortcuts), accent contrast math, formatting, `shortcuts.ts` (every keyboard action, its default keys and the user's), `activity.ts` (recording time for Statistics), `reorder.ts` (dragging rows into a new order, for short lists and virtualized ones) |
 | `lib/ambient/` | Ambient music and interface sounds: the "Morning Lounge" composition and synth, the playback engine, and its React provider |
 | `styles/` | Breeze tokens and app styles (D-016); `looks.css` (Cinematic and the Breeze palettes, as token overrides) and `views.css` (shelf materials, detailed and carousel views, smart shelves, Home's widgets) (D-023). Nunito, Inter and Archivo are bundled via Fontsource, never loaded online |

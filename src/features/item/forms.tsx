@@ -5,7 +5,6 @@ import { Plus, X } from "lucide-react";
 import { api, errorText, type Handler, type ItemDetail, type PersonInput } from "../../lib/api";
 import { libraryChanged, useCategories } from "../../lib/queries";
 import { Dialog, Field } from "../../components/common";
-import { CustomFieldInputs, customValues, fromText, toText } from "./customFields";
 
 /** Disc formats a film or series in Movies & Series can come from (D-029). */
 export const DISC_FORMATS: [string, string][] = [
@@ -97,10 +96,8 @@ export function EditItemDialog({ item, open, onOpenChange }: { item: ItemDetail;
   const [description, setDescription] = useState("");
   const [people, setPeople] = useState<PersonInput[]>([]);
   const [fields, setFields] = useState<Record<string, string>>({});
-  const [custom, setCustom] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const categoryInfo = categories.data?.find((c) => c.key === category);
-  const customFields = categoryInfo?.fields ?? [];
 
   useEffect(() => {
     if (!open) return;
@@ -116,9 +113,6 @@ export function EditItemDialog({ item, open, onOpenChange }: { item: ItemDetail;
       readingDirection: str(metadata.readingDirection),
       discFormat: str(metadata.discFormat),
     });
-    const stored = customValues(item.metadata);
-    const definitions = categories.data?.flatMap((c) => c.fields) ?? [];
-    setCustom(Object.fromEntries(definitions.map((field) => [field.key, toText(field, stored[field.key])])));
     setError(null);
     // Only when the dialog opens: later category changes must not reset what's being typed.
   }, [open, item]);
@@ -136,19 +130,6 @@ export function EditItemDialog({ item, open, onOpenChange }: { item: ItemDetail;
     if (handler === "comic") metadata.readingDirection = fields.readingDirection || defaultDirection;
     if (category === "video" && fields.discFormat) metadata.discFormat = fields.discFormat;
     else delete metadata.discFormat;
-    const values = { ...customValues(item.metadata) };
-    try {
-      for (const field of customFields) {
-        const value = fromText(field, custom[field.key] ?? "");
-        if (value === undefined) delete values[field.key];
-        else values[field.key] = value;
-      }
-    } catch (reason) {
-      setError(errorText(reason));
-      return;
-    }
-    if (Object.keys(values).length) metadata.custom = values;
-    else delete metadata.custom;
     const parsedYear = year.trim() ? Number(year) : null;
     if (parsedYear !== null && (!Number.isInteger(parsedYear) || parsedYear < 0 || parsedYear > 3000)) {
       setError("Year should be a whole number, like 1927.");
@@ -244,7 +225,6 @@ export function EditItemDialog({ item, open, onOpenChange }: { item: ItemDetail;
           </select>
         </Field>
       )}
-      <CustomFieldInputs fields={customFields} values={custom} onChange={setCustom} />
       <Field label="Description">
         <textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} />
       </Field>

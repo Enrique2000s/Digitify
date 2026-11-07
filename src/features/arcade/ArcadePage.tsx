@@ -340,6 +340,15 @@ function BulkBar({
         >
           <ImageDown size={15} /> Find covers
         </button>
+        <button
+          type="button"
+          className="btn btn-sm"
+          disabled={none || busy}
+          title="Puts back each game's own cover: its launcher's for PC games, the emulator's or the download's for the others (pictures you chose give way)"
+          onClick={() => void run(() => api.arcadeFindCovers(ids, preferences.arcade.downloadCovers, true), "Default covers back")}
+        >
+          <RotateCcw size={15} /> Default covers
+        </button>
         <button type="button" className="btn btn-sm btn-danger" disabled={none || busy} onClick={() => setConfirming(true)}>
           <Trash size={15} /> Remove from Digitify
         </button>
@@ -481,8 +490,13 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
           <button type="button" className="btn" onClick={() => void changeCover()}>
             <ImagePlus size={16} /> Change cover
           </button>
-          <button type="button" className="btn" onClick={() => void run(() => api.arcadeFindCovers([game.id], preferences.arcade.downloadCovers))}>
-            <ImageDown size={16} /> Find cover
+          <button
+            type="button"
+            className="btn"
+            title={pc ? "Puts back the cover its launcher shows" : "Puts back the cover from the emulator or the download"}
+            onClick={() => void run(() => api.arcadeFindCovers([game.id], preferences.arcade.downloadCovers, true))}
+          >
+            <RotateCcw size={16} /> Default cover
           </button>
           <button type="button" className="btn" onClick={() => void run(() => api.arcadeReveal(game.id))}>
             <FolderOpen size={16} /> {pc ? "Show folder" : "Show file"}

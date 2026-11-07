@@ -400,7 +400,7 @@ fn scan(app: &AppHandle, library: &std::sync::Arc<Library>, download_covers: boo
     }
     // PC games installed through their stores (D-037): known ones keep their names (a rename stays).
     let mut store_games = 0;
-    let mut store_covers: Vec<(i64, PathBuf)> = Vec::new();
+    let mut store_art = StoreArt::new();
     for found in stores::scan_all() {
         for game in found.games {
             store_games += 1;
@@ -416,18 +416,7 @@ fn scan(app: &AppHandle, library: &std::sync::Arc<Library>, download_covers: boo
             })?;
             added += usize::from(new);
             present.insert(id);
-            if let Some(cover) = game.cover {
-                store_covers.push((id, cover));
-            }
-        }
-    }
-    // Their own art first (Steam's cache, the Xbox app's logos), for games without a cover yet.
-    for (id, path) in store_covers {
-        let bare: bool = library.db.with(|conn| Ok(conn.query_row("SELECT cover_key IS NULL FROM arcade_games WHERE id = ?1", [id], |row| row.get(0))?))?;
-        if bare {
-            if let Ok(bytes) = std::fs::read(&path) {
-                let _ = set_cover(library, id, &bytes, "store");
-            }
+            store_art.insert(key, (game.cover, game.cover_url));
         }
     }
 
@@ -453,7 +442,7 @@ fn scan(app: &AppHandle, library: &std::sync::Arc<Library>, download_covers: boo
         let rows = conn.prepare("SELECT id FROM arcade_games WHERE cover_key IS NULL AND missing = 0")?.query_map([], |row| row.get(0))?.collect::<Result<_, _>>()?;
         Ok(rows)
     })?;
-    let covers_queued = find_covers(app, library, &bare, dolphin_covers.as_deref(), download_covers)?;
+    let covers_queued = find_covers(app, library, &bare, dolphin_covers.as_deref(), download_covers, Some(store_art))?;
     let _ = app.emit("arcade-changed", ());
     let found = files.len() + store_games;
     log::info!("arcade scan: {found} games found ({store_games} from stores), {added} new, {missing} missing, {covers_queued} covers to fetch");
@@ -463,7 +452,18 @@ fn scan(app: &AppHandle, library: &std::sync::Arc<Library>, download_covers: boo
 /// Covers for `ids`: Dolphin's cache at once; when `download`, GameTDB (GameCube and Wii, by disc ID)
 /// and libretro-thumbnails (every console, by name; D-035) in the background. Returns how many
 /// games wait for a download.
-fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], dolphin_covers: Option<&Path>, download: bool) -> AppResult<usize> {
+/// Each store game's art by its path (`store://…`): on this computer, and its launcher's online.
+type StoreArt = HashMap<String, (Option<PathBuf>, Option<String>)>;
+
+fn store_art_now() -> StoreArt {
+    stores::scan_all()
+        .into_iter()
+        .flat_map(|found| found.games)
+        .map(|g| (format!("store://{}/{}", g.store.key(), g.key), (g.cover, g.cover_url)))
+        .collect()
+}
+
+fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], dolphin_covers: Option<&Path>, download: bool, store_art: Option<StoreArt>) -> AppResult<usize> {
     type Row = (i64, Option<String>, String, String, String, Option<String>, Option<String>);
     let games: Vec<Row> = library.db.with(|conn| {
         let mut stmt = conn.prepare("SELECT id, game_id, platform, path, title, store, store_key FROM arcade_games WHERE id = ?1")?;
@@ -476,11 +476,26 @@ fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], 
         Ok(out)
     })?;
     let mut queue = Vec::new();
+    let mut store_art = store_art;
     for (id, game_id, platform, path, title, store, store_key) in games {
-        // PC games: Steam's public art by app id (D-037); other stores' games keep a drawn cover.
+        // PC games (D-037, D-039): their launcher's art on this computer (Steam's cache, the Xbox app's
+        // logos); else, with downloads, the art their launcher shows (Epic's and Heroic's records name
+        // it; Steam's by app id).
         if platform == "pc" {
-            if let (true, Some("steam"), Some(app)) = (download, store.as_deref(), store_key.as_deref()) {
-                queue.push((id, stores::steam_cover_urls(app)));
+            let art = store_art.get_or_insert_with(store_art_now).get(&path).cloned().unwrap_or_default();
+            if let Some(bytes) = art.0.and_then(|p| std::fs::read(p).ok()) {
+                if set_cover(library, id, &bytes, "store").is_ok() {
+                    continue;
+                }
+            }
+            if download {
+                let mut urls: Vec<String> = art.1.into_iter().collect();
+                if let (Some("steam"), Some(app)) = (store.as_deref(), store_key.as_deref()) {
+                    urls.extend(stores::steam_cover_urls(app));
+                }
+                if !urls.is_empty() {
+                    queue.push((id, urls));
+                }
             }
             continue;
         }
@@ -514,10 +529,12 @@ fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], 
                 for url in urls {
                     let source = if url.contains("gametdb") {
                         "gametdb"
+                    } else if url.contains("libretro") {
+                        "libretro"
                     } else if url.contains("steamstatic") {
                         "steam"
                     } else {
-                        "libretro"
+                        "store"
                     };
                     if let Some(bytes) = crate::online::http::image(&url) {
                         if set_cover(&library, id, &bytes, source).is_ok() {
@@ -675,15 +692,19 @@ pub async fn arcade_forget_many(state: State<'_, AppState>, ids: Vec<i64>) -> Ap
     .await
 }
 
-/// Looks for covers again for some games (not those with a picture of the user's).
+/// Looks for covers again for some games: those with a picture of the user's keep it, unless
+/// `reset` (Default cover, D-039) puts back the launcher's or emulator's own.
 #[tauri::command]
-pub async fn arcade_find_covers(app: AppHandle, state: State<'_, AppState>, ids: Vec<i64>, download: bool) -> AppResult<usize> {
+pub async fn arcade_find_covers(app: AppHandle, state: State<'_, AppState>, ids: Vec<i64>, download: bool, reset: bool) -> AppResult<usize> {
     let library = state.library()?;
     crate::library::blocking(move || {
         library.db.with(|conn| {
             let tx = conn.transaction()?;
             for id in &ids {
-                tx.execute("UPDATE arcade_games SET cover_key = NULL, cover_color = NULL, cover_source = NULL WHERE id = ?1 AND coalesce(cover_source, '') <> 'user'", [id])?;
+                tx.execute(
+                    "UPDATE arcade_games SET cover_key = NULL, cover_color = NULL, cover_source = NULL WHERE id = ?1 AND (?2 OR coalesce(cover_source, '') <> 'user')",
+                    params![id, reset],
+                )?;
             }
             tx.commit()?;
             Ok(())
@@ -699,7 +720,7 @@ pub async fn arcade_find_covers(app: AppHandle, state: State<'_, AppState>, ids:
             }
             Ok(out)
         })?;
-        let queued = find_covers(&app, &library, &ids, dolphin.as_deref(), download)?;
+        let queued = find_covers(&app, &library, &ids, dolphin.as_deref(), download, None)?;
         let _ = app.emit("arcade-changed", ());
         Ok(queued)
     })

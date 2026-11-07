@@ -5,19 +5,10 @@ export type Handler = "book" | "comic" | "video" | "audio" | "generic" | "image"
 export type Ownership = "digital" | "online";
 export type SortKey = "title" | "added" | "year" | "creator" | "durationAsc" | "durationDesc" | "takenDesc" | "takenAsc" | "relevance" | "custom";
 export type ImportMode = "reference" | "copy";
-export type FieldKind = "text" | "longtext" | "number" | "date" | "rating" | "boolean" | "choice" | "url";
 
 export interface NamedRef {
   id: number;
   name: string;
-}
-
-/** A custom field; item values live in `metadata.custom[key]`. */
-export interface FieldDef {
-  key: string;
-  label: string;
-  kind: FieldKind;
-  choices: string[];
 }
 
 export interface AppStatus {
@@ -43,7 +34,6 @@ export interface Category {
   itemCount: number;
   /** Kind-specific settings, such as `readingDirection` for comics. */
   settings: { readingDirection?: "ltr" | "rtl" } & Record<string, unknown>;
-  fields: FieldDef[];
 }
 
 export interface ItemCard {
@@ -551,22 +541,6 @@ export interface BulkActions {
   direction: boolean;
 }
 
-export interface FieldInput {
-  key?: string | null;
-  label: string;
-  kind: FieldKind;
-  choices: string[];
-}
-
-export interface CategoryInput {
-  name: string;
-  icon: string;
-  /** Only when creating: a category's kind of media never changes. */
-  handler?: Handler | null;
-  readingDirection?: "ltr" | "rtl" | null;
-  fields: FieldInput[];
-}
-
 export interface PersonInput {
   name: string;
   role: string;
@@ -699,7 +673,8 @@ export const api = {
   arcadeEmulatorFolders: (emulator: ArcadeEmulator, folders: { path: string; recursive: boolean }[] | null) => invoke<void>("arcade_emulator_folders", { emulator, folders }),
   arcadeSetFavoriteMany: (ids: number[], favorite: boolean) => invoke<void>("arcade_set_favorite_many", { ids, favorite }),
   arcadeForgetMany: (ids: number[]) => invoke<number>("arcade_forget_many", { ids }),
-  arcadeFindCovers: (ids: number[], download: boolean) => invoke<number>("arcade_find_covers", { ids, download }),
+  /** `reset`: pictures the user chose give way too (Default cover, D-039). */
+  arcadeFindCovers: (ids: number[], download: boolean, reset = false) => invoke<number>("arcade_find_covers", { ids, download, reset }),
   arcadeRename: (id: number, title: string) => invoke<void>("arcade_rename", { id, title }),
   arcadeReorder: (ids: number[]) => invoke<void>("arcade_reorder", { ids }),
   /** Brings back the store games taken off the list. */
@@ -724,9 +699,6 @@ export const api = {
   bookmarkRename: (id: number, label: string | null) => invoke<void>("bookmark_rename", { id, label }),
   bookmarkRemove: (id: number) => invoke<void>("bookmark_remove", { id }),
   progressSave: (id: number, page: number, pages: number) => invoke<void>("progress_save", { id, page, pages }),
-  categoryCreate: (category: CategoryInput) => invoke<string>("category_create", { category }),
-  categoryUpdate: (key: string, category: CategoryInput) => invoke<void>("category_update", { key, category }),
-  categoryDelete: (key: string, moveTo: string | null) => invoke<void>("category_delete", { key, moveTo }),
   categoriesArrange: (order: string[], hidden: string[]) => invoke<void>("categories_arrange", { order, hidden }),
   dashboard: () => invoke<Dashboard>("dashboard_get"),
   item: (id: number) => invoke<ItemDetail>("item_get", { id }),

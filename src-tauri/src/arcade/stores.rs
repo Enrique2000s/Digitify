@@ -3,7 +3,7 @@
 //! games are listed, read from each store's own files on this computer; nothing is asked online.
 //! A game starts through its store, the way its own launcher would start it.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// A store Arcade reads.
@@ -64,6 +64,8 @@ pub struct StoreGame {
     pub launch: String,
     /// Art for it already on this computer.
     pub cover: Option<PathBuf>,
+    /// The art its launcher shows for it, online (Epic's and Heroic's own records name it; D-039).
+    pub cover_url: Option<String>,
 }
 
 /// What was found for one store: where it is, and its installed games.
@@ -283,6 +285,7 @@ pub(crate) fn steam_manifest(text: &str, apps: &Path, root: &Path) -> Option<Sto
         store: Store::Steam,
         launch: format!("steam://rungameid/{id}"),
         cover: steam_cover(root, &id),
+        cover_url: None,
         key: id,
         title,
         install_dir,
@@ -390,11 +393,17 @@ fn epic_manifests() -> PathBuf {
 fn epic() -> (Option<String>, Vec<StoreGame>) {
     let dir = epic_manifests();
     let Ok(entries) = std::fs::read_dir(&dir) else { return (None, Vec::new()) };
+    // The launcher's catalog cache, beside the manifests: its art for each game.
+    let art = dir.parent().and_then(|data| std::fs::read(data.join("Catalog").join("catcache.bin")).ok()).map(|bin| epic_art(&bin)).unwrap_or_default();
     let games = entries
         .filter_map(Result::ok)
         .filter(|e| e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("item")))
         .filter_map(|e| std::fs::read_to_string(e.path()).ok())
         .filter_map(|text| epic_manifest(&text))
+        .map(|mut game: StoreGame| {
+            game.cover_url = art.get(&game.key).cloned();
+            game
+        })
         .collect();
     (Some("Epic Games Launcher".into()), games)
 }
@@ -402,6 +411,52 @@ fn epic() -> (Option<String>, Vec<StoreGame>) {
 #[cfg(not(windows))]
 fn epic() -> (Option<String>, Vec<StoreGame>) {
     (None, Vec::new())
+}
+
+/// Epic's catalog cache (`catcache.bin`, Base64 of a JSON list): each app's tall cover, the one the
+/// launcher's library shows.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn epic_art(bin: &[u8]) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    let Some(json) = base64_decode(bin) else { return out };
+    let Ok(serde_json::Value::Array(items)) = serde_json::from_slice::<serde_json::Value>(&json) else { return out };
+    for item in items {
+        let images = item.get("keyImages").and_then(|x| x.as_array()).cloned().unwrap_or_default();
+        let url = |kind: &str| images.iter().find(|i| i.get("type").and_then(|t| t.as_str()) == Some(kind)).and_then(|i| i.get("url")?.as_str().map(str::to_string));
+        let Some(url) = url("DieselGameBoxTall").or_else(|| url("DieselGameBox")) else { continue };
+        for release in item.get("releaseInfo").and_then(|x| x.as_array()).into_iter().flatten() {
+            if let Some(app) = release.get("appId").and_then(|x| x.as_str()) {
+                out.entry(app.to_string()).or_insert_with(|| url.clone());
+            }
+        }
+    }
+    out
+}
+
+/// Standard Base64 (whitespace skipped).
+fn base64_decode(text: &[u8]) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(text.len() * 3 / 4);
+    let (mut acc, mut bits) = (0u32, 0u32);
+    for &c in text {
+        let v = match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' | b'-' => 62,
+            b'/' | b'_' => 63,
+            b'=' => break,
+            b' ' | b'\r' | b'\n' | b'\t' => continue,
+            _ => return None,
+        };
+        acc = (acc << 6) | u32::from(v);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+            acc &= (1 << bits) - 1;
+        }
+    }
+    Some(out)
 }
 
 /// One Epic `.item` manifest: an installed game (not a plug-in, not unfinished), or none.
@@ -413,7 +468,7 @@ pub(crate) fn epic_manifest(text: &str) -> Option<StoreGame> {
     if v.get("bIsIncompleteInstall").and_then(|x| x.as_bool()) == Some(true) {
         return None;
     }
-    if s("MainGameAppName").is_some_and(|main| main != app) {
+    if s("MainGameAppName").is_some_and(|main| !main.is_empty() && main != app) {
         return None; // add-on content
     }
     let categories: Vec<String> = v.get("AppCategories").and_then(|x| x.as_array()).map(|a| a.iter().filter_map(|c| c.as_str().map(str::to_string)).collect()).unwrap_or_default();
@@ -428,6 +483,7 @@ pub(crate) fn epic_manifest(text: &str) -> Option<StoreGame> {
         install_dir: PathBuf::from(s("InstallLocation")?),
         launch: format!("com.epicgames.launcher://apps/{namespace}%3A{item}%3A{app}?action=launch&silent=true"),
         cover: None,
+        cover_url: None,
         key: app,
     })
 }
@@ -504,7 +560,7 @@ fn xbox_game(content: &Path) -> Option<StoreGame> {
             .map(|file| content.join(file))
             .find(|p| p.is_file())
     });
-    Some(StoreGame { store: Store::Xbox, key: family.clone(), title, install_dir: content.to_path_buf(), launch: format!("shell:AppsFolder\\{family}!{app}"), cover })
+    Some(StoreGame { store: Store::Xbox, key: family.clone(), title, install_dir: content.to_path_buf(), launch: format!("shell:AppsFolder\\{family}!{app}"), cover, cover_url: None })
 }
 
 /// The publisher part of a package family name: the first 8 bytes of SHA-256 over the publisher
@@ -525,13 +581,35 @@ pub(crate) fn publisher_id(publisher: &str) -> String {
 // Heroic Games Launcher (Linux): its Epic (Legendary) and GOG games
 
 #[cfg(not(windows))]
-fn heroic_dirs() -> Vec<PathBuf> {
+fn heroic_bases() -> Vec<PathBuf> {
     let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
     let config = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from).unwrap_or_else(|| home.join(".config"));
-    [config.join("heroic"), home.join(".var/app/com.heroicgameslauncher.hgl/config/heroic")]
+    [config.join("heroic"), home.join(".var/app/com.heroicgameslauncher.hgl/config/heroic")].into_iter().filter(|p| p.is_dir()).collect()
+}
+
+#[cfg(not(windows))]
+fn heroic_dirs() -> Vec<PathBuf> {
+    heroic_bases()
         .into_iter()
         .flat_map(|base| [base.join("legendaryConfig/legendary"), base.join("gog_store")])
         .filter(|p| p.is_dir())
+        .collect()
+}
+
+/// The art Heroic's library shows for each game, from its library caches (`art_square`, its tall
+/// cover; else `art_cover`), by app name.
+#[cfg_attr(windows, allow(dead_code))]
+pub(crate) fn heroic_art(text: &str) -> HashMap<String, String> {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(text) else { return HashMap::new() };
+    ["library", "games"]
+        .iter()
+        .filter_map(|k| v.get(*k).and_then(|x| x.as_array()))
+        .flatten()
+        .filter_map(|g| {
+            let app = g.get("app_name")?.as_str()?.to_string();
+            let art = ["art_square", "art_cover"].iter().find_map(|k| g.get(*k).and_then(|x| x.as_str()).filter(|s| s.starts_with("http")))?;
+            Some((app, art.to_string()))
+        })
         .collect()
 }
 
@@ -554,6 +632,20 @@ fn heroic() -> (Option<String>, Vec<StoreGame>) {
     }
     let mut seen = HashSet::new();
     games.retain(|g| seen.insert(g.key.clone()));
+    let mut art = HashMap::new();
+    for base in heroic_bases() {
+        for file in ["store_cache/legendary_library.json", "store_cache/gog_library.json", "gog_store/library.json"] {
+            if let Ok(text) = std::fs::read_to_string(base.join(file)) {
+                for (app, url) in heroic_art(&text) {
+                    art.entry(app).or_insert(url);
+                }
+            }
+        }
+    }
+    for game in &mut games {
+        let app = game.key.split_once(':').map_or(game.key.as_str(), |(_, a)| a);
+        game.cover_url = art.get(app).cloned();
+    }
     (Some("Heroic Games Launcher".into()), games)
 }
 
@@ -577,6 +669,7 @@ pub(crate) fn heroic_legendary(text: &str) -> Vec<StoreGame> {
                 install_dir: PathBuf::from(v.get("install_path")?.as_str()?),
                 launch: format!("heroic://launch/legendary/{app}"),
                 cover: None,
+                cover_url: None,
                 key: format!("legendary:{app}"),
             })
         })
@@ -604,7 +697,7 @@ pub(crate) fn heroic_gog(text: &str, library: &str) -> Vec<StoreGame> {
             let app = g.get("appName")?.as_str()?.to_string();
             let install = PathBuf::from(g.get("install_path")?.as_str()?);
             let title = titles.get(&app).cloned().unwrap_or_else(|| install.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| app.clone()));
-            Some(StoreGame { store: Store::Heroic, title, install_dir: install, launch: format!("heroic://launch/gog/{app}"), cover: None, key: format!("gog:{app}") })
+            Some(StoreGame { store: Store::Heroic, title, install_dir: install, launch: format!("heroic://launch/gog/{app}"), cover: None, cover_url: None, key: format!("gog:{app}") })
         })
         .collect()
 }
@@ -674,6 +767,27 @@ mod tests {
         assert_eq!(g.launch, "com.epicgames.launcher://apps/fn%3A4fe7%3AFortnite?action=launch&silent=true");
         assert!(epic_manifest(&item.replace("\"MainGameAppName\":\"Fortnite\"", "\"MainGameAppName\":\"Other\"")).is_none());
         assert!(epic_manifest(&item.replace("\"bIsIncompleteInstall\":false", "\"bIsIncompleteInstall\":true")).is_none());
+        // A main game's MainGameAppName is empty (D-039).
+        assert!(epic_manifest(&item.replace("\"MainGameAppName\":\"Fortnite\"", "\"MainGameAppName\":\"\"")).is_some());
+    }
+
+    #[test]
+    fn launcher_art_from_epic_and_heroic() {
+        let json = r#"[{"keyImages":[{"type":"DieselGameBox","url":"https://x/wide"},{"type":"DieselGameBoxTall","url":"https://x/tall"}],"releaseInfo":[{"appId":"Sugar"}]},{"keyImages":[],"releaseInfo":[{"appId":"Other"}]}]"#;
+        let alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut b64 = String::new();
+        for chunk in json.as_bytes().chunks(3) {
+            let n = chunk.iter().enumerate().fold(0u32, |acc, (i, &b)| acc | (u32::from(b) << (16 - 8 * i)));
+            for i in 0..4 {
+                b64.push(if i <= chunk.len() { alphabet[((n >> (18 - 6 * i)) & 63) as usize] as char } else { '=' });
+            }
+        }
+        let art = epic_art(b64.as_bytes());
+        assert_eq!(art.get("Sugar").map(String::as_str), Some("https://x/tall"));
+        assert!(!art.contains_key("Other"));
+        let heroic = heroic_art(r#"{"library":[{"app_name":"Sable","art_square":"https://h/sq","art_cover":"https://h/c"},{"app_name":"NoArt","art_square":"fallback"}]}"#);
+        assert_eq!(heroic.get("Sable").map(String::as_str), Some("https://h/sq"));
+        assert!(!heroic.contains_key("NoArt"));
     }
 
     #[test]
