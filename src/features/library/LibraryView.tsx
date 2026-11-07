@@ -59,18 +59,59 @@ interface CardSource {
 }
 
 /** A view's collections (D-030) first, then the query's items. */
+/**
+ * A view's cards: its collections, each at its place (first by default; anywhere among the items in
+ * a custom order, D-036), and its items filling the other places in order.
+ */
 class LedSource implements CardSource {
+  private readonly at: Map<number, ItemCard>;
+  /** The collections' places, in order. */
+  readonly slots: number[];
   constructor(
-    private readonly lead: ItemCard[],
+    lead: ItemCard[],
+    places: Map<number, number> | null,
     private readonly items: PageCache | null,
-  ) {}
+  ) {
+    const placed = lead.map((card, i) => [places?.get(card.id) ?? i, card] as const).sort((a, b) => a[0] - b[0]);
+    // Places must be distinct and in reach; anything odd falls back to the next free place.
+    const at = new Map<number, ItemCard>();
+    for (const [place, card] of placed) {
+      let p = Math.max(0, place);
+      while (at.has(p)) p++;
+      at.set(p, card);
+    }
+    this.at = at;
+    this.slots = [...at.keys()].sort((a, b) => a - b);
+  }
+  /** How many collections stand before `index`. */
+  private before(index: number): number {
+    let lo = 0;
+    let hi = this.slots.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.slots[mid] < index) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  }
   get(index: number): ItemCard | undefined {
-    return index < this.lead.length ? this.lead[index] : this.items?.get(index - this.lead.length);
+    return this.at.get(index) ?? this.items?.get(index - this.before(index));
   }
   ensure(first: number, last: number): void {
-    const n = this.lead.length;
-    if (this.items && last >= n) this.items.ensure(Math.max(0, first - n), last - n);
+    if (!this.items) return;
+    const from = Math.max(0, first - this.before(first));
+    const to = last - this.before(last + 1);
+    if (to >= from) this.items.ensure(from, to);
   }
+}
+
+/** Item aspects with the collections' (16:9) put in at their places. */
+function withSlots(slots: number[], total: number, itemAspects: number[]): number[] {
+  const out: number[] = [];
+  const places = new Set(slots);
+  let next = 0;
+  for (let i = 0; i < total; i++) out.push(places.has(i) ? 16 / 9 : (itemAspects[next++] ?? itemAspects[itemAspects.length - 1] ?? 2 / 3));
+  return out;
 }
 
 /** Keeps the pages for the rendered rows loaded. */
@@ -85,8 +126,10 @@ function useEnsureRows(cache: CardSource, total: number, perRow: number, rows: {
 interface ViewProps {
   cache: CardSource;
   total: number;
-  /** How many collections lead the view. */
+  /** How many collections the view holds. */
   lead: number;
+  /** Where they stand (D-036). */
+  slots: number[];
   square: boolean;
   /** The view's usual cover shape (an item may have its own). */
   shape: CoverShape | "book";
@@ -133,7 +176,7 @@ function aspectsOf(codes: string, total: number, fallback: number, defaults: Par
  * at one height, each as wide as its shape needs (the view's kinds and shapes come from the core,
  * so every row is known before its cards load).
  */
-function GridView({ cache, total, lead, shape, params }: ViewProps) {
+function GridView({ cache, total, lead, slots, shape, params }: ViewProps) {
   const { preferences } = usePreferences();
   const scroll = useRef<HTMLDivElement>(null);
   const width = useWidth(scroll);
@@ -143,7 +186,7 @@ function GridView({ cache, total, lead, shape, params }: ViewProps) {
   const artHeight = Math.round(preferences.cardSize * 1.5);
   const viewAspect = SHAPE_ASPECT[shape];
   const layout = useMemo(() => {
-    const widths = [...Array<number>(lead).fill(16 / 9), ...aspectsOf(shapes.data ?? "", total - lead, viewAspect, preferences.coverShapes)].map((aspect) => Math.round(artHeight * aspect));
+    const widths = withSlots(slots, total, aspectsOf(shapes.data ?? "", total - lead, viewAspect, preferences.coverShapes)).map((aspect) => Math.round(artHeight * aspect));
     const rows: number[] = [0];
     let used = 0;
     widths.forEach((w, i) => {
@@ -157,7 +200,7 @@ function GridView({ cache, total, lead, shape, params }: ViewProps) {
     });
     rows.push(total);
     return { widths, starts: rows };
-  }, [shapes.data, total, lead, width, artHeight, viewAspect, preferences.coverShapes]);
+  }, [shapes.data, total, lead, slots, width, artHeight, viewAspect, preferences.coverShapes]);
   const rowCount = Math.max(0, layout.starts.length - 1);
   const rowHeight = artHeight + 44 + GAP + 10;
   // Light mode draws fewer rows ahead of the scroll.
@@ -184,7 +227,7 @@ function GridView({ cache, total, lead, shape, params }: ViewProps) {
                   const item = cache.get(index);
                   const w = layout.widths[index];
                   return item?.collection ? (
-                    <CollectionCard key={`c${item.id}`} item={item} width={w} />
+                    <CollectionCard key={`c${item.id}`} item={item} width={w} index={index} />
                   ) : item ? (
                     <MediaCard key={index} item={item} index={index} width={w} transitionId={item.id} />
                   ) : (
@@ -219,7 +262,7 @@ function ListView({ cache, total }: ViewProps) {
           {rows.map((row) => {
             const item = cache.get(row.index);
             if (!item) return <div key={row.key} className="list-row" style={{ top: row.start, height: 54 }} />;
-            if (item.collection) return <CollectionRowItem key={`c${item.id}`} item={item} top={row.start} />;
+            if (item.collection) return <CollectionRowItem key={`c${item.id}`} item={item} top={row.start} index={row.index} />;
             return <ListRow key={row.key} item={item} index={row.index} top={row.start} />;
           })}
         </div>
@@ -349,7 +392,7 @@ function ShelfView({ cache, total, square, shape }: ViewProps) {
                 const index = row.index * perShelf + i;
                 if (index >= total) return null;
                 const item = cache.get(index);
-                if (item?.collection) return <CollectionShelfItem key={`c${item.id}`} item={item} height={height * 0.78} />;
+                if (item?.collection) return <CollectionShelfItem key={`c${item.id}`} item={item} height={height * 0.78} index={index} />;
                 return item ? <ShelfItem key={index} item={item} index={index} height={height} spines={spines} /> : null;
               })}
             </div>
@@ -462,7 +505,7 @@ function DetailedView({ cache, total }: ViewProps) {
         {rows.map((row) => {
           const item = cache.get(row.index);
           if (!item) return <div key={row.key} className="detail-row skeleton" style={{ top: row.start, height: rowHeight }} />;
-          if (item.collection) return <CollectionDetailRow key={`c${item.id}`} item={item} top={row.start} height={rowHeight} />;
+          if (item.collection) return <CollectionDetailRow key={`c${item.id}`} item={item} top={row.start} height={rowHeight} index={row.index} />;
           return <DetailedRow key={row.key} item={item} index={row.index} top={row.start} height={rowHeight} blurb={blurbs.get(item.id)} />;
         })}
       </div>
@@ -476,7 +519,7 @@ function DetailedView({ cache, total }: ViewProps) {
  * dragging, clicking a cover or the slider move along; Enter or a click on the front cover opens it.
  * Every cover's shape is known before its card loads (from the core), so posters, squares, CDs and
  * horizontal frames keep their places and sizes as they come in. */
-function CarouselView({ cache, total, lead, shape, params }: ViewProps) {
+function CarouselView({ cache, total, lead, slots, shape, params }: ViewProps) {
   const navigate = useNavigate();
   const { preferences } = usePreferences();
   const shapeOf = useCoverShape();
@@ -493,8 +536,8 @@ function CarouselView({ cache, total, lead, shape, params }: ViewProps) {
   latest.current = current;
   const shapes = useQuery({ queryKey: ["shapes", params], queryFn: () => api.queryShapes(params), staleTime: 30_000 });
   const aspects = useMemo(
-    () => [...Array<number>(lead).fill(16 / 9), ...aspectsOf(shapes.data ?? "", total - lead, SHAPE_ASPECT[shape], preferences.coverShapes)],
-    [shapes.data, total, lead, shape, preferences.coverShapes],
+    () => withSlots(slots, total, aspectsOf(shapes.data ?? "", total - lead, SHAPE_ASPECT[shape], preferences.coverShapes)),
+    [shapes.data, total, lead, slots, shape, preferences.coverShapes],
   );
 
   // A new sort or filter starts at the beginning; a shorter list keeps the index in range.
@@ -854,7 +897,14 @@ export function LibraryView({
     [collections, filter, level.data],
   );
   const onlyCollections = filter === "collections";
-  const source = useMemo(() => new LedSource(leadCards, onlyCollections ? null : cache), [leadCards, onlyCollections, cache]);
+  // In a custom order, collections stand where they were put among the items (D-036).
+  const slotsQuery = useQuery({
+    queryKey: ["custom-slots", params, leadCards.map((c) => c.id)],
+    queryFn: () => api.customOrderSlots(params, leadCards.map((c) => c.id)),
+    enabled: sort === "custom" && !!orderKey && leadCards.length > 0 && !onlyCollections,
+  });
+  const places = useMemo(() => (sort === "custom" && !onlyCollections && slotsQuery.data ? new Map(slotsQuery.data) : null), [sort, onlyCollections, slotsQuery.data]);
+  const source = useMemo(() => new LedSource(leadCards, places, onlyCollections ? null : cache), [leadCards, places, onlyCollections, cache]);
   const waiting = itemTotal == null || (!!collections && (filter === "" || onlyCollections) && !level.data);
   const total = waiting ? null : leadCards.length + (onlyCollections ? 0 : itemTotal);
   const lead = leadCards.length;
@@ -878,15 +928,21 @@ export function LibraryView({
         ? {
             onDrop: (dragged: number, target: number, after: boolean) => {
               void (async () => {
-                const ids = await api.queryIds(params);
-                await api.customOrderSet(orderKey!, moved(ids, dragged, target, after));
+                // Items and collections in one order (D-036): the collections at their places.
+                const items = await api.queryIds(params);
+                const combined: number[] = [];
+                const places = new Map(source.slots.map((slot) => [slot, source.get(slot)!.id] as const));
+                let next = 0;
+                for (let i = 0; i < items.length + places.size; i++) combined.push(places.get(i) ?? items[next++]);
+                await api.customOrderSet(orderKey!, moved(combined.filter((id) => id !== undefined), dragged, target, after));
                 libraryChanged(queryClient);
+                void queryClient.invalidateQueries({ queryKey: ["custom-slots"] });
               })();
             },
           }
         : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [arrangeable, selection.active, layout, orderKey, JSON.stringify(params), queryClient],
+    [arrangeable, selection.active, layout, orderKey, JSON.stringify(params), queryClient, source],
   );
   const [arranging, setArranging] = useState(false);
 
@@ -1014,15 +1070,15 @@ export function LibraryView({
         {total === 0 ? (
           <div style={{ padding: "8px 40px" }}>{empty}</div>
         ) : total != null && layout === "list" ? (
-          <ListView cache={source} total={total} lead={lead} square={!!square} shape={shape} params={params} />
+          <ListView cache={source} total={total} lead={lead} slots={source.slots} square={!!square} shape={shape} params={params} />
         ) : total != null && layout === "shelf" ? (
-          <ShelfView cache={source} total={total} lead={lead} square={!!square} shape={shape} params={params} />
+          <ShelfView cache={source} total={total} lead={lead} slots={source.slots} square={!!square} shape={shape} params={params} />
         ) : total != null && layout === "detailed" ? (
-          <DetailedView cache={source} total={total} lead={lead} square={!!square} shape={shape} params={params} />
+          <DetailedView cache={source} total={total} lead={lead} slots={source.slots} square={!!square} shape={shape} params={params} />
         ) : total != null && layout === "carousel" ? (
-          <CarouselView cache={source} total={total} lead={lead} square={!!square} shape={shape} params={params} />
+          <CarouselView cache={source} total={total} lead={lead} slots={source.slots} square={!!square} shape={shape} params={params} />
         ) : total != null ? (
-          <GridView cache={source} total={total} lead={lead} square={!!square} shape={shape} params={params} />
+          <GridView cache={source} total={total} lead={lead} slots={source.slots} square={!!square} shape={shape} params={params} />
         ) : null}
         </div>
         {arranging && orderKey && (
@@ -1033,7 +1089,7 @@ export function LibraryView({
             onClose={() => setArranging(false)}
           />
         )}
-        {itemTotal != null && <BulkBar base={params} total={itemTotal} />}
+        {itemTotal != null && <BulkBar base={params} total={onlyCollections ? lead : itemTotal + lead} collections={leadCards.map((c) => c.id)} itemsShown={!onlyCollections} />}
       </div>
       </GridDragProvider>
     </SelectionProvider>

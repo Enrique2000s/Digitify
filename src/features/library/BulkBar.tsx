@@ -296,44 +296,70 @@ function PlaylistMenu({ ids, onError }: { ids: number[]; onError: (message: stri
   );
 }
 
-function RemoveDialog({ ids, open, onOpenChange, onRemoved }: { ids: number[]; open: boolean; onOpenChange: (open: boolean) => void; onRemoved: () => void }) {
+function RemoveDialog({ ids, collections, open, onOpenChange, onRemoved }: { ids: number[]; collections: number[]; open: boolean; onOpenChange: (open: boolean) => void; onRemoved: () => void }) {
   const queryClient = useQueryClient();
   const [trash, setTrash] = useState(false);
   useEffect(() => {
     if (open) setTrash(false);
   }, [open]);
+  const parts = [ids.length ? plural(ids.length, "item") : null, collections.length ? plural(collections.length, "collection") : null].filter(Boolean);
   return (
     <BulkDialogFrame
       open={open}
       onOpenChange={onOpenChange}
-      title={`Remove ${plural(ids.length, "item")} from your library?`}
-      description="Their details, copies and progress are removed from Digitify. Files on your computer are not deleted."
-      confirm="Remove from library"
+      title={`Remove ${parts.join(" and ")}?`}
+      description={[
+        ids.length > 0 ? "The items' details, copies and progress are removed from Digitify. Files on your computer are not deleted." : "",
+        collections.length > 0 ? "Deleting a collection keeps what's inside it: its items and collections move up one level." : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      confirm={ids.length ? "Remove" : collections.length === 1 ? "Delete collection" : "Delete collections"}
       danger
       onConfirm={async () => {
-        const report = await api.itemRemove(ids, trash);
+        // Collections first, outermost last doesn't matter: what's inside always moves up a level.
+        for (const id of collections) await api.collectionDelete(id);
+        const report = ids.length ? await api.itemRemove(ids, trash) : { errors: [] as string[] };
         libraryChanged(queryClient);
+        void queryClient.invalidateQueries({ queryKey: ["collections"] });
+        void queryClient.invalidateQueries({ queryKey: ["collection-tree"] });
         onRemoved();
         if (report.errors.length) {
           throw new Error(`Removed from the library, but some copies couldn't be moved to the Recycle Bin: ${report.errors.join("; ")}`);
         }
       }}
     >
-      <label className="checkbox">
-        <input type="checkbox" checked={trash} onChange={(event) => setTrash(event.target.checked)} />
-        Also move copies Digitify made in the library folder to the Recycle Bin
-      </label>
+      {ids.length > 0 && (
+        <label className="checkbox">
+          <input type="checkbox" checked={trash} onChange={(event) => setTrash(event.target.checked)} />
+          Also move copies Digitify made in the library folder to the Recycle Bin
+        </label>
+      )}
     </BulkDialogFrame>
   );
 }
 
 /** The floating bar while selecting: what to do with the selected items. */
-export function BulkBar({ base, total }: { base: Omit<QueryParams, "offset" | "limit">; total: number }) {
+export function BulkBar({
+  base,
+  total,
+  collections = [],
+  itemsShown = true,
+}: {
+  base: Omit<QueryParams, "offset" | "limit">;
+  total: number;
+  /** The view's collections (negative card ids), selectable too (D-036). */
+  collections?: number[];
+  itemsShown?: boolean;
+}) {
   const selection = useSelection();
   const categories = useCategories();
   const [dialog, setDialog] = useState<BulkDialog>(null);
   const [error, setError] = useState<string | null>(null);
-  const ids = selection?.active ? [...selection.selected] : [];
+  const picked = selection?.active ? [...selection.selected] : [];
+  // Items have positive ids; collections come as negative ones.
+  const ids = picked.filter((id) => id > 0);
+  const collectionIds = picked.filter((id) => id < 0).map((id) => -id);
   // What fits every selected item comes from the core, so the bar and the edits follow one set of rules.
   const actions = useQuery({
     queryKey: ["bulk-actions", [...ids].sort((a, b) => a - b).join(",")],
@@ -344,12 +370,13 @@ export function BulkBar({ base, total }: { base: Omit<QueryParams, "offset" | "l
   const fits = ids.length > 0 ? actions : undefined;
   if (!selection?.active) return null;
   const none = ids.length === 0;
+  const nothing = picked.length === 0;
   const close = (open: boolean) => !open && setDialog(null);
 
   const selectAll = async () => {
     setError(null);
     try {
-      selection.set(await api.queryIds(base));
+      selection.set([...collections, ...(itemsShown ? await api.queryIds(base) : [])]);
     } catch (reason) {
       setError(errorText(reason));
     }
@@ -358,8 +385,8 @@ export function BulkBar({ base, total }: { base: Omit<QueryParams, "offset" | "l
   return (
     <>
       <div className="bulk-bar" role="toolbar" aria-label="Selected items">
-        <strong aria-live="polite">{ids.length === 0 ? "Select items" : `${ids.length.toLocaleString()} selected`}</strong>
-        {ids.length < total ? (
+        <strong aria-live="polite">{nothing ? "Select items" : `${picked.length.toLocaleString()} selected`}</strong>
+        {picked.length < total ? (
           <button type="button" className="btn btn-sm btn-ghost" onClick={() => void selectAll()}>
             Select all {total.toLocaleString()}
           </button>
@@ -373,7 +400,7 @@ export function BulkBar({ base, total }: { base: Omit<QueryParams, "offset" | "l
         <button type="button" className="btn btn-sm" disabled={none} onClick={() => setDialog("tags")}>
           <Tags size={15} /> Tags…
         </button>
-        <button type="button" className="btn btn-sm" disabled={none} onClick={() => setDialog("move")}>
+        <button type="button" className="btn btn-sm" disabled={nothing} onClick={() => setDialog("move")}>
           <FolderInput size={15} /> Move…
         </button>
         <button type="button" className="btn btn-sm" disabled={none} onClick={() => setDialog("edit")}>
@@ -382,7 +409,7 @@ export function BulkBar({ base, total }: { base: Omit<QueryParams, "offset" | "l
         <button type="button" className="btn btn-sm" disabled={none} onClick={() => setDialog("cover")}>
           <ImagePlus size={15} /> Cover…
         </button>
-        <button type="button" className="btn btn-sm btn-danger" disabled={none} onClick={() => setDialog("remove")}>
+        <button type="button" className="btn btn-sm btn-danger" disabled={nothing} onClick={() => setDialog("remove")}>
           <Trash size={15} /> Remove…
         </button>
         <button type="button" className="btn btn-sm btn-primary" onClick={selection.stop}>
@@ -393,12 +420,13 @@ export function BulkBar({ base, total }: { base: Omit<QueryParams, "offset" | "l
       <TagsDialog ids={ids} open={dialog === "tags"} onOpenChange={close} />
       <EditDialog ids={ids} actions={fits} open={dialog === "edit"} onOpenChange={close} />
       <CoverDialog ids={ids} actions={fits} open={dialog === "cover"} onOpenChange={close} />
-      <RemoveDialog ids={ids} open={dialog === "remove"} onOpenChange={close} onRemoved={() => selection.set([])} />
+      <RemoveDialog ids={ids} collections={collectionIds} open={dialog === "remove"} onOpenChange={close} onRemoved={() => selection.set([])} />
       <MoveDialog
         open={dialog === "move"}
         onOpenChange={close}
         ids={ids}
-        title={`Move ${plural(ids.length, "item")}`}
+        collections={collectionIds}
+        title={`Move ${[ids.length ? plural(ids.length, "item") : null, collectionIds.length ? plural(collectionIds.length, "collection") : null].filter(Boolean).join(" and ")}`}
         initialCategory={base.category ?? categories.data?.[0]?.key ?? "books"}
         initialCollection={base.collection ?? null}
       />

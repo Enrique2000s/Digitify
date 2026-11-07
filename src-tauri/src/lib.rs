@@ -197,6 +197,7 @@ pub fn run() {
             arcade::arcade_find_covers,
             arcade::arcade_rename,
             arcade::arcade_reorder,
+            library::custom_order_slots,
             online::online_import,
             online::online_queue,
             online::online_cancel,

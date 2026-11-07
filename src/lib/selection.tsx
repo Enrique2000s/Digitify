@@ -33,8 +33,8 @@ export function useSelectionState(cache: { get(index: number): { id: number } | 
           const [first, last] = from < index ? [from, index] : [index, from];
           for (let i = first; i <= last; i++) {
             const item = cache.get(i);
-            // Collections among the items (negative ids) aren't selectable.
-            if (item && item.id > 0) next.add(item.id);
+            // Collections among the items (negative ids) are selected too (D-036).
+            if (item && item.id !== 0) next.add(item.id);
           }
         } else if (next.has(id)) next.delete(id);
         else next.add(id);

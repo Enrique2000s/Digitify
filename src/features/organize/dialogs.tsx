@@ -148,6 +148,7 @@ export function MoveDialog({
   open,
   onOpenChange,
   ids,
+  collections = [],
   title,
   initialCategory,
   initialCollection,
@@ -156,6 +157,8 @@ export function MoveDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   ids: number[];
+  /** Collections to move too (D-036): inside another collection of their category, or to its top. */
+  collections?: number[];
   title: string;
   initialCategory: string;
   initialCollection: number | null;
@@ -209,8 +212,14 @@ export function MoveDialog({
             disabled={busy}
             onClick={() =>
               void run(async () => {
-                await api.itemsBulk(ids, [{ op: "move", category, collection }]);
+                if (collections.length && category !== initialCategory) {
+                  throw new Error("Collections stay in their category; pick a place in it, or move only items.");
+                }
+                for (const id of collections) await api.collectionMove(id, collection);
+                if (ids.length) await api.itemsBulk(ids, [{ op: "move", category, collection }]);
                 libraryChanged(queryClient);
+                void queryClient.invalidateQueries({ queryKey: ["collections"] });
+                void queryClient.invalidateQueries({ queryKey: ["collection-tree"] });
                 onMoved?.();
               })
             }

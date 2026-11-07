@@ -23,7 +23,8 @@ export function GridDragProvider({ value, children }: { value: GridDrag | null; 
 /** Props that make a card draggable while a provider above enables dragging; none otherwise. */
 export function useGridDragProps(id: number) {
   const drag = useContext(Context);
-  return useMemo(() => (drag && id > 0 ? dragProps(id, drag.onDrop) : {}), [drag, id]);
+  // Items have positive ids; collections among them negative ones (D-036).
+  return useMemo(() => (drag && id !== 0 ? dragProps(id, drag.onDrop) : {}), [drag, id]);
 }
 
 const THRESHOLD = 6;

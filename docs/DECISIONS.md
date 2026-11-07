@@ -101,6 +101,11 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-036 · Collections: selected, placed and deleted like items
+- **Date:** 2026-11-07 · **Approved by:** project owner (asked for it; chose deleting a collection to keep what's inside, and collections anywhere among the items in a custom order)
+- **Selecting:** in every view, a collection among the items can be selected like an item (click, Shift+click ranges, Select all). Item-only actions (tags, edit, cover, playlist) apply to the selected items; Move moves collections too (inside another collection of their category, or to its top); Remove deletes the selected collections — their items and collections move up one level, nothing leaves the library — and removes the selected items as before, with one confirmation.
+- **Custom order:** a collection takes a place among the items like any of them, dragged into place; collections never placed stay first. Places are stored per view in `custom_order_collections` (migration 13), sharing one count with the view's items; an order of items alone (the Arrange dialog) leaves the collections' places as they were.
+
 ### D-035 · Arcade, more: folders, N64 covers, selecting, custom order, quiet while playing; dragging in the Library
 - **Date:** 2026-11-07 · **Approved by:** project owner (asked for these; chose libretro-thumbnails for N64 covers, "hide and go silent" while playing, and dragging covers in place in the Library)
 - **Game folders per emulator:** each emulator's folders can be changed, removed or added in Arcade, replacing the ones read from its settings (`arcade_emulator_folders`, migration 12), and set back to the emulator's own. A game that isn't in any game folder anymore is hidden as missing, with its play time kept.

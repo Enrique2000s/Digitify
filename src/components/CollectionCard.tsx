@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { Link } from "@tanstack/react-router";
-import { Folder } from "lucide-react";
+import { Check, Folder } from "lucide-react";
+import { useSelectable } from "../lib/selection";
 import type { Collection, ItemCard } from "../lib/api";
 import { Collage } from "./Collage";
 
@@ -53,12 +54,24 @@ function Art({ item }: { item: ItemCard }) {
 
 const to = (item: ItemCard) => ({ to: "/library/$scope" as const, params: { scope: item.category }, search: { collection: item.collection!.id } });
 
-/** A collection in the grid: a horizontal cover with its first items fanned out, its name and count. */
-export function CollectionCard({ item, width }: { item: ItemCard; width?: number }) {
+/** The tick on a selected collection, like an item's (D-036). */
+function Tick({ selecting, checked }: { selecting: boolean; checked: boolean }) {
+  if (!selecting) return null;
   return (
-    <Link {...to(item)} className="card collection-card" style={width ? { width } : undefined} data-blip>
-      <div className="card-art" data-shape="landscape" style={{ aspectRatio: 16 / 9 }}>
+    <span className={`card-check${checked ? " on" : ""}`} aria-hidden>
+      {checked && <Check size={15} strokeWidth={3.2} />}
+    </span>
+  );
+}
+
+/** A collection in the grid: a horizontal cover with its first items fanned out, its name and count. */
+export function CollectionCard({ item, width, index }: { item: ItemCard; width?: number; index?: number }) {
+  const { selecting, checked, props } = useSelectable(item.id, index);
+  return (
+    <Link {...to(item)} className="card collection-card" style={width ? { width } : undefined} data-blip {...props}>
+      <div className="card-art" data-shape="landscape" style={{ aspectRatio: 16 / 9, position: "relative" }}>
         <Art item={item} />
+        <Tick selecting={selecting} checked={checked} />
       </div>
       <div className="card-title">{item.title}</div>
       <div className="card-sub">{item.subtitle}</div>
@@ -67,11 +80,13 @@ export function CollectionCard({ item, width }: { item: ItemCard; width?: number
 }
 
 /** A collection as a row of the list view. */
-export function CollectionRowItem({ item, top }: { item: ItemCard; top: number }) {
+export function CollectionRowItem({ item, top, index }: { item: ItemCard; top: number; index?: number }) {
+  const { selecting, checked, props } = useSelectable(item.id, index);
   return (
-    <Link {...to(item)} className="list-row collection-list-row" style={{ top, height: 54 }}>
-      <span className="thumb" data-shape="landscape">
+    <Link {...to(item)} className="list-row collection-list-row" style={{ top, height: 54 }} {...props}>
+      <span className="thumb" data-shape="landscape" style={{ position: "relative" }}>
         <Art item={item} />
+        <Tick selecting={selecting} checked={checked} />
       </span>
       <span className="title">{item.title}</span>
       <span className="cell">{item.subtitle}</span>
@@ -83,23 +98,27 @@ export function CollectionRowItem({ item, top }: { item: ItemCard; top: number }
 }
 
 /** A collection standing on a shelf. */
-export function CollectionShelfItem({ item, height }: { item: ItemCard; height: number }) {
+export function CollectionShelfItem({ item, height, index }: { item: ItemCard; height: number; index?: number }) {
+  const { selecting, checked, props } = useSelectable(item.id, index);
   return (
-    <Link {...to(item)} className="shelf-item" title={item.title} data-blip>
+    <Link {...to(item)} className="shelf-item" title={item.title} data-blip {...props}>
       <div className="shelf-cover collection-shelf" data-shape="landscape" style={{ width: height * (16 / 9), aspectRatio: 16 / 9, position: "relative" }}>
         <Art item={item} />
+        <Tick selecting={selecting} checked={checked} />
       </div>
     </Link>
   );
 }
 
 /** A collection in the detailed view. */
-export function CollectionDetailRow({ item, top, height }: { item: ItemCard; top: number; height: number }) {
+export function CollectionDetailRow({ item, top, height, index }: { item: ItemCard; top: number; height: number; index?: number }) {
   const c = item.collection!;
+  const { selecting, checked, props } = useSelectable(item.id, index);
   return (
-    <Link {...to(item)} className="detail-row" style={{ top, height }} data-blip>
-      <div className="detail-cover" data-shape="landscape" style={{ height: height - 26, aspectRatio: 16 / 9 }}>
+    <Link {...to(item)} className="detail-row" style={{ top, height }} data-blip {...props}>
+      <div className="detail-cover" data-shape="landscape" style={{ height: height - 26, aspectRatio: 16 / 9, position: "relative" }}>
         <Art item={item} />
+        <Tick selecting={selecting} checked={checked} />
       </div>
       <div className="detail-body">
         <div className="detail-title">

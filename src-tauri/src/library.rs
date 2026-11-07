@@ -456,21 +456,79 @@ fn query(conn: &Connection, params: &QueryParams) -> AppResult<QueryResult> {
 // Custom order
 
 /// Saves a view's hand-arranged order. The order is kept per view; ids are stored in the given order.
+/// Saves a view's custom order. Positive ids are items; negative ids are collections placed among
+/// them (D-036), `-id` being the collection. An order of items alone (the Arrange dialog) leaves the
+/// collections' places as they were.
 pub fn set_custom_order(conn: &mut Connection, view: &str, ids: &[i64]) -> AppResult<()> {
     let view = view.trim();
     if view.is_empty() || view.len() > 100 {
         return Err(AppError::msg("unknown view"));
     }
+    let with_collections = ids.iter().any(|id| *id < 0);
     let tx = conn.transaction()?;
     tx.execute("DELETE FROM custom_order WHERE view = ?1", [view])?;
+    if with_collections {
+        tx.execute("DELETE FROM custom_order_collections WHERE view = ?1", [view])?;
+    }
     {
         let mut insert = tx.prepare("INSERT OR IGNORE INTO custom_order (view, item_id, position) SELECT ?1, id, ?3 FROM items WHERE id = ?2")?;
+        let mut place = tx.prepare("INSERT OR IGNORE INTO custom_order_collections (view, collection_id, position) SELECT ?1, id, ?3 FROM collections WHERE id = ?2")?;
         for (position, id) in ids.iter().enumerate() {
-            insert.execute(params![view, id, position as i64])?;
+            if *id > 0 {
+                insert.execute(params![view, id, position as i64])?;
+            } else if *id < 0 {
+                place.execute(params![view, -id, position as i64])?;
+            }
         }
     }
     tx.commit()?;
     Ok(())
+}
+
+/// Where the given collections stand among a view's items in its custom order (D-036): for each,
+/// its index in the combined list. Collections never placed come first, in the order given; placed
+/// ones go between the items by position; items never arranged come last.
+#[tauri::command]
+pub async fn custom_order_slots(state: State<'_, AppState>, params: QueryParams, collections: Vec<i64>) -> AppResult<Vec<(i64, i64)>> {
+    with_library(&state, move |library| library.db.with(|conn| custom_slots(conn, &params, &collections)))
+        .await
+}
+
+pub fn custom_slots(conn: &Connection, params: &QueryParams, collections: &[i64]) -> AppResult<Vec<(i64, i64)>> {
+    let Some(view) = params.custom.clone().filter(|_| params.sort.as_deref() == Some("custom")) else {
+        return Ok(collections.iter().enumerate().map(|(i, id)| (*id, i as i64)).collect());
+    };
+    let mut placed: Vec<(i64, i64)> = Vec::new();
+    let mut unplaced: Vec<i64> = Vec::new();
+    {
+        let mut stmt = conn.prepare("SELECT position FROM custom_order_collections WHERE view = ?1 AND collection_id = ?2")?;
+        for id in collections {
+            // The view's cards carry collections as negative ids.
+            match stmt.query_row(params![view, id.abs()], |row| row.get::<_, i64>(0)).optional()? {
+                Some(position) => placed.push((*id, position)),
+                None => unplaced.push(*id),
+            }
+        }
+    }
+    placed.sort_by_key(|(_, position)| *position);
+    let QueryParts { joins, filter, args, counted, .. } = QueryParts::new(params);
+    let mut args: Vec<SqlValue> = args[..counted].to_vec();
+    args.push(SqlValue::Text(view));
+    let view_arg = args.len();
+    args.push(SqlValue::Integer(0));
+    let below_arg = args.len();
+    let glue = if filter.trim().is_empty() { " WHERE " } else { " AND " };
+    let sql = format!(
+        "SELECT count(*) FROM items i{joins}{filter}{glue}(SELECT co.position FROM custom_order co WHERE co.view = ?{view_arg} AND co.item_id = i.id) < ?{below_arg}"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let mut slots: Vec<(i64, i64)> = unplaced.iter().enumerate().map(|(i, id)| (*id, i as i64)).collect();
+    for (k, (id, position)) in placed.iter().enumerate() {
+        args[below_arg - 1] = SqlValue::Integer(*position);
+        let items_before: i64 = stmt.query_row(params_from_iter(args.iter()), |row| row.get(0))?;
+        slots.push((*id, unplaced.len() as i64 + k as i64 + items_before));
+    }
+    Ok(slots)
 }
 
 #[tauri::command]
@@ -1263,6 +1321,30 @@ pub async fn file_reveal(state: State<'_, AppState>, id: i64) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn collections_take_places_among_items_in_a_custom_order() {
+        let mut conn = crate::db::memory();
+        let books: i64 = conn.query_row("SELECT id FROM categories WHERE key = 'books'", [], |r| r.get(0)).unwrap();
+        for (id, title) in [(1, "A"), (2, "B"), (3, "C")] {
+            conn.execute("INSERT INTO items (id, category_id, title, sort_title) VALUES (?1, ?2, ?3, ?3)", params![id, books, title]).unwrap();
+        }
+        for (id, name) in [(10, "X"), (11, "Y")] {
+            conn.execute("INSERT INTO collections (id, category_id, name, sort_name) VALUES (?1, ?2, ?3, ?3)", params![id, books, name]).unwrap();
+        }
+        let params = QueryParams { category: Some("books".into()), sort: Some("custom".into()), custom: Some("books".into()), ..Default::default() };
+        // Never placed: collections first, as before.
+        assert_eq!(custom_slots(&conn, &params, &[-10, -11]).unwrap(), [(-10, 0), (-11, 1)]);
+        // X between A and B, Y after C.
+        set_custom_order(&mut conn, "books", &[1, -10, 2, 3, -11]).unwrap();
+        assert_eq!(custom_slots(&conn, &params, &[-10, -11]).unwrap(), [(-10, 1), (-11, 4)]);
+        // An order of items alone keeps the collections' places.
+        set_custom_order(&mut conn, "books", &[3, 2, 1]).unwrap();
+        let items: Vec<i64> = conn.prepare("SELECT item_id FROM custom_order WHERE view = 'books' ORDER BY position").unwrap().query_map([], |r| r.get(0)).unwrap().collect::<Result<_, _>>().unwrap();
+        assert_eq!(items, [3, 2, 1]);
+        let kept: i64 = conn.query_row("SELECT count(*) FROM custom_order_collections WHERE view = 'books'", [], |r| r.get(0)).unwrap();
+        assert_eq!(kept, 2);
+    }
 
     #[test]
     fn fts_query_prefixes_each_word_and_drops_syntax() {

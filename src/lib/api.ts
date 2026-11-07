@@ -654,7 +654,11 @@ export const api = {
   blurbs: (ids: number[]) => invoke<Blurb[]>("items_blurbs", { ids }),
   queryShapes: (params: Omit<QueryParams, "offset" | "limit">) => invoke<string>("library_query_shapes", { params: { ...params, offset: 0, limit: 0 } }),
   cards: (ids: number[]) => invoke<ItemCard[]>("items_cards", { ids }),
+  /** A view's custom order; negative ids are collections placed among the items (D-036). */
   customOrderSet: (view: string, ids: number[]) => invoke<void>("custom_order_set", { view, ids }),
+  /** Where collections (negative card ids) stand among a view's items in its custom order: [id, index]. */
+  customOrderSlots: (params: Omit<QueryParams, "offset" | "limit">, collections: number[]) =>
+    invoke<[number, number][]>("custom_order_slots", { params: { ...params, offset: 0, limit: 0 }, collections }),
   activityAdd: (item: number, kind: "read" | "watch" | "listen", seconds: number) => invoke<void>("activity_add", { item, kind, seconds }),
   stats: () => invoke<LibraryStats>("library_stats"),
   tags: () => invoke<Tag[]>("tags_list"),
