@@ -34,20 +34,21 @@ Progress, test results and known limits are in [docs/STATUS.md](docs/STATUS.md);
 Run `Digitify_0.1.0_x64-setup.exe`. It installs for the current user in `%LOCALAPPDATA%\Digitify` without admin rights, and adds Start menu and desktop shortcuts. Uninstall it from Settings › Apps; that removes the program, never your library folder, settings or logs.
 
 ### Linux (x64)
-Two packages, both built by GitHub Actions:
+Built by GitHub Actions:
 - **`.deb`** (Ubuntu, Debian, Linux Mint, Pop!_OS…): `sudo apt install ./Digitify_0.1.0_amd64.deb`. It brings in `mpv`, `ffmpeg` and `udisks2` from the distribution. Digitify then appears in the applications menu. Uninstall with `sudo apt remove digitify`.
+- **Arch Linux and Arch-based** (Manjaro, EndeavourOS, CachyOS…): put `install-arch.sh` next to the `.deb` and run `bash install-arch.sh` as your normal user. It installs only the missing packages Digitify needs (never `pacman -Syu`), turns the `.deb` into a pacman package and installs it. Uninstall with `sudo pacman -R digitify`. If pacman reports missing files (404), your package lists are out of date: update your system as you normally do, then run it again.
 - **AppImage** (any distribution): install `mpv` and `ffmpeg` with your package manager first, then `chmod +x Digitify_0.1.0_amd64.AppImage` and run it. Nothing is installed; delete the file to remove it.
 
 On Wayland desktops Digitify runs through XWayland (needed to show video inside its window). Disc drives appear as `sr0`, `sr1`…; your user needs read access to them (usually the `cdrom` or `optical` group).
 
 ### Giving Digitify to someone
-Send the file itself (a USB stick, Google Drive, WeTransfer, a chat app): the Windows installer, or for Linux the `.deb` (simplest on Ubuntu-like systems) or the AppImage (any distribution). The GitHub repository is private, so they can't download it from there themselves.
+Send the file itself (a USB stick, Google Drive, WeTransfer, a chat app): the Windows installer, or for Linux the `.deb` (simplest on Ubuntu-like systems; on Arch, together with `install-arch.sh`) or the AppImage (any distribution). The GitHub repository is private, so they can't download it from there themselves.
 
 ## Getting the installers
 | Platform | How | Where it ends up |
 |---|---|---|
 | Windows | `npm run installer` on this PC | `installer\Digitify_0.1.0_x64-setup.exe` |
-| Linux | GitHub builds it on every push to `main` (or Actions › **Build installers** › **Run workflow**); then `npm run installer:linux` downloads the latest one (needs the [GitHub CLI](https://cli.github.com), signed in with `gh auth login`) | `installer\linux\*.deb` and `*.AppImage` |
+| Linux | GitHub builds it on every push to `main` (or Actions › **Build installers** › **Run workflow**); then `npm run installer:linux` downloads the latest one (needs the [GitHub CLI](https://cli.github.com), signed in with `gh auth login`) | `installer\linux\*.deb`, `*.AppImage` and `install-arch.sh` |
 
 Without the GitHub CLI: open the repository's **Actions** tab, the latest **Build installers** run, and download **digitify-linux** (and **digitify-windows**) under **Artifacts**. The `installer` folder isn't committed.
 

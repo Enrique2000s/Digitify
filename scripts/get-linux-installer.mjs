@@ -1,9 +1,10 @@
 // Puts the Linux packages that GitHub Actions built (the latest "Build installers" run) in the
-// project's `installer\linux` folder, next to the Windows installer, ready to hand to someone.
+// project's `installer\linux` folder, next to the Windows installer, ready to hand to someone, with
+// the Arch Linux install script (scripts/install-arch.sh).
 // Needs the GitHub CLI, signed in once: `winget install GitHub.cli`, then `gh auth login`.
 // Run with `npm run installer:linux`.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -47,5 +48,9 @@ for (const file of files) {
 for (const entry of readdirSync(out, { withFileTypes: true })) {
   if (entry.isDirectory()) rmSync(join(out, entry.name), { recursive: true, force: true });
 }
+// The Arch Linux install script, from this checkout (LF line endings, or bash on Linux refuses it).
+const arch = readFileSync(join(root, "scripts", "install-arch.sh"), "utf8").replaceAll("\r\n", "\n");
+writeFileSync(join(out, "install-arch.sh"), arch, { mode: 0o755 });
+
 console.log(`Linux packages in ${out}:`);
 for (const name of readdirSync(out)) console.log(`  ${name}`);

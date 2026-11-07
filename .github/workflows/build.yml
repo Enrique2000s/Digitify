@@ -1,5 +1,5 @@
-# Builds Digitify's installers (D-031): the Windows installer (NSIS) and, for Linux, a .deb package
-# and an AppImage. Runs when run by hand (Actions › Build installers › Run workflow) and on pushes
+# Builds Digitify's installers (D-031): the Windows installer (NSIS) and, for Linux, a .deb package,
+# an AppImage and the Arch Linux install script. Runs when run by hand (Actions › Build installers › Run workflow) and on pushes
 # to main; the installers are attached to each run as downloadable artifacts.
 name: Build installers
 
@@ -41,12 +41,16 @@ jobs:
       - name: Build
         run: npx tauri build
 
+      - name: Arch Linux install script
+        run: cp scripts/install-arch.sh src-tauri/target/release/bundle/install-arch.sh
+
       - uses: actions/upload-artifact@v4
         with:
           name: digitify-linux
           path: |
             src-tauri/target/release/bundle/deb/*.deb
             src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/install-arch.sh
           if-no-files-found: error
 
   windows:
