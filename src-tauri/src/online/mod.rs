@@ -244,7 +244,7 @@ fn open_in_browser(url: &str) -> AppResult<()> {
 
 #[cfg(not(windows))]
 fn open_in_browser(url: &str) -> AppResult<()> {
-    std::process::Command::new("xdg-open")
+    crate::tools::host_command("xdg-open")
         .arg(url)
         .spawn()
         .map(|_| ())

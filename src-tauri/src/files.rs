@@ -9,6 +9,7 @@ use std::os::windows::ffi::OsStrExt;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
+#[cfg(windows)]
 use std::process::Command;
 use std::time::UNIX_EPOCH;
 
@@ -188,7 +189,7 @@ pub fn reveal(path: &Path) -> AppResult<()> {
     #[cfg(not(windows))]
     {
         let folder = if path.is_dir() { path } else { path.parent().unwrap_or(path) };
-        Command::new("xdg-open")
+        crate::tools::host_command("xdg-open")
             .arg(folder)
             .spawn()
             .map(|_| ())

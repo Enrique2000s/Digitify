@@ -83,14 +83,16 @@ impl AppState {
 
 pub fn run() {
     // Linux: the video player embeds mpv in an X11 window, so Digitify runs on X11 (XWayland on
-    // Wayland desktops). WebKitGTK's DMA-BUF renderer draws blank windows on some GPUs; it's
-    // turned off unless asked for.
+    // Wayland desktops). WebKitGTK's DMA-BUF renderer draws blank windows with NVIDIA's own
+    // driver, so it's turned off there (unless asked for); with Intel, AMD and other Mesa drivers
+    // it stays on, as it draws much faster.
     #[cfg(target_os = "linux")]
     {
         if std::env::var_os("GDK_BACKEND").is_none() {
             std::env::set_var("GDK_BACKEND", "x11");
         }
-        if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        let nvidia = std::path::Path::new("/proc/driver/nvidia/version").exists();
+        if nvidia && std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
     }

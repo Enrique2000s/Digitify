@@ -36,8 +36,103 @@ pub fn find_in(dir: &Path, name: &str) -> Option<PathBuf> {
 
 pub fn command(program: &Path) -> Command {
     #[allow(unused_mut)]
-    let mut command = Command::new(program);
+    let mut command = host_command(program);
     #[cfg(windows)]
     command.creation_flags(CREATE_NO_WINDOW);
     command
+}
+
+/// A command for a program of the system's own (mpv, ffmpeg, xdg-open, udisksctl…).
+///
+/// Inside the Linux AppImage, its launcher points `LD_LIBRARY_PATH`, `PATH` and the GTK, GIO,
+/// GStreamer and Python paths at the libraries the AppImage carries (built on an older Ubuntu).
+/// The system's programs must not inherit them: they would load those libraries instead of their
+/// own and fail to start (no video thumbnails, no playback on Arch and other newer systems). So
+/// every entry that points inside the AppImage is taken out again. Elsewhere this is `Command::new`.
+pub fn host_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    #[allow(unused_mut)]
+    let mut command = Command::new(program);
+    #[cfg(target_os = "linux")]
+    for (key, value) in appimage_env_fixes() {
+        match value {
+            Some(value) => command.env(key, value),
+            None => command.env_remove(key),
+        };
+    }
+    command
+}
+
+/// What to change in a child's environment to undo the AppImage launcher's settings: each variable
+/// with paths inside the AppImage keeps only its other paths (or goes away), and the launcher's
+/// own markers are removed. Empty outside an AppImage.
+#[cfg(target_os = "linux")]
+fn appimage_env_fixes() -> Vec<(std::ffi::OsString, Option<std::ffi::OsString>)> {
+    use std::os::unix::ffi::OsStrExt;
+    let Some(appdir) = std::env::var_os("APPDIR").filter(|_| std::env::var_os("APPIMAGE").is_some()) else {
+        return Vec::new();
+    };
+    env_fixes(appdir.as_bytes(), std::env::vars_os())
+}
+
+#[cfg(target_os = "linux")]
+fn env_fixes(
+    appdir: &[u8],
+    vars: impl Iterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
+) -> Vec<(std::ffi::OsString, Option<std::ffi::OsString>)> {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    // Set by the launcher (or its hooks) with no paths in them, or naming the AppImage itself.
+    const LAUNCHER_ONLY: [&str; 7] =
+        ["APPDIR", "APPIMAGE", "ARGV0", "OWD", "GTK_THEME", "PYTHONDONTWRITEBYTECODE", "GST_REGISTRY_REUSE_PLUGIN_SCANNER"];
+    let appdir = appdir.strip_suffix(b"/").unwrap_or(appdir);
+    let mut fixes = Vec::new();
+    for (key, value) in vars {
+        if LAUNCHER_ONLY.iter().any(|name| key.as_bytes() == name.as_bytes()) {
+            fixes.push((key, None));
+            continue;
+        }
+        let bytes = value.as_bytes();
+        if !bytes.windows(appdir.len()).any(|w| w == appdir) {
+            continue;
+        }
+        let kept: Vec<&[u8]> = bytes
+            .split(|b| *b == b':')
+            .filter(|entry| !entry.is_empty() && !entry.starts_with(appdir))
+            .collect();
+        let value = (!kept.is_empty()).then(|| OsString::from_vec(kept.join(&b':')));
+        fixes.push((key, value));
+    }
+    fixes
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use std::ffi::OsString;
+
+    fn var(key: &str, value: &str) -> (OsString, OsString) {
+        (key.into(), value.into())
+    }
+
+    #[test]
+    fn appimage_paths_are_taken_out_of_child_environments() {
+        let app = "/tmp/.mount_DigiXY";
+        let vars = vec![
+            var("LD_LIBRARY_PATH", "/tmp/.mount_DigiXY/usr/lib/:/tmp/.mount_DigiXY/usr/lib64/:"),
+            var("PATH", "/tmp/.mount_DigiXY/usr/bin/:/usr/local/bin:/usr/bin"),
+            var("XDG_DATA_DIRS", "/tmp/.mount_DigiXY/usr/share/:/usr/share:"),
+            var("GTK_THEME", "Adwaita:light"),
+            var("APPDIR", app),
+            var("HOME", "/home/someone"),
+            var("GST_PLUGIN_SYSTEM_PATH_1_0", "/tmp/.mount_DigiXY/usr/lib/gstreamer-1.0:"),
+        ];
+        let fixes = super::env_fixes(app.as_bytes(), vars.into_iter());
+        let get = |key: &str| fixes.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone());
+        assert_eq!(get("LD_LIBRARY_PATH"), Some(None));
+        assert_eq!(get("PATH"), Some(Some("/usr/local/bin:/usr/bin".into())));
+        assert_eq!(get("XDG_DATA_DIRS"), Some(Some("/usr/share".into())));
+        assert_eq!(get("GTK_THEME"), Some(None));
+        assert_eq!(get("APPDIR"), Some(None));
+        assert_eq!(get("GST_PLUGIN_SYSTEM_PATH_1_0"), Some(None));
+        assert_eq!(get("HOME"), None, "untouched variables are left alone");
+    }
 }

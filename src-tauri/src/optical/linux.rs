@@ -68,7 +68,7 @@ pub fn root(letter: char) -> PathBuf {
         return path;
     }
     // Audio CDs have nothing to mount; this simply fails for them.
-    let _ = std::process::Command::new("udisksctl")
+    let _ = crate::tools::host_command("udisksctl")
         .args(["mount", "--no-user-interaction", "-b"])
         .arg(&device)
         .stdout(std::process::Stdio::null())
@@ -263,7 +263,7 @@ impl Device {
 
     pub fn eject(&self) -> std::io::Result<()> {
         // A mounted disc is let go of first.
-        let _ = std::process::Command::new("udisksctl")
+        let _ = crate::tools::host_command("udisksctl")
             .args(["unmount", "--no-user-interaction", "-b"])
             .arg(device_path(self.letter))
             .stdout(std::process::Stdio::null())

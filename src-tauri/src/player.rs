@@ -7,7 +7,7 @@
 //! sends is forwarded to the UI as a `player-event`.
 
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
+use std::process::Child;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -99,7 +99,12 @@ pub async fn start_with(
 
     let pipe = ipc_name("mpv", NEXT_PIPE.fetch_add(1, Ordering::Relaxed));
     let log_file = app.path().app_log_dir()?.join("mpv.log");
-    let spawned = Command::new(mpv_path()?)
+    #[allow(unused_mut)]
+    let mut mpv = crate::tools::host_command(mpv_path()?);
+    // On Wayland desktops mpv has to draw through X11 (XWayland) to land in our window (`--wid`).
+    #[cfg(target_os = "linux")]
+    mpv.env_remove("WAYLAND_DISPLAY");
+    let spawned = mpv
         .args([
             "--no-config".to_string(),
             format!("--wid={host}"),

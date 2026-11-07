@@ -5,7 +5,7 @@
 //! (in the catalog only; files are never changed, D-009).
 
 use std::path::PathBuf;
-use std::process::{Child, Command};
+use std::process::Child;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
 
@@ -466,7 +466,7 @@ async fn session(app: &AppHandle, state: &MusicState, volume: f64) -> AppResult<
     }
     let pipe = player::ipc_name("music", NEXT_PIPE.fetch_add(1, Ordering::Relaxed));
     let log_file = app.path().app_log_dir()?.join("mpv-music.log");
-    let mut child = Command::new(player::mpv_path()?)
+    let mut child = crate::tools::host_command(player::mpv_path()?)
         .args([
             "--no-config".to_string(),
             format!("--input-ipc-server={pipe}"),
