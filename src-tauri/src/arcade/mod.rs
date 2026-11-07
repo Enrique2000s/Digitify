@@ -873,9 +873,7 @@ const STORE_START_WAIT: u64 = 90;
 /// then hides and goes quiet; when no program from that folder is left, the session ends. A game
 /// never seen leaves Digitify as it was.
 fn launch_store_game(app: AppHandle, library: std::sync::Arc<Library>, id: i64, store: Store, launch: &str, install_dir: Option<PathBuf>) -> AppResult<()> {
-    let mut command = if cfg!(windows) { crate::tools::host_command("explorer.exe") } else { crate::tools::host_command("xdg-open") };
-    command.arg(launch);
-    command.spawn().map_err(|e| AppError::msg(format!("Couldn't ask {} to start the game: {e}", store.name())))?;
+    crate::tools::open_link(launch).map_err(|e| AppError::msg(format!("Couldn't ask {} to start the game: {e}", store.name())))?;
     log::info!("arcade: asked {} to start game {id}", store.name());
     let _ = app.emit("arcade-session", serde_json::json!({ "starting": id, "store": store.name() }));
     let Some(dir) = install_dir.filter(|d| d.is_dir()) else { return Ok(()) };

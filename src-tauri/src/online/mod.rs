@@ -229,26 +229,8 @@ pub async fn online_open(state: State<'_, AppState>, id: i64) -> AppResult<()> {
     open_in_browser(&url)
 }
 
-#[cfg(windows)]
 fn open_in_browser(url: &str) -> AppResult<()> {
-    use windows_sys::Win32::UI::Shell::ShellExecuteW;
-    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
-    let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
-    let (verb, target) = (wide("open"), wide(url));
-    let result = unsafe { ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), target.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL) };
-    if result as isize <= 32 {
-        return Err(AppError::msg("Windows couldn't open the browser."));
-    }
-    Ok(())
-}
-
-#[cfg(not(windows))]
-fn open_in_browser(url: &str) -> AppResult<()> {
-    crate::tools::host_command("xdg-open")
-        .arg(url)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| AppError::msg(format!("couldn't open the browser: {e}")))
+    crate::tools::open_link(url).map_err(|e| AppError::msg(format!("Couldn't open the browser: {e}")))
 }
 
 // ---------------------------------------------------------------------------------------------

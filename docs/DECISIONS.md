@@ -101,6 +101,10 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-040 · Store games opened through the Windows shell
+- **Date:** 2026-11-07 · **Approved by:** project owner (reported Epic games opening File Explorer)
+- **Fix:** on Windows a store game's link was handed to `explorer.exe`, which opens Epic's link (it has a query string: `?action=launch&silent=true`) as a folder instead, so File Explorer came up instead of the game. Links and app targets now go to the Windows shell itself (`ShellExecuteW`), which hands each to the program registered for it (Epic Games Launcher, Steam, the Xbox app). Linux still uses `xdg-open`. Web links (Online services) use the same helper.
+
 ### D-039 · Fixed categories; Epic games found; Default cover
 - **Date:** 2026-11-07 · **Approved by:** project owner (asked for fixed categories; chose built-in names back, custom fields out of view and Default cover for every game)
 - **Categories are fixed:** Settings › Categories only puts them in order and shows or hides them, like Arcade's views. They can't be renamed, re-iconed, created or deleted, and custom fields can't be added, so the library keeps its structure. Migration 15 gives the built-in categories their own names, icons and reading directions back; categories made earlier by the user stay, fixed. Custom fields are no longer shown, edited or searched; their values stay in each item's metadata. Supersedes the category editing of D-004 and D-005.

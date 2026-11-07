@@ -136,3 +136,25 @@ mod tests {
         assert_eq!(get("HOME"), None, "untouched variables are left alone");
     }
 }
+
+/// Opens a link or app target the way the system does (a web page in the browser; `steam://`,
+/// `com.epicgames.launcher://` or `heroic://` in its launcher; `shell:AppsFolder\\…` on Windows).
+/// Windows: the shell itself (`ShellExecuteW`), not `explorer.exe`, which falls back to opening a
+/// folder for links with a query string such as Epic's (D-040).
+#[cfg(windows)]
+pub fn open_link(target: &str) -> std::io::Result<()> {
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+    let (verb, target) = (wide("open"), wide(target));
+    let result = unsafe { ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), target.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL) };
+    if result as isize <= 32 {
+        return Err(std::io::Error::other(format!("Windows couldn't open it (code {})", result as isize)));
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+pub fn open_link(target: &str) -> std::io::Result<()> {
+    host_command("xdg-open").arg(target).spawn().map(|_| ())
+}
