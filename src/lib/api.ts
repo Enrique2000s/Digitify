@@ -677,6 +677,8 @@ export const api = {
   onlineKeysSet: (service: "youtube" | "spotify" | "soundcloud", first: string | null, second: string | null) =>
     invoke<OnlineKeysStatus>("online_keys_set", { service, first, second }),
   onlineOpen: (id: number) => invoke<void>("online_open", { id }),
+  /** Linux: the local page that hosts YouTube's player (D-032); null on Windows. */
+  onlineEmbedHost: () => invoke<string | null>("online_embed_host"),
   readerOpen: (id: number) => invoke<Opened>("reader_open", { id }),
   ebookProgressSave: (id: number, cfi: string, fraction: number, finished: boolean) =>
     invoke<void>("ebook_progress_save", { id, cfi, fraction, finished }),

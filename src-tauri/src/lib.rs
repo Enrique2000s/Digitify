@@ -19,6 +19,7 @@ mod formats;
 mod import;
 mod library;
 mod library_folder;
+mod localhost;
 mod media_protocol;
 mod music;
 mod online;
@@ -173,6 +174,7 @@ pub fn run() {
             organize::items_bulk,
             organize::items_bulk_actions,
             online::online_inspect,
+            localhost::online_embed_host,
             online::online_import,
             online::online_queue,
             online::online_cancel,

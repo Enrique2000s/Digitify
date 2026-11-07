@@ -451,7 +451,10 @@ mod video_host {
 
 /// The child window mpv renders into on Linux: an X11 window inside the app window (Digitify runs
 /// on X11, through XWayland on Wayland desktops). mpv's `--wid` puts its picture in it and follows
-/// its size. It sits above the page, so the player keeps it clear of its controls.
+/// its size. It sits above the page, so the player keeps it clear of its controls; and it takes no
+/// mouse input (an empty input shape, which also covers mpv's window inside it), so the pointer
+/// always reaches the page: moving it brings the controls back, clicks work and the window keeps
+/// the keyboard. Without that the video swallowed every event and the player could not be left.
 #[cfg(target_os = "linux")]
 mod video_host {
     use std::sync::OnceLock;
@@ -466,6 +469,37 @@ mod video_host {
     // Only the main thread (the window thread) touches it.
     unsafe impl Send for X {}
     unsafe impl Sync for X {}
+
+    /// The XFixes library, for the input shape. Missing it only means the video takes the mouse.
+    struct Fixes(x11_dl::xfixes::Xlib);
+    unsafe impl Send for Fixes {}
+    unsafe impl Sync for Fixes {}
+
+    fn fixes() -> Option<&'static x11_dl::xfixes::Xlib> {
+        static FIXES: OnceLock<Option<Fixes>> = OnceLock::new();
+        FIXES.get_or_init(|| x11_dl::xfixes::Xlib::open().ok().map(Fixes)).as_ref().map(|f| &f.0)
+    }
+
+    /// `ShapeInput` from the X Shape extension.
+    const SHAPE_INPUT: i32 = 2;
+
+    /// Lets every pointer event through `window` (and the windows inside it) to the page below.
+    unsafe fn let_input_through(x: &X, window: u64) {
+        let Some(fixes) = fixes() else {
+            log::warn!("libXfixes isn't available; the video will catch the mouse");
+            return;
+        };
+        let (mut event_base, mut error_base) = (0, 0);
+        if (fixes.XFixesQueryExtension)(x.display, &mut event_base, &mut error_base) == 0 {
+            log::warn!("the X server has no XFixes; the video will catch the mouse");
+            return;
+        }
+        let (mut major, minor) = (5, 0);
+        (fixes.XFixesQueryVersion)(x.display, &mut major, &minor);
+        let empty = (fixes.XFixesCreateRegion)(x.display, std::ptr::null_mut(), 0);
+        (fixes.XFixesSetWindowShapeRegion)(x.display, window, SHAPE_INPUT, 0, 0, empty);
+        (fixes.XFixesDestroyRegion)(x.display, empty);
+    }
 
     fn x() -> Option<&'static X> {
         static X11: OnceLock<Option<X>> = OnceLock::new();
@@ -493,6 +527,7 @@ mod video_host {
             if window == 0 {
                 return None;
             }
+            let_input_through(x, window);
             (x.lib.XMapWindow)(x.display, window);
             (x.lib.XFlush)(x.display);
             Some(window as isize)

@@ -1,20 +1,36 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { ArrowLeft, Cloud, ExternalLink } from "lucide-react";
-import { api, errorText, type ItemDetail, type OnlineSource } from "../../lib/api";
+import { api, errorText, onLinux, type ItemDetail, type OnlineSource } from "../../lib/api";
 import { useItem } from "../../lib/queries";
 import { useAmbientHold } from "../../lib/ambient/AmbientProvider";
 import { useMusic } from "../../lib/music/MusicProvider";
 
+/**
+ * Where YouTube's player is hosted from: on Linux a local http page (D-032), since the interface's
+ * `tauri://` page sends no Referer and YouTube refuses to play without one; null on Windows (the
+ * player goes straight into the page); undefined while it is being asked.
+ */
+export function useEmbedHost(): string | null | undefined {
+  const host = useQuery({ queryKey: ["online-embed-host"], queryFn: api.onlineEmbedHost, staleTime: Infinity, enabled: onLinux });
+  if (!onLinux) return null;
+  return host.isPending ? undefined : (host.data ?? null);
+}
+
 /** The service's own embedded player for an online item, or none when it has no embed. */
-export function embedUrl(source: OnlineSource, origin: string): string | null {
+export function embedUrl(source: OnlineSource, origin: string, host: string | null = null): string | null {
   const id = encodeURIComponent(source.externalId);
   switch (source.provider) {
-    case "youtube":
+    case "youtube": {
       // youtube-nocookie and an explicit origin: YouTube refuses embeds that don't say where they are.
-      return source.kind === "playlist"
-        ? `https://www.youtube-nocookie.com/embed/videoseries?list=${id}&autoplay=1&rel=0&enablejsapi=1&origin=${encodeURIComponent(origin)}`
-        : `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&enablejsapi=1&origin=${encodeURIComponent(origin)}`;
+      const from = encodeURIComponent(host ?? origin);
+      const player =
+        source.kind === "playlist"
+          ? `https://www.youtube-nocookie.com/embed/videoseries?list=${id}&autoplay=1&rel=0&enablejsapi=1&origin=${from}`
+          : `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&enablejsapi=1&origin=${from}`;
+      return host ? `${host}/youtube?src=${encodeURIComponent(player)}` : player;
+    }
     case "spotify":
       return `https://open.spotify.com/embed/${source.kind}/${id}`;
     case "soundcloud":
@@ -26,13 +42,14 @@ export function embedUrl(source: OnlineSource, origin: string): string | null {
 
 function Player({ item, source }: { item: ItemDetail; source: OnlineSource }) {
   const [error, setError] = useState<string | null>(null);
-  const embed = embedUrl(source, window.location.origin);
+  const host = useEmbedHost();
+  const embed = host === undefined ? null : embedUrl(source, window.location.origin, host);
   const tall = source.provider === "spotify" ? (source.kind === "track" ? 352 : 480) : undefined;
   const open = () => void api.onlineOpen(item.id).catch((reason) => setError(errorText(reason)));
   return (
     <>
       <div className={`online-stage${item.handler === "audio" && source.provider !== "youtube" ? " audio" : ""}`} style={tall ? { height: tall } : undefined}>
-        {embed ? (
+        {host === undefined ? null : embed ? (
           <iframe
             key={embed}
             src={embed}

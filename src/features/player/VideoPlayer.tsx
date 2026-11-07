@@ -310,7 +310,8 @@ function VideoPlayer({ source }: { source: Source }) {
   useEffect(() => {
     if (!target) return;
     document.documentElement.classList.add("video-mode");
-    return () => document.documentElement.classList.remove("video-mode");
+    if (onLinux) document.documentElement.classList.add("on-linux");
+    return () => document.documentElement.classList.remove("video-mode", "on-linux");
   }, [target]);
 
   // Keep the native video surface exactly under the surface element (physical pixels).

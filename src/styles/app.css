@@ -25,6 +25,14 @@ html.video-mode #root {
   background: transparent;
 }
 
+/* On Linux the video window sits above the page (D-031), so nothing needs to show through: black,
+   never the desktop behind the window. */
+html.video-mode.on-linux,
+html.video-mode.on-linux body,
+html.video-mode.on-linux #root {
+  background: #000;
+}
+
 :root[data-motion="off"] *,
 :root[data-motion="off"] *::before,
 :root[data-motion="off"] *::after {

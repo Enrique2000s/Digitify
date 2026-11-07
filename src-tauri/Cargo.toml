@@ -65,6 +65,8 @@ gtk = "0.18"
 gdkx11 = "0.18"
 # Pure-Rust D-Bus (zbus), so the packages need no libdbus.
 keyring = { version = "3", features = ["async-secret-service", "async-io", "crypto-rust"] }
+# The local page that hosts YouTube's player on Linux (D-032).
+tiny_http = "0.12"
 
 # Optimize dependencies even in debug builds: SQLite, image decoding and hashing are slow unoptimized.
 [profile.dev.package."*"]

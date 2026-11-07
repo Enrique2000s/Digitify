@@ -2,6 +2,7 @@
 // "Morning Lounge" and the interface sounds are synthesized with Web Audio; the user's own music
 // streams through an <audio> element from the core's `ambient/` route.
 
+import { onLinux } from "../api";
 import { MorningLounge, Synth, type VoiceOptions } from "./lounge";
 
 export type MusicMode = "lounge" | "custom";
@@ -322,11 +323,16 @@ class AmbientEngine {
     window.addEventListener("keydown", unlock, true);
   }
 
-  /** Lets the audio context sleep while nothing synthesized is playing (saves CPU and battery). */
+  /**
+   * Lets the audio context sleep while nothing synthesized is playing (saves CPU and battery).
+   * Not on Linux: WebKitGTK wakes a sleeping context by waiting on GStreamer inside the page's
+   * thread, and that wait can last forever (it froze the whole player at the first click sound
+   * after a video had played for a few seconds), so there the context stays awake.
+   */
   private scheduleIdle() {
     window.clearTimeout(this.idleTimer);
     const graph = this.graph;
-    if (!graph || graph.lounge.running) return;
+    if (!graph || graph.lounge.running || onLinux) return;
     this.idleTimer = window.setTimeout(() => {
       if (!graph.lounge.running && graph.ctx.state === "running") void graph.ctx.suspend();
     }, IDLE_SUSPEND_MS);

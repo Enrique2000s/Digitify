@@ -6,7 +6,7 @@ import { useAmbientHold } from "../../lib/ambient/AmbientProvider";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { usePad } from "../../lib/gamepad";
 import { SourceTag } from "../../components/SourceTag";
-import { embedUrl } from "../online/OnlinePlayer";
+import { embedUrl, useEmbedHost } from "../online/OnlinePlayer";
 import { useEmbedControl } from "../online/embedControl";
 
 function clock(seconds: number | null): string {
@@ -33,6 +33,7 @@ export function OnlineScreen({ id }: { id: number }) {
     if (music.active && !music.paused) music.pause();
   }, []);
   const source = item.data?.online ?? null;
+  const host = useEmbedHost();
   const control = useEmbedControl(frame, source?.provider ?? "");
   const canSeek = source?.provider === "youtube" || source?.provider === "soundcloud" || source?.provider === "spotify";
   usePad((action) => {
@@ -46,7 +47,7 @@ export function OnlineScreen({ id }: { id: number }) {
   const data = item.data;
   if (!data) return null;
   if (!source || source.downloaded) return <p className="bp-empty">This item plays from your library.</p>;
-  const embed = embedUrl(source, window.location.origin);
+  const embed = host === undefined ? null : embedUrl(source, window.location.origin, host);
   const audio = data.handler === "audio" && source.provider !== "youtube";
   const open = () => void api.onlineOpen(id).catch((reason) => setError(errorText(reason)));
   const { playing, time, duration } = control.state;
@@ -62,7 +63,7 @@ export function OnlineScreen({ id }: { id: number }) {
         </span>
       </div>
       <div className={`bp-online-stage${audio ? " audio" : ""}`} data-source={source.provider === "youtube" ? (source.service === "YouTube Music" ? "youtube-music" : "youtube") : source.provider}>
-        {embed ? (
+        {host === undefined ? null : embed ? (
           <iframe
             ref={frame}
             src={embed}

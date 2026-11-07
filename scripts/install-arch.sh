@@ -22,6 +22,7 @@ RUNTIME_DEPS=(
   webkit2gtk-4.1 gtk3 libx11 openssl dbus   # the window and the web view
   glib-networking                           # HTTPS inside the web view (online players)
   gst-plugins-base gst-plugins-good         # sound inside the web view
+  gst-plugins-bad gst-libav                 # YouTube's video (H.264) in its embedded player
   mpv ffmpeg                                # the video and music engines
   udisks2                                   # mounting data discs
   xdg-utils hicolor-icon-theme              # opening links and folders, the menu icon

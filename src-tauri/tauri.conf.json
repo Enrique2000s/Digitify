@@ -25,7 +25,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob: http://digitify.localhost digitify: https:; media-src 'self' blob: http://digitify.localhost digitify: https:; style-src 'self' 'unsafe-inline' blob:; font-src 'self' data: blob:; frame-src blob: https://www.youtube-nocookie.com https://www.youtube.com https://open.spotify.com https://w.soundcloud.com; form-action 'none'; connect-src 'self' ipc: http://ipc.localhost http://digitify.localhost digitify:",
+      "csp": "default-src 'self'; img-src 'self' data: blob: http://digitify.localhost digitify: https:; media-src 'self' blob: http://digitify.localhost digitify: https:; style-src 'self' 'unsafe-inline' blob:; font-src 'self' data: blob:; frame-src blob: http://localhost:* https://www.youtube-nocookie.com https://www.youtube.com https://open.spotify.com https://w.soundcloud.com; form-action 'none'; connect-src 'self' ipc: http://ipc.localhost http://digitify.localhost digitify:",
       "devCsp": null
     }
   },
