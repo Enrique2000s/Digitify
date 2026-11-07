@@ -1,20 +1,32 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
-import { api, artworkUrl, errorText, type ArcadeGame, type ArcadePlatform } from "../../lib/api";
+import { api, artworkUrl, errorText, type ArcadeGame, type ArcadePlatform, type ArcadeStore } from "../../lib/api";
 import { usePreferences, type ArcadePreferences } from "../../lib/preferences";
 
-export const PLATFORM_NAMES: Record<ArcadePlatform, string> = { gamecube: "GameCube", wii: "Wii", n64: "Nintendo 64" };
-export const PLATFORM_SHORT: Record<ArcadePlatform, string> = { gamecube: "GC", wii: "Wii", n64: "N64" };
+export const PLATFORM_NAMES: Record<ArcadePlatform, string> = { gamecube: "GameCube", wii: "Wii", n64: "Nintendo 64", pc: "PC" };
+export const PLATFORM_SHORT: Record<ArcadePlatform, string> = { gamecube: "GC", wii: "Wii", n64: "N64", pc: "PC" };
+export const STORE_NAMES: Record<ArcadeStore, string> = { steam: "Steam", epic: "Epic Games", xbox: "Xbox", heroic: "Heroic" };
 
-/** Box art proportions: GameCube and Wii cases are tall; Nintendo 64 boxes are wide. */
-export const PLATFORM_ASPECT: Record<ArcadePlatform, number> = { gamecube: 0.71, wii: 0.71, n64: 1.38 };
+/** Box art proportions: GameCube and Wii cases are tall; Nintendo 64 boxes are wide; PC capsules 2:3. */
+export const PLATFORM_ASPECT: Record<ArcadePlatform, number> = { gamecube: 0.71, wii: 0.71, n64: 1.38, pc: 0.667 };
+
+/** A game's console, or for a PC game its store ("Steam"). */
+export function consoleOf(game: ArcadeGame): string {
+  return game.platform === "pc" && game.store ? STORE_NAMES[game.store] : PLATFORM_NAMES[game.platform];
+}
+
+/** The short badge on a game's box. */
+export function badgeOf(game: ArcadeGame): string {
+  return game.platform === "pc" && game.store ? (game.store === "epic" ? "Epic" : STORE_NAMES[game.store]) : PLATFORM_SHORT[game.platform];
+}
 
 export const PLATFORM_FILTERS: { key: ArcadePreferences["platform"]; label: string }[] = [
   { key: "all", label: "All games" },
   { key: "gamecube", label: "GameCube" },
   { key: "wii", label: "Wii" },
   { key: "n64", label: "Nintendo 64" },
+  { key: "pc", label: "PC" },
   { key: "favorites", label: "Favorites" },
 ];
 
@@ -31,19 +43,32 @@ export function useArcade() {
   const queryClient = useQueryClient();
   const status = useQuery({ queryKey: ["arcade-status"], queryFn: api.arcadeStatus });
   const games = useQuery({ queryKey: ["arcade-games"], queryFn: api.arcadeGames });
+  // A store game asked to start, until it shows up (or doesn't) (D-037).
+  const [starting, setStarting] = useState<{ id: number; store: string } | null>(null);
+  const [notSeen, setNotSeen] = useState<number | null>(null);
   useEffect(() => {
     const refresh = () => {
       void queryClient.invalidateQueries({ queryKey: ["arcade-status"] });
       void queryClient.invalidateQueries({ queryKey: ["arcade-games"] });
     };
     const changed = listen("arcade-changed", refresh);
-    const session = listen("arcade-session", refresh);
+    const session = listen<{ starting?: number; store?: string; running?: number | null; notSeen?: number }>("arcade-session", (event) => {
+      const p = event.payload ?? {};
+      if (p.starting != null) {
+        setStarting({ id: p.starting, store: p.store ?? "its store" });
+        setNotSeen(null);
+      } else {
+        setStarting(null);
+        if (p.notSeen != null) setNotSeen(p.notSeen);
+      }
+      refresh();
+    });
     return () => {
       void changed.then((off) => off());
       void session.then((off) => off());
     };
   }, [queryClient]);
-  return { status, games };
+  return { status, games, starting, notSeen, clearNotSeen: () => setNotSeen(null) };
 }
 
 /** The games shown, filtered, searched and sorted as the preferences say. */
@@ -114,9 +139,25 @@ export function GameCover({ game, size = "thumb" }: { game: ArcadeGame; size?: "
     return <img className="arcade-cover-img" src={artworkUrl(game.coverKey, size)} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setFailed(true)} />;
   }
   return (
-    <span className="arcade-cover-blank" data-platform={game.platform}>
-      <span className="arcade-cover-console">{PLATFORM_NAMES[game.platform]}</span>
+    <span className="arcade-cover-blank" data-platform={game.platform} data-store={game.store ?? undefined}>
+      <span className="arcade-cover-console">{consoleOf(game)}</span>
       <span className="arcade-cover-title">{game.title}</span>
     </span>
   );
+}
+
+/**
+ * Moves a game within the games shown (one console, a search) and gives back the whole custom
+ * order: the shown games trade places among themselves, the others keep theirs (D-037).
+ */
+export function reorderWithin(all: ArcadeGame[], shown: ArcadeGame[], dragged: number, target: number, after: boolean): number[] {
+  const byCustom = [...all].sort((a, b) => (a.position ?? Infinity) - (b.position ?? Infinity) || a.title.localeCompare(b.title, undefined, { sensitivity: "base", numeric: true }));
+  const shownIds = new Set(shown.map((g) => g.id));
+  const subset = shown.map((g) => g.id).filter((id) => id !== dragged);
+  const at = subset.indexOf(target);
+  if (at < 0) return byCustom.map((g) => g.id);
+  subset.splice(after ? at + 1 : at, 0, dragged);
+  // The shown games go back into the places shown games had, in their new order.
+  let next = 0;
+  return byCustom.map((g) => (shownIds.has(g.id) ? subset[next++] : g.id));
 }

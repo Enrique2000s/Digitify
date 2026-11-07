@@ -17,6 +17,28 @@ pub fn after(conn: &Connection, version: i64) -> AppResult<()> {
     if version == 10 {
         d033(conn)?;
     }
+    if version == 14 {
+        widen_check(conn, "arcade_games", "CHECK (platform IN ('gamecube', 'wii', 'n64'))", "CHECK (platform IN ('gamecube', 'wii', 'n64', 'pc'))")?;
+    }
+    Ok(())
+}
+
+/// Widens a CHECK constraint (every existing row already satisfies the new one) by editing the
+/// stored table definition — SQLite's documented way for such a change — and bumping the schema
+/// version, inside the migration's transaction. Already widened: nothing to do.
+fn widen_check(conn: &Connection, table: &str, old: &str, new: &str) -> AppResult<()> {
+    let sql: String = conn.query_row("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?1", [table], |row| row.get(0))?;
+    if sql.contains(new) {
+        return Ok(());
+    }
+    if !sql.contains(old) {
+        return Err(AppError::msg(format!("the {table} table isn't the one this version expects")));
+    }
+    let version: i64 = conn.query_row("PRAGMA schema_version", [], |row| row.get(0))?;
+    conn.execute_batch("PRAGMA writable_schema = ON")?;
+    let edited = conn.execute("UPDATE sqlite_schema SET sql = ?1 WHERE type = 'table' AND name = ?2", params![sql.replace(old, new), table]);
+    conn.execute_batch(&format!("PRAGMA schema_version = {}; PRAGMA writable_schema = OFF", version + 1))?;
+    edited?;
     Ok(())
 }
 
@@ -26,22 +48,12 @@ pub fn after(conn: &Connection, version: i64) -> AppResult<()> {
 /// existing row already satisfies is to edit the stored table definition (`writable_schema`) and
 /// bump the schema version, which is what happens here, inside the migration's transaction.
 fn d033(conn: &Connection) -> AppResult<()> {
-    const OLD: &str = "CHECK (handler IN ('book', 'comic', 'video', 'audio', 'generic'))";
-    const NEW: &str = "CHECK (handler IN ('book', 'comic', 'video', 'audio', 'generic', 'image'))";
-    let sql: String = conn.query_row("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'categories'", [], |row| row.get(0))?;
-    if !sql.contains(NEW) {
-        if !sql.contains(OLD) {
-            return Err(AppError::msg("the categories table isn't the one this version expects"));
-        }
-        let version: i64 = conn.query_row("PRAGMA schema_version", [], |row| row.get(0))?;
-        conn.execute_batch("PRAGMA writable_schema = ON")?;
-        let edited = conn.execute(
-            "UPDATE sqlite_schema SET sql = ?1 WHERE type = 'table' AND name = 'categories'",
-            [sql.replace(OLD, NEW)],
-        );
-        conn.execute_batch(&format!("PRAGMA schema_version = {}; PRAGMA writable_schema = OFF", version + 1))?;
-        edited?;
-    }
+    widen_check(
+        conn,
+        "categories",
+        "CHECK (handler IN ('book', 'comic', 'video', 'audio', 'generic'))",
+        "CHECK (handler IN ('book', 'comic', 'video', 'audio', 'generic', 'image'))",
+    )?;
     let exists: bool = conn.query_row("SELECT EXISTS (SELECT 1 FROM categories WHERE key = 'pictures')", [], |row| row.get(0))?;
     if !exists {
         conn.execute(

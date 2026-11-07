@@ -142,8 +142,10 @@ export interface Preferences {
 export interface ArcadePreferences {
   downloadCovers: boolean;
   n64: "project64" | "rmg";
-  platform: "all" | "gamecube" | "wii" | "n64" | "favorites";
+  platform: "all" | "gamecube" | "wii" | "n64" | "pc" | "favorites";
   sort: "title" | "played" | "most" | "added" | "custom";
+  /** Box width in Arcade, like the Library's cover size (D-037). */
+  cardSize: number;
 }
 
 /** The page color under each look and palette, for accent text contrast. */
@@ -224,7 +226,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   home: { order: [...HOME_SECTIONS], hidden: [] },
   homeWallpaper: null,
   slideshowSeconds: 5,
-  arcade: { downloadCovers: true, n64: "project64", platform: "all", sort: "title" },
+  arcade: { downloadCovers: true, n64: "project64", platform: "all", sort: "title", cardSize: 160 },
 };
 
 type Raw<T> = { [K in keyof T]?: unknown };
@@ -305,8 +307,9 @@ function sanitizeArcade(raw: unknown): ArcadePreferences {
   return {
     downloadCovers: pick("downloadCovers", isBoolean),
     n64: pick("n64", (v) => v === "project64" || v === "rmg"),
-    platform: pick("platform", (v) => ["all", "gamecube", "wii", "n64", "favorites"].includes(v as string)),
+    platform: pick("platform", (v) => ["all", "gamecube", "wii", "n64", "pc", "favorites"].includes(v as string)),
     sort: pick("sort", (v) => ["title", "played", "most", "added", "custom"].includes(v as string)),
+    cardSize: pick("cardSize", (v) => typeof v === "number" && v >= 110 && v <= 260),
   };
 }
 

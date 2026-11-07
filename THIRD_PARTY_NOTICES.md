@@ -179,6 +179,8 @@ SOFTWARE.
 | walkdir | Unlicense or MIT |
 | ureq, native-tls, url (Import from URL; TLS is the system's: SChannel on Windows, OpenSSL on Linux) | MIT or Apache-2.0 |
 | kamadak-exif (photo details, D-033) | BSD-2-Clause |
+| sha2 (Xbox package names, D-037) | MIT or Apache-2.0 |
+| sysinfo (recognizing a running game, D-037) | MIT |
 | tiny_http (Linux: YouTube's host page, D-032) | MIT or Apache-2.0 |
 | Linux only: libc, x11-dl, gtk, gdkx11, keyring | MIT or Apache-2.0 |
 

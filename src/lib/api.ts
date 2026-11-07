@@ -702,6 +702,8 @@ export const api = {
   arcadeFindCovers: (ids: number[], download: boolean) => invoke<number>("arcade_find_covers", { ids, download }),
   arcadeRename: (id: number, title: string) => invoke<void>("arcade_rename", { id, title }),
   arcadeReorder: (ids: number[]) => invoke<void>("arcade_reorder", { ids }),
+  /** Brings back the store games taken off the list. */
+  arcadeUnhide: () => invoke<number>("arcade_unhide"),
   /** Turns or mirrors a photo in Digitify only, never in its file (D-033). */
   pictureSetView: (id: number, view: PictureView) => invoke<void>("picture_set_view", { id, view }),
   /** An item's cover as its collection's (an album's) cover; null goes back to the collage. */
@@ -797,7 +799,9 @@ export function driveName(letter: string): string {
 }
 
 /** Arcade (D-034): a console a game is for. */
-export type ArcadePlatform = "gamecube" | "wii" | "n64";
+export type ArcadePlatform = "gamecube" | "wii" | "n64" | "pc";
+/** The store a PC game came from (D-037). */
+export type ArcadeStore = "steam" | "epic" | "xbox" | "heroic";
 export type ArcadeEmulator = "dolphin" | "project64" | "rmg";
 
 export interface ArcadeFolder {
@@ -828,6 +832,10 @@ export interface ArcadeStatus {
   folders: ArcadeFolder[];
   running: number | null;
   games: number;
+  /** PC stores read for installed games (D-037). */
+  stores: { key: ArcadeStore; name: string; found: string | null; games: number }[];
+  /** Store games taken off the list (still installed). */
+  hidden: number;
 }
 
 export interface ArcadeGame {
@@ -847,6 +855,8 @@ export interface ArcadeGame {
   missing: boolean;
   /** Place in the custom order (D-035). */
   position: number | null;
+  /** For PC games, the store it came from (D-037). */
+  store: ArcadeStore | null;
 }
 
 export interface ArcadeScanReport {

@@ -2,14 +2,14 @@ import { CircleAlert, Heart, Joystick } from "lucide-react";
 import type { ArcadeGame } from "../../lib/api";
 import { usePad } from "../../lib/gamepad";
 import { usePreferences } from "../../lib/preferences";
-import { GameCover, PLATFORM_ASPECT, PLATFORM_FILTERS, PLATFORM_SHORT, playTime, useArcade, useLaunch, useShownGames } from "./shared";
+import { badgeOf, GameCover, PLATFORM_ASPECT, PLATFORM_FILTERS, playTime, useArcade, useLaunch, useShownGames } from "./shared";
 
 /**
  * Arcade in Big Picture (D-034): the games as big tiles a controller reaches. A plays, LB and RB
  * switch between the consoles (Y stays Big Picture's search).
  */
 export function ArcadeScreen() {
-  const { status, games } = useArcade();
+  const { status, games, starting } = useArcade();
   const { preferences, update } = usePreferences();
   const shown = useShownGames(games.data, "");
   const { launch, error } = useLaunch();
@@ -36,7 +36,8 @@ export function ArcadeScreen() {
         ))}
         <span className="bp-hint-key">RB</span>
       </div>
-      {running && <p className="bp-arcade-note">Playing {running.title}. Close the emulator to come back.</p>}
+      {running && <p className="bp-arcade-note">Playing {running.title}. Close the game to come back.</p>}
+      {starting && !running && <p className="bp-arcade-note">Starting through {starting.store}…</p>}
       {error && (
         <p className="bp-arcade-note error">
           <CircleAlert size={22} /> {error}
@@ -65,7 +66,7 @@ function ArcadeTile({ game, autofocus, onPlay }: { game: ArcadeGame; autofocus: 
     <button type="button" className="bp-tile" style={{ width }} data-bp-focus data-bp-autofocus={autofocus || undefined} data-game={game.id} onClick={onPlay}>
       <span className="bp-tile-art arcade-bp-art" style={{ width, height }}>
         <GameCover game={game} size="cover" />
-        <span className="arcade-badge" data-platform={game.platform}>{PLATFORM_SHORT[game.platform]}</span>
+        <span className="arcade-badge" data-platform={game.platform} data-store={game.store ?? undefined}>{badgeOf(game)}</span>
         {game.isFavorite && <Heart className="arcade-fav" size={22} fill="currentColor" />}
       </span>
       <span className="bp-tile-title">{game.title}</span>

@@ -5,13 +5,13 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { Check, CheckCircle2, CircleAlert, Clock, FolderOpen, FolderPlus, Heart, ImageDown, ImagePlus, Joystick, ListChecks, LoaderCircle, Pencil, Play, RefreshCw, RotateCcw, Search, Settings2, Trash, X } from "lucide-react";
 import { api, errorText, onLinux, type ArcadeEmulatorStatus, type ArcadeFolder, type ArcadeGame, type ArcadeStatus } from "../../lib/api";
 import { usePreferences } from "../../lib/preferences";
-import { GridDragProvider, moved, useGridDragProps } from "../../lib/gridDrag";
-import { Dialog, Switch } from "../../components/common";
-import { GameCover, lastPlayed, PLATFORM_ASPECT, PLATFORM_FILTERS, PLATFORM_NAMES, PLATFORM_SHORT, playTime, SORTS, useArcade, useLaunch, useShownGames } from "./shared";
+import { GridDragProvider, useGridDragProps } from "../../lib/gridDrag";
+import { CardSizeSlider, Dialog, Switch } from "../../components/common";
+import { badgeOf, consoleOf, GameCover, lastPlayed, PLATFORM_ASPECT, PLATFORM_FILTERS, PLATFORM_NAMES, playTime, reorderWithin, SORTS, useArcade, useLaunch, useShownGames } from "./shared";
 
-/** `/arcade` (D-034, D-035): the games of the emulators on this computer, launched with their own settings. */
+/** `/arcade` (D-034, D-035, D-037): the games of the emulators and stores on this computer, started the way they start. */
 export function ArcadePage() {
-  const { status, games } = useArcade();
+  const { status, games, starting, notSeen, clearNotSeen } = useArcade();
   const { preferences, update } = usePreferences();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -25,7 +25,7 @@ export function ArcadePage() {
   const shown = useShownGames(games.data, search);
   const arcade = preferences.arcade;
   const setArcade = (change: Partial<typeof arcade>) => update((current) => ({ arcade: { ...current.arcade, ...change } }));
-  const anyEmulator = status.data?.emulators.some((e) => e.found) ?? false;
+  const anyEmulator = (status.data?.emulators.some((e) => e.found) || status.data?.stores.some((s) => s.found)) ?? false;
   // The setup shows by itself until there's an emulator and a game.
   const showSetup = setup ?? (status.data ? !anyEmulator || status.data.games === 0 : false);
   const running = status.data?.running != null ? games.data?.find((g) => g.id === status.data!.running) : undefined;
@@ -80,19 +80,22 @@ export function ArcadePage() {
       return next;
     });
 
-  // Custom order: games are dragged into place while all of them show (D-035).
+  // Custom order: games are dragged into place in any console's view too; the games shown trade
+  // places among themselves and the rest keep theirs (D-035, D-037).
   const customOrder = arcade.sort === "custom";
-  const canArrange = customOrder && arcade.platform === "all" && !search.trim() && !selecting;
+  const canArrange = customOrder && !selecting;
   const drag = canArrange
     ? {
         onDrop: (dragged: number, target: number, after: boolean) => {
           void api
-            .arcadeReorder(moved(shown.map((g) => g.id), dragged, target, after))
+            .arcadeReorder(reorderWithin((games.data ?? []).filter((g) => !g.missing), shown, dragged, target, after))
             .then(refresh)
             .catch((reason) => setNotice(errorText(reason)));
         },
       }
     : null;
+  const startingGame = starting ? games.data?.find((g) => g.id === starting.id) : undefined;
+  const unseenGame = notSeen != null ? games.data?.find((g) => g.id === notSeen) : undefined;
 
   return (
     <div className="page arcade-page">
@@ -103,7 +106,7 @@ export function ArcadePage() {
           </span>
           <div>
             <h1 className="display">Arcade</h1>
-            <p>Your Dolphin, Project64 and RMG games, played with each emulator's own settings.</p>
+            <p>Your emulators' and stores' games, each started the way it always starts, with its own settings.</p>
           </div>
         </div>
         <div className="arcade-head-actions">
@@ -122,6 +125,24 @@ export function ArcadePage() {
           <span>
             Playing <strong>{running.title}</strong>. Digitify waits, hidden and quiet, until the game closes.
           </span>
+        </div>
+      )}
+      {startingGame && !running && (
+        <div className="arcade-running starting" role="status">
+          <LoaderCircle size={16} className="spin" />
+          <span>
+            Starting <strong>{startingGame.title}</strong> through {starting!.store}. Digitify hides once the game is up.
+          </span>
+        </div>
+      )}
+      {unseenGame && (
+        <div className="arcade-notice" role="status">
+          <span>
+            {unseenGame.title} didn't show up, so Digitify stayed open. If it's running, it plays as usual; play time isn't counted this time.
+          </span>
+          <button type="button" className="icon-btn" aria-label="Dismiss" onClick={clearNotSeen}>
+            <X size={15} />
+          </button>
         </div>
       )}
       {notice && (
@@ -158,6 +179,10 @@ export function ArcadePage() {
         <button type="button" className="btn btn-sm glow-when-on" aria-pressed={selecting} onClick={() => (selecting ? stopSelecting() : setSelecting(true))}>
           <ListChecks size={15} /> Select
         </button>
+        <label className="arcade-size">
+          <span>Size</span>
+          <CardSizeSlider value={arcade.cardSize} onChange={(size) => setArcade({ cardSize: size })} />
+        </label>
         <label className="arcade-sort">
           <span>Sort</span>
           <select value={arcade.sort} onChange={(event) => setArcade({ sort: event.target.value as typeof arcade.sort })}>
@@ -167,8 +192,7 @@ export function ArcadePage() {
           </select>
         </label>
       </div>
-      {customOrder && !canArrange && !selecting && shown.length > 1 && <p className="arcade-hint">Show all games, without a search, to drag them into your order.</p>}
-      {canArrange && shown.length > 1 && <p className="arcade-hint">Drag the games into the order you like.</p>}
+      {canArrange && shown.length > 1 && <p className="arcade-hint">Drag the games into the order you like{arcade.platform === "all" && !search.trim() ? "" : "; the others keep their places"}.</p>}
 
       {games.data && shown.length === 0 ? (
         <div className="empty arcade-empty">
@@ -178,13 +202,13 @@ export function ArcadePage() {
             {games.data.length === 0
               ? anyEmulator
                 ? "Arcade looks in the game folders set up in your emulators, and in folders you add here. Check them in Emulators & folders, then look for games."
-                : "Install Dolphin (GameCube and Wii), Project64 or RMG (Nintendo 64), or point Arcade to where they are, in Emulators & folders."
+                : `Install Dolphin (GameCube and Wii), Project64 or RMG (Nintendo 64), or games from a store (Steam${onLinux ? " or Heroic" : ", Epic Games or Xbox"}), or point Arcade to your emulators in Emulators & folders.`
               : "Nothing matches this console or search."}
           </p>
         </div>
       ) : (
         <GridDragProvider value={drag}>
-          <div className={`arcade-grid${selecting ? " selecting" : ""}${canArrange ? " arranging-in-place" : ""}`} style={{ ["--card" as string]: `${preferences.cardSize}px` }}>
+          <div className={`arcade-grid${selecting ? " selecting" : ""}${canArrange ? " arranging-in-place" : ""}`} style={{ ["--card" as string]: `${arcade.cardSize}px` }}>
             {shown.map((g) => (
               <GameTile
                 key={g.id}
@@ -225,12 +249,12 @@ function GameTile({ game, running, selecting, checked, onOpen, onPlay }: { game:
         className="arcade-tile-art"
         style={{ aspectRatio: PLATFORM_ASPECT[game.platform] }}
         onClick={onOpen}
-        aria-label={`${game.title}, ${PLATFORM_NAMES[game.platform]}`}
+        aria-label={`${game.title}, ${consoleOf(game)}`}
         aria-pressed={selecting ? checked : undefined}
         data-blip
       >
         <GameCover game={game} />
-        <span className="arcade-badge" data-platform={game.platform}>{PLATFORM_SHORT[game.platform]}</span>
+        <span className="arcade-badge" data-platform={game.platform} data-store={game.store ?? undefined}>{badgeOf(game)}</span>
         {game.isFavorite && <Heart className="arcade-fav" size={16} fill="currentColor" aria-label="Favorite" />}
         {selecting && <span className={`card-check${checked ? " on" : ""}`} aria-hidden>{checked && <Check size={15} strokeWidth={3.2} />}</span>}
       </button>
@@ -241,7 +265,7 @@ function GameTile({ game, running, selecting, checked, onOpen, onPlay }: { game:
       )}
       <div className="arcade-tile-text">
         <strong title={game.title}>{game.title}</strong>
-        <span>{game.playSeconds > 0 ? playTime(game.playSeconds) : PLATFORM_NAMES[game.platform]}</span>
+        <span>{game.playSeconds > 0 ? playTime(game.playSeconds) : consoleOf(game)}</span>
       </div>
     </div>
   );
@@ -327,7 +351,7 @@ function BulkBar({
         open={confirming}
         onOpenChange={setConfirming}
         title={`Remove ${ids.length} ${ids.length === 1 ? "game" : "games"} from Digitify?`}
-        description="They leave Arcade's list, with their play time. Their files stay where they are; a later search for games finds them again if they're still in a game folder."
+        description="They leave Arcade's list. Files stay where they are and store games stay installed: emulator games come back with a later search if they're still in a game folder; store games stay off until you show them again in Emulators & folders."
         footer={
           <>
             <button type="button" className="btn" onClick={() => setConfirming(false)}>
@@ -386,7 +410,8 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
     await run(() => api.arcadeRename(game.id, naming));
     setNaming(null);
   };
-  const emulator = game.platform === "n64" ? (onLinux ? "RMG" : preferences.arcade.n64 === "rmg" ? "RMG" : "Project64") : "Dolphin";
+  const pc = game.platform === "pc";
+  const emulator = pc ? consoleOf(game) : game.platform === "n64" ? (onLinux ? "RMG" : preferences.arcade.n64 === "rmg" ? "RMG" : "Project64") : "Dolphin";
   const played = lastPlayed(game.lastPlayedAt);
   // On the page's own layer, so it stays put however the page scrolls.
   return createPortal(
@@ -418,10 +443,7 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
             <button type="button" className="btn btn-sm" onClick={() => setNaming(null)}>Cancel</button>
           </form>
         )}
-        <p className="arcade-panel-sub">
-          {PLATFORM_NAMES[game.platform]}
-          {game.gameId ? ` · ${game.gameId}` : ""} · plays in {emulator}
-        </p>
+        <p className="arcade-panel-sub">{pc ? `PC · starts through ${emulator}` : `${PLATFORM_NAMES[game.platform]}${game.gameId ? ` · ${game.gameId}` : ""} · plays in ${emulator}`}</p>
         <button type="button" className="btn btn-primary arcade-panel-play" disabled={running != null} onClick={onPlay}>
           <Play size={17} fill="currentColor" /> {running === game.id ? "Playing…" : "Play"}
         </button>
@@ -441,13 +463,15 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
               <dd>{played}</dd>
             </div>
           )}
-          <div>
-            <dt>File</dt>
-            <dd title={game.path}>
-              {game.path.split(/[\\/]/).pop()}
-              {game.size ? ` · ${fileSize(game.size)}` : ""}
-            </dd>
-          </div>
+          {!pc && (
+            <div>
+              <dt>File</dt>
+              <dd title={game.path}>
+                {game.path.split(/[\\/]/).pop()}
+                {game.size ? ` · ${fileSize(game.size)}` : ""}
+              </dd>
+            </div>
+          )}
         </dl>
         <div className="arcade-panel-actions">
           <button type="button" className="btn" aria-pressed={game.isFavorite} onClick={() => void run(() => api.arcadeSetFavorite(game.id, !game.isFavorite))}>
@@ -460,12 +484,12 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
             <ImageDown size={16} /> Find cover
           </button>
           <button type="button" className="btn" onClick={() => void run(() => api.arcadeReveal(game.id))}>
-            <FolderOpen size={16} /> Show file
+            <FolderOpen size={16} /> {pc ? "Show folder" : "Show file"}
           </button>
           <button
             type="button"
             className="btn btn-danger"
-            title="Takes it off Arcade's list; the file stays where it is"
+            title={pc ? "Takes it off Arcade's list; it stays installed (Emulators & folders can show it again)" : "Takes it off Arcade's list; the file stays where it is"}
             onClick={() =>
               void run(async () => {
                 await api.arcadeForget(game.id);
@@ -507,6 +531,27 @@ function Setup({ status, onChanged }: { status: ArcadeStatus; onChanged: () => v
           <EmulatorCard key={emulator.key} emulator={emulator} onRun={run} />
         ))}
       </div>
+      <div className="arcade-stores">
+        <h3>PC games from your stores</h3>
+        <p className="muted">Only installed games are listed, and the list follows what you install or remove. Each starts through its store.</p>
+        <ul>
+          {status.stores.map((store) => (
+            <li key={store.key} className={store.found ? "found" : ""}>
+              {store.found ? <CheckCircle2 size={16} className="ok" /> : <CircleAlert size={16} className="warn" />}
+              <strong>{store.name}</strong>
+              <span className="muted">{store.found ? `${store.games} installed ${store.games === 1 ? "game" : "games"}` : "not found on this computer"}</span>
+            </li>
+          ))}
+        </ul>
+        {status.hidden > 0 && (
+          <p className="arcade-hidden">
+            {status.hidden} store {status.hidden === 1 ? "game is" : "games are"} off the list.
+            <button type="button" className="btn btn-sm" onClick={() => void run(() => api.arcadeUnhide())}>
+              Show {status.hidden === 1 ? "it" : "them"} again
+            </button>
+          </p>
+        )}
+      </div>
       <div className="arcade-setup-row">
         <div className="arcade-setup-block">
           <h3>More game folders</h3>
@@ -534,7 +579,7 @@ function Setup({ status, onChanged }: { status: ArcadeStatus; onChanged: () => v
             <Switch checked={preferences.arcade.downloadCovers} onChange={(on) => update((c) => ({ arcade: { ...c.arcade, downloadCovers: on } }))} label="Download covers" />
             <span>
               Download covers
-              <small>GameCube and Wii from GameTDB by each disc's ID; every console from libretro-thumbnails by the game's name. Covers Dolphin already has are used first.</small>
+              <small>GameCube and Wii from GameTDB by each disc's ID; consoles from libretro-thumbnails by the game's name; Steam games from Steam by their ID. Covers already on this computer (Dolphin's, Steam's, the Xbox app's) are used first.</small>
             </span>
           </label>
           {n64Choices.length > 1 && (

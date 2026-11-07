@@ -189,17 +189,23 @@ function GridView({ cache, total, lead, slots, shape, params }: ViewProps) {
     const widths = withSlots(slots, total, aspectsOf(shapes.data ?? "", total - lead, viewAspect, preferences.coverShapes)).map((aspect) => Math.round(artHeight * aspect));
     const rows: number[] = [0];
     let used = 0;
+    let widest = 0;
     widths.forEach((w, i) => {
       const need = used === 0 ? w : used + GAP + w;
       if (used > 0 && need > Math.max(width, w)) {
         rows.push(i);
+        widest = Math.max(widest, used);
         used = w;
       } else {
         used = need;
       }
     });
+    widest = Math.max(widest, used);
     rows.push(total);
-    return { widths, starts: rows };
+    // The rows sit centered as one block (lined up on the left with each other), so a short view
+    // doesn't hug the left edge (D-037).
+    const offset = Math.max(0, Math.floor((width - widest) / 2));
+    return { widths, starts: rows, offset };
   }, [shapes.data, total, lead, slots, width, artHeight, viewAspect, preferences.coverShapes]);
   const rowCount = Math.max(0, layout.starts.length - 1);
   const rowHeight = artHeight + 44 + GAP + 10;
@@ -221,7 +227,7 @@ function GridView({ cache, total, lead, slots, shape, params }: ViewProps) {
             const from = layout.starts[row.index];
             const to = layout.starts[row.index + 1];
             return (
-              <div key={row.key} className="grid-row flow" style={{ transform: `translateY(${row.start}px)`, columnGap: GAP, ["--row" as string]: row.index }}>
+              <div key={row.key} className="grid-row flow" style={{ transform: `translateY(${row.start}px)`, left: layout.offset, columnGap: GAP, ["--row" as string]: row.index }}>
                 {Array.from({ length: to - from }, (_, k) => {
                   const index = from + k;
                   const item = cache.get(index);
@@ -790,7 +796,7 @@ const OWNERSHIP: { value: Filter; label: string }[] = [
 ];
 
 /** The "Select" toggle; Ctrl+A selects everything and Esc stops selecting. */
-function SelectToggle({ base }: { base: Omit<QueryParams, "offset" | "limit"> }) {
+function SelectToggle({ base, collections, itemsShown }: { base: Omit<QueryParams, "offset" | "limit">; collections: number[]; itemsShown: boolean }) {
   const selection = useSelection();
   useEffect(() => {
     if (!selection?.active) return;
@@ -801,12 +807,13 @@ function SelectToggle({ base }: { base: Omit<QueryParams, "offset" | "limit"> })
       if (action === "library.stopSelecting") selection.stop();
       if (action === "library.selectAll") {
         event.preventDefault();
-        void api.queryIds(base).then(selection.set, () => {});
+        // Everything shown: the collections (negative ids) and the items.
+        void (itemsShown ? api.queryIds(base) : Promise.resolve([] as number[])).then((ids) => selection.set([...collections, ...ids]), () => {});
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selection, base]);
+  }, [selection, base, collections, itemsShown]);
   if (!selection) return null;
   return (
     <button type="button" className="btn btn-sm" aria-pressed={selection.active} onClick={selection.active ? selection.stop : selection.start}>
@@ -1015,7 +1022,7 @@ export function LibraryView({
               ))}
             </div>
             <div className="spacer" />
-            {itemTotal != null && itemTotal > 0 && !onlyCollections && <SelectToggle base={params} />}
+            {total != null && total > 0 && <SelectToggle base={params} collections={leadCards.map((c) => c.id)} itemsShown={!onlyCollections} />}
             {layout === "shelf" && (
               <>
                 <div className="segmented" role="group" aria-label="Shelf style">

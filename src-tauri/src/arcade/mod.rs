@@ -9,6 +9,7 @@
 
 mod detect;
 mod games;
+mod stores;
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -27,6 +28,7 @@ use crate::{artwork, AppState, Library};
 pub use detect::Emulator;
 use detect::{Found, Program};
 use games::Platform;
+use stores::Store;
 
 /// The game being played, if any (one at a time).
 #[derive(Default)]
@@ -80,6 +82,19 @@ pub struct ArcadeStatus {
     /// The game being played.
     pub running: Option<i64>,
     pub games: i64,
+    /// PC stores read for installed games (D-037).
+    pub stores: Vec<StoreStatus>,
+    /// Store games taken off the list (still installed).
+    pub hidden: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreStatus {
+    pub key: &'static str,
+    pub name: &'static str,
+    pub found: Option<String>,
+    pub games: usize,
 }
 
 fn picked_paths(library: &Library) -> AppResult<HashMap<String, PathBuf>> {
@@ -169,8 +184,13 @@ pub async fn arcade_status(state: State<'_, AppState>, arcade: State<'_, ArcadeS
             .into_iter()
             .map(|(id, path, recursive)| FolderStatus { id: Some(id), exists: path.is_dir(), path: path.display().to_string(), recursive })
             .collect();
-        let games = library.db.with(|conn| Ok(conn.query_row("SELECT count(*) FROM arcade_games WHERE missing = 0", [], |row| row.get(0))?))?;
-        Ok(ArcadeStatus { emulators, folders, running, games })
+        let games = library.db.with(|conn| Ok(conn.query_row("SELECT count(*) FROM arcade_games WHERE missing = 0 AND hidden = 0", [], |row| row.get(0))?))?;
+        let hidden = library.db.with(|conn| Ok(conn.query_row("SELECT count(*) FROM arcade_games WHERE hidden = 1 AND missing = 0", [], |row| row.get(0))?))?;
+        let stores = stores::scan_all()
+            .into_iter()
+            .map(|s| StoreStatus { key: s.store.key(), name: s.store.name(), found: s.found, games: s.games.len() })
+            .collect();
+        Ok(ArcadeStatus { emulators, folders, running, games, stores, hidden })
     })
     .await
 }
@@ -378,8 +398,41 @@ fn scan(app: &AppHandle, library: &std::sync::Arc<Library>, download_covers: boo
         }
         present.insert(id);
     }
-    // Not in any game folder now (its file gone, its drive unplugged, its folder removed or changed):
-    // missing, and hidden, with its play time kept; found again: back.
+    // PC games installed through their stores (D-037): known ones keep their names (a rename stays).
+    let mut store_games = 0;
+    let mut store_covers: Vec<(i64, PathBuf)> = Vec::new();
+    for found in stores::scan_all() {
+        for game in found.games {
+            store_games += 1;
+            let key = format!("store://{}/{}", game.store.key(), game.key);
+            let (id, new) = library.db.with(|conn| {
+                let existed: bool = conn.query_row("SELECT EXISTS (SELECT 1 FROM arcade_games WHERE path = ?1)", [&key], |row| row.get(0))?;
+                conn.execute(
+                    "INSERT INTO arcade_games (path, platform, title, sort_title, store, store_key, launch, install_dir) VALUES (?1, 'pc', ?2, ?3, ?4, ?5, ?6, ?7) \
+                     ON CONFLICT(path) DO UPDATE SET launch = excluded.launch, install_dir = excluded.install_dir, missing = 0",
+                    params![key, game.title, sort_key(&game.title), game.store.key(), game.key, game.launch, game.install_dir.display().to_string()],
+                )?;
+                Ok((conn.query_row("SELECT id FROM arcade_games WHERE path = ?1", [&key], |row| row.get::<_, i64>(0))?, !existed))
+            })?;
+            added += usize::from(new);
+            present.insert(id);
+            if let Some(cover) = game.cover {
+                store_covers.push((id, cover));
+            }
+        }
+    }
+    // Their own art first (Steam's cache, the Xbox app's logos), for games without a cover yet.
+    for (id, path) in store_covers {
+        let bare: bool = library.db.with(|conn| Ok(conn.query_row("SELECT cover_key IS NULL FROM arcade_games WHERE id = ?1", [id], |row| row.get(0))?))?;
+        if bare {
+            if let Ok(bytes) = std::fs::read(&path) {
+                let _ = set_cover(library, id, &bytes, "store");
+            }
+        }
+    }
+
+    // Not in any game folder now (its file gone, its drive unplugged, its folder removed or changed;
+    // a store game uninstalled): missing, and hidden, with its play time kept; found again: back.
     let missing = library.db.with(|conn| {
         let tx = conn.transaction()?;
         let mut count = 0;
@@ -402,26 +455,35 @@ fn scan(app: &AppHandle, library: &std::sync::Arc<Library>, download_covers: boo
     })?;
     let covers_queued = find_covers(app, library, &bare, dolphin_covers.as_deref(), download_covers)?;
     let _ = app.emit("arcade-changed", ());
-    log::info!("arcade scan: {} games found, {added} new, {missing} missing, {covers_queued} covers to fetch", files.len());
-    Ok(ScanReport { found: files.len(), added, missing, covers_queued })
+    let found = files.len() + store_games;
+    log::info!("arcade scan: {found} games found ({store_games} from stores), {added} new, {missing} missing, {covers_queued} covers to fetch");
+    Ok(ScanReport { found, added, missing, covers_queued })
 }
 
 /// Covers for `ids`: Dolphin's cache at once; when `download`, GameTDB (GameCube and Wii, by disc ID)
 /// and libretro-thumbnails (every console, by name; D-035) in the background. Returns how many
 /// games wait for a download.
 fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], dolphin_covers: Option<&Path>, download: bool) -> AppResult<usize> {
-    let games: Vec<(i64, Option<String>, String, String, String)> = library.db.with(|conn| {
-        let mut stmt = conn.prepare("SELECT id, game_id, platform, path, title FROM arcade_games WHERE id = ?1")?;
+    type Row = (i64, Option<String>, String, String, String, Option<String>, Option<String>);
+    let games: Vec<Row> = library.db.with(|conn| {
+        let mut stmt = conn.prepare("SELECT id, game_id, platform, path, title, store, store_key FROM arcade_games WHERE id = ?1")?;
         let mut out = Vec::new();
         for id in ids {
-            if let Some(row) = stmt.query_row([id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))).optional()? {
+            if let Some(row) = stmt.query_row([id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?))).optional()? {
                 out.push(row);
             }
         }
         Ok(out)
     })?;
     let mut queue = Vec::new();
-    for (id, game_id, platform, path, title) in games {
+    for (id, game_id, platform, path, title, store, store_key) in games {
+        // PC games: Steam's public art by app id (D-037); other stores' games keep a drawn cover.
+        if platform == "pc" {
+            if let (true, Some("steam"), Some(app)) = (download, store.as_deref(), store_key.as_deref()) {
+                queue.push((id, stores::steam_cover_urls(app)));
+            }
+            continue;
+        }
         let cached = game_id.as_ref().and_then(|g| dolphin_covers.map(|dir| dir.join(format!("{g}.png")))).filter(|p| p.is_file());
         if let Some(bytes) = cached.and_then(|p| std::fs::read(p).ok()) {
             if set_cover(library, id, &bytes, "dolphin").is_ok() {
@@ -450,7 +512,13 @@ fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], 
         std::thread::spawn(move || {
             for (id, urls) in queue {
                 for url in urls {
-                    let source = if url.contains("gametdb") { "gametdb" } else { "libretro" };
+                    let source = if url.contains("gametdb") {
+                        "gametdb"
+                    } else if url.contains("steamstatic") {
+                        "steam"
+                    } else {
+                        "libretro"
+                    };
                     if let Some(bytes) = crate::online::http::image(&url) {
                         if set_cover(&library, id, &bytes, source).is_ok() {
                             let _ = app.emit("arcade-changed", ());
@@ -497,6 +565,8 @@ pub struct GameCard {
     pub missing: bool,
     /// Place in the custom order, if the game was put there (D-035).
     pub position: Option<f64>,
+    /// For PC games, the store it came from (`steam`, `epic`, `xbox`, `heroic`; D-037).
+    pub store: Option<String>,
 }
 
 #[tauri::command]
@@ -506,7 +576,7 @@ pub async fn arcade_games(state: State<'_, AppState>) -> AppResult<Vec<GameCard>
             let rows = conn
                 .prepare(
                     "SELECT id, title, platform, game_id, path, size, cover_key, cover_color, is_favorite, play_seconds, play_count, \
-                     last_played_at, added_at, missing, position FROM arcade_games ORDER BY sort_title, id",
+                     last_played_at, added_at, missing, position, store FROM arcade_games WHERE hidden = 0 ORDER BY sort_title, id",
                 )?
                 .query_map([], |row| {
                     Ok(GameCard {
@@ -525,6 +595,7 @@ pub async fn arcade_games(state: State<'_, AppState>) -> AppResult<Vec<GameCard>
                         added_at: row.get(12)?,
                         missing: row.get::<_, i64>(13)? != 0,
                         position: row.get(14)?,
+                        store: row.get(15)?,
                     })
                 })?
                 .collect::<Result<_, _>>()?;
@@ -561,7 +632,9 @@ pub async fn arcade_set_cover(state: State<'_, AppState>, id: i64, path: String)
 pub async fn arcade_forget(state: State<'_, AppState>, id: i64) -> AppResult<()> {
     with_library(&state, move |library| {
         library.db.with(|conn| {
-            conn.execute("DELETE FROM arcade_games WHERE id = ?1", [id])?;
+            // A store game is still installed: it's hidden, so the next search doesn't bring it back.
+            conn.execute("UPDATE arcade_games SET hidden = 1 WHERE id = ?1 AND store IS NOT NULL", [id])?;
+            conn.execute("DELETE FROM arcade_games WHERE id = ?1 AND store IS NULL", [id])?;
             Ok(())
         })
     })
@@ -592,7 +665,8 @@ pub async fn arcade_forget_many(state: State<'_, AppState>, ids: Vec<i64>) -> Ap
             let tx = conn.transaction()?;
             let mut removed = 0;
             for id in &ids {
-                removed += tx.execute("DELETE FROM arcade_games WHERE id = ?1", [id])?;
+                removed += tx.execute("UPDATE arcade_games SET hidden = 1 WHERE id = ?1 AND store IS NOT NULL", [id])?;
+                removed += tx.execute("DELETE FROM arcade_games WHERE id = ?1 AND store IS NULL", [id])?;
             }
             tx.commit()?;
             Ok(removed)
@@ -664,10 +738,18 @@ pub async fn arcade_reorder(state: State<'_, AppState>, ids: Vec<i64>) -> AppRes
     .await
 }
 
+/// Brings back every store game taken off the list.
+#[tauri::command]
+pub async fn arcade_unhide(app: AppHandle, state: State<'_, AppState>) -> AppResult<usize> {
+    let shown = with_library(&state, move |library| library.db.with(|conn| Ok(conn.execute("UPDATE arcade_games SET hidden = 0 WHERE hidden = 1", [])?))).await?;
+    let _ = app.emit("arcade-changed", ());
+    Ok(shown)
+}
+
 #[tauri::command]
 pub async fn arcade_reveal(state: State<'_, AppState>, id: i64) -> AppResult<()> {
     let path: String = with_library(&state, move |library| {
-        library.db.with(|conn| Ok(conn.query_row("SELECT path FROM arcade_games WHERE id = ?1", [id], |row| row.get(0))?))
+        library.db.with(|conn| Ok(conn.query_row("SELECT coalesce(install_dir, path) FROM arcade_games WHERE id = ?1", [id], |row| row.get(0))?))
     })
     .await?;
     crate::files::reveal(Path::new(&path))
@@ -684,10 +766,21 @@ pub async fn arcade_launch(app: AppHandle, state: State<'_, AppState>, arcade: S
         return Err(AppError::msg("A game is already running. Close it first."));
     }
     let library = state.library()?;
-    let (path, platform): (String, String) = library
+    let (path, platform, store, launch, install_dir): (String, String, Option<String>, Option<String>, Option<String>) = library
         .db
-        .with(|conn| Ok(conn.query_row("SELECT path, platform FROM arcade_games WHERE id = ?1", [id], |row| Ok((row.get(0)?, row.get(1)?))).optional()?))?
+        .with(|conn| {
+            Ok(conn
+                .query_row("SELECT path, platform, store, launch, install_dir FROM arcade_games WHERE id = ?1", [id], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+                })
+                .optional()?)
+        })?
         .ok_or_else(|| AppError::msg("That game is no longer in Arcade."))?;
+    if platform == "pc" {
+        let store = store.as_deref().and_then(Store::parse).ok_or_else(|| AppError::msg("That game's store isn't known."))?;
+        let launch = launch.ok_or_else(|| AppError::msg("Arcade doesn't know how to start that game."))?;
+        return launch_store_game(app, library, id, store, &launch, install_dir.map(PathBuf::from));
+    }
     if !Path::new(&path).is_file() {
         return Err(AppError::msg("The game's file isn't there anymore (was its drive unplugged?)."));
     }
@@ -720,33 +813,138 @@ pub async fn arcade_launch(app: AppHandle, state: State<'_, AppState>, arcade: S
     let started = Instant::now();
     std::thread::spawn(move || {
         let _ = child.wait();
-        let seconds = started.elapsed().as_secs() as i64;
-        // A start that ends at once (an emulator refusing the file) isn't a session.
-        let played = seconds >= 5;
-        let _ = library.db.with(|conn| {
-            if played {
-                conn.execute(
-                    "UPDATE arcade_games SET play_seconds = play_seconds + ?2, play_count = play_count + 1, \
-                     last_played_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
-                    params![id, seconds],
-                )?;
-            }
-            Ok(())
-        });
-        if let Some(state) = app.try_state::<ArcadeState>() {
-            if let Ok(mut running) = state.running.lock() {
-                *running = None;
-            }
-        }
-        let _ = app.emit("arcade-session", serde_json::json!({ "running": null, "seconds": seconds }));
-        // Back to Digitify, where it was (Big Picture stays full screen), when the game closes.
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.show();
-            let _ = window.unminimize();
-            let _ = window.set_focus();
-        }
+        finish_session(&app, &library, id, started.elapsed().as_secs() as i64);
     });
     Ok(())
+}
+
+/// The end of a game session: play time (a start that ends at once isn't a session), Arcade free
+/// again, the UI told, and Digitify back where it was (Big Picture stays full screen).
+fn finish_session(app: &AppHandle, library: &Library, id: i64, seconds: i64) {
+    if seconds >= 5 {
+        let _ = library.db.with(|conn| {
+            conn.execute(
+                "UPDATE arcade_games SET play_seconds = play_seconds + ?2, play_count = play_count + 1, \
+                 last_played_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
+                params![id, seconds],
+            )?;
+            Ok(())
+        });
+    }
+    if let Some(state) = app.try_state::<ArcadeState>() {
+        if let Ok(mut running) = state.running.lock() {
+            *running = None;
+        }
+    }
+    let _ = app.emit("arcade-session", serde_json::json!({ "running": null, "seconds": seconds }));
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+/// How long a store game has to show up after its launcher was asked to start it.
+const STORE_START_WAIT: u64 = 90;
+
+/// Starts a PC game through its store (D-037). The store starts the game in its own way, so
+/// Digitify watches for the game's own program — one running from its install folder — and only
+/// then hides and goes quiet; when no program from that folder is left, the session ends. A game
+/// never seen leaves Digitify as it was.
+fn launch_store_game(app: AppHandle, library: std::sync::Arc<Library>, id: i64, store: Store, launch: &str, install_dir: Option<PathBuf>) -> AppResult<()> {
+    let mut command = if cfg!(windows) { crate::tools::host_command("explorer.exe") } else { crate::tools::host_command("xdg-open") };
+    command.arg(launch);
+    command.spawn().map_err(|e| AppError::msg(format!("Couldn't ask {} to start the game: {e}", store.name())))?;
+    log::info!("arcade: asked {} to start game {id}", store.name());
+    let _ = app.emit("arcade-session", serde_json::json!({ "starting": id, "store": store.name() }));
+    let Some(dir) = install_dir.filter(|d| d.is_dir()) else { return Ok(()) };
+    std::thread::spawn(move || {
+        let mut system = sysinfo::System::new();
+        let deadline = Instant::now() + std::time::Duration::from_secs(STORE_START_WAIT);
+        // Wait for the game to appear.
+        loop {
+            if game_running(&mut system, &dir) {
+                break;
+            }
+            if Instant::now() > deadline {
+                log::info!("arcade: game {id} wasn't seen running; Digitify stays as it is");
+                let _ = app.emit("arcade-session", serde_json::json!({ "running": null, "notSeen": id }));
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_secs(2));
+        }
+        log::info!("arcade: game {id} is running");
+        if let Some(state) = app.try_state::<ArcadeState>() {
+            if let Ok(mut running) = state.running.lock() {
+                *running = Some(Running { game: id });
+            }
+        }
+        let _ = app.emit("arcade-session", serde_json::json!({ "running": id }));
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.hide();
+        }
+        let started = Instant::now();
+        // Wait for it to end: no program from its folder for two checks in a row (launchers
+        // sometimes hand over from one program to another).
+        let mut absent = 0;
+        while absent < 2 {
+            std::thread::sleep(std::time::Duration::from_secs(3));
+            absent = if game_running(&mut system, &dir) { 0 } else { absent + 1 };
+        }
+        finish_session(&app, &library, id, started.elapsed().as_secs() as i64);
+    });
+    Ok(())
+}
+
+/// Whether a program from `dir` is running: its program file, working folder or command line is
+/// inside it (games under Proton show their Windows path, `Z:\home\…`, in the command line).
+fn game_running(system: &mut sysinfo::System, dir: &Path) -> bool {
+    // The program, its command line and its working folder, read again every time: launchers often
+    // start a helper that then becomes the game, keeping its process (the default refresh reads
+    // only the program, once).
+    let what = sysinfo::ProcessRefreshKind::nothing()
+        .with_exe(sysinfo::UpdateKind::Always)
+        .with_cmd(sysinfo::UpdateKind::Always)
+        .with_cwd(sysinfo::UpdateKind::Always);
+    system.refresh_processes_specifics(sysinfo::ProcessesToUpdate::All, true, what);
+    let wanted = normalize(&dir.display().to_string());
+    if wanted.len() < 4 {
+        return false;
+    }
+    system.processes().values().any(|process| {
+        process.exe().is_some_and(|p| normalize(&p.display().to_string()).starts_with(&wanted))
+            || process.cwd().is_some_and(|p| normalize(&p.display().to_string()).starts_with(&wanted))
+            || process.cmd().iter().any(|arg| normalize(&arg.to_string_lossy()).contains(&wanted))
+    })
+}
+
+/// Paths compared loosely: forward slashes, lower case, no Wine drive letter, no trailing slash.
+fn normalize(path: &str) -> String {
+    let mut p = path.replace('\\', "/").to_lowercase();
+    if p.starts_with("z:/") {
+        p = p[2..].to_string();
+    }
+    p.trim_end_matches('/').to_string()
+}
+
+/// Watches the stores' install records and tells the UI when a game was installed or removed, so
+/// Arcade refreshes by itself (D-037). Cheap: names and dates of a few folders, every 20 seconds.
+pub fn watch_stores(app: AppHandle) {
+    std::thread::Builder::new()
+        .name("arcade-stores".into())
+        .spawn(move || {
+            let mut last = stores::fingerprint();
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(20));
+                let now = stores::fingerprint();
+                if now != last {
+                    last = now;
+                    log::info!("arcade: a store's installed games changed");
+                    let _ = app.emit("arcade-stores-changed", ());
+                }
+            }
+        })
+        .ok();
 }
 
 fn launch_command(found: &Found, game: &Path) -> std::process::Command {

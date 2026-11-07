@@ -4992,3 +4992,83 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
   top: auto;
   left: auto;
 }
+
+/* Arcade, D-037: centered grid, size, PC stores. */
+.arcade-grid {
+  grid-template-columns: repeat(auto-fill, var(--card, 160px));
+  justify-content: center;
+}
+.arcade-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  color: var(--muted);
+}
+.arcade-size input {
+  width: 110px;
+}
+.arcade-running.starting {
+  border-style: dashed;
+}
+.arcade-badge[data-store="steam"] {
+  background: rgba(23, 26, 33, 0.9);
+}
+.arcade-badge[data-store="epic"] {
+  background: rgba(40, 40, 40, 0.92);
+}
+.arcade-badge[data-store="xbox"] {
+  background: rgba(16, 124, 16, 0.92);
+}
+.arcade-badge[data-store="heroic"] {
+  background: rgba(130, 70, 200, 0.9);
+}
+.arcade-cover-blank[data-platform="pc"] {
+  background: linear-gradient(160deg, #2a3f5f 0%, #121a26 100%);
+}
+.arcade-cover-blank[data-store="xbox"] {
+  background: linear-gradient(160deg, #1c7d1c 0%, #0b3a0b 100%);
+}
+.arcade-cover-blank[data-store="epic"] {
+  background: linear-gradient(160deg, #3a3a3a 0%, #121212 100%);
+}
+.arcade-stores h3 {
+  font-size: 15px;
+  font-weight: 900;
+}
+.arcade-stores .muted {
+  font-size: 13px;
+}
+.arcade-stores ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.arcade-stores li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  font-size: 13px;
+}
+.arcade-stores .ok {
+  color: #30a46c;
+}
+.arcade-stores .warn {
+  color: #e5a00d;
+}
+
+.arcade-hidden {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 700;
+}

@@ -120,6 +120,7 @@ pub fn run() {
             app.manage(music::MusicState::default());
             app.manage(online::OnlineState::default());
             app.manage(arcade::ArcadeState::default());
+            arcade::watch_stores(app.handle().clone());
             app.manage(optical::OpticalState::default());
             optical::watch(app.handle().clone());
             app.manage(ambient::AmbientState::default());
@@ -198,6 +199,7 @@ pub fn run() {
             arcade::arcade_rename,
             arcade::arcade_reorder,
             library::custom_order_slots,
+            arcade::arcade_unhide,
             online::online_import,
             online::online_queue,
             online::online_cancel,
