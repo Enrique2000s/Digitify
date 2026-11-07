@@ -1,7 +1,9 @@
 //! Importing files and folders into the library, in the background with progress events.
 //!
-//! 1. Scan: expand the picked paths into candidates (one per book, comic, video, image folder,
-//!    series or track; D-027: no albums).
+//! 1. Scan: expand the picked paths into candidates (one per book, comic, video, photo, series
+//!    or track; D-027: no music albums). Photos go to Pictures, a picked folder and its subfolders
+//!    becoming albums (D-033); a folder of images becomes a book only when a book or comic
+//!    category is picked (or through the image-set book builder).
 //! 2. For each candidate, in parallel: fingerprint its files, drop files already in the library,
 //!    read embedded metadata and artwork.
 //! 3. Save: copy into the library folder if asked, then record the item, its digital version, its
@@ -24,7 +26,7 @@ use crate::files::{self, natural_cmp};
 use crate::formats::{self, year_of};
 use crate::library::{reindex, sort_key, upsert_person};
 use crate::episodes::{self, EpisodeName};
-use crate::{artwork, pdf, series, AppState, Library};
+use crate::{artwork, pdf, pictures, series, AppState, Library};
 
 #[derive(Default)]
 pub struct ImportManager {
@@ -115,7 +117,18 @@ fn run(
 ) -> AppResult<()> {
     emit(app, progress);
     let paths: Vec<PathBuf> = request.paths.iter().map(PathBuf::from).collect();
-    let candidates = scan(&paths, cancel);
+    // Images are photos (D-033) unless a book or comic category was picked for them.
+    let picked_handler: Option<String> = match &request.category {
+        Some(key) => library.db.with(|conn| {
+            Ok(conn.query_row("SELECT handler FROM categories WHERE key = ?1", [key], |row| row.get(0)).optional()?)
+        })?,
+        None => None,
+    };
+    let images = match picked_handler.as_deref() {
+        Some("book" | "comic") => ImageMode::Pages,
+        _ => ImageMode::Photos,
+    };
+    let candidates = scan(&paths, cancel, images);
     progress.total = candidates.len();
     progress.phase = "importing";
     emit(app, progress);
@@ -224,6 +237,17 @@ enum Candidate {
     Track { path: PathBuf },
     /// Episodes of one TV series, recognized by their names (D-018).
     Series { name: String, episodes: Vec<(PathBuf, EpisodeName)> },
+    /// One photo (D-033), with the albums it sits in: the picked folder, then its subfolders.
+    Picture { path: PathBuf, album: Vec<String> },
+}
+
+/// What images in the picked paths are.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ImageMode {
+    /// Photos for Pictures, each an item of its own.
+    Photos,
+    /// The pages of a book or comic, one folder per item.
+    Pages,
 }
 
 impl Candidate {
@@ -234,6 +258,7 @@ impl Candidate {
             Candidate::ImageSet { dir, .. } => name(dir),
             Candidate::Track { path } => name(path),
             Candidate::Series { name, .. } => name.clone(),
+            Candidate::Picture { path, .. } => name(path),
         }
     }
 
@@ -243,12 +268,15 @@ impl Candidate {
             Candidate::ImageSet { pages, .. } => pages.iter().collect(),
             Candidate::Track { path } => vec![path],
             Candidate::Series { episodes, .. } => episodes.iter().map(|(path, _)| path).collect(),
+            Candidate::Picture { path, .. } => vec![path],
         }
     }
 }
 
-fn scan(paths: &[PathBuf], cancel: &AtomicBool) -> Vec<Candidate> {
+fn scan(paths: &[PathBuf], cancel: &AtomicBool, images: ImageMode) -> Vec<Candidate> {
     let mut found: Vec<PathBuf> = Vec::new();
+    // The picked folder each file was found in, for photo albums.
+    let mut roots: HashMap<PathBuf, PathBuf> = HashMap::new();
     for path in paths {
         if path.is_dir() {
             for entry in WalkDir::new(path).follow_links(false).into_iter().filter_map(Result::ok) {
@@ -256,6 +284,7 @@ fn scan(paths: &[PathBuf], cancel: &AtomicBool) -> Vec<Candidate> {
                     return Vec::new();
                 }
                 if entry.file_type().is_file() {
+                    roots.entry(entry.path().to_path_buf()).or_insert_with(|| path.clone());
                     found.push(entry.into_path());
                 }
             }
@@ -292,14 +321,35 @@ fn scan(paths: &[PathBuf], cancel: &AtomicBool) -> Vec<Candidate> {
             None => {}
         }
     }
-    // Images next to music or video are album art and posters, not books.
+    // Images next to music or video are album art and posters, neither photos nor books.
     for (dir, pages) in image_dirs {
-        if !av_dirs.contains(&dir) {
-            candidates.push(Candidate::ImageSet { dir, pages });
+        if av_dirs.contains(&dir) {
+            continue;
+        }
+        match images {
+            ImageMode::Pages => candidates.push(Candidate::ImageSet { dir, pages }),
+            ImageMode::Photos => {
+                for path in pages {
+                    let album = roots.get(&path).map(|root| album_of(root, &path)).unwrap_or_default();
+                    candidates.push(Candidate::Picture { path, album });
+                }
+            }
         }
     }
     candidates.extend(series.into_values().map(|(name, episodes)| Candidate::Series { name, episodes }));
     candidates
+}
+
+/// The albums a photo found inside a picked folder sits in: that folder, then each subfolder down
+/// to the photo's own ("Trips", "2024", "Lisbon").
+fn album_of(root: &Path, photo: &Path) -> Vec<String> {
+    let name = |p: &Path| p.file_name().map(|n| n.to_string_lossy().into_owned());
+    let mut album: Vec<String> = name(root).into_iter().collect();
+    if let Some(folder) = photo.parent().and_then(|parent| parent.strip_prefix(root).ok()) {
+        album.extend(folder.components().map(|c| c.as_os_str().to_string_lossy().into_owned()));
+    }
+    album.retain(|n| !n.is_empty());
+    album
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -338,6 +388,10 @@ struct Draft {
     artwork: Option<Vec<u8>>,
     /// Folder name for managed copies of multi-file items (albums, page folders).
     copy_folder: Option<String>,
+    /// A photo's albums, outermost first (D-033).
+    album: Vec<String>,
+    /// Artwork made while preparing (photos are decoded in parallel there).
+    ready_art: Option<artwork::Artwork>,
 }
 
 enum Prepared {
@@ -370,6 +424,13 @@ fn prepare(library: &Library, candidate: &Candidate) -> AppResult<Prepared> {
         Candidate::ImageSet { dir, .. } => describe_image_set(dir, files),
         Candidate::Track { path } => describe_track(path, files),
         Candidate::Series { name, episodes } => describe_series(name, episodes, files),
+        Candidate::Picture { path, album } => {
+            let mut d = describe_picture(path, album, files);
+            d.ready_art = pictures::store_artwork(library, path, pictures::View::default())
+                .map_err(|e| log::warn!("thumbnail for {} skipped: {e}", path.display()))
+                .ok();
+            d
+        }
     };
     Ok(Prepared::Draft(Box::new(draft)))
 }
@@ -413,6 +474,8 @@ fn draft(category: &'static str, title: String, year: Option<i64>, format: Strin
         parts: Vec::new(),
         artwork: None,
         copy_folder: None,
+        album: Vec::new(),
+        ready_art: None,
     }
 }
 
@@ -530,6 +593,17 @@ fn describe_image_set(dir: &Path, mut files: Vec<FileDraft>) -> Draft {
     d.artwork = artwork;
     d.copy_folder = Some(title);
     d.metadata.insert("pageCount".into(), json!(pages));
+    d
+}
+
+/// One photo (D-033): its file name as the title, the year it was taken, and what its EXIF says.
+fn describe_picture(path: &Path, album: &[String], files: Vec<FileDraft>) -> Draft {
+    let title = path.file_stem().map(|s| s.to_string_lossy().trim().to_string()).filter(|t| !t.is_empty()).unwrap_or_else(|| "Untitled".into());
+    let metadata = pictures::describe(path);
+    let year = metadata.get("taken").and_then(Value::as_str).and_then(|t| year_of(&t[..4.min(t.len())]));
+    let mut d = draft("pictures", title, year, extension(path), files);
+    d.metadata = metadata;
+    d.album = album.to_vec();
     d
 }
 
@@ -695,11 +769,44 @@ fn save(library: &Library, draft: Draft, mode: ImportMode, category_id: i64, cat
     }
     let stored = store_files(library, &draft, mode, category_name)?;
     let art = store_artwork(library, &draft);
-    let result = library.db.with(|conn| insert(conn, &draft, &stored, category_id, art.as_ref()));
+    let result = library.db.with(|conn| {
+        let item = insert(conn, &draft, &stored, category_id, art.as_ref())?;
+        if !draft.album.is_empty() {
+            let album = ensure_album(conn, category_id, &draft.album)?;
+            conn.execute("UPDATE items SET collection_id = ?2 WHERE id = ?1", params![item, album])?;
+        }
+        Ok(item)
+    });
     if result.is_err() {
         discard_copies(library, &stored);
     }
     result.map(|_| ())
+}
+
+/// The collection for a photo's albums (`["Trips", "2024"]`), made where missing (D-033). An album
+/// already there with the same name, in the same place, is used again.
+fn ensure_album(conn: &Connection, category_id: i64, names: &[String]) -> AppResult<i64> {
+    let mut parent: Option<i64> = None;
+    for name in names {
+        let existing: Option<i64> = conn
+            .query_row(
+                "SELECT id FROM collections WHERE category_id = ?1 AND parent_id IS ?2 AND lower(name) = lower(?3) ORDER BY id LIMIT 1",
+                params![category_id, parent, name],
+                |row| row.get(0),
+            )
+            .optional()?;
+        parent = Some(match existing {
+            Some(id) => id,
+            None => {
+                conn.execute(
+                    "INSERT INTO collections (category_id, parent_id, kind, name, sort_name) VALUES (?1, ?2, 'folder', ?3, ?4)",
+                    params![category_id, parent, name, sort_key(name)],
+                )?;
+                conn.last_insert_rowid()
+            }
+        });
+    }
+    parent.ok_or_else(|| AppError::msg("an album needs a name"))
 }
 
 fn store_files(library: &Library, draft: &Draft, mode: ImportMode, category_name: &str) -> AppResult<Vec<Stored>> {
@@ -714,6 +821,9 @@ fn store_files(library: &Library, draft: &Draft, mode: ImportMode, category_name
 }
 
 fn store_artwork(library: &Library, draft: &Draft) -> Option<artwork::Artwork> {
+    if let Some(art) = &draft.ready_art {
+        return Some(art.clone());
+    }
     let bytes = draft.artwork.as_deref()?;
     artwork::store(&library.folder, bytes)
         .map_err(|e| log::warn!("artwork for {} skipped: {e}", draft.title))
@@ -735,7 +845,7 @@ pub fn import_in_place(library: &Library, paths: &[PathBuf]) -> AppResult<Vec<i6
         Ok(rows)
     })?;
     let mut ids = Vec::new();
-    for candidate in scan(paths, &AtomicBool::new(false)) {
+    for candidate in scan(paths, &AtomicBool::new(false), ImageMode::Photos) {
         let Prepared::Draft(draft) = prepare(library, &candidate)? else { continue };
         let category_id = *categories.get(draft.category).ok_or_else(|| AppError::msg(format!("unknown category '{}'", draft.category)))?;
         let stored: Vec<Stored> = draft
@@ -916,6 +1026,14 @@ fn insert_version(conn: &Connection, item_id: i64, draft: &Draft, with_parts: bo
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn photo_albums_follow_the_picked_folder() {
+        use std::path::Path;
+        let root = Path::new("/photos/Trips");
+        assert_eq!(super::album_of(root, Path::new("/photos/Trips/a.jpg")), ["Trips"]);
+        assert_eq!(super::album_of(root, Path::new("/photos/Trips/2024/Lisbon/b.jpg")), ["Trips", "2024", "Lisbon"]);
+    }
+
     use super::*;
 
     #[test]

@@ -40,6 +40,7 @@ fn route<R: Runtime>(app: &AppHandle<R>, request: &Request<Vec<u8>>) -> Routed {
         (Some("page"), Some(page)) => book_page(app, page, request),
         (Some("book"), Some(version)) => ebook_file(app, version, request),
         (Some("cd"), Some(track)) => cd_track(track, request),
+        (Some("picture"), Some(item)) => picture(app, item, request),
         _ => Err((StatusCode::NOT_FOUND, format!("unknown resource {path}"))),
     }
 }
@@ -118,6 +119,31 @@ fn ebook_file<R: Runtime>(app: &AppHandle<R>, version: &str, request: &Request<V
         .map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?
         .ok_or_else(|| (StatusCode::NOT_FOUND, format!("copy {version} isn't an ebook")))?;
     stream(&path, ebooks::mime_type(&path), request)
+}
+
+/// A photo's own file, `picture/<item>` (D-033). Formats the web view can't show (TIFF) come
+/// converted to JPEG, upright.
+fn picture<R: Runtime>(app: &AppHandle<R>, item: &str, request: &Request<Vec<u8>>) -> Routed {
+    let item: i64 = item.parse().map_err(|_| (StatusCode::BAD_REQUEST, "invalid picture".to_string()))?;
+    let library = app
+        .state::<AppState>()
+        .library()
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+    let path = crate::pictures::file_of(&library, item).map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?;
+    if let Some(mime) = crate::pictures::shown_directly(&path) {
+        return stream(&path, mime, request);
+    }
+    let image = crate::pictures::load(&path, crate::pictures::View::default()).map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, e.to_string()))?;
+    let mut bytes = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, 92)
+        .encode_image(&image::DynamicImage::ImageRgb8(image.to_rgb8()))
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "image/jpeg")
+        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+        .body(bytes)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
 /// An audio CD track straight from the disc as WAV, `cd/<letter>/<track>`, in range slices.

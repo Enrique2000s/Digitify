@@ -27,7 +27,7 @@ interface AmbientContext {
   skip: () => void;
   playlist: PlaylistInfo;
   /** Pauses the music until the returned release is called (e.g. while a video plays). */
-  hold: (reason: "video" | "media" | "reading") => () => void;
+  hold: (reason: "video" | "media" | "reading" | "game") => () => void;
 }
 
 const Context = createContext<AmbientContext | null>(null);
@@ -226,7 +226,7 @@ export function useAmbient(): AmbientContext {
 }
 
 /** Pauses ambient music while the calling component is mounted and `active`. */
-export function useAmbientHold(reason: "video" | "media" | "reading", active = true) {
+export function useAmbientHold(reason: "video" | "media" | "reading" | "game", active = true) {
   const { hold } = useAmbient();
   useEffect(() => (active ? hold(reason) : undefined), [hold, reason, active]);
 }

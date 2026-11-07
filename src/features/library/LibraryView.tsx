@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { flushSync } from "react-dom";
 import { motionAllowed } from "../reader/chrome";
@@ -7,12 +7,14 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Popover } from "radix-ui";
 import { Check, ChevronLeft, ChevronRight, GalleryHorizontalEnd, GripVertical, Heart, LayoutGrid, LayoutList, LibraryBig, List, ListChecks, Paintbrush, Play, Plus, Shuffle } from "lucide-react";
 import { api, type Blurb, type ItemCard, type Ownership, type QueryParams, type SortKey } from "../../lib/api";
+import { itemPath, photoContext } from "../../lib/routes";
+import { GridDragProvider, moved } from "../../lib/gridDrag";
 import { spineColors } from "../../lib/color";
 import { formatLabel } from "../../lib/format";
 import { coverShapeOf, FILMS, SHAPE_ASPECT, useCoverShape, usePreferences, type Layout } from "../../lib/preferences";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { shuffled } from "../music/Tracks";
-import { useCollections, usePagedItems, type PageCache } from "../../lib/queries";
+import { libraryChanged, useCollections, usePagedItems, type PageCache } from "../../lib/queries";
 import { actionFor, isTyping } from "../../lib/shortcuts";
 import { SelectionProvider, useSelectable, useSelection, useSelectionState } from "../../lib/selection";
 import { AddMenu } from "../../components/AddMenu";
@@ -231,7 +233,7 @@ function ListRow({ item, index, top }: { item: ItemCard; index: number; top: num
   const shapeOf = useCoverShape();
   return (
               <Link
-                to="/item/$id"
+                to={itemPath(item)}
                 params={{ id: String(item.id) }}
                 className="list-row"
                 style={{ top, height: 54 }}
@@ -291,7 +293,7 @@ function ShelfItem({ item, index, height, spines }: { item: ItemCard; index: num
     const width = Math.round(height * (0.14 + jitter(item.id, 1) * 0.1));
     const spineHeight = Math.round(height * (0.86 + jitter(item.id, 2) * 0.14));
     return (
-      <Link to="/item/$id" params={{ id: String(item.id) }} className="shelf-item" title={item.title} data-blip {...props}>
+      <Link to={itemPath(item)} params={{ id: String(item.id) }} className="shelf-item" title={item.title} data-blip {...props}>
         <div className="spine" style={{ width, height: spineHeight, ...colors }} {...vt(item.id)}>
           <span>{item.title}</span>
         </div>
@@ -300,7 +302,7 @@ function ShelfItem({ item, index, height, spines }: { item: ItemCard; index: num
     );
   }
   return (
-    <Link to="/item/$id" params={{ id: String(item.id) }} className="shelf-item" title={item.title} data-blip {...props}>
+    <Link to={itemPath(item)} params={{ id: String(item.id) }} className="shelf-item" title={item.title} data-blip {...props}>
       {/* Sized by width: if a full shelf narrows its covers, they shrink whole and keep their shape. */}
       <div className="shelf-cover" data-shape={shape} style={{ width: shelfBox(shape, height).width, aspectRatio: aspect, position: "relative" }} {...vt(item.id)} {...sourceProps(item.source)}>
         <Cover item={item} />
@@ -392,7 +394,7 @@ function DetailedRow({ item, index, top, height, blurb }: { item: ItemCard; inde
   const progress = item.progress ?? 0;
   const availability = item.online ? `Online on ${item.source ?? "the web"}` : item.hasDigital ? "Digital" : null;
   return (
-    <Link to="/item/$id" params={{ id: String(item.id) }} className="detail-row" style={{ top, height }} data-blip {...props}>
+    <Link to={itemPath(item)} params={{ id: String(item.id) }} className="detail-row" style={{ top, height }} data-blip {...props}>
       <div className="detail-cover" data-shape={shape} style={{ height: height - 26, aspectRatio: aspect }} {...vt(item.id)} {...sourceProps(item.source)}>
         <Cover item={item} />
         <SourceTag service={item.source} />
@@ -511,7 +513,7 @@ function CarouselView({ cache, total, lead, shape, params }: ViewProps) {
       if (action === "library.carouselPrevious") step(-1);
       else if (action === "library.carouselNext") step(1);
       else if (action === "library.carouselOpen" && front?.collection) void navigate({ to: "/library/$scope", params: { scope: front.category }, search: { collection: front.collection.id } });
-      else if (action === "library.carouselOpen" && front) void navigate({ to: "/item/$id", params: { id: String(front.id) } });
+      else if (action === "library.carouselOpen" && front) void navigate({ to: itemPath(front), params: { id: String(front.id) } });
       else return;
       event.preventDefault();
     };
@@ -653,7 +655,7 @@ function CarouselCover({ item, index, front, shape, style, onPick }: { item: Ite
   const { selecting, checked, props } = useSelectable(item.id, index);
   return (
     <Link
-      to="/item/$id"
+      to={itemPath(item)}
       params={{ id: String(item.id) }}
       className={`carousel-item${front ? " front" : ""}`}
       data-shape={shape}
@@ -693,6 +695,12 @@ const SORTS: { value: SortKey; label: string }[] = [
   { value: "added", label: "Recently added" },
   { value: "year", label: "Year" },
   { value: "creator", label: "Creator" },
+];
+
+/** For photos (D-033): by the date they were taken. */
+const TAKEN_SORTS: { value: SortKey; label: string }[] = [
+  { value: "takenDesc", label: "Date taken: Newest First" },
+  { value: "takenAsc", label: "Date taken: Oldest First" },
 ];
 
 /** For views that can hold music and video; items without a known length come last. */
@@ -821,16 +829,23 @@ export function LibraryView({
           ? "favorites"
           : (base.category ?? "all");
   // A view of books or comics alone has nothing to time.
-  const timed = handler !== "book" && handler !== "comic" ? [...SORTS, ...DURATION_SORTS] : SORTS;
+  const timed =
+    handler === "image"
+      ? [...TAKEN_SORTS, ...SORTS.filter((s) => s.value !== "creator")]
+      : handler !== "book" && handler !== "comic"
+        ? [...SORTS, ...DURATION_SORTS, ...(base.category ? [] : TAKEN_SORTS)]
+        : SORTS;
   const sorts = base.search ? timed : [...timed, CUSTOM_SORT];
   const [searchSort, setSearchSort] = useState<SortKey | "">("");
   const saved = orderKey ? preferences.sorts[orderKey] : undefined;
-  const sort: SortKey | "" = base.search ? searchSort : saved && sorts.some((s) => s.value === saved) ? saved : "title";
+  const sort: SortKey | "" = base.search ? searchSort : saved && sorts.some((s) => s.value === saved) ? saved : handler === "image" ? "takenDesc" : "title";
   const setSort = (next: SortKey | "") => {
     if (!orderKey) setSearchSort(next);
     else if (next) update((current) => ({ sorts: { ...current.sorts, [orderKey]: next } }));
   };
   const params = { ...base, sort: sort || null, ownership: ownership || null, custom: sort === "custom" ? orderKey : null };
+  // The image viewer steps through what this view shows (D-033).
+  photoContext.params = params;
   const { cache, total: itemTotal, error } = usePagedItems(params);
   // The view's collections lead its items in "All", and are all there is in "Collections".
   const level = useCollections(collections?.category ?? "", collections?.parent ?? null, !!collections && (filter === "" || filter === "collections"));
@@ -854,6 +869,25 @@ export function LibraryView({
   }, [stageKey, layout]);
   const shape = coverShapeOf({ handler: handler ?? "book", category: base.category }, preferences.coverShapes);
   const arrangeable = !!orderKey && sort === "custom";
+  // In a custom order, covers can be dragged straight to a new place (not in the carousel, which
+  // drags to turn, nor while selecting).
+  const queryClient = useQueryClient();
+  const cardDrag = useMemo(
+    () =>
+      arrangeable && !selection.active && layout !== "carousel"
+        ? {
+            onDrop: (dragged: number, target: number, after: boolean) => {
+              void (async () => {
+                const ids = await api.queryIds(params);
+                await api.customOrderSet(orderKey!, moved(ids, dragged, target, after));
+                libraryChanged(queryClient);
+              })();
+            },
+          }
+        : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [arrangeable, selection.active, layout, orderKey, JSON.stringify(params), queryClient],
+  );
   const [arranging, setArranging] = useState(false);
 
   // Switching layouts moves each cover from its old place to its new one (a view transition).
@@ -872,7 +906,8 @@ export function LibraryView({
 
   return (
     <SelectionProvider value={selection}>
-      <div className={`library-view${selection.active ? " selecting" : ""}`}>
+      <GridDragProvider value={cardDrag}>
+      <div className={`library-view${selection.active ? " selecting" : ""}${cardDrag ? " arranging-in-place" : ""}`}>
         <div style={{ padding: "16px 40px 0" }}>
           <CategoryStrip />
           <div className="page-header">
@@ -1000,6 +1035,7 @@ export function LibraryView({
         )}
         {itemTotal != null && <BulkBar base={params} total={itemTotal} />}
       </div>
+      </GridDragProvider>
     </SelectionProvider>
   );
 }

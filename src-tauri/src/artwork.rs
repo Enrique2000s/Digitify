@@ -15,6 +15,7 @@ use crate::library_folder::LibraryFolder;
 const COVER_MAX: u32 = 1400;
 const THUMB_WIDTH: u32 = 400;
 
+#[derive(Clone)]
 pub struct Artwork {
     pub key: String,
     pub color: String,
@@ -23,6 +24,16 @@ pub struct Artwork {
 pub fn store(folder: &LibraryFolder, bytes: &[u8]) -> AppResult<Artwork> {
     let key = blake3::hash(bytes).to_hex()[..32].to_string();
     let decoded = image::load_from_memory(bytes).map_err(|e| AppError::msg(format!("unreadable image: {e}")))?;
+    store_decoded(folder, decoded, key)
+}
+
+/// Stores an image already decoded (a photo, upright), keyed by `source`: what it was made from.
+pub fn store_image(folder: &LibraryFolder, decoded: DynamicImage, source: &str) -> AppResult<Artwork> {
+    let key = blake3::hash(source.as_bytes()).to_hex()[..32].to_string();
+    store_decoded(folder, decoded, key)
+}
+
+fn store_decoded(folder: &LibraryFolder, decoded: DynamicImage, key: String) -> AppResult<Artwork> {
     let image = DynamicImage::ImageRgb8(decoded.to_rgb8());
     let (width, height) = image.dimensions();
 

@@ -264,9 +264,17 @@ pub fn collections(conn: &Connection, category: &str, parent: Option<i64>) -> Ap
         "{SUBTREE} SELECT i.cover_key, i.cover_color, c.handler FROM items i JOIN categories c ON c.id = i.category_id \
          WHERE i.collection_id IN subtree AND i.cover_key IS NOT NULL ORDER BY i.sort_title LIMIT 3"
     ))?;
+    // A cover picked for the collection (an album's, D-033) is shown alone instead of the collage.
+    let mut chosen = conn.prepare(
+        "SELECT i.cover_key, i.cover_color, c.handler FROM collections k JOIN items i ON i.cover_key = k.cover_key \
+         JOIN categories c ON c.id = i.category_id WHERE k.id = ?1 LIMIT 1",
+    )?;
     for child in &mut children {
         child.item_count = count.query_row([child.id], |row| row.get(0))?;
-        child.covers = covers.query_map([child.id], cover)?.collect::<Result<_, _>>()?;
+        child.covers = chosen.query_map([child.id], cover)?.collect::<Result<_, _>>()?;
+        if child.covers.is_empty() {
+            child.covers = covers.query_map([child.id], cover)?.collect::<Result<_, _>>()?;
+        }
     }
     let path = match parent {
         Some(parent) => collection_path(conn, parent)?,

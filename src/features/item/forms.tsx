@@ -38,6 +38,7 @@ const METADATA_FIELDS: Record<Handler, { key: string; label: string }[]> = {
   ],
   audio: [{ key: "genre", label: "Genre" }],
   generic: [],
+  image: [],
 };
 
 function str(value: unknown): string {

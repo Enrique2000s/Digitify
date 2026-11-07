@@ -101,6 +101,32 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-035 · Arcade, more: folders, N64 covers, selecting, custom order, quiet while playing; dragging in the Library
+- **Date:** 2026-11-07 · **Approved by:** project owner (asked for these; chose libretro-thumbnails for N64 covers, "hide and go silent" while playing, and dragging covers in place in the Library)
+- **Game folders per emulator:** each emulator's folders can be changed, removed or added in Arcade, replacing the ones read from its settings (`arcade_emulator_folders`, migration 12), and set back to the emulator's own. A game that isn't in any game folder anymore is hidden as missing, with its play time kept.
+- **Covers:** after Dolphin's cache and GameTDB, libretro-thumbnails (the box-art collection RetroArch uses, on GitHub) for every console, by the game's No-Intro/Redump name: the file's name first, then the title with the usual regions. Online only when covers are downloaded (the same switch).
+- **Selecting:** "Select" in Arcade for favorites on or off, finding covers again, and removing games from Digitify (with a confirmation; files are never deleted). A game can be renamed in its panel.
+- **Custom order:** "Custom order" sort; games are dragged into place while all show (`arcade_games.position`).
+- **While playing:** Digitify hides (out of the taskbar) and goes silent — the menu music is held and the music player paused — and comes back where it was, focused, with the music carrying on, when the game closes (D-034's process watch).
+- **The game panel** is drawn above the page, so it no longer moves when the page scrolls.
+- **Library:** in a custom order, covers are dragged straight to a new place in the grid, list, shelf and detailed views (the Arrange dialog stays). Both use one pointer-based drag (`lib/gridDrag`): a press becomes a drag after a few pixels, a copy follows the pointer, a line shows where it lands, the view scrolls near its edges.
+
+### D-034 · Arcade: a launcher for the emulators' games
+- **Date:** 2026-11-07 · **Approved by:** project owner (asked for "Arcade" beside Home and Library, a universal launcher for Dolphin and Project64; chose RMG for Nintendo 64 on both systems and GameTDB covers)
+- **What:** a third section in the title bar (and in Big Picture's menu) listing the games of the emulators installed on the computer, and starting the chosen one in its emulator, which runs with its own settings. Digitify never ships, downloads or changes games, BIOS files, emulators or their settings.
+- **Emulators:** Dolphin (GameCube, Wii) on Windows and Linux (installed, portable, on the PATH, or Flatpak); Project64 (Nintendo 64) on Windows only; RMG, Rosalie's Mupen GUI (Nintendo 64), on Windows and Linux, so both systems play the same games. Found where they're usually installed, or pointed at by hand. When both N64 emulators are there, the user picks which one plays.
+- **Games:** from the folders set up in each emulator (Dolphin's `Dolphin.ini` `ISOPaths`/`ISOPath<n>`/`RecursiveISOPaths`; Project64's `Config\Project64.cfg` `[Game Directory]`; RMG's `mupen64plus.cfg` `[Rosalie's Mupen GUI RomBrowser]`) and folders added in Arcade. Recognized by their headers: ISO/GCM/CISO, RVZ/WIA, WBFS disc headers (ID and title), WAD and GCZ by file name; N64 ROMs in any byte order (.z64/.v64/.n64). Only headers are read. A game whose file is gone is kept as missing, with its play time.
+- **Launching:** `Dolphin -b -e <game>` (closes with the game), `Project64 <rom>`, `RMG --quit-after-emulation <rom>`; one game at a time; play time and sessions are counted until the emulator closes (starts under 5 seconds don't count), and Digitify comes back to the front.
+- **Covers:** Dolphin's own cover cache first, then GameTDB by the disc's ID (GameCube and Wii; on by default, switchable — an online exception like D-028), or a picture the user picks. Nintendo 64 games have a drawn box unless given a picture.
+- **Data:** `arcade_emulators`, `arcade_folders`, `arcade_games` (migration 11); games aren't library items.
+
+### D-033 · Pictures and the image viewer
+- **Date:** 2026-11-07 · **Approved by:** project owner (asked for a Pictures category and an image viewer; chose albums from folders, and a slideshow, photo info, rotate and flip, and album cover / Home background)
+- **Category:** Pictures, a new kind of category (`image`), right after Everything. Images are imported as photos, each an item of its own; a picked folder and its subfolders become nested albums (collections). A folder of images becomes a book only when a book or comic category is picked, or through "Book from images…".
+- **Formats:** JPG, PNG, WebP, GIF (animated in the viewer), BMP and TIFF (converted for the viewer). AVIF and HEIC aren't imported: they can't be decoded for thumbnails without native libraries.
+- **What's read:** EXIF date taken, camera, lens, exposure, GPS location and orientation; the file's date when there's no EXIF date. Thumbnails are upright (EXIF orientation). Cards are wide, tall or square by the photo's proportions. Pictures sort by date taken by default.
+- **Image viewer:** full window; zoom (wheel, buttons, keys, double-click) and drag; previous/next through the album or view it was opened from (buttons, arrows, swipe); slideshow (3–20 s per photo); info panel; turn and mirror (stored in Digitify, applied to thumbnails, never to the file); use as album cover; use as Home background (removable in Customize Home). Controller: left/right, A zoom, X slideshow, Y info, LB/RB zoom, B back. In Big Picture, photos open in the same viewer.
+
 ### D-032 · Linux: a local page hosts YouTube's player
 - **Date:** 2026-11-07 · **Approved by:** project owner (chose a local server over opening YouTube videos in the browser)
 - **Why:** on Linux the interface is a `tauri://localhost` page, which sends no Referer; YouTube's embedded player refuses to play without one (error 153). Windows (`http://tauri.localhost`) is not affected.

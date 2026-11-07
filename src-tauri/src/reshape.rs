@@ -3,7 +3,7 @@
 
 use rusqlite::{params, Connection};
 
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::library::{reindex, sort_key, upsert_person};
 
 /// Runs the Rust half of migration `version`, if it has one.
@@ -13,6 +13,41 @@ pub fn after(conn: &Connection, version: i64) -> AppResult<()> {
     }
     if version == 9 {
         d029(conn)?;
+    }
+    if version == 10 {
+        d033(conn)?;
+    }
+    Ok(())
+}
+
+/// D-033: 'image' becomes a category type, and Pictures a category, first after Everything.
+///
+/// SQLite can't change a CHECK constraint in place; its documented way for a change that every
+/// existing row already satisfies is to edit the stored table definition (`writable_schema`) and
+/// bump the schema version, which is what happens here, inside the migration's transaction.
+fn d033(conn: &Connection) -> AppResult<()> {
+    const OLD: &str = "CHECK (handler IN ('book', 'comic', 'video', 'audio', 'generic'))";
+    const NEW: &str = "CHECK (handler IN ('book', 'comic', 'video', 'audio', 'generic', 'image'))";
+    let sql: String = conn.query_row("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'categories'", [], |row| row.get(0))?;
+    if !sql.contains(NEW) {
+        if !sql.contains(OLD) {
+            return Err(AppError::msg("the categories table isn't the one this version expects"));
+        }
+        let version: i64 = conn.query_row("PRAGMA schema_version", [], |row| row.get(0))?;
+        conn.execute_batch("PRAGMA writable_schema = ON")?;
+        let edited = conn.execute(
+            "UPDATE sqlite_schema SET sql = ?1 WHERE type = 'table' AND name = 'categories'",
+            [sql.replace(OLD, NEW)],
+        );
+        conn.execute_batch(&format!("PRAGMA schema_version = {}; PRAGMA writable_schema = OFF", version + 1))?;
+        edited?;
+    }
+    let exists: bool = conn.query_row("SELECT EXISTS (SELECT 1 FROM categories WHERE key = 'pictures')", [], |row| row.get(0))?;
+    if !exists {
+        conn.execute(
+            "INSERT INTO categories (key, name, icon, handler, sort_order, is_builtin, settings)              VALUES ('pictures', 'Pictures', 'image', 'image', (SELECT coalesce(min(sort_order), 1) - 1 FROM categories), 1, '{}')",
+            [],
+        )?;
     }
     Ok(())
 }
@@ -354,6 +389,20 @@ mod tests {
     fn the_new_category_order() {
         let conn = crate::db::memory();
         let keys: Vec<String> = conn.prepare("SELECT key FROM categories ORDER BY sort_order").unwrap().query_map([], |row| row.get(0)).unwrap().collect::<Result<_, _>>().unwrap();
-        assert_eq!(keys, ["music", "videos", "video", "books", "comics", "manga"]);
+        assert_eq!(keys, ["pictures", "music", "videos", "video", "books", "comics", "manga"]);
+    }
+
+    #[test]
+    fn pictures_is_an_image_category_and_image_is_a_valid_type() {
+        let conn = crate::db::memory();
+        let handler: String = conn.query_row("SELECT handler FROM categories WHERE key = 'pictures'", [], |row| row.get(0)).unwrap();
+        assert_eq!(handler, "image");
+        // The widened constraint accepts 'image' for a new category and still refuses nonsense.
+        conn.execute("INSERT INTO categories (key, name, icon, handler, sort_order) VALUES ('shots', 'Shots', 'image', 'image', 99)", []).unwrap();
+        assert!(conn.execute("INSERT INTO categories (key, name, icon, handler, sort_order) VALUES ('bad', 'Bad', 'x', 'nonsense', 100)", []).is_err());
+        // Running the step again (an older library catching up) changes nothing.
+        super::d033(&conn).unwrap();
+        let count: i64 = conn.query_row("SELECT count(*) FROM categories WHERE key = 'pictures'", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 1);
     }
 }

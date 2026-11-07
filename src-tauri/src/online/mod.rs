@@ -9,7 +9,7 @@
 //!
 //! Digitify goes online only here, when the owner pastes a link, and when an online item is played.
 
-mod http;
+pub(crate) mod http;
 pub mod keys;
 pub mod link;
 mod providers;

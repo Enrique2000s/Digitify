@@ -178,6 +178,8 @@ SOFTWARE.
 | blake3 | CC0-1.0 or Apache-2.0 |
 | walkdir | Unlicense or MIT |
 | ureq, native-tls, url (Import from URL; TLS is the system's: SChannel on Windows, OpenSSL on Linux) | MIT or Apache-2.0 |
+| kamadak-exif (photo details, D-033) | BSD-2-Clause |
+| tiny_http (Linux: YouTube's host page, D-032) | MIT or Apache-2.0 |
 | Linux only: libc, x11-dl, gtk, gdkx11, keyring | MIT or Apache-2.0 |
 
 These are the direct dependencies. A complete, machine-generated list covering every transitive dependency (Rust crates and npm packages), plus a written offer for GPL source code with a contact address, will be produced before the first public release.

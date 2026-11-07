@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { itemPath } from "../../lib/routes";
 import { Award, BookOpen, Info, Play } from "lucide-react";
 import { api, type ItemCard } from "../../lib/api";
 import { Cover } from "../../components/common";
@@ -20,7 +21,7 @@ export function Featured({ item }: { item: ItemCard }) {
           <Cover item={item} size="cover" />
         </div>
       )}
-      <Link to="/item/$id" params={{ id: String(item.id) }} className="featured-cover" data-shape={shape} style={{ aspectRatio: aspect, height: shape === "landscape" ? 170 : undefined }} tabIndex={-1} data-blip>
+      <Link to={itemPath(item)} params={{ id: String(item.id) }} className="featured-cover" data-shape={shape} style={{ aspectRatio: aspect, height: shape === "landscape" ? 170 : undefined }} tabIndex={-1} data-blip>
         <Cover item={item} size="cover" />
       </Link>
       <div className="featured-body">

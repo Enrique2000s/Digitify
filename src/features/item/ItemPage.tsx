@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { open } from "@tauri-apps/plugin-dialog";
-import { BookOpen, Cloud, CloudDownload, ExternalLink, FolderOpen, HardDrive, ImagePlus, Pause, Pencil, Play, Star, Trash } from "lucide-react";
+import { BookOpen, Cloud, CloudDownload, ExternalLink, FolderOpen, HardDrive, ImagePlus, Pause, Pencil, Play, Star, Trash, Eye } from "lucide-react";
 import { api, artworkUrl, errorText, type CoverShape, type FieldDef, type ItemDetail, type VersionInfo } from "../../lib/api";
 import { bytes, date, formatLabel, longDuration, ROLE_LABELS } from "../../lib/format";
 import { libraryChanged, useCategories, useItem } from "../../lib/queries";
@@ -287,7 +287,12 @@ export function ItemPage() {
                 {trackPlaying ? <Pause size={16} /> : <Play size={16} />} {trackPlaying ? "Pause" : "Play"}
               </button>
             )}
-            {readable && (
+            {item.handler === "image" && (
+              <Link to="/view/$id" params={{ id: String(item.id) }} className="btn btn-primary">
+                <Eye size={16} /> View
+              </Link>
+            )}
+            {readable && item.handler !== "image" && (
               <Link to="/read/$id" params={{ id: String(item.id) }} className="btn btn-primary">
                 <BookOpen size={16} />
                 {item.progress != null && item.progress > 0 && item.progress < 1 ? `Continue reading · ${Math.round(item.progress * 100)}%` : "Read"}
@@ -305,9 +310,11 @@ export function ItemPage() {
             <button type="button" className="btn" onClick={() => setEditing(true)}>
               <Pencil size={16} /> Edit details
             </button>
-            <button type="button" className="btn" onClick={() => void changeArtwork()}>
-              <ImagePlus size={16} /> Change artwork
-            </button>
+            {item.handler !== "image" && (
+              <button type="button" className="btn" onClick={() => void changeArtwork()}>
+                <ImagePlus size={16} /> Change artwork
+              </button>
+            )}
             {item.handler === "video" && (
               <button type="button" className="btn" onClick={() => void (backdrop ? run(() => api.itemSetBackdrop(item.id, null)) : changeBackdrop())}>
                 <ImagePlus size={16} /> {backdrop ? "Remove background" : "Background…"}

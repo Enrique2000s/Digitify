@@ -1,34 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import {
-  Award,
-  BookOpen,
-  ChartColumn,
-  ChevronLeft,
-  ChevronRight,
-  Delete,
-  Gamepad2,
-  Heart,
-  House,
-  LibraryBig,
-  LogOut,
-  MousePointer2,
-  Pause,
-  Play,
-  Search,
-  Settings2,
-  SkipBack,
-  SkipForward,
-  Space,
-  Star,
-  X,
-} from "lucide-react";
+import { Award, BookOpen, ChartColumn, ChevronLeft, ChevronRight, Delete, Gamepad2, Heart, House, LibraryBig, LogOut, MousePointer2, Pause, Play, Search, Settings2, SkipBack, SkipForward, Space, Star, X, Eye, Joystick } from "lucide-react";
 import { api, type ItemCard } from "../../lib/api";
 import { exitBigPicture, focusFirst, moveFocus } from "../../lib/bigpicture";
 import { controllerKind, onControllerChange, usePad, useSticks, type PadAction } from "../../lib/gamepad";
 import { Cursor } from "./Cursor";
 import { OnlineScreen } from "./OnlineScreen";
+import { ArcadeScreen } from "../arcade/ArcadeScreen";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { useCoverShape, usePreferences, type HomeSection } from "../../lib/preferences";
 import { StatsPanel } from "../home/Stats";
@@ -36,7 +15,7 @@ import { SourceTag, sourceProps } from "../../components/SourceTag";
 import { libraryChanged, useCategories, useDashboard } from "../../lib/queries";
 import { CategoryIcon, Cover } from "../../components/common";
 
-export type BigPictureScreen = "home" | "library" | "item" | "search" | "online";
+export type BigPictureScreen = "home" | "library" | "item" | "search" | "online" | "arcade";
 export interface BigPictureSearch {
   screen?: BigPictureScreen;
   scope?: string;
@@ -329,6 +308,11 @@ function ItemScreen({ id }: { id: number }) {
         {blurb.data?.facts.length ? <p className="bp-item-facts">{blurb.data.facts.join(" · ")}</p> : null}
         {data.description && <p className="bp-item-description">{data.description}</p>}
         <div className="bp-actions">
+          {digital && data.handler === "image" && (
+            <button type="button" className="bp-button primary" data-bp-focus data-bp-autofocus onClick={() => void navigate({ to: "/view/$id", params: { id: String(id) } })}>
+              <Eye size={26} /> View
+            </button>
+          )}
           {digital && (data.handler === "book" || data.handler === "comic") && (
             <button type="button" className="bp-button primary" data-bp-focus data-bp-autofocus onClick={() => void navigate({ to: "/read/$id", params: { id: String(id) } })}>
               <BookOpen size={26} /> {started ? `Continue · ${Math.round(progress * 100)}%` : "Read"}
@@ -635,7 +619,7 @@ export function BigPicturePage() {
       {icon} {label}
     </button>
   );
-  const title = useMemo(() => ({ home: "Home", library: "Library", item: "", search: "Search", online: "" })[screen], [screen]);
+  const title = useMemo(() => ({ home: "Home", library: "Library", item: "", search: "Search", online: "", arcade: "Arcade" })[screen], [screen]);
 
   return (
     <div ref={shell} className={`bp${cursor ? " bp-cursor-mode" : ""}`}>
@@ -646,6 +630,7 @@ export function BigPicturePage() {
         <nav className="bp-navs">
           {nav({ screen: "home" }, "Home", <House size={24} />, screen === "home")}
           {nav({ screen: "library", scope: search.scope ?? "all" }, "Library", <LibraryBig size={24} />, screen === "library")}
+          {nav({ screen: "arcade" }, "Arcade", <Joystick size={24} />, screen === "arcade")}
           {nav({ screen: "search" }, "Search", <Search size={24} />, screen === "search")}
         </nav>
         <NowPlaying />
@@ -667,6 +652,7 @@ export function BigPicturePage() {
         {screen === "item" && search.id != null && <ItemScreen id={search.id} />}
         {screen === "search" && <SearchScreen />}
         {screen === "online" && search.id != null && <OnlineScreen id={search.id} />}
+        {screen === "arcade" && <ArcadeScreen />}
       </main>
       <footer className="bp-hints">
         <span>
@@ -687,6 +673,16 @@ export function BigPicturePage() {
           <span>
             <b>LB</b> <b>RB</b> Categories
           </span>
+        )}
+        {screen === "arcade" && (
+          <>
+            <span>
+              <b>{buttons.a}</b> Play
+            </span>
+            <span>
+              <b>LB</b> <b>RB</b> Consoles
+            </span>
+          </>
         )}
         {screen === "online" && (
           <>

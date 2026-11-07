@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { useGridDragProps } from "./gridDrag";
 
 /** Multi-select in the library views, for bulk edits. */
 export interface Selection {
@@ -59,6 +60,8 @@ export function useSelectionState(cache: { get(index: number): { id: number } | 
 /** Click handling for a card or row: toggles selection instead of opening the item while selecting. */
 export function useSelectable(id: number, index: number | undefined) {
   const selection = useSelection();
+  // In a custom order, a card can also be dragged to a new place (when the view allows it).
+  const drag = useGridDragProps(index != null ? id : 0);
   const selecting = !!selection?.active && index != null;
   const checked = selecting && selection.selected.has(id);
   const onClick = (event: React.MouseEvent) => {
@@ -69,6 +72,6 @@ export function useSelectable(id: number, index: number | undefined) {
   return {
     selecting,
     checked,
-    props: selecting ? { onClick, role: "checkbox", "aria-checked": checked, "data-selected": checked || undefined } : {},
+    props: selecting ? { onClick, role: "checkbox", "aria-checked": checked, "data-selected": checked || undefined } : drag,
   };
 }

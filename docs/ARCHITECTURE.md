@@ -62,6 +62,9 @@ Digitify.exe (Tauri 2)
 | `optical` | Discs (Phase 4, D-022): `win` (Windows drive calls: drives, media, TOC, CD-Text, raw audio sectors, DVD copyright descriptor, eject), `cd` (TOC and CD-Text parsing, verified ripping), `dvd` (IFO titles, chapters, languages; CSS scrambling check), `bluray` (MPLS playlists; AACS/BD+), and the service: drive watcher (`drives-changed`), contents, playing titles through mpv (EDL plus a chapters file), CD audio over the media server, rip and import jobs (`disc-job`), cataloging. `DIGITIFY_FAKE_DRIVES` adds simulated drives for testing. |
 | `stats` | Recorded time (`activity`: day, item, read/watch/listen, seconds) and Home's statistics |
 | `music` | The music player (D-020): a second, audio-only mpv whose playlist is the queue (gapless), tracks and artists, favorites, playlists, recently played, track edits |
+| `pictures` | Photos (D-033): EXIF details, upright thumbnails with the viewer's turn and mirror, the file behind a photo, album covers |
+| `arcade` | Arcade (D-034, D-035): `detect` finds Dolphin, Project64 and RMG and reads their game folders (or Arcade's own per emulator); `games` recognizes discs and ROMs by their headers and names libretro box art; scanning, covers (Dolphin's cache, GameTDB, libretro-thumbnails), selecting, custom order, launching with play time while the window hides |
+| `localhost` | Linux: the loopback page hosting YouTube's player (D-032) |
 | `dev` | Phase 0 video lab harness (Settings › Developer) |
 
 Planned modules: none for now.

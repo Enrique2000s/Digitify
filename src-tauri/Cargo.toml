@@ -32,6 +32,8 @@ blake3 = "1"
 rayon = "1"
 trash = "5"
 imagesize = "0.15"
+# Photo details (D-033): date taken, camera, exposure, location, orientation.
+kamadak-exif = "0.6"
 # Comic archives besides ZIP (D-017): RAR via RARLAB's UnRAR source, 7z read-only, TAR.
 unrar = "0.5.8"
 sevenz-rust2 = { version = "0.24.2", default-features = false, features = ["bzip2", "deflate", "ppmd"] }

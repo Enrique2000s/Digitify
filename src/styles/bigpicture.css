@@ -780,3 +780,29 @@ html.bp-cursor-on * {
 .bp-category {
   animation: pop-in 380ms var(--spring) both;
 }
+
+/* Arcade in Big Picture (D-034). */
+.arcade-bp-art {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+}
+.arcade-bp-art .arcade-cover-title {
+  font-size: 22px;
+}
+.bp-tile-sub {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 15px;
+  font-weight: 700;
+}
+.bp-arcade-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 18px;
+  font-size: 20px;
+  font-weight: 800;
+}
+.bp-arcade-note.error {
+  color: #ff7a7f;
+}

@@ -106,6 +106,14 @@ pub(crate) fn clean(text: Option<String>) -> Option<String> {
 // ---------------------------------------------------------------------------------------------
 // Categories
 
+/// A photo's card shape from its proportions (D-033): wide ones landscape, tall ones poster.
+macro_rules! photo_shape {
+    () => {
+        "(CASE WHEN json_extract(i.metadata, '$.width') >= 1.2 * json_extract(i.metadata, '$.height') THEN 'landscape' \
+               WHEN json_extract(i.metadata, '$.height') >= 1.2 * json_extract(i.metadata, '$.width') THEN 'poster' ELSE 'square' END)"
+    };
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Category {
@@ -182,6 +190,9 @@ pub struct QueryParams {
     pub limit: i64,
     /// The view whose hand-arranged order `sort: "custom"` uses ("books", "all", "collection:3"…).
     pub custom: Option<String>,
+    /// Only items of this kind of category (`image` for the image viewer's photos, D-033).
+    #[serde(default)]
+    pub handler: Option<String>,
 }
 
 
@@ -228,15 +239,16 @@ pub async fn library_query(state: State<'_, AppState>, params: QueryParams) -> A
 }
 
 /// Each matching item's kind and cover shape, in view order, two letters per item: the kind (`b`ook,
-/// `c`omic, `v`ideo, `m`ovies & series, `a`udio, `g`eneric) and its own shape (`s`quare, `d`isc, `p`oster,
+/// `c`omic, `v`ideo, `m`ovies & series, `a`udio, `g`eneric, `i`mage) and its own shape (`s`quare, `d`isc, `p`oster,
 /// `l`andscape, or `-` for the default). The grid lays out rows of equal height from these.
 #[tauri::command]
 pub async fn library_query_shapes(state: State<'_, AppState>, params: QueryParams) -> AppResult<String> {
     with_library(&state, move |library| {
         library.db.with(|conn| {
                         let QueryParts { joins, filter, args, order, .. } = QueryParts::new(&params);
+            let photo = photo_shape!();
             let mut stmt = conn.prepare(&format!(
-                "SELECT (SELECT CASE c.key WHEN 'video' THEN 'm' ELSE substr(c.handler, 1, 1) END FROM categories c WHERE c.id = i.category_id),                  coalesce(substr(json_extract(i.metadata, '$.coverShape'), 1, 1), '-')                  FROM items i{joins}{filter} ORDER BY {order} LIMIT 100000"
+                "SELECT (SELECT CASE c.key WHEN 'video' THEN 'm' ELSE substr(c.handler, 1, 1) END FROM categories c WHERE c.id = i.category_id),                  coalesce(substr(json_extract(i.metadata, '$.coverShape'), 1, 1), CASE WHEN (SELECT c.handler FROM categories c WHERE c.id = i.category_id) = 'image' THEN substr({photo}, 1, 1) END, '-')                  FROM items i{joins}{filter} ORDER BY {order} LIMIT 100000"
             ))?;
             let mut out = String::new();
             let mut rows = stmt.query(params_from_iter(args.iter()))?;
@@ -262,6 +274,10 @@ pub async fn library_query_ids(state: State<'_, AppState>, params: QueryParams) 
     .await
 }
 
+/// When a photo was taken (D-033): its EXIF date, else its file's date, else when it was added.
+pub(crate) const TAKEN_SORT: &str = "coalesce(json_extract(i.metadata, '$.taken'), \
+    strftime('%Y-%m-%dT%H:%M:%S', json_extract(i.metadata, '$.fileDate'), 'unixepoch', 'localtime'), i.added_at)";
+
 pub(crate) const CREATOR_SORT: &str = "(SELECT p.sort_name FROM item_people ip JOIN people p ON p.id = ip.person_id \
                             WHERE ip.item_id = i.id ORDER BY ip.position LIMIT 1)";
 
@@ -269,7 +285,7 @@ pub(crate) const CREATOR_SORT: &str = "(SELECT p.sort_name FROM item_people ip J
 /// episodes); none for books and anything not measured.
 pub(crate) const DURATION_SORT: &str = "coalesce(json_extract(i.metadata, '$.durationSec'),                             (SELECT sum(pd.duration_ms) / 1000.0 FROM parts pd WHERE pd.item_id = i.id))";
 
-const CARD_COLUMNS: &str = "i.id, i.title, \
+const CARD_COLUMNS: &str = concat!("i.id, i.title, \
     COALESCE((SELECT p.name FROM item_people ip JOIN people p ON p.id = ip.person_id \
               WHERE ip.item_id = i.id ORDER BY ip.position LIMIT 1), i.subtitle), \
     i.year, c.key, c.handler, i.cover_key, i.cover_color, i.is_favorite, \
@@ -278,9 +294,9 @@ const CARD_COLUMNS: &str = "i.id, i.title, \
     EXISTS (SELECT 1 FROM versions v WHERE v.item_id = i.id AND v.kind = 'digital'), \
     EXISTS (SELECT 1 FROM files f JOIN versions v ON v.id = f.version_id WHERE v.item_id = i.id AND f.status <> 'ok'), \
     (SELECT pr.fraction FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0), \
-    json_extract(i.metadata, '$.coverShape'),     EXISTS (SELECT 1 FROM online_sources o WHERE o.item_id = i.id AND o.downloaded = 0), \
+    coalesce(json_extract(i.metadata, '$.coverShape'), CASE WHEN c.handler = 'image' THEN ", photo_shape!(), " END),     EXISTS (SELECT 1 FROM online_sources o WHERE o.item_id = i.id AND o.downloaded = 0), \
     (SELECT o.service FROM online_sources o WHERE o.item_id = i.id AND o.provider <> 'web'), \
-    json_extract(i.metadata, '$.discFormat')";
+    json_extract(i.metadata, '$.discFormat')");
 
 fn card(row: &Row<'_>) -> rusqlite::Result<ItemCard> {
     let formats: Option<String> = row.get(9)?;
@@ -373,6 +389,10 @@ impl QueryParts {
         if params.favorites {
             conditions.push("i.is_favorite = 1".into());
         }
+        if let Some(handler) = &params.handler {
+            args.push(SqlValue::Text(handler.clone()));
+            conditions.push(format!("i.category_id IN (SELECT id FROM categories WHERE handler = ?{})", args.len()));
+        }
         // Digital: files in the library; Online: imported from a link and played online (D-029).
         match params.ownership.as_deref() {
             Some("digital") => conditions.push("EXISTS (SELECT 1 FROM versions v WHERE v.item_id = i.id AND v.kind = 'digital')".into()),
@@ -398,6 +418,9 @@ impl QueryParts {
             Some("added") => "i.added_at DESC, i.id DESC".to_string(),
             Some("opened") => "i.last_opened_at IS NULL, i.last_opened_at DESC, i.id DESC".to_string(),
             Some("year") => "i.year IS NULL, i.year DESC, i.sort_title".to_string(),
+            // Photos by the date they were taken (D-033); anything else by when it was added.
+            Some("takenDesc") => format!("{TAKEN_SORT} DESC, i.id DESC"),
+            Some("takenAsc") => format!("{TAKEN_SORT}, i.id"),
             Some("creator") => format!("{CREATOR_SORT} IS NULL, {CREATOR_SORT}, i.sort_title"),
             // Items without a known length come last either way.
             Some("durationAsc") => format!("{DURATION_SORT} IS NULL, {DURATION_SORT}, i.sort_title, i.id"),

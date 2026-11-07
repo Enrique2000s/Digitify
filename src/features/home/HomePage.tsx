@@ -23,7 +23,7 @@ import {
   Volume2,
   VolumeOff,
 } from "lucide-react";
-import { type Category, type ItemCard, type TileCover } from "../../lib/api";
+import { type Category, type ItemCard, type TileCover, pictureUrl } from "../../lib/api";
 import { plural } from "../../lib/format";
 import { useImporter } from "../../lib/importer";
 import { arrayMove, useReorder } from "../../lib/reorder";
@@ -277,14 +277,21 @@ export function HomePage() {
   };
   const order = preferences.home.order;
 
+  // A photo picked in the image viewer shows behind Home (D-033), fading into the page.
+  const wallpaper = preferences.homeWallpaper != null ? { backgroundImage: `var(--wallpaper-fade), url("${pictureUrl(preferences.homeWallpaper)}")` } : undefined;
   return (
-    <div className="page">
+    <div className={`page${wallpaper ? " with-wallpaper" : ""}`} style={wallpaper}>
       <div className="greeting">
         <div>
           <h1 className="display">{greeting()}</h1>
           <p>{data.totals.items === 0 ? "Let's bring your collection in." : "Where would you like to go today?"}</p>
         </div>
         <div className="greeting-actions">
+          {editing && preferences.homeWallpaper != null && (
+            <button type="button" className="btn" onClick={() => update({ homeWallpaper: null })}>
+              Remove background
+            </button>
+          )}
           {hasItems && (
             <button type="button" className="btn glow-when-on" aria-pressed={editing} onClick={() => setEditing(!editing)}>
               <LayoutDashboard size={17} strokeWidth={2.4} aria-hidden /> Customize Home
@@ -334,7 +341,7 @@ export function HomePage() {
         <section className="welcome" aria-labelledby="welcome-title">
           <h2 id="welcome-title">Your library is ready</h2>
           <p>
-            Import ebooks, comics and manga (CBZ, PDF, EPUB, page images), films, episodes and videos, and music. You can
+            Import photos, ebooks, comics and manga (CBZ, PDF, EPUB), films, episodes and videos, and music. You can
             also drop files or folders anywhere on this window, or import from a link with “Add”.
           </p>
           <div className="actions">

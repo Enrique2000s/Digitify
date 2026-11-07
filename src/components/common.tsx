@@ -101,6 +101,7 @@ const HANDLER_ICONS: Record<Handler, ComponentType<LucideProps>> = {
   video: Clapperboard,
   audio: AudioLines,
   generic: Folder,
+  image: ImageIcon,
 };
 
 export function CategoryIcon({ icon, size = 18, strokeWidth = 2.2 }: { icon: string; size?: number; strokeWidth?: number }) {

@@ -131,6 +131,19 @@ export interface Preferences {
   shortcuts: ShortcutMap;
   /** Home's sections: their order, and the ones hidden. */
   home: HomeLayout;
+  /** A photo shown behind Home (D-033), by item id; none for the plain page. */
+  homeWallpaper: number | null;
+  /** Seconds each photo stays up in the image viewer's slideshow. */
+  slideshowSeconds: number;
+  /** Arcade (D-034): covers from GameTDB, the Nintendo 64 emulator, and how the games are shown. */
+  arcade: ArcadePreferences;
+}
+
+export interface ArcadePreferences {
+  downloadCovers: boolean;
+  n64: "project64" | "rmg";
+  platform: "all" | "gamecube" | "wii" | "n64" | "favorites";
+  sort: "title" | "played" | "most" | "added" | "custom";
 }
 
 /** The page color under each look and palette, for accent text contrast. */
@@ -209,6 +222,9 @@ export const DEFAULT_PREFERENCES: Preferences = {
   volumes: { video: 35, music: 35 },
   shortcuts: {},
   home: { order: [...HOME_SECTIONS], hidden: [] },
+  homeWallpaper: null,
+  slideshowSeconds: 5,
+  arcade: { downloadCovers: true, n64: "project64", platform: "all", sort: "title" },
 };
 
 type Raw<T> = { [K in keyof T]?: unknown };
@@ -284,10 +300,23 @@ function sanitizeBigPicture(raw: unknown): Preferences["bigPicture"] {
   };
 }
 
+function sanitizeArcade(raw: unknown): ArcadePreferences {
+  const pick = picker(raw, DEFAULT_PREFERENCES.arcade);
+  return {
+    downloadCovers: pick("downloadCovers", isBoolean),
+    n64: pick("n64", (v) => v === "project64" || v === "rmg"),
+    platform: pick("platform", (v) => ["all", "gamecube", "wii", "n64", "favorites"].includes(v as string)),
+    sort: pick("sort", (v) => ["title", "played", "most", "added", "custom"].includes(v as string)),
+  };
+}
+
 function sanitizeShapes(raw: unknown): Preferences["coverShapes"] {
   const value = (raw && typeof raw === "object" ? raw : {}) as { audio?: unknown; videos?: unknown };
   return { audio: value.audio === "disc" ? "disc" : "square", videos: value.videos === "poster" ? "poster" : "landscape" };
 }
+
+/** The image viewer's slideshow speeds, in seconds per photo. */
+export const SLIDESHOW_SECONDS = [3, 5, 8, 12, 20];
 
 /** Movies & Series: its covers are always vertical (D-027). */
 export const FILMS = "video";
@@ -297,6 +326,8 @@ export function coverShapeOf(item: { handler: string; category?: string | null; 
   // A collection among the items is as wide as a horizontal video (D-030).
   if (item.collection) return "landscape";
   if (item.handler === "audio") return item.coverShape === "disc" || item.coverShape === "square" ? item.coverShape : defaults.audio;
+  // A photo is wide, tall or square, as the core reads it from its proportions (D-033).
+  if (item.handler === "image") return item.coverShape === "landscape" || item.coverShape === "poster" ? item.coverShape : "square";
   if (item.handler === "video") {
     if (item.category === FILMS) return "poster";
     return item.coverShape === "poster" || item.coverShape === "landscape" ? item.coverShape : defaults.videos;
@@ -364,6 +395,9 @@ function sanitize(raw: unknown): Preferences {
     volumes: sanitizeVolumes((raw as Raw<Preferences>)?.volumes),
     shortcuts: sanitizeShortcuts((raw as Raw<Preferences>)?.shortcuts),
     home: sanitizeHome((raw as Raw<Preferences>)?.home),
+    homeWallpaper: pick("homeWallpaper", (v) => v === null || (typeof v === "number" && Number.isInteger(v) && v > 0)),
+    slideshowSeconds: pick("slideshowSeconds", (v) => typeof v === "number" && SLIDESHOW_SECONDS.includes(v)),
+    arcade: sanitizeArcade((raw as Raw<Preferences>)?.arcade),
   };
 }
 

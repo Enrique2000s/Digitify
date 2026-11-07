@@ -1,9 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export type Handler = "book" | "comic" | "video" | "audio" | "generic";
+export type Handler = "book" | "comic" | "video" | "audio" | "generic" | "image";
 /** The library filter (D-029): with files in the library, or added from a link and played online. */
 export type Ownership = "digital" | "online";
-export type SortKey = "title" | "added" | "year" | "creator" | "durationAsc" | "durationDesc" | "relevance" | "custom";
+export type SortKey = "title" | "added" | "year" | "creator" | "durationAsc" | "durationDesc" | "takenDesc" | "takenAsc" | "relevance" | "custom";
 export type ImportMode = "reference" | "copy";
 export type FieldKind = "text" | "longtext" | "number" | "date" | "rating" | "boolean" | "choice" | "url";
 
@@ -195,6 +195,8 @@ export interface QueryParams {
   sort?: SortKey | null;
   /** The view a custom order belongs to, for `sort: "custom"`. */
   custom?: string | null;
+  /** Only items of this kind of category (photos for the image viewer, D-033). */
+  handler?: Handler | null;
   offset: number;
   limit: number;
 }
@@ -677,6 +679,29 @@ export const api = {
   onlineKeysSet: (service: "youtube" | "spotify" | "soundcloud", first: string | null, second: string | null) =>
     invoke<OnlineKeysStatus>("online_keys_set", { service, first, second }),
   onlineOpen: (id: number) => invoke<void>("online_open", { id }),
+  arcadeStatus: () => invoke<ArcadeStatus>("arcade_status"),
+  arcadeSetEmulator: (emulator: ArcadeEmulator, path: string | null) => invoke<void>("arcade_set_emulator", { emulator, path }),
+  arcadeFolderAdd: (path: string) => invoke<void>("arcade_folder_add", { path }),
+  arcadeFolderRemove: (id: number) => invoke<void>("arcade_folder_remove", { id }),
+  arcadeScan: (downloadCovers: boolean) => invoke<ArcadeScanReport>("arcade_scan", { downloadCovers }),
+  arcadeGames: () => invoke<ArcadeGame[]>("arcade_games"),
+  arcadeSetFavorite: (id: number, favorite: boolean) => invoke<void>("arcade_set_favorite", { id, favorite }),
+  arcadeSetCover: (id: number, path: string) => invoke<void>("arcade_set_cover", { id, path }),
+  arcadeForget: (id: number) => invoke<void>("arcade_forget", { id }),
+  arcadeReveal: (id: number) => invoke<void>("arcade_reveal", { id }),
+  /** Starts the game in its emulator; `n64` picks Project64 or RMG for Nintendo 64 games. */
+  arcadeLaunch: (id: number, n64: ArcadeEmulator | null) => invoke<void>("arcade_launch", { id, n64 }),
+  /** An emulator's game folders set in Arcade (D-035); null goes back to its own. */
+  arcadeEmulatorFolders: (emulator: ArcadeEmulator, folders: { path: string; recursive: boolean }[] | null) => invoke<void>("arcade_emulator_folders", { emulator, folders }),
+  arcadeSetFavoriteMany: (ids: number[], favorite: boolean) => invoke<void>("arcade_set_favorite_many", { ids, favorite }),
+  arcadeForgetMany: (ids: number[]) => invoke<number>("arcade_forget_many", { ids }),
+  arcadeFindCovers: (ids: number[], download: boolean) => invoke<number>("arcade_find_covers", { ids, download }),
+  arcadeRename: (id: number, title: string) => invoke<void>("arcade_rename", { id, title }),
+  arcadeReorder: (ids: number[]) => invoke<void>("arcade_reorder", { ids }),
+  /** Turns or mirrors a photo in Digitify only, never in its file (D-033). */
+  pictureSetView: (id: number, view: PictureView) => invoke<void>("picture_set_view", { id, view }),
+  /** An item's cover as its collection's (an album's) cover; null goes back to the collage. */
+  collectionSetCover: (id: number, item: number | null) => invoke<void>("collection_set_cover", { id, item }),
   /** Linux: the local page that hosts YouTube's player (D-032); null on Windows. */
   onlineEmbedHost: () => invoke<string | null>("online_embed_host"),
   readerOpen: (id: number) => invoke<Opened>("reader_open", { id }),
@@ -765,6 +790,78 @@ const MEDIA = onLinux ? "digitify://localhost" : "http://digitify.localhost";
 /** How a disc drive is named: "E:" on Windows, "sr0" on Linux (its device, `/dev/sr0`). */
 export function driveName(letter: string): string {
   return /^\d$/.test(letter) ? `sr${letter}` : `${letter}:`;
+}
+
+/** Arcade (D-034): a console a game is for. */
+export type ArcadePlatform = "gamecube" | "wii" | "n64";
+export type ArcadeEmulator = "dolphin" | "project64" | "rmg";
+
+export interface ArcadeFolder {
+  /** For folders added in Digitify; null for an emulator's own. */
+  id: number | null;
+  path: string;
+  recursive: boolean;
+  exists: boolean;
+}
+
+export interface ArcadeEmulatorStatus {
+  key: ArcadeEmulator;
+  name: string;
+  platforms: ArcadePlatform[];
+  /** False where it doesn't exist (Project64 on Linux). */
+  available: boolean;
+  /** Where it was found (a path, or "Flatpak <id>"). */
+  found: string | null;
+  /** Pointed at by hand. */
+  picked: boolean;
+  /** Its game folders are set in Arcade instead of read from its settings (D-035). */
+  customFolders: boolean;
+  folders: ArcadeFolder[];
+}
+
+export interface ArcadeStatus {
+  emulators: ArcadeEmulatorStatus[];
+  folders: ArcadeFolder[];
+  running: number | null;
+  games: number;
+}
+
+export interface ArcadeGame {
+  id: number;
+  title: string;
+  platform: ArcadePlatform;
+  gameId: string | null;
+  path: string;
+  size: number | null;
+  coverKey: string | null;
+  coverColor: string | null;
+  isFavorite: boolean;
+  playSeconds: number;
+  playCount: number;
+  lastPlayedAt: string | null;
+  addedAt: string;
+  missing: boolean;
+  /** Place in the custom order (D-035). */
+  position: number | null;
+}
+
+export interface ArcadeScanReport {
+  found: number;
+  added: number;
+  missing: number;
+  coversQueued: number;
+}
+
+/** A photo's own file (D-033), served by the core's private `digitify` scheme. */
+export function pictureUrl(itemId: number): string {
+  return `${MEDIA}/picture/${itemId}`;
+}
+
+/** A turn or mirror picked in the image viewer (D-033). */
+export interface PictureView {
+  rotate: 0 | 90 | 180 | 270;
+  flipH: boolean;
+  flipV: boolean;
 }
 
 /** Artwork served by the core's private `digitify` scheme. */

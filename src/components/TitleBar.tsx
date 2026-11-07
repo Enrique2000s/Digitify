@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ChevronLeft, ChevronRight, Disc3, Gamepad2, House, LibraryBig, Search, Settings } from "lucide-react";
+import { ChevronLeft, ChevronRight, Disc3, Gamepad2, House, Joystick, LibraryBig, Search, Settings } from "lucide-react";
 import { enterBigPicture, useBigPicture } from "../lib/bigpicture";
 import { Logo } from "./common";
 import { MiniPlayer } from "./MiniPlayer";
@@ -119,6 +119,10 @@ export function TitleBar({ searchEnabled }: { searchEnabled: boolean }) {
               aria-current={/^\/(library|tags|tag|item|online)\b/.test(location.pathname) ? "page" : undefined}
             >
               <LibraryBig size={16} strokeWidth={2.5} aria-hidden /> <span className="appbar-nav-label">Library</span>
+            </Link>
+            {/* Arcade (D-034): the games of the emulators on this computer. */}
+            <Link to="/arcade" className="appbar-nav-item" aria-current={location.pathname === "/arcade" ? "page" : undefined}>
+              <Joystick size={16} strokeWidth={2.5} aria-hidden /> <span className="appbar-nav-label">Arcade</span>
             </Link>
           </nav>
         )}

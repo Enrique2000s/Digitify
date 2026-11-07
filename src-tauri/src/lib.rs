@@ -1,6 +1,7 @@
 //! Digitify core: the Rust side of the desktop app.
 
 mod ambient;
+mod arcade;
 mod archives;
 mod artwork;
 mod backup;
@@ -27,6 +28,7 @@ mod optical;
 mod organize;
 mod pages;
 mod pdf;
+mod pictures;
 mod player;
 mod reshape;
 mod series;
@@ -117,6 +119,7 @@ pub fn run() {
             app.manage(player::PlayerState::default());
             app.manage(music::MusicState::default());
             app.manage(online::OnlineState::default());
+            app.manage(arcade::ArcadeState::default());
             app.manage(optical::OpticalState::default());
             optical::watch(app.handle().clone());
             app.manage(ambient::AmbientState::default());
@@ -175,6 +178,25 @@ pub fn run() {
             organize::items_bulk_actions,
             online::online_inspect,
             localhost::online_embed_host,
+            pictures::picture_set_view,
+            pictures::collection_set_cover,
+            arcade::arcade_status,
+            arcade::arcade_set_emulator,
+            arcade::arcade_folder_add,
+            arcade::arcade_folder_remove,
+            arcade::arcade_scan,
+            arcade::arcade_games,
+            arcade::arcade_set_favorite,
+            arcade::arcade_set_cover,
+            arcade::arcade_forget,
+            arcade::arcade_reveal,
+            arcade::arcade_launch,
+            arcade::arcade_emulator_folders,
+            arcade::arcade_set_favorite_many,
+            arcade::arcade_forget_many,
+            arcade::arcade_find_covers,
+            arcade::arcade_rename,
+            arcade::arcade_reorder,
             online::online_import,
             online::online_queue,
             online::online_cancel,

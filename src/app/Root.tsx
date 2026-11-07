@@ -16,6 +16,7 @@ import { ImportUrlDialog, OnlineQueuePanel } from "../features/online/ImportUrl"
 import { Onboarding } from "../features/onboarding/Onboarding";
 import { BuilderContext, ImportUrlContext } from "./catalog";
 import { AppShortcuts } from "./AppShortcuts";
+import { ArcadeSession } from "../features/arcade/ArcadeSession";
 import { BigPictureCursor, BigPictureLauncher } from "../features/bigpicture/Launcher";
 
 export function Root() {
@@ -45,6 +46,7 @@ export function Root() {
         <MusicProvider>
         <DiscsProvider>
         <AppShortcuts />
+        <ArcadeSession />
         <BigPictureLauncher />
         {fullWindow ? (
           // The video lab and the reader take the whole window.

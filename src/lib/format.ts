@@ -53,6 +53,8 @@ export const FORMAT_LABELS: Record<string, string> = {
   "bluray-3d": "3D Blu-ray",
   vhs: "VHS",
   laserdisc: "LaserDisc",
+  print: "Print",
+  album: "Photo album",
   cd: "CD",
   vinyl: "Vinyl",
   cassette: "Cassette",
@@ -72,6 +74,7 @@ export const PHYSICAL_FORMATS: Record<Handler, string[]> = {
   video: ["bluray", "uhd-bluray", "dvd", "bluray-3d", "vhs", "laserdisc", "box-set", "other"],
   audio: ["cd", "vinyl", "cassette", "sacd", "box-set", "other"],
   generic: ["other"],
+  image: ["print", "album", "other"],
 };
 
 export const CONDITIONS = ["Sealed", "Mint", "Like new", "Very good", "Good", "Fair", "Poor"];
@@ -83,6 +86,7 @@ export const CREATOR_ROLE: Record<Handler, { role: string; label: string }> = {
   video: { role: "director", label: "Director" },
   audio: { role: "artist", label: "Artist" },
   generic: { role: "creator", label: "Creator" },
+  image: { role: "photographer", label: "Photographer" },
 };
 
 export const ROLE_LABELS: Record<string, string> = {
@@ -90,6 +94,7 @@ export const ROLE_LABELS: Record<string, string> = {
   writer: "Writer",
   artist: "Artist",
   director: "Director",
+  photographer: "Photographer",
   creator: "Creator",
 };
 

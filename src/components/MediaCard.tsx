@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { Link } from "@tanstack/react-router";
+import { itemPath } from "../lib/routes";
 import { Check, Cloud, Star } from "lucide-react";
 import type { ItemCard } from "../lib/api";
 import { useSelectable } from "../lib/selection";
@@ -20,7 +21,7 @@ export const MediaCard = memo(function MediaCard({ item, width, index, transitio
   const { selecting, checked, props } = useSelectable(item.id, index);
   const { shape, aspect } = useCoverShape()(item);
   return (
-    <Link to="/item/$id" params={{ id: String(item.id) }} className="card" style={width ? { width } : undefined} data-blip {...props}>
+    <Link to={itemPath(item)} params={{ id: String(item.id) }} className="card" style={width ? { width } : undefined} data-blip {...props}>
       <div className="card-art" data-shape={shape} data-vt={transitionId} style={{ aspectRatio: aspect }} {...sourceProps(item.source)}>
         <Cover item={item} />
         <SourceTag service={item.source} />

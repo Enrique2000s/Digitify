@@ -2,6 +2,8 @@ import { createHashHistory, createRootRoute, createRoute, createRouter, useNavig
 import { HomePage } from "../features/home/HomePage";
 import { ItemPage } from "../features/item/ItemPage";
 import { OnlinePlayerPage } from "../features/online/OnlinePlayer";
+import { PictureViewerPage } from "../features/pictures/PictureViewer";
+import { ArcadePage } from "../features/arcade/ArcadePage";
 import { LibraryPage, SearchPage } from "../features/library/LibraryPage";
 import { TagPage, TagsPage } from "../features/organize/pages";
 import { ReaderPage } from "../features/reader/ReaderPage";
@@ -55,6 +57,10 @@ const routeTree = rootRoute.addChildren([
   createRoute({ getParentRoute: () => rootRoute, path: "/item/$id", component: ItemPage }),
   // An online item (D-028), in its service's own player.
   createRoute({ getParentRoute: () => rootRoute, path: "/online/$id", component: OnlinePlayerPage }),
+  // Arcade (D-034): the games of the emulators on this computer.
+  createRoute({ getParentRoute: () => rootRoute, path: "/arcade", component: ArcadePage }),
+  // A photo (D-033), in the image viewer, full window.
+  createRoute({ getParentRoute: () => rootRoute, path: "/view/$id", component: PictureViewerPage }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/read/$id",
@@ -84,7 +90,7 @@ const routeTree = rootRoute.addChildren([
     path: "/bp",
     // Big Picture's screens: home, a library category or Favorites, an item, search.
     validateSearch: (search: Record<string, unknown>): BigPictureSearch => {
-      const screen = ["home", "library", "item", "search", "online"].includes(String(search.screen)) ? (search.screen as BigPictureSearch["screen"]) : undefined;
+      const screen = ["home", "library", "item", "search", "online", "arcade"].includes(String(search.screen)) ? (search.screen as BigPictureSearch["screen"]) : undefined;
       const id = Number(search.id);
       return {
         ...(screen ? { screen } : {}),
