@@ -165,8 +165,6 @@ export interface ArcadePreferences {
    *  the music can be switched back on), hides and comes back when the game ends, or quits. */
   whilePlaying: "stay" | "hide" | "quit";
   sort: "title" | "played" | "most" | "added" | "custom";
-  /** Box width in Arcade, like the Library's cover size (D-037). */
-  cardSize: number;
 }
 
 /** The page color under each look and palette, for accent text contrast. */
@@ -256,7 +254,6 @@ export const DEFAULT_PREFERENCES: Preferences = {
     combineAll: false,
     whilePlaying: "stay",
     sort: "title",
-    cardSize: 160,
   },
 };
 
@@ -353,7 +350,6 @@ function sanitizeArcade(raw: unknown): ArcadePreferences {
     combineAll: pick("combineAll", isBoolean),
     whilePlaying: pick("whilePlaying", (v) => v === "stay" || v === "hide" || v === "quit"),
     sort: pick("sort", (v) => ["title", "played", "most", "added", "custom"].includes(v as string)),
-    cardSize: pick("cardSize", (v) => typeof v === "number" && v >= 110 && v <= 260),
   };
 }
 

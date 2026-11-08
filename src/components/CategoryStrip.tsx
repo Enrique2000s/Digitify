@@ -26,26 +26,27 @@ export function CategoryStrip({ tools }: { tools?: ReactNode }) {
           them, as in Arcade's toolbar (D-043). */}
       <div className="arcade-toolbar library-toolbar">
       <nav className="segmented category-strip" aria-label="Library sections">
-        <Link to="/library/$scope" params={{ scope: "all" }} className="strip-pill" style={{ ["--i" as string]: 0 }} data-blip>
+        <Link to="/library/$scope" params={{ scope: "all" }} className="strip-pill" data-blip>
           Everything
           {total != null && <span className="count">{total.toLocaleString()}</span>}
         </Link>
         {categories.data
           ?.filter((category) => !category.isHidden)
-          .map((category, index) => (
-            <Link key={category.key} to="/library/$scope" params={{ scope: category.key }} activeOptions={{ includeSearch: false }} className="strip-pill" style={{ ["--i" as string]: index + 1 }} data-blip>
+          .map((category) => (
+            <Link key={category.key} to="/library/$scope" params={{ scope: category.key }} activeOptions={{ includeSearch: false }} className="strip-pill" data-blip>
               {category.name}
               <span className="count">{category.itemCount.toLocaleString()}</span>
             </Link>
           ))}
-        <Link to="/library/$scope" params={{ scope: "favorites" }} className="strip-pill" style={{ ["--i" as string]: 9 }} data-blip>
+        <Link to="/library/$scope" params={{ scope: "favorites" }} className="strip-pill" data-blip>
           Favorites
         </Link>
-        <Link to="/tags" className="strip-pill" style={{ ["--i" as string]: 10 }} data-blip>
+        <Link to="/tags" className="strip-pill" data-blip>
           Tags
         </Link>
       </nav>
-      {tools}
+      {/* Always there, even empty (Music's other tabs), so nothing moves between views. */}
+      <div className="view-tools">{tools}</div>
       </div>
     </>
   );

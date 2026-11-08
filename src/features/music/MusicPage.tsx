@@ -60,9 +60,9 @@ function Header({ category, tab }: { category: Category; tab: MusicTab }) {
             <h1 className="display">{category.name}</h1>
             <div className="count">{LABELS[tab][0]}</div>
           </div>
+          <MusicTabs category={category} tab={tab} />
         </div>
       </div>
-      <MusicTabs category={category} tab={tab} />
     </>
   );
 }

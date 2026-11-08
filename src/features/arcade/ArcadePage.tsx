@@ -188,17 +188,19 @@ export function ArcadePage() {
             </button>
           ))}
         </div>
+        {/* Find, Size, Select and Sort: the same tools, in the same order, as the Library's (D-044). */}
+        <div className="view-tools">
         <label className="arcade-search">
           <Search size={15} aria-hidden />
           <input type="search" placeholder="Find a game" value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Find a game" />
         </label>
+        <label className="arcade-size">
+          <span>Size</span>
+          <CardSizeSlider value={preferences.cardSize} onChange={(cardSize) => update({ cardSize })} />
+        </label>
         <button type="button" className="btn btn-sm glow-when-on" aria-pressed={selecting} onClick={() => (selecting ? stopSelecting() : setSelecting(true))}>
           <ListChecks size={15} /> Select
         </button>
-        <label className="arcade-size">
-          <span>Size</span>
-          <CardSizeSlider value={arcade.cardSize} onChange={(size) => setArcade({ cardSize: size })} />
-        </label>
         <label className="arcade-sort">
           <span>Sort</span>
           <select value={arcade.sort} onChange={(event) => setArcade({ sort: event.target.value as typeof arcade.sort })}>
@@ -207,6 +209,7 @@ export function ArcadePage() {
             ))}
           </select>
         </label>
+        </div>
       </div>
       {canArrange && shown.length > 1 && <p className="arcade-hint">Drag the games into the order you like{view.current === "all" && !search.trim() ? "" : "; the others keep their places"}.</p>}
 
@@ -224,7 +227,7 @@ export function ArcadePage() {
         </div>
       ) : (
         <GridDragProvider value={drag}>
-          <div key={stageKey} className={`arcade-grid${selecting ? " selecting" : ""}${canArrange ? " arranging-in-place" : ""}${entering ? " entering" : ""}`} style={{ ["--card" as string]: `${arcade.cardSize}px` }}>
+          <div key={stageKey} className={`arcade-grid${selecting ? " selecting" : ""}${canArrange ? " arranging-in-place" : ""}${entering ? " entering" : ""}`} style={{ ["--card" as string]: `${preferences.cardSize}px` }}>
             {shown.map((g, index) => (
               <GameTile
                 key={g.id}

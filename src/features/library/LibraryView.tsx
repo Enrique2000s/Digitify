@@ -832,6 +832,7 @@ export function LibraryView({
   description,
   actions,
   prelude,
+  titleExtra,
   beforeItems,
   square,
   handler,
@@ -846,8 +847,10 @@ export function LibraryView({
   description?: string | null;
   /** Extra buttons next to "Add" (tag or collection actions). */
   actions?: ReactNode;
-  /** Shown between the header and the toolbar (music tabs). */
+  /** Shown between the header and the toolbar. */
   prelude?: ReactNode;
+  /** Shown beside the title (Music's tabs, D-044). */
+  titleExtra?: ReactNode;
   /** Shown under the toolbar, above the items (a category's collections). */
   beforeItems?: ReactNode;
   square?: boolean;
@@ -988,19 +991,19 @@ export function LibraryView({
           <CategoryStrip
             tools={
               <>
-          {!base.search && (
+              {!base.search && (
                 <label className="arcade-search view-find">
                   <Search size={15} aria-hidden />
                   <input type="search" placeholder="Find in this view" value={find} onChange={(event) => setFind(event.target.value)} aria-label="Find in this view" />
                 </label>
               )}
-              {total != null && total > 0 && <SelectToggle base={params} collections={leadCards.map((c) => c.id)} itemsShown={!onlyCollections} />}
               {layout !== "list" && layout !== "carousel" && (
                 <label className="arcade-size">
                   <span>Size</span>
                   <CardSizeSlider value={preferences.cardSize} onChange={(cardSize) => update({ cardSize })} />
                 </label>
               )}
+              {total != null && total > 0 && <SelectToggle base={params} collections={leadCards.map((c) => c.id)} itemsShown={!onlyCollections} />}
               <label className="arcade-sort">
                 <span>Sort</span>
                 <select value={sort} onChange={(event) => setSort(event.target.value as SortKey | "")}>
@@ -1027,6 +1030,7 @@ export function LibraryView({
                   {description && <span className="view-description"> · {description}</span>}
                 </div>
               </div>
+              {titleExtra}
             </div>
             <div className="header-actions">
               {handler === "audio" && total != null && total > 0 && <PlayAll params={params} />}

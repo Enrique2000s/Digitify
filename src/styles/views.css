@@ -2181,7 +2181,8 @@ body:has(.import-panel) .online-queue {
   gap: 26px 20px;
 }
 .arcade-grid > .arcade-tile {
-  width: calc(var(--card, 160px) / 0.71 * var(--aspect, 0.71));
+  /* The Library's cover height for the same Size (D-044): 1.5 × the size. */
+  width: calc(var(--card, 160px) * 1.5 * var(--aspect, 0.71));
   flex: 0 0 auto;
 }
 
@@ -2191,14 +2192,6 @@ body:has(.import-panel) .online-queue {
 }
 .library-toolbar .segmented.category-strip {
   margin: 0;
-}
-/* Library's title, description and section buttons arrive like the rest of the view. */
-.library-head {
-  animation: view-in 320ms var(--ease) both;
-}
-.library-toolbar .strip-pill {
-  animation: pop-in 420ms var(--spring) both;
-  animation-delay: calc(var(--i, 0) * 30ms);
 }
 
 /* "(Library)" and "(Arcade)" beside the golden banner, not inside it. */
@@ -2245,4 +2238,31 @@ body:has(.import-panel) .online-queue {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* ---------------------------------------------------------------- D-044 */
+
+/* Find, Size, Select and Sort, in Arcade and the Library alike: one group that takes the rest of
+   the line, or a line of its own when the buttons before it are wide, the same in every view (an
+   empty group keeps its place, so Library's header and buttons never move). */
+.view-tools {
+  display: flex;
+  flex: 1 0 640px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  min-height: 38px;
+}
+.view-tools .arcade-sort {
+  margin-left: auto;
+}
+/* Music's tabs beside its title. */
+.title-row .music-tabs {
+  margin: 0 0 0 18px;
+  align-self: center;
+}
+/* No top margin: the header's own spacing is the gap, whether or not the page lays out as a column
+   (Music's other tabs), so the buttons sit at the same height in every view. */
+.library-toolbar {
+  margin-top: 0;
 }

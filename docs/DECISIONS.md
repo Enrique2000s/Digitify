@@ -101,12 +101,19 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-044 · Library's header and buttons hold still; one Size; Select after Size; Music's tabs beside its title
+- **Date:** 2026-11-07 · **Approved by:** project owner (asked for each of these)
+- **No replay on a category change:** D-043's pop-in of Library's title, description and section buttons is gone: they stay as they are from one view to the next, as Arcade's do.
+- **One Size:** Arcade uses the Library's cover size (Arcade's own Size from D-037 is dropped), so the same Size gives covers of the same height in both (1.5 × the size).
+- **Tools:** Find, Size, Select, Sort in that order in Arcade and the Library, as one group with a fixed place: the rest of the line, or a line of its own when the buttons before it are wide. On Music's other tabs the group is there empty, so Library's header, buttons and the view's title stay at the same height in every view.
+- **Music's tabs** (Tracks, Artists, Playlists, Recently played, Favorites) sit beside the Music title instead of under it.
+
 ### D-043 · Arcade at one height, play time added by hand; Library's tools beside its sections, centered rows, collections on "All"
 - **Date:** 2026-11-07 · **Approved by:** project owner (asked for each of these)
 - **Arcade's covers at one height:** every console's covers are as tall as a GameCube box at the chosen size, each as wide as its shape (Nintendo 64 boxes are wider, not shorter); rows are centered. The line under a game is one line, so it never lifts the cover out of line.
 - **Play time added by hand:** a game's panel can add time played outside Digitify (hours and minutes), kept apart from what Digitify counts (migration 17: `extra_seconds`) and shown as part of the total ("… added by you"). The statistics' days keep only what Digitify counted. The line under a game shows its console or store and then its play time, so play time no longer takes the console's place (Arcade, Home's rows, Big Picture).
 - **Home:** "(Library)" and "(Arcade)" sit beside the golden Featured today and Game of the day banners, not inside them.
-- **Library:** the view's Find, Select, Size and Sort sit in one toolbar with the section buttons, like Arcade's (they wrap to a second line when the window is narrow); layouts, filters, shelf options and Arrange stay above the items. Library's title, description and section buttons arrive with the page's pop-in.
+- **Library:** the view's Find, Select, Size and Sort sit in one toolbar with the section buttons, like Arcade's (they wrap to a second line when the window is narrow); layouts, filters, shelf options and Arrange stay above the items. Library's title, description and section buttons arrived with a pop-in (dropped in D-044).
 - **Grid rows centered:** each row of the grid is centered on its own, so rows of different widths (mixed shapes, the last row) don't leave one edge further out than another.
 - **Collections open on "All":** inside a collection the filter (All, Digital, Collections…) starts at All every time and isn't carried from the view before or remembered.
 
