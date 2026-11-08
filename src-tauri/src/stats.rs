@@ -1,6 +1,7 @@
 //! Statistics for Home (Phase 5, D-023): time spent reading, watching and listening (recorded
-//! by the readers and players while they're in use), what was finished, the most played artists,
-//! and the library's make-up. Everything is computed from this library alone.
+//! by the readers and players while they're in use) and playing (Arcade's games, D-041), what was
+//! finished, the most played artists and games, and the library's make-up. Everything is computed
+//! from this library alone.
 
 use rusqlite::{params, Connection};
 use serde::Serialize;
@@ -19,6 +20,7 @@ pub struct Time {
     pub read: i64,
     pub watch: i64,
     pub listen: i64,
+    pub play: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -53,6 +55,8 @@ pub struct Stats {
     pub plays_month: i64,
     /// Most played artists this year.
     pub top_artists: Vec<NamedCount>,
+    /// Most played games this year, by minutes played.
+    pub top_games: Vec<NamedCount>,
     /// Items per category, largest first.
     pub categories: Vec<NamedCount>,
 }
@@ -79,14 +83,18 @@ pub async fn activity_add(state: State<'_, AppState>, item: i64, kind: String, s
     with_library(&state, move |library| library.db.with(|conn| add(conn, item, &kind, seconds))).await
 }
 
+/// Every kind of activity, as `day, kind, seconds` rows: the library's and Arcade's.
+const ALL_ACTIVITY: &str = "(SELECT day, kind, seconds FROM activity UNION ALL SELECT day, 'play', seconds FROM arcade_activity)";
+
 fn time_since(conn: &Connection, start: &str) -> AppResult<Time> {
     Ok(conn.query_row(
         &format!(
             "SELECT coalesce(sum(CASE kind WHEN 'read' THEN seconds END), 0), coalesce(sum(CASE kind WHEN 'watch' THEN seconds END), 0), \
-             coalesce(sum(CASE kind WHEN 'listen' THEN seconds END), 0) FROM activity WHERE day >= {start}"
+             coalesce(sum(CASE kind WHEN 'listen' THEN seconds END), 0), coalesce(sum(CASE kind WHEN 'play' THEN seconds END), 0) \
+             FROM {ALL_ACTIVITY} WHERE day >= {start}"
         ),
         [],
-        |row| Ok(Time { read: row.get(0)?, watch: row.get(1)?, listen: row.get(2)? }),
+        |row| Ok(Time { read: row.get(0)?, watch: row.get(1)?, listen: row.get(2)?, play: row.get(3)? }),
     )?)
 }
 
@@ -99,12 +107,20 @@ pub fn stats(conn: &Connection) -> AppResult<Stats> {
     let count = |sql: &str| conn.query_row(sql, [], |row| row.get::<_, i64>(0));
 
     let days = conn
-        .prepare(
+        .prepare(&format!(
             "WITH RECURSIVE d(day, n) AS (SELECT date('now', 'localtime'), 0 UNION ALL SELECT date(day, '-1 day'), n + 1 FROM d WHERE n < 13) \
              SELECT d.day, coalesce(sum(CASE a.kind WHEN 'read' THEN a.seconds END), 0), coalesce(sum(CASE a.kind WHEN 'watch' THEN a.seconds END), 0), \
-             coalesce(sum(CASE a.kind WHEN 'listen' THEN a.seconds END), 0) FROM d LEFT JOIN activity a ON a.day = d.day GROUP BY d.day ORDER BY d.day",
+             coalesce(sum(CASE a.kind WHEN 'listen' THEN a.seconds END), 0), coalesce(sum(CASE a.kind WHEN 'play' THEN a.seconds END), 0) \
+             FROM d LEFT JOIN {ALL_ACTIVITY} a ON a.day = d.day GROUP BY d.day ORDER BY d.day"
+        ))?
+        .query_map([], |row| Ok(Day { day: row.get(0)?, time: Time { read: row.get(1)?, watch: row.get(2)?, listen: row.get(3)?, play: row.get(4)? } }))?
+        .collect::<Result<_, _>>()?;
+    let top_games = conn
+        .prepare(
+            "SELECT g.id, g.title, sum(a.seconds) / 60 AS minutes FROM arcade_activity a JOIN arcade_games g ON g.id = a.game_id \
+             WHERE a.day >= strftime('%Y-01-01', 'now', 'localtime') GROUP BY g.id HAVING minutes > 0 ORDER BY minutes DESC, g.sort_title LIMIT 5",
         )?
-        .query_map([], |row| Ok(Day { day: row.get(0)?, time: Time { read: row.get(1)?, watch: row.get(2)?, listen: row.get(3)? } }))?
+        .query_map([], |row| Ok(NamedCount { key: row.get::<_, i64>(0)?.to_string(), name: row.get(1)?, count: row.get(2)? }))?
         .collect::<Result<_, _>>()?;
     let top_artists = conn
         .prepare(&format!(
@@ -115,23 +131,30 @@ pub fn stats(conn: &Connection) -> AppResult<Stats> {
         ))?
         .query_map([], |row| Ok(NamedCount { key: row.get(0)?, name: row.get(0)?, count: row.get(1)? }))?
         .collect::<Result<_, _>>()?;
-    let categories = conn
+    let mut categories: Vec<NamedCount> = conn
         .prepare(
             "SELECT c.key, c.name, count(i.id) AS n FROM categories c JOIN items i ON i.category_id = c.id \
              GROUP BY c.id HAVING n > 0 ORDER BY n DESC, c.sort_order",
         )?
         .query_map([], |row| Ok(NamedCount { key: row.get(0)?, name: row.get(1)?, count: row.get(2)? }))?
         .collect::<Result<_, _>>()?;
+    // Arcade's games, among the library's categories (D-041).
+    let games = count("SELECT count(*) FROM arcade_games WHERE hidden = 0 AND missing = 0")?;
+    if games > 0 {
+        categories.push(NamedCount { key: "arcade".into(), name: "Games".into(), count: games });
+        categories.sort_by(|a, b| b.count.cmp(&a.count));
+    }
     Ok(Stats {
         month: time_since(conn, MONTH)?,
         year: time_since(conn, YEAR)?,
-        since: conn.query_row("SELECT min(day) FROM activity", [], |row| row.get(0))?,
+        since: conn.query_row(&format!("SELECT min(day) FROM {ALL_ACTIVITY}"), [], |row| row.get(0))?,
         days,
         finished_month: count(&format!("SELECT count(*) FROM progress WHERE part_id = 0 AND completed = 1 AND updated_at >= {MONTH_UTC}"))?,
         finished_year: count(&format!("SELECT count(*) FROM progress WHERE part_id = 0 AND completed = 1 AND updated_at >= {YEAR_UTC}"))?,
         in_progress: count("SELECT count(*) FROM progress WHERE part_id = 0 AND completed = 0 AND fraction > 0.01")?,
         plays_month: count(&format!("SELECT count(*) FROM plays WHERE played_at >= {MONTH_UTC}"))?,
         top_artists,
+        top_games,
         categories,
     })
 }
@@ -158,12 +181,21 @@ mod tests {
         add(&conn, id + 1, "read", 30).unwrap(); // an item that isn't there adds nothing
         assert!(add(&conn, id, "sleep", 30).is_err());
         let stats = stats(&conn).unwrap();
-        assert_eq!(stats.month, Time { read: 75, watch: 0, listen: 600 });
+        assert_eq!(stats.month, Time { read: 75, watch: 0, listen: 600, play: 0 });
         assert_eq!(stats.year, stats.month);
         assert_eq!(stats.days.len(), 14);
         assert_eq!(stats.days.last().unwrap().time.read, 75);
         assert!(stats.days[..13].iter().all(|d| d.time == Time::default()));
-        assert_eq!(stats.categories.len(), 1);
+        // Arcade's play time counts too (D-041).
+        conn.execute("INSERT INTO arcade_games (path, platform, title, sort_title) VALUES ('/g.iso', 'wii', 'Zelda', 'zelda')", []).unwrap();
+        let game = conn.last_insert_rowid();
+        conn.execute("INSERT INTO arcade_activity (day, game_id, seconds) VALUES (date('now', 'localtime'), ?1, 1800)", [game]).unwrap();
+        let stats = super::stats(&conn).unwrap();
+        assert_eq!(stats.month.play, 1800);
+        assert_eq!(stats.days.last().unwrap().time.play, 1800);
+        assert_eq!(stats.top_games.iter().map(|g| (g.name.as_str(), g.count)).collect::<Vec<_>>(), [("Zelda", 30)]);
+        assert!(stats.categories.iter().any(|c| c.key == "arcade" && c.count == 1));
+        assert_eq!(stats.categories.len(), 2); // Books and Games
         assert_eq!(stats.categories[0].count, 1);
         assert!(stats.since.is_some());
     }

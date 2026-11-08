@@ -63,7 +63,7 @@ Digitify.exe (Tauri 2)
 | `stats` | Recorded time (`activity`: day, item, read/watch/listen, seconds) and Home's statistics |
 | `music` | The music player (D-020): a second, audio-only mpv whose playlist is the queue (gapless), tracks and artists, favorites, playlists, recently played, track edits |
 | `pictures` | Photos (D-033): EXIF details, upright thumbnails with the viewer's turn and mirror, the file behind a photo, album covers |
-| `arcade` | Arcade (D-034, D-035): `detect` finds Dolphin, Project64 and RMG and reads their game folders (or Arcade's own per emulator); `games` recognizes discs and ROMs by their headers and names libretro box art; `stores` reads the installed games of Steam, Epic Games, the Xbox app and Heroic; scanning, covers (Dolphin's cache, GameTDB, libretro-thumbnails), selecting, custom order, launching with play time while the window hides |
+| `arcade` | Arcade (D-034, D-035): `detect` finds Dolphin, Project64 and RMG and reads their game folders (or Arcade's own per emulator); `games` recognizes discs and ROMs by their headers and names libretro box art; `stores` reads the installed games of Steam, Epic Games, the Xbox app and Heroic; play time per day goes to `arcade_activity` for the statistics (D-041); scanning, covers (Dolphin's cache, GameTDB, libretro-thumbnails), selecting, custom order, launching with play time while the window hides |
 | `localhost` | Linux: the loopback page hosting YouTube's player (D-032) |
 | `dev` | Phase 0 video lab harness (Settings › Developer) |
 

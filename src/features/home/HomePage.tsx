@@ -22,6 +22,7 @@ import {
   TriangleAlert,
   Volume2,
   VolumeOff,
+  Joystick,
 } from "lucide-react";
 import { type Category, type ItemCard, type TileCover, pictureUrl } from "../../lib/api";
 import { plural } from "../../lib/format";
@@ -38,18 +39,35 @@ import { useRelink } from "../settings/LibraryTools";
 import { Featured } from "./Featured";
 import { DiscsBanner } from "./DiscsBanner";
 import { StatsPanel } from "./Stats";
+import { FeaturedGame, GameRow, useHomeGames } from "./GameSections";
 
-const SECTION_NAMES: Record<HomeSection, string> = {
-  tiles: "Library sections",
-  featured: "Featured today",
-  continueWatching: "Continue watching",
-  continueReading: "Pick up where you left off",
-  recentlyOpened: "Recently opened",
-  recentlyAdded: "Recently added",
-  favorites: "Favorites",
-  discs: "Discs",
-  stats: "Statistics",
+/** Each section's name and what it shows, Library or Arcade (D-042). */
+export const SECTION_TITLES: Record<HomeSection, [string, string | null]> = {
+  discs: ["Discs", null],
+  tiles: ["Library sections", null],
+  featured: ["Featured today", "Library"],
+  featuredGame: ["Game of the day", "Arcade"],
+  favorites: ["Favorites", "Library"],
+  favoriteGames: ["Favorites", "Arcade"],
+  continueWatching: ["Continue watching", "Library"],
+  continuePlaying: ["Continue playing", "Arcade"],
+  continueReading: ["Pick up where you left off", "Library"],
+  recentlyAdded: ["Recently added", "Library"],
+  recentlyOpened: ["Recently opened", "Library"],
+  stats: ["Statistics", "Library & Arcade"],
 };
+const SECTION_NAMES = Object.fromEntries(Object.entries(SECTION_TITLES).map(([key, [name, from]]) => [key, from ? `${name} (${from})` : name])) as Record<HomeSection, string>;
+
+/** A section's title with where it's from, "(Library)" or "(Arcade)", in a quieter tone. */
+export function SectionTitle({ section }: { section: HomeSection }) {
+  const [name, from] = SECTION_TITLES[section];
+  return (
+    <>
+      {name}
+      {from && <span className="section-source"> ({from})</span>}
+    </>
+  );
+}
 
 function greeting(): string {
   const hour = new Date().getHours();
@@ -60,7 +78,7 @@ function greeting(): string {
 }
 
 // Pastel "screens" for the built-in sections; other categories cycle through the first five.
-const SCREENS: Record<string, number> = { books: 0, comics: 1, manga: 2, video: 3, music: 4, videos: 5, favorites: 6, all: 7 };
+const SCREENS: Record<string, number> = { books: 0, comics: 1, manga: 2, video: 3, music: 4, videos: 5, favorites: 6, all: 7, arcade: 2 };
 
 interface TileProps extends ComponentPropsWithoutRef<"button"> {
   label: string;
@@ -94,20 +112,18 @@ function SectionTile({ scope, label, screen, covers, icon, count }: { scope: str
   );
 }
 
-/** Columns that keep the grid balanced: 3 × 2 for six tiles, 4 × 2 for eight, and so on. */
+/** Columns for the compact tiles (D-041): one row up to six, else two balanced rows (at most six wide). */
 function tileColumns(count: number): number {
-  if (count <= 4) return Math.max(count, 1);
-  if (count <= 6 || count === 9) return 3;
-  if (count <= 12) return 4;
-  return 5;
+  if (count <= 6) return Math.max(count, 1);
+  return Math.min(6, Math.ceil(count / 2));
 }
 
-function Tiles({ categories, covers, total }: { categories: Category[]; covers: Record<string, TileCover[]>; total: number }) {
+function Tiles({ categories, covers, total, games }: { categories: Category[]; covers: Record<string, TileCover[]>; total: number; games: { count: number; covers: TileCover[] } }) {
   const visible = categories.filter((category) => !category.isHidden);
-  const columns = tileColumns(visible.length + 2);
+  const columns = tileColumns(visible.length + 3);
   return (
     <section className="tiles" aria-label="Library sections" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-      <SectionTile scope="all" label="Everything" screen={SCREENS.all} covers={covers.all ?? []} icon={<LibraryBig size={46} strokeWidth={2.2} aria-hidden />} count={total} />
+      <SectionTile scope="all" label="Everything" screen={SCREENS.all} covers={covers.all ?? []} icon={<LibraryBig size={36} strokeWidth={2.2} aria-hidden />} count={total} />
       {visible.map((category, index) => (
         <SectionTile
           key={category.key}
@@ -115,11 +131,14 @@ function Tiles({ categories, covers, total }: { categories: Category[]; covers: 
           label={category.name}
           screen={SCREENS[category.key] ?? index % 5}
           covers={covers[category.key] ?? []}
-          icon={<CategoryIcon icon={category.icon} size={46} strokeWidth={2.2} />}
+          icon={<CategoryIcon icon={category.icon} size={36} strokeWidth={2.2} />}
           count={category.itemCount}
         />
       ))}
-      <SectionTile scope="favorites" label="Favorites" screen={SCREENS.favorites} covers={covers.favorites ?? []} icon={<Star size={46} strokeWidth={2.2} aria-hidden />} />
+      <Link to="/arcade" className="tile" data-blip>
+        <TileBody label="Arcade" screen={SCREENS.arcade} covers={games.covers} icon={<Joystick size={36} strokeWidth={2.2} aria-hidden />} count={games.count} />
+      </Link>
+      <SectionTile scope="favorites" label="Favorites" screen={SCREENS.favorites} covers={covers.favorites ?? []} icon={<Star size={36} strokeWidth={2.2} aria-hidden />} />
     </section>
   );
 }
@@ -146,7 +165,7 @@ function ContinueCard({ item }: { item: ItemCard }) {
 /** Cover height in Home's rows (a vertical cover 152 px wide). */
 const ROW_ART_HEIGHT = 228;
 
-function Row({ title, items, more }: { title: string; items: ItemCard[]; more?: { scope: string } }) {
+function Row({ title, items, more }: { title: ReactNode; items: ItemCard[]; more?: { scope: string } }) {
   const shapeOf = useCoverShape();
   return (
     <section className="section">
@@ -220,15 +239,19 @@ export function HomePage() {
   const { preferences, resolvedTheme, update } = usePreferences();
   const ambient = useAmbient();
   const [editing, setEditing] = useState(false);
+  const games = useHomeGames();
   const reorder = useReorder((from, to) => update((current) => ({ home: { ...current.home, order: arrayMove(current.home.order, from, to) } })));
   const data = dashboard.data;
   if (!data) return <div className="page" />;
   const dark = resolvedTheme === "dark";
-  const hasItems = data.totals.items > 0;
+  const hasItems = data.totals.items > 0 || games.count > 0;
 
   // Each section's content, or null when it has nothing to show.
   const content: Record<HomeSection, ReactNode> = {
-    tiles: <Tiles categories={data.categories} covers={data.tileCovers} total={data.totals.items} />,
+    tiles: <Tiles categories={data.categories} covers={data.tileCovers} total={data.totals.items} games={games} />,
+    continuePlaying: games.recent.length > 0 && <GameRow title={<SectionTitle section="continuePlaying" />} games={games.recent} running={games.running} starting={games.starting} />,
+    favoriteGames: games.favorites.length > 0 && <GameRow title={<SectionTitle section="favoriteGames" />} games={games.favorites} running={games.running} starting={games.starting} />,
+    featuredGame: games.featured && <FeaturedGame game={games.featured} running={games.running === games.featured.id} />,
     featured: data.featured && (
       <section className="section" aria-label="Featured today">
         <Featured item={data.featured} />
@@ -237,7 +260,9 @@ export function HomePage() {
     continueWatching: data.continueWatching.length > 0 && (
       <section className="section">
         <div className="section-head">
-          <h2>Continue watching</h2>
+          <h2>
+            <SectionTitle section="continueWatching" />
+          </h2>
         </div>
         <div className="continue-grid">
           {data.continueWatching.map((item) => (
@@ -249,7 +274,9 @@ export function HomePage() {
     continueReading: data.continueItems.length > 0 && (
       <section className="section">
         <div className="section-head">
-          <h2>Pick up where you left off</h2>
+          <h2>
+            <SectionTitle section="continueReading" />
+          </h2>
         </div>
         <div className="continue-grid">
           {data.continueItems.map((item) => (
@@ -258,9 +285,9 @@ export function HomePage() {
         </div>
       </section>
     ),
-    recentlyOpened: data.recentlyOpened.length > 0 && <Row title="Recently opened" items={data.recentlyOpened} />,
-    recentlyAdded: data.recent.length > 0 && <Row title="Recently added" items={data.recent} more={{ scope: "all" }} />,
-    favorites: data.favorites.length > 0 && <Row title="Favorites" items={data.favorites} more={{ scope: "favorites" }} />,
+    recentlyOpened: data.recentlyOpened.length > 0 && <Row title={<SectionTitle section="recentlyOpened" />} items={data.recentlyOpened} />,
+    recentlyAdded: data.recent.length > 0 && <Row title={<SectionTitle section="recentlyAdded" />} items={data.recent} more={{ scope: "all" }} />,
+    favorites: data.favorites.length > 0 && <Row title={<SectionTitle section="favorites" />} items={data.favorites} more={{ scope: "favorites" }} />,
     discs: (
       <section className="section">
         <DiscsBanner />
@@ -269,7 +296,9 @@ export function HomePage() {
     stats: hasItems && (
       <section className="section">
         <div className="section-head">
-          <h2>Statistics</h2>
+          <h2>
+            <SectionTitle section="stats" />
+          </h2>
         </div>
         <StatsPanel />
       </section>
@@ -315,10 +344,18 @@ export function HomePage() {
           <button
             type="button"
             className="round-btn lg sound-toggle menu-music-toggle"
-            aria-pressed={ambient.music.enabled}
-            aria-label={ambient.music.enabled ? "Menu music: on" : "Menu music: off"}
-            title={ambient.music.enabled ? "Menu music: on (click to turn off)" : "Menu music: off (click to turn on)"}
-            onClick={() => ambient.updateMusic({ enabled: !ambient.music.enabled })}
+            aria-pressed={ambient.musicOn}
+            aria-label={ambient.musicOn ? "Menu music: on" : "Menu music: off"}
+            title={
+              ambient.inGame
+                ? ambient.musicOn
+                  ? "Menu music: on while you play (click to silence it)"
+                  : "Menu music: silent while you play (click to turn it on)"
+                : ambient.musicOn
+                  ? "Menu music: on (click to turn off)"
+                  : "Menu music: off (click to turn on)"
+            }
+            onClick={ambient.toggleMusic}
           >
             <Music size={19} strokeWidth={2.4} aria-hidden />
           </button>

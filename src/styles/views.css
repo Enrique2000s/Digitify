@@ -657,16 +657,22 @@
 
 /* ---------------------------------------------------------------- Home: statistics */
 
-/* Categorical slots 1-3 of the reference palette, validated for both modes (dataviz). */
+/* Categorical slots 1-3 of the reference palette, validated for both modes (dataviz); playing
+   (D-041) is a magenta checked against them for normal and colorblind vision in both modes. */
 .viz-root {
   --series-read: #2a78d6;
   --series-watch: #eb6834;
   --series-listen: #1baf7a;
+  --series-play: #c2399c;
 }
 :root[data-theme="dark"] .viz-root {
   --series-read: #3987e5;
   --series-watch: #d95926;
   --series-listen: #199e70;
+  --series-play: #cf4fb0;
+}
+.series-play {
+  background: var(--series-play);
 }
 .series-read {
   background: var(--series-read);
@@ -1969,4 +1975,196 @@ body:has(.import-panel) .online-queue {
   --pop-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   --glow: 0 0 0 2px var(--accent-bright);
   --glow-sm: 0 0 0 2px var(--accent-bright);
+}
+
+/* ---------------------------------------------------------------- Home: compact sections and games (D-041) */
+
+/* Library sections: low cards, more to a row. */
+.tiles {
+  gap: 14px;
+  margin-top: 20px;
+}
+.tile {
+  gap: 6px;
+  padding: 7px 7px 9px;
+  border-radius: 20px;
+}
+.tile-screen {
+  aspect-ratio: 2.6 / 1;
+  border-radius: 14px;
+}
+.tile-screen .tile-cover {
+  border-radius: 5px;
+}
+.tile-label {
+  padding: 0 4px;
+}
+.tile-label strong {
+  font-size: 15px;
+}
+.tile-label .count {
+  font-size: 12px;
+}
+.tile-label svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Games in Home's rows: each as wide as its cover at the row's height. */
+.row-scroller.home-games {
+  align-items: flex-end;
+  gap: 20px;
+}
+.home-game {
+  flex: 0 0 auto;
+}
+.home-game .arcade-tile-art {
+  color: inherit;
+}
+.home-game-note {
+  margin: -4px 0 12px;
+  color: var(--muted);
+  font-weight: 700;
+}
+.home-game-note.error {
+  color: var(--danger, #d93f3f);
+  cursor: pointer;
+}
+/* Collage covers sized by the low screen's height, so they fit instead of being cut off. */
+.tiles .tile-screen .tile-cover {
+  top: 12% !important;
+  width: auto !important;
+  height: 76%;
+  margin-left: 4%;
+}
+
+/* ---------------------------------------------------------------- Library like Arcade (D-041) */
+
+/* Each view's own title, under Library's header (D-042): a step smaller. */
+.library-view .page-header {
+  align-items: center;
+}
+.library-view .page-header h1 {
+  font-size: 30px;
+}
+.library-view .title-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+}
+/* The toolbar: views, filters, find, Select, Size, then Sort on the right, as in Arcade. */
+.toolbar.arcade-toolbar {
+  margin: 6px 0 20px;
+}
+.view-find {
+  max-width: 280px;
+}
+
+/* Arcade's games pop in like the library's items. */
+.arcade-grid.entering > .arcade-tile {
+  animation: pop-in 420ms var(--spring) both;
+  animation-delay: calc(min(var(--i, 0), 24) * 28ms);
+}
+
+/* ---------------------------------------------------------------- D-042: Library's header, slimmer featured cards */
+
+/* Library's logo: Arcade's shape in the accent's colors. */
+.library-logo {
+  background: linear-gradient(145deg, var(--accent-bright) 0%, var(--accent) 100%);
+}
+/* The sections as a segmented control, the same size as Arcade's view buttons; it scrolls
+   sideways when there are more than fit. */
+.segmented.category-strip {
+  display: flex;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 6px 0 18px;
+  padding: 4px;
+  scrollbar-width: none;
+}
+.segmented.category-strip::-webkit-scrollbar {
+  display: none;
+}
+.segmented.category-strip .strip-pill {
+  flex: 0 0 auto;
+  gap: 6px;
+  height: auto;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--pill);
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+.segmented.category-strip .strip-pill:hover {
+  color: var(--text);
+  box-shadow: none;
+}
+.segmented.category-strip .strip-pill[data-status="active"] {
+  border-color: var(--line);
+  background: var(--gloss);
+  color: var(--accent-text);
+  box-shadow: var(--raise-sm);
+}
+.segmented.category-strip .strip-pill .count {
+  font-size: 11.5px;
+  opacity: 0.8;
+}
+
+/* "(Library)" or "(Arcade)" after a Home section's name. */
+.section-source {
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Featured today and Game of the day: slim cards. */
+.featured-card {
+  min-height: 0;
+  gap: 22px;
+  padding: 16px 22px;
+  border-radius: 24px;
+}
+.featured-cover {
+  height: 150px;
+}
+.featured-body {
+  gap: 4px;
+}
+.featured-title {
+  font-size: 24px;
+}
+.featured-sub,
+.featured-facts {
+  font-size: 13.5px;
+}
+.featured-description {
+  -webkit-line-clamp: 2;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.featured-actions {
+  margin-top: 4px;
+}
+.featured-actions .btn {
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: 13.5px;
+}
+/* The blurred backdrop fills the slimmer card whatever the art's shape (a photo's wrapper too). */
+.featured-backdrop > * {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.featured-backdrop img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }

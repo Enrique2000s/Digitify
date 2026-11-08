@@ -779,10 +779,43 @@ pub async fn arcade_reveal(state: State<'_, AppState>, id: i64) -> AppResult<()>
 // ---------------------------------------------------------------------------------------------
 // Playing
 
+/// What Digitify does while a game runs (D-041).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WhilePlaying {
+    /// Stays open; the UI silences its music (the default).
+    Stay,
+    /// Hides, out of the taskbar, and comes back when the game ends (D-035).
+    Hide,
+    /// Quits once the game is started; play time isn't counted.
+    Quit,
+}
+
+impl WhilePlaying {
+    fn parse(mode: Option<&str>) -> Self {
+        match mode {
+            Some("hide") => Self::Hide,
+            Some("quit") => Self::Quit,
+            _ => Self::Stay,
+        }
+    }
+}
+
+/// Quits Digitify a moment after a game was started (`WhilePlaying::Quit`), leaving the game running.
+fn quit_for_game(app: &AppHandle, id: i64) {
+    log::info!("arcade: game {id} started; Digitify quits as asked");
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(800));
+        app.exit(0);
+    });
+}
+
 /// Starts the emulator on a game, with the emulator's own settings. Nintendo 64 games use `n64`
 /// (`project64` or `rmg`) when both are found. Play time is counted until the emulator closes.
+/// `mode` says what Digitify does meanwhile: `stay` (default), `hide` or `quit` (D-041).
 #[tauri::command]
-pub async fn arcade_launch(app: AppHandle, state: State<'_, AppState>, arcade: State<'_, ArcadeState>, id: i64, n64: Option<String>) -> AppResult<()> {
+pub async fn arcade_launch(app: AppHandle, state: State<'_, AppState>, arcade: State<'_, ArcadeState>, id: i64, n64: Option<String>, mode: Option<String>) -> AppResult<()> {
+    let mode = WhilePlaying::parse(mode.as_deref());
     if arcade.running.lock().map(|r| r.is_some()).unwrap_or(false) {
         return Err(AppError::msg("A game is already running. Close it first."));
     }
@@ -800,7 +833,7 @@ pub async fn arcade_launch(app: AppHandle, state: State<'_, AppState>, arcade: S
     if platform == "pc" {
         let store = store.as_deref().and_then(Store::parse).ok_or_else(|| AppError::msg("That game's store isn't known."))?;
         let launch = launch.ok_or_else(|| AppError::msg("Arcade doesn't know how to start that game."))?;
-        return launch_store_game(app, library, id, store, &launch, install_dir.map(PathBuf::from));
+        return launch_store_game(app, library, id, store, &launch, install_dir.map(PathBuf::from), mode);
     }
     if !Path::new(&path).is_file() {
         return Err(AppError::msg("The game's file isn't there anymore (was its drive unplugged?)."));
@@ -822,31 +855,42 @@ pub async fn arcade_launch(app: AppHandle, state: State<'_, AppState>, arcade: S
     let mut command = launch_command(&chosen, Path::new(&path));
     let mut child = command.spawn().map_err(|e| AppError::msg(format!("Couldn't start {}: {e}", chosen.emulator.name())))?;
     log::info!("arcade: {} started for game {id} (pid {})", chosen.emulator.name(), child.id());
+    if mode == WhilePlaying::Quit {
+        quit_for_game(&app, id);
+        return Ok(());
+    }
     if let Ok(mut running) = arcade.running.lock() {
         *running = Some(Running { game: id });
     }
     let _ = app.emit("arcade-session", serde_json::json!({ "running": id }));
-    // Out of the way while the game runs (D-035): hidden, out of the taskbar; the UI goes silent on
-    // the event above. It comes back where it was when the game closes.
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.hide();
+    // The UI goes silent on the event above. Hiding (D-035): out of the taskbar until the game closes.
+    if mode == WhilePlaying::Hide {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.hide();
+        }
     }
     let started = Instant::now();
     std::thread::spawn(move || {
         let _ = child.wait();
-        finish_session(&app, &library, id, started.elapsed().as_secs() as i64);
+        finish_session(&app, &library, id, started.elapsed().as_secs() as i64, mode == WhilePlaying::Hide);
     });
     Ok(())
 }
 
 /// The end of a game session: play time (a start that ends at once isn't a session), Arcade free
-/// again, the UI told, and Digitify back where it was (Big Picture stays full screen).
-fn finish_session(app: &AppHandle, library: &Library, id: i64, seconds: i64) {
+/// again, the UI told, and Digitify back where it was when it hid (Big Picture stays full screen).
+fn finish_session(app: &AppHandle, library: &Library, id: i64, seconds: i64, restore: bool) {
     if seconds >= 5 {
         let _ = library.db.with(|conn| {
             conn.execute(
                 "UPDATE arcade_games SET play_seconds = play_seconds + ?2, play_count = play_count + 1, \
                  last_played_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
+                params![id, seconds],
+            )?;
+            // Home's statistics (D-041).
+            conn.execute(
+                "INSERT INTO arcade_activity (day, game_id, seconds) SELECT date('now', 'localtime'), id, ?2 FROM arcade_games WHERE id = ?1 \
+                 ON CONFLICT (day, game_id) DO UPDATE SET seconds = seconds + excluded.seconds",
                 params![id, seconds],
             )?;
             Ok(())
@@ -858,10 +902,12 @@ fn finish_session(app: &AppHandle, library: &Library, id: i64, seconds: i64) {
         }
     }
     let _ = app.emit("arcade-session", serde_json::json!({ "running": null, "seconds": seconds }));
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
+    if restore {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
     }
 }
 
@@ -872,9 +918,13 @@ const STORE_START_WAIT: u64 = 90;
 /// Digitify watches for the game's own program — one running from its install folder — and only
 /// then hides and goes quiet; when no program from that folder is left, the session ends. A game
 /// never seen leaves Digitify as it was.
-fn launch_store_game(app: AppHandle, library: std::sync::Arc<Library>, id: i64, store: Store, launch: &str, install_dir: Option<PathBuf>) -> AppResult<()> {
+fn launch_store_game(app: AppHandle, library: std::sync::Arc<Library>, id: i64, store: Store, launch: &str, install_dir: Option<PathBuf>, mode: WhilePlaying) -> AppResult<()> {
     crate::tools::open_link(launch).map_err(|e| AppError::msg(format!("Couldn't ask {} to start the game: {e}", store.name())))?;
     log::info!("arcade: asked {} to start game {id}", store.name());
+    if mode == WhilePlaying::Quit {
+        quit_for_game(&app, id);
+        return Ok(());
+    }
     let _ = app.emit("arcade-session", serde_json::json!({ "starting": id, "store": store.name() }));
     let Some(dir) = install_dir.filter(|d| d.is_dir()) else { return Ok(()) };
     std::thread::spawn(move || {
@@ -899,8 +949,10 @@ fn launch_store_game(app: AppHandle, library: std::sync::Arc<Library>, id: i64, 
             }
         }
         let _ = app.emit("arcade-session", serde_json::json!({ "running": id }));
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.hide();
+        if mode == WhilePlaying::Hide {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.hide();
+            }
         }
         let started = Instant::now();
         // Wait for it to end: no program from its folder for two checks in a row (launchers
@@ -910,7 +962,7 @@ fn launch_store_game(app: AppHandle, library: std::sync::Arc<Library>, id: i64, 
             std::thread::sleep(std::time::Duration::from_secs(3));
             absent = if game_running(&mut system, &dir) { 0 } else { absent + 1 };
         }
-        finish_session(&app, &library, id, started.elapsed().as_secs() as i64);
+        finish_session(&app, &library, id, started.elapsed().as_secs() as i64, mode == WhilePlaying::Hide);
     });
     Ok(())
 }

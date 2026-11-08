@@ -19,11 +19,14 @@ export const HOME_SECTIONS = [
   "discs",
   "tiles",
   "featured",
+  "featuredGame",
   "favorites",
+  "favoriteGames",
   "continueWatching",
+  "continuePlaying",
   "continueReading",
-  "recentlyOpened",
   "recentlyAdded",
+  "recentlyOpened",
   "stats",
 ] as const;
 /** Earlier default orders: a Home still in one of them moves to the current default. */
@@ -31,6 +34,9 @@ const OLD_HOME_ORDERS = [
   // (Shelves, D-029, left Home; these read as they are once their "shelves" is dropped.)
   "tiles,featured,continueWatching,continueReading,recentlyOpened,recentlyAdded,favorites,discs,stats",
   "tiles,featured,continueWatching,continueReading,recentlyOpened,recentlyAdded,favorites,stats",
+  // Before Arcade's sections (D-041, D-042).
+  "discs,tiles,featured,favorites,continueWatching,continueReading,recentlyOpened,recentlyAdded,stats",
+  "discs,tiles,featured,continuePlaying,favorites,continueWatching,continueReading,recentlyOpened,recentlyAdded,favoriteGames,featuredGame,stats",
 ];
 export type HomeSection = (typeof HOME_SECTIONS)[number];
 export interface HomeLayout {
@@ -155,6 +161,9 @@ export interface ArcadePreferences {
   hiddenFilters: ArcadeFilter[];
   /** "All PC games" and "All ROM games" as one "All games" view. */
   combineAll: boolean;
+  /** What Digitify does while a game runs (D-041): stays open with its music silenced (the default;
+   *  the music can be switched back on), hides and comes back when the game ends, or quits. */
+  whilePlaying: "stay" | "hide" | "quit";
   sort: "title" | "played" | "most" | "added" | "custom";
   /** Box width in Arcade, like the Library's cover size (D-037). */
   cardSize: number;
@@ -245,6 +254,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
     filterOrder: [...ARCADE_FILTER_ORDER],
     hiddenFilters: [],
     combineAll: false,
+    whilePlaying: "stay",
     sort: "title",
     cardSize: 160,
   },
@@ -341,6 +351,7 @@ function sanitizeArcade(raw: unknown): ArcadePreferences {
     filterOrder: order,
     hiddenFilters: Array.isArray(value.hiddenFilters) ? [...new Set(value.hiddenFilters.filter(isArcadeFilter))] : [],
     combineAll: pick("combineAll", isBoolean),
+    whilePlaying: pick("whilePlaying", (v) => v === "stay" || v === "hide" || v === "quit"),
     sort: pick("sort", (v) => ["title", "played", "most", "added", "custom"].includes(v as string)),
     cardSize: pick("cardSize", (v) => typeof v === "number" && v >= 110 && v <= 260),
   };

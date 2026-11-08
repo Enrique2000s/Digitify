@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { itemPath } from "../../lib/routes";
-import { Award, BookOpen, Info, Play } from "lucide-react";
-import { api, type ItemCard } from "../../lib/api";
+import { Award, BookOpen, Image, Info, Play } from "lucide-react";
+import { api, artworkUrl, type ItemCard } from "../../lib/api";
 import { Cover } from "../../components/common";
 import { useCoverShape } from "../../lib/preferences";
 
@@ -14,19 +14,22 @@ export function Featured({ item }: { item: ItemCard }) {
   const started = progress > 0.01 && progress < 0.999;
   const readable = item.hasDigital && !item.missing && (item.handler === "book" || item.handler === "comic");
   const watchable = item.hasDigital && !item.missing && item.handler === "video";
+  // A photo can be featured too (D-042): it opens in the image viewer.
+  const viewable = !item.missing && item.handler === "image";
   return (
     <div className="featured-card" style={item.coverColor ? { ["--tint" as string]: item.coverColor } : undefined}>
       {item.coverKey && (
         <div className="featured-backdrop" aria-hidden>
-          <Cover item={item} size="cover" />
+          {/* A plain picture: it fills the blurred backdrop whatever the item's kind (D-042). */}
+          <img src={artworkUrl(item.coverKey, "cover")} alt="" />
         </div>
       )}
-      <Link to={itemPath(item)} params={{ id: String(item.id) }} className="featured-cover" data-shape={shape} style={{ aspectRatio: aspect, height: shape === "landscape" ? 170 : undefined }} tabIndex={-1} data-blip>
+      <Link to={itemPath(item)} params={{ id: String(item.id) }} className="featured-cover" data-shape={shape} style={{ aspectRatio: aspect, height: shape === "landscape" ? 104 : undefined }} tabIndex={-1} data-blip>
         <Cover item={item} size="cover" />
       </Link>
       <div className="featured-body">
         <span className="featured-eyebrow">
-          <Award size={16} strokeWidth={2.6} aria-hidden /> Featured today
+          <Award size={16} strokeWidth={2.6} aria-hidden /> Featured today <span className="section-source">(Library)</span>
         </span>
         <h2 className="display featured-title">{item.title}</h2>
         {(item.subtitle || item.year) && <p className="featured-sub">{[item.subtitle, item.year].filter(Boolean).join(" · ")}</p>}
@@ -43,9 +46,15 @@ export function Featured({ item }: { item: ItemCard }) {
               <Play size={17} /> {started ? "Resume" : "Play"}
             </Link>
           )}
-          <Link to="/item/$id" params={{ id: String(item.id) }} className={readable || watchable ? "btn" : "btn btn-primary"}>
-            <Info size={17} /> Details
-          </Link>
+          {viewable ? (
+            <Link to="/view/$id" params={{ id: String(item.id) }} className="btn btn-primary">
+              <Image size={17} /> View
+            </Link>
+          ) : (
+            <Link to="/item/$id" params={{ id: String(item.id) }} className={readable || watchable ? "btn" : "btn btn-primary"}>
+              <Info size={17} /> Details
+            </Link>
+          )}
         </div>
       </div>
     </div>

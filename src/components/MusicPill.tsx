@@ -11,7 +11,8 @@ import { Marquee } from "./Marquee";
 export function MusicPill() {
   const ambient = useAmbient();
   const { music, updateMusic } = ambient;
-  const silent = music.muted || music.volume === 0;
+  // While a game runs (D-041), the mute button silences or brings back the music for the game.
+  const silent = music.muted || music.volume === 0 || ambient.gameSilenced;
   const VolumeIcon = silent ? VolumeX : music.volume < 50 ? Volume1 : Volume2;
   if (!music.enabled) {
     return (
@@ -43,10 +44,15 @@ export function MusicPill() {
       <button
         type="button"
         className="icon-btn"
-        aria-label={music.muted ? "Unmute music" : "Mute music"}
-        aria-pressed={music.muted}
-        title={music.muted ? "Unmute music" : "Mute music"}
-        onClick={() => updateMusic({ muted: !music.muted })}
+        aria-label={music.muted || ambient.gameSilenced ? "Unmute music" : "Mute music"}
+        aria-pressed={music.muted || ambient.gameSilenced}
+        title={ambient.gameSilenced ? "Silent while you play (click to bring the music back)" : music.muted ? "Unmute music" : "Mute music"}
+        onClick={() => {
+          if (ambient.inGame && (ambient.gameSilenced || !music.muted)) {
+            ambient.setGameSilenced(!ambient.gameSilenced);
+            if (ambient.gameSilenced && music.muted) updateMusic({ muted: false });
+          } else updateMusic({ muted: !music.muted });
+        }}
       >
         <VolumeIcon size={18} />
       </button>

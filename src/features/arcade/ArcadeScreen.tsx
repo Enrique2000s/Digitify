@@ -32,7 +32,7 @@ export function ArcadeScreen() {
         ))}
         <span className="bp-hint-key">RB</span>
       </div>
-      {running && <p className="bp-arcade-note">Playing {running.title}. Close the game to come back.</p>}
+      {running && <p className="bp-arcade-note">Playing {running.title}. Digitify's music is silent until the game closes (Menu › Music brings it back).</p>}
       {starting && !running && <p className="bp-arcade-note">Starting through {starting.store}…</p>}
       {error && (
         <p className="bp-arcade-note error">
@@ -45,7 +45,8 @@ export function ArcadeScreen() {
           <p>{games.data.length === 0 ? "No games yet. Set up Arcade from the regular app: Arcade › Emulators & folders." : "No games for this console."}</p>
         </div>
       ) : (
-        <div className="bp-grid">
+        // A new console pops its games in, like the library's items (D-041).
+        <div className="bp-grid" key={view.current}>
           {shown.map((game, index) => (
             <ArcadeTile key={game.id} game={game} autofocus={index === 0} onPlay={() => void launch(game)} />
           ))}
@@ -55,8 +56,8 @@ export function ArcadeScreen() {
   );
 }
 
-function ArcadeTile({ game, autofocus, onPlay }: { game: ArcadeGame; autofocus: boolean; onPlay: () => void }) {
-  const height = 270;
+/** A game as a Big Picture tile: A plays it. Also Home's game rows in Big Picture (D-041). */
+export function ArcadeTile({ game, autofocus, onPlay, height = 270 }: { game: ArcadeGame; autofocus: boolean; onPlay: () => void; height?: number }) {
   const width = Math.round(height * PLATFORM_ASPECT[game.platform]);
   return (
     <button type="button" className="bp-tile" style={{ width }} data-bp-focus data-bp-autofocus={autofocus || undefined} data-game={game.id} onClick={onPlay}>

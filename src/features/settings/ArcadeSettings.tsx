@@ -36,6 +36,28 @@ export function ArcadeSettings() {
   return (
     <section className="panel" id="arcade">
       <h2>Arcade</h2>
+      <Setting
+        title="While a game runs"
+        text={
+          arcade.whilePlaying === "quit"
+            ? "Digitify closes once the game starts and stays closed until you open it again. Time played isn't counted, since Digitify isn't running."
+            : arcade.whilePlaying === "hide"
+              ? "Digitify hides and goes silent, then comes back when the game ends."
+              : "Digitify stays open and silences its music until the game ends; you can turn the music back on (or off again) meanwhile."
+        }
+      >
+        <select
+          className="select"
+          style={{ width: 260 }}
+          aria-label="While a game runs"
+          value={arcade.whilePlaying}
+          onChange={(event) => update((c) => ({ arcade: { ...c.arcade, whilePlaying: event.target.value as typeof arcade.whilePlaying } }))}
+        >
+          <option value="stay">Stay open and mute the music</option>
+          <option value="hide">Hide, and come back after</option>
+          <option value="quit">Close Digitify completely</option>
+        </select>
+      </Setting>
       <Setting title="One “All games” view" text="Show your PC games and your ROM games together in one view, instead of “All PC games” and “All ROM games”.">
         <Switch checked={arcade.combineAll} label="Combine All PC games and All ROM games" onChange={(combineAll) => update((c) => ({ arcade: { ...c.arcade, combineAll } }))} />
       </Setting>

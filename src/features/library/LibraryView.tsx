@@ -5,7 +5,7 @@ import { flushSync } from "react-dom";
 import { motionAllowed } from "../reader/chrome";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Popover } from "radix-ui";
-import { Check, ChevronLeft, ChevronRight, GalleryHorizontalEnd, GripVertical, Heart, LayoutGrid, LayoutList, LibraryBig, List, ListChecks, Paintbrush, Play, Plus, Shuffle } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, GalleryHorizontalEnd, GripVertical, Heart, LayoutGrid, LayoutList, LibraryBig, List, ListChecks, Paintbrush, Play, Plus, Search, Shuffle } from "lucide-react";
 import { api, type Blurb, type ItemCard, type Ownership, type QueryParams, type SortKey } from "../../lib/api";
 import { itemPath, photoContext } from "../../lib/routes";
 import { GridDragProvider, moved } from "../../lib/gridDrag";
@@ -858,6 +858,15 @@ export function LibraryView({
   empty: ReactNode;
 }) {
   const { preferences, update } = usePreferences();
+  // "Find in this view" (D-041, like Arcade's search): narrows the view by words; the search page
+  // has its own.
+  const [find, setFind] = useState("");
+  const [finding, setFinding] = useState("");
+  useEffect(() => {
+    const timer = window.setTimeout(() => setFinding(find.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [find]);
+  useEffect(() => setFind(""), [viewKey]);
   // Layout and the filter are shared by every view unless Settings says otherwise.
   const shared = preferences.syncViews ? "*" : viewKey;
   const other = preferences.syncViews ? viewKey : "*";
@@ -893,7 +902,7 @@ export function LibraryView({
     if (!orderKey) setSearchSort(next);
     else if (next) update((current) => ({ sorts: { ...current.sorts, [orderKey]: next } }));
   };
-  const params = { ...base, sort: sort || null, ownership: ownership || null, custom: sort === "custom" ? orderKey : null };
+  const params = { ...base, ...(finding && !base.search ? { search: finding } : {}), sort: sort || null, ownership: ownership || null, custom: sort === "custom" ? orderKey : null };
   // The image viewer steps through what this view shows (D-033).
   photoContext.params = params;
   const { cache, total: itemTotal, error } = usePagedItems(params);
@@ -917,7 +926,7 @@ export function LibraryView({
   const lead = leadCards.length;
   const selection = useSelectionState(source);
   // Entrance animations play for a moment after the view, filter or sort changes, not while scrolling.
-  const stageKey = `${viewKey}:${filter}:${sort}`;
+  const stageKey = `${viewKey}:${filter}:${sort}:${finding}`;
   const [entering, setEntering] = useState(true);
   useEffect(() => {
     setEntering(true);
@@ -925,7 +934,7 @@ export function LibraryView({
     return () => window.clearTimeout(timer);
   }, [stageKey, layout]);
   const shape = coverShapeOf({ handler: handler ?? "book", category: base.category }, preferences.coverShapes);
-  const arrangeable = !!orderKey && sort === "custom";
+  const arrangeable = !!orderKey && sort === "custom" && !finding;
   // In a custom order, covers can be dragged straight to a new place (not in the carousel, which
   // drags to turn, nor while selecting).
   const queryClient = useQueryClient();
@@ -997,7 +1006,7 @@ export function LibraryView({
             </div>
           </div>
           {prelude}
-          <div className="toolbar">
+          <div className="toolbar arcade-toolbar">
             <div className="segmented layout-switch" role="group" aria-label="Layout">
               {(
                 [
@@ -1021,7 +1030,12 @@ export function LibraryView({
                 </button>
               ))}
             </div>
-            <div className="spacer" />
+            {!base.search && (
+              <label className="arcade-search view-find">
+                <Search size={15} aria-hidden />
+                <input type="search" placeholder="Find in this view" value={find} onChange={(event) => setFind(event.target.value)} aria-label="Find in this view" />
+              </label>
+            )}
             {total != null && total > 0 && <SelectToggle base={params} collections={leadCards.map((c) => c.id)} itemsShown={!onlyCollections} />}
             {layout === "shelf" && (
               <>
@@ -1047,14 +1061,14 @@ export function LibraryView({
               </>
             )}
             {layout !== "list" && layout !== "carousel" && (
-              <label className="inline">
-                Size
+              <label className="arcade-size">
+                <span>Size</span>
                 <CardSizeSlider value={preferences.cardSize} onChange={(cardSize) => update({ cardSize })} />
               </label>
             )}
-            <label className="inline">
-              Sort
-              <select className="select" style={{ width: "auto", minHeight: 34 }} value={sort} onChange={(event) => setSort(event.target.value as SortKey | "")}>
+            <label className="arcade-sort">
+              <span>Sort</span>
+              <select value={sort} onChange={(event) => setSort(event.target.value as SortKey | "")}>
                 {base.search && <option value="">Best match</option>}
                 {sorts.map((option) => (
                   <option key={option.value} value={option.value}>

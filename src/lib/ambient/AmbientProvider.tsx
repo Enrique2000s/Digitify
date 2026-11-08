@@ -28,6 +28,17 @@ interface AmbientContext {
   playlist: PlaylistInfo;
   /** Pauses the music until the returned release is called (e.g. while a video plays). */
   hold: (reason: "video" | "media" | "reading" | "game") => () => void;
+  /** A game from Arcade is running (D-041). */
+  inGame: boolean;
+  /** The menu music is silent for the game; it can be switched back on while the game runs. */
+  gameSilenced: boolean;
+  setGameSilenced: (silenced: boolean) => void;
+  /** Arcade's session: `true` when a game starts (silencing the music), `false` when it ends. */
+  setInGame: (running: boolean) => void;
+  /** Menu music on or off, as Home's music button shows and switches it: during a game, only for
+   *  the game; otherwise the saved preference. */
+  musicOn: boolean;
+  toggleMusic: () => void;
 }
 
 const Context = createContext<AmbientContext | null>(null);
@@ -117,11 +128,13 @@ export function AmbientProvider({ children }: { children: ReactNode }) {
   const { preferences, update } = usePreferences();
   const { music, interfaceSounds } = preferences;
   const [holds, setHolds] = useState<ReadonlyMap<symbol, string>>(new Map());
+  // null: no game running; otherwise whether the music is silent for it (D-041).
+  const [game, setGame] = useState<{ silenced: boolean } | null>(null);
   const [playlist, setPlaylist] = useState<PlaylistInfo>(NO_PLAYLIST);
   const minimized = useMinimized();
   const engine = useSyncExternalStore(ambientEngine.subscribe, ambientEngine.getState);
   const custom = music.source === "custom";
-  const play = music.enabled && holds.size === 0 && !(minimized && music.pauseWhenMinimized);
+  const play = music.enabled && holds.size === 0 && !game?.silenced && !(minimized && music.pauseWhenMinimized);
   useInterfaceSounds(interfaceSounds);
 
   // The user's music: the core resolves the chosen files, folders and albums into a playlist.
@@ -190,6 +203,7 @@ export function AmbientProvider({ children }: { children: ReactNode }) {
     status = details.data?.artist ?? details.data?.album ?? "Your music";
   }
   if (!music.enabled) status = "Off";
+  else if (game?.silenced) status = "Silent while you play";
   else if (holds.size > 0) status = "Paused while media plays";
   else if (custom && playlist.loading && !track) status = "Loading your music…";
   else if (custom && playlist.error) status = "Couldn't load your music";
@@ -199,6 +213,17 @@ export function AmbientProvider({ children }: { children: ReactNode }) {
   } else if (custom && engine.failed) status = "Couldn't play your music";
   else if (!engine.unlocked) status = "Starts when you click";
   else if (music.muted || music.volume === 0) status = "Muted";
+
+  const setInGame = useCallback((running: boolean) => setGame(running ? { silenced: true } : null), []);
+  const setGameSilenced = useCallback((silenced: boolean) => setGame((current) => (current ? { silenced } : current)), []);
+  const musicOn = music.enabled && !game?.silenced;
+  const toggleMusic = useCallback(() => {
+    if (game && music.enabled) setGame({ silenced: !game.silenced });
+    else {
+      update((current) => ({ music: { ...current.music, enabled: !current.music.enabled } }));
+      if (game) setGame({ silenced: false });
+    }
+  }, [game, music.enabled, update]);
 
   const value = useMemo<AmbientContext>(
     () => ({
@@ -213,8 +238,14 @@ export function AmbientProvider({ children }: { children: ReactNode }) {
       skip: () => ambientEngine.skip(),
       playlist,
       hold,
+      inGame: game != null,
+      gameSilenced: !!game?.silenced,
+      setGameSilenced,
+      setInGame,
+      musicOn,
+      toggleMusic,
     }),
-    [music, updateMusic, interfaceSounds, setInterfaceSounds, engine.playing, title, status, custom, playlist, hold],
+    [music, updateMusic, interfaceSounds, setInterfaceSounds, engine.playing, title, status, custom, playlist, hold, game, setGameSilenced, setInGame, musicOn, toggleMusic],
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

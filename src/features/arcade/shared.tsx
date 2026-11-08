@@ -162,7 +162,7 @@ export function useLaunch() {
   const launch = async (game: ArcadeGame) => {
     setError(null);
     try {
-      await api.arcadeLaunch(game.id, preferences.arcade.n64);
+      await api.arcadeLaunch(game.id, preferences.arcade.n64, preferences.arcade.whilePlaying);
       void queryClient.invalidateQueries({ queryKey: ["arcade-status"] });
     } catch (reason) {
       setError(errorText(reason));

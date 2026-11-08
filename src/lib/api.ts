@@ -144,6 +144,8 @@ export interface ActivityTime {
   read: number;
   watch: number;
   listen: number;
+  /** Arcade's games (D-041). */
+  play: number;
 }
 
 export interface NamedCount {
@@ -163,6 +165,8 @@ export interface LibraryStats {
   inProgress: number;
   playsMonth: number;
   topArtists: NamedCount[];
+  /** Most played games this year; `count` is minutes (D-041). */
+  topGames: NamedCount[];
   categories: NamedCount[];
 }
 
@@ -668,7 +672,8 @@ export const api = {
   arcadeForget: (id: number) => invoke<void>("arcade_forget", { id }),
   arcadeReveal: (id: number) => invoke<void>("arcade_reveal", { id }),
   /** Starts the game in its emulator; `n64` picks Project64 or RMG for Nintendo 64 games. */
-  arcadeLaunch: (id: number, n64: ArcadeEmulator | null) => invoke<void>("arcade_launch", { id, n64 }),
+  /** `mode`: what Digitify does while the game runs (D-041). */
+  arcadeLaunch: (id: number, n64: ArcadeEmulator | null, mode: "stay" | "hide" | "quit") => invoke<void>("arcade_launch", { id, n64, mode }),
   /** An emulator's game folders set in Arcade (D-035); null goes back to its own. */
   arcadeEmulatorFolders: (emulator: ArcadeEmulator, folders: { path: string; recursive: boolean }[] | null) => invoke<void>("arcade_emulator_folders", { emulator, folders }),
   arcadeSetFavoriteMany: (ids: number[], favorite: boolean) => invoke<void>("arcade_set_favorite_many", { ids, favorite }),

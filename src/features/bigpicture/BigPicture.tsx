@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { Award, BookOpen, ChartColumn, ChevronLeft, ChevronRight, Delete, Gamepad2, Heart, House, LibraryBig, LogOut, MousePointer2, Pause, Play, Search, Settings2, SkipBack, SkipForward, Space, Star, X, Eye, Joystick } from "lucide-react";
-import { api, type ItemCard } from "../../lib/api";
+import { Award, BookOpen, ChartColumn, ChevronLeft, ChevronRight, Delete, Gamepad2, Heart, House, LibraryBig, LogOut, MousePointer2, Pause, Play, Search, Settings2, SkipBack, SkipForward, Space, Star, X, Eye, Joystick, Music, VolumeOff } from "lucide-react";
+import { api, type ArcadeGame, type ItemCard } from "../../lib/api";
 import { exitBigPicture, focusFirst, moveFocus } from "../../lib/bigpicture";
 import { controllerKind, onControllerChange, usePad, useSticks, type PadAction } from "../../lib/gamepad";
 import { Cursor } from "./Cursor";
 import { OnlineScreen } from "./OnlineScreen";
-import { ArcadeScreen } from "../arcade/ArcadeScreen";
+import { ArcadeScreen, ArcadeTile } from "../arcade/ArcadeScreen";
+import { consoleOf, GameCover, PLATFORM_ASPECT, playTime, useLaunch } from "../arcade/shared";
+import { useHomeGames } from "../home/GameSections";
+import { useAmbient } from "../../lib/ambient/AmbientProvider";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { useCoverShape, usePreferences, type HomeSection } from "../../lib/preferences";
 import { StatsPanel } from "../home/Stats";
+import { SectionTitle } from "../home/HomePage";
 import { SourceTag, sourceProps } from "../../components/SourceTag";
 import { libraryChanged, useCategories, useDashboard } from "../../lib/queries";
 import { CategoryIcon, Cover } from "../../components/common";
@@ -110,7 +114,7 @@ function Scroller({ children }: { children: ReactNode }) {
   );
 }
 
-function Row({ title, items, first, height }: { title: string; items: ItemCard[]; first?: boolean; height?: number }) {
+function Row({ title, items, first, height }: { title: ReactNode; items: ItemCard[]; first?: boolean; height?: number }) {
   if (!items.length) return null;
   return (
     <section className="bp-row">
@@ -132,7 +136,7 @@ function FeaturedCard({ item }: { item: ItemCard }) {
   return (
     <section className="bp-row">
       <h2>
-        <Award size={26} /> Featured today
+        <Award size={26} /> Featured today <span className="section-source">(Library)</span>
       </h2>
       <button type="button" className="bp-featured" data-bp-focus onClick={() => void navigate({ to: "/bp", search: { screen: "item", id: item.id } })}>
         {item.coverKey && (
@@ -155,12 +159,58 @@ function FeaturedCard({ item }: { item: ItemCard }) {
   );
 }
 
+/** Home's game rows in Big Picture (D-041): A plays a game, as in Arcade. */
+function GameRowBP({ title, games }: { title: ReactNode; games: ArcadeGame[] }) {
+  const { launch, error } = useLaunch();
+  if (!games.length) return null;
+  return (
+    <section className="bp-row">
+      <h2>{title}</h2>
+      {error && <p className="bp-arcade-note error">{error}</p>}
+      <Scroller>
+        {games.map((game) => (
+          <ArcadeTile key={game.id} game={game} autofocus={false} height={240} onPlay={() => void launch(game)} />
+        ))}
+      </Scroller>
+    </section>
+  );
+}
+
+/** "Game of the day" in Big Picture: A plays it. */
+function FeaturedGameBP({ game }: { game: ArcadeGame }) {
+  const { launch, error } = useLaunch();
+  return (
+    <section className="bp-row">
+      <h2>
+        <Gamepad2 size={26} /> Game of the day <span className="section-source">(Arcade)</span>
+      </h2>
+      {error && <p className="bp-arcade-note error">{error}</p>}
+      <button type="button" className="bp-featured" data-bp-focus onClick={() => void launch(game)}>
+        {game.coverKey && (
+          <span className="bp-featured-backdrop" aria-hidden>
+            <GameCover game={game} size="cover" />
+          </span>
+        )}
+        <span className="bp-featured-art arcade-bp-art" style={{ ["--a" as string]: PLATFORM_ASPECT[game.platform] }}>
+          <GameCover game={game} size="cover" />
+        </span>
+        <span className="bp-featured-body">
+          <strong>{game.title}</strong>
+          <span className="bp-featured-sub">{consoleOf(game)}</span>
+          <span className="bp-featured-facts">{game.playSeconds > 0 ? `${playTime(game.playSeconds)} played` : "Not played yet"} · A to play</span>
+        </span>
+      </button>
+    </section>
+  );
+}
+
 /** Home in Big Picture: the same sections as Home, in the order (and with the ones hidden) set in "Customize Home". */
 function HomeScreen() {
   const dashboard = useDashboard();
   const categories = useCategories();
   const navigate = useNavigate();
   const { preferences } = usePreferences();
+  const games = useHomeGames();
   const data = dashboard.data;
   if (!data) return null;
   const sections: Partial<Record<HomeSection, ReactNode>> = {
@@ -189,6 +239,11 @@ function HomeScreen() {
                 <span>{category.itemCount.toLocaleString()}</span>
               </button>
             ))}
+          <button type="button" className="bp-category" data-bp-focus onClick={() => void navigate({ to: "/bp", search: { screen: "arcade" } })}>
+            <Joystick size={46} />
+            <strong>Arcade</strong>
+            <span>{games.count.toLocaleString()}</span>
+          </button>
           <button type="button" className="bp-category" data-bp-focus onClick={() => void navigate({ to: "/bp", search: { screen: "library", scope: "favorites" } })}>
             <Star size={46} />
             <strong>Favorites</strong>
@@ -196,17 +251,20 @@ function HomeScreen() {
         </Scroller>
       </section>
     ),
+    continuePlaying: <GameRowBP title={<SectionTitle section="continuePlaying" />} games={games.recent} />,
+    favoriteGames: <GameRowBP title={<SectionTitle section="favoriteGames" />} games={games.favorites} />,
+    featuredGame: games.featured && <FeaturedGameBP game={games.featured} />,
     featured: data.featured && <FeaturedCard item={data.featured} />,
-    favorites: <Row title="Favorites" items={data.favorites} />,
+    favorites: <Row title={<SectionTitle section="favorites" />} items={data.favorites} />,
     // Smaller than the other rows, as before.
-    continueWatching: <Row title="Continue watching" items={data.continueWatching} height={190} />,
-    continueReading: <Row title="Pick up where you left off" items={data.continueItems} height={190} />,
-    recentlyOpened: <Row title="Recently opened" items={data.recentlyOpened} />,
-    recentlyAdded: <Row title="Recently added" items={data.recent} />,
-    stats: data.totals.items > 0 && (
+    continueWatching: <Row title={<SectionTitle section="continueWatching" />} items={data.continueWatching} height={190} />,
+    continueReading: <Row title={<SectionTitle section="continueReading" />} items={data.continueItems} height={190} />,
+    recentlyOpened: <Row title={<SectionTitle section="recentlyOpened" />} items={data.recentlyOpened} />,
+    recentlyAdded: <Row title={<SectionTitle section="recentlyAdded" />} items={data.recent} />,
+    stats: (data.totals.items > 0 || games.count > 0) && (
       <section className="bp-row bp-stats">
         <h2>
-          <ChartColumn size={26} /> Statistics
+          <ChartColumn size={26} /> <SectionTitle section="stats" />
         </h2>
         <StatsPanel />
       </section>
@@ -419,6 +477,7 @@ function SearchScreen() {
 /** The menu on Start or the Xbox / PS button: navigation mode, cursor speed, leaving. */
 function Menu({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
+  const ambient = useAmbient();
   const { preferences, update } = usePreferences();
   const ref = useRef<HTMLDivElement>(null);
   const bp = preferences.bigPicture;
@@ -467,6 +526,17 @@ function Menu({ onClose }: { onClose: () => void }) {
             </div>
           </div>
         )}
+        <div className="bp-menu-setting">
+          <span>{ambient.inGame ? "Music while you play" : "Menu music"}</span>
+          <div className="bp-choice">
+            <button type="button" className="bp-button" data-bp-focus aria-pressed={ambient.musicOn} onClick={() => !ambient.musicOn && ambient.toggleMusic()}>
+              <Music size={22} /> On
+            </button>
+            <button type="button" className="bp-button" data-bp-focus aria-pressed={!ambient.musicOn} onClick={() => ambient.musicOn && ambient.toggleMusic()}>
+              <VolumeOff size={22} /> Off
+            </button>
+          </div>
+        </div>
         <button type="button" className="bp-button" data-bp-focus onClick={() => void exitBigPicture(() => void navigate({ to: "/" }))}>
           <LogOut size={22} /> Exit Big Picture
         </button>

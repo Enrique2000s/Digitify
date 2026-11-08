@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearch } from "@tanstack/react-router";
 import { createPortal } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -15,7 +16,11 @@ export function ArcadePage() {
   const { preferences, update } = usePreferences();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<number | null>(null);
+  const opened = useSearch({ strict: false }) as { game?: number };
+  const [selected, setSelected] = useState<number | null>(opened.game ?? null);
+  useEffect(() => {
+    if (opened.game != null) setSelected(opened.game);
+  }, [opened.game]);
   const [setup, setSetup] = useState<boolean | null>(null);
   const [scanning, setScanning] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -24,6 +29,14 @@ export function ArcadePage() {
   const { launch, error, clearError } = useLaunch();
   const shown = useShownGames(games.data, search);
   const view = useArcadeFilters();
+  // Games pop in when the view, sort or search changes, like the library's items (D-041).
+  const stageKey = `${view.current}:${preferences.arcade.sort}:${search.trim()}`;
+  const [entering, setEntering] = useState(true);
+  useEffect(() => {
+    setEntering(true);
+    const timer = window.setTimeout(() => setEntering(false), 1100);
+    return () => window.clearTimeout(timer);
+  }, [stageKey]);
   const arcade = preferences.arcade;
   const setArcade = (change: Partial<typeof arcade>) => update((current) => ({ arcade: { ...current.arcade, ...change } }));
   const anyEmulator = (status.data?.emulators.some((e) => e.found) || status.data?.stores.some((s) => s.found)) ?? false;
@@ -124,7 +137,8 @@ export function ArcadePage() {
         <div className="arcade-running" role="status">
           <span className="arcade-running-dot" aria-hidden />
           <span>
-            Playing <strong>{running.title}</strong>. Digitify waits, hidden and quiet, until the game closes.
+            Playing <strong>{running.title}</strong>.{" "}
+            {arcade.whilePlaying === "hide" ? "Digitify waits, hidden and quiet, until the game closes." : "Digitify's music is silent until the game closes (the music button on Home or in the title bar brings it back)."}
           </span>
         </div>
       )}
@@ -132,7 +146,8 @@ export function ArcadePage() {
         <div className="arcade-running starting" role="status">
           <LoaderCircle size={16} className="spin" />
           <span>
-            Starting <strong>{startingGame.title}</strong> through {starting!.store}. Digitify hides once the game is up.
+            Starting <strong>{startingGame.title}</strong> through {starting!.store}.{" "}
+            {arcade.whilePlaying === "hide" ? "Digitify hides once the game is up." : "Digitify goes quiet once the game is up."}
           </span>
         </div>
       )}
@@ -209,10 +224,11 @@ export function ArcadePage() {
         </div>
       ) : (
         <GridDragProvider value={drag}>
-          <div className={`arcade-grid${selecting ? " selecting" : ""}${canArrange ? " arranging-in-place" : ""}`} style={{ ["--card" as string]: `${arcade.cardSize}px` }}>
-            {shown.map((g) => (
+          <div key={stageKey} className={`arcade-grid${selecting ? " selecting" : ""}${canArrange ? " arranging-in-place" : ""}${entering ? " entering" : ""}`} style={{ ["--card" as string]: `${arcade.cardSize}px` }}>
+            {shown.map((g, index) => (
               <GameTile
                 key={g.id}
+                index={index}
                 game={g}
                 running={status.data?.running === g.id}
                 selecting={selecting}
@@ -241,10 +257,10 @@ export function ArcadePage() {
   );
 }
 
-function GameTile({ game, running, selecting, checked, onOpen, onPlay }: { game: ArcadeGame; running: boolean; selecting: boolean; checked: boolean; onOpen: () => void; onPlay: () => void }) {
+function GameTile({ game, index, running, selecting, checked, onOpen, onPlay }: { game: ArcadeGame; index: number; running: boolean; selecting: boolean; checked: boolean; onOpen: () => void; onPlay: () => void }) {
   const drag = useGridDragProps(game.id);
   return (
-    <div className={`arcade-tile${running ? " running" : ""}${checked ? " checked" : ""}`} data-platform={game.platform} {...drag}>
+    <div className={`arcade-tile${running ? " running" : ""}${checked ? " checked" : ""}`} data-platform={game.platform} style={{ ["--i" as string]: index }} {...drag}>
       <button
         type="button"
         className="arcade-tile-art"

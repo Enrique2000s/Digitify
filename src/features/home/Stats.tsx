@@ -7,6 +7,7 @@ const SERIES: { key: keyof ActivityTime; label: string }[] = [
   { key: "read", label: "Reading" },
   { key: "watch", label: "Watching" },
   { key: "listen", label: "Listening" },
+  { key: "play", label: "Playing" },
 ];
 
 /** "2 h 15 min", "40 min", "under a minute". */
@@ -22,10 +23,10 @@ export function timeLabel(seconds: number): string {
 const dayName = (day: string, style: "short" | "long") =>
   new Date(`${day}T12:00:00`).toLocaleDateString(undefined, style === "short" ? { weekday: "narrow" } : { weekday: "long", month: "short", day: "numeric" });
 
-/** The last 14 days as stacked bars (reading, watching, listening), with a tooltip per day and a table view. */
+/** The last 14 days as stacked bars (reading, watching, listening, playing), with a tooltip per day and a table view. */
 function DaysChart({ days }: { days: LibraryStats["days"] }) {
   const [hover, setHover] = useState<number | null>(null);
-  const totals = days.map((d) => d.read + d.watch + d.listen);
+  const totals = days.map((d) => d.read + d.watch + d.listen + d.play);
   const max = Math.max(...totals, 1);
   const empty = totals.every((t) => t === 0);
   const summary = `Time per day over the last 14 days: ${empty ? "nothing yet" : `${timeLabel(totals.reduce((a, b) => a + b, 0))} in all`}.`;
@@ -138,6 +139,19 @@ export function StatsPanel() {
               </ol>
             )}
           </section>
+          {s.topGames.length > 0 && (
+            <section>
+              <h3>Most played games this year</h3>
+              <ol className="stats-artists">
+                {s.topGames.map((game) => (
+                  <li key={game.key}>
+                    <span>{game.name}</span>
+                    <b>{timeLabel(game.count * 60)}</b>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
           <section>
             <h3>Your library</h3>
             <ul className="stats-categories">
@@ -156,8 +170,8 @@ export function StatsPanel() {
       </div>
       <p className="stats-since">
         {s.since
-          ? `Time counts while a reader is open and in use, or while a video or music plays (since ${new Date(`${s.since}T12:00:00`).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}). It stays on this computer.`
-          : "Time spent reading, watching and listening shows up here once you start. It stays on this computer."}
+          ? `Time counts while a reader is open and in use, while a video or music plays, or while a game from Arcade runs (since ${new Date(`${s.since}T12:00:00`).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}). It stays on this computer.`
+          : "Time spent reading, watching, listening and playing shows up here once you start. It stays on this computer."}
         {s.playsMonth > 0 && ` ${plural(s.playsMonth, "track")} played this month.`}
       </p>
     </div>

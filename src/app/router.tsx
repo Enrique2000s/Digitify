@@ -58,7 +58,16 @@ const routeTree = rootRoute.addChildren([
   // An online item (D-028), in its service's own player.
   createRoute({ getParentRoute: () => rootRoute, path: "/online/$id", component: OnlinePlayerPage }),
   // Arcade (D-034): the games of the emulators on this computer.
-  createRoute({ getParentRoute: () => rootRoute, path: "/arcade", component: ArcadePage }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/arcade",
+    // ?game=<id> opens that game's panel (from Home, D-041).
+    validateSearch: (search: Record<string, unknown>): { game?: number } => {
+      const game = Number(search.game);
+      return Number.isInteger(game) && game > 0 ? { game } : {};
+    },
+    component: ArcadePage,
+  }),
   // A photo (D-033), in the image viewer, full window.
   createRoute({ getParentRoute: () => rootRoute, path: "/view/$id", component: PictureViewerPage }),
   createRoute({
