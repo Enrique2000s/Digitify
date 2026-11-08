@@ -188,24 +188,24 @@ function GridView({ cache, total, lead, slots, shape, params }: ViewProps) {
   const layout = useMemo(() => {
     const widths = withSlots(slots, total, aspectsOf(shapes.data ?? "", total - lead, viewAspect, preferences.coverShapes)).map((aspect) => Math.round(artHeight * aspect));
     const rows: number[] = [0];
+    const rowWidths: number[] = [];
     let used = 0;
-    let widest = 0;
     widths.forEach((w, i) => {
       const need = used === 0 ? w : used + GAP + w;
       if (used > 0 && need > Math.max(width, w)) {
         rows.push(i);
-        widest = Math.max(widest, used);
+        rowWidths.push(used);
         used = w;
       } else {
         used = need;
       }
     });
-    widest = Math.max(widest, used);
+    rowWidths.push(used);
     rows.push(total);
-    // The rows sit centered as one block (lined up on the left with each other), so a short view
-    // doesn't hug the left edge (D-037).
-    const offset = Math.max(0, Math.floor((width - widest) / 2));
-    return { widths, starts: rows, offset };
+    // Every row centered on its own, so rows of different widths (mixed shapes, the last row)
+    // don't leave one edge further out than another (D-043).
+    const offsets = rowWidths.map((w) => Math.max(0, Math.floor((width - w) / 2)));
+    return { widths, starts: rows, offsets };
   }, [shapes.data, total, lead, slots, width, artHeight, viewAspect, preferences.coverShapes]);
   const rowCount = Math.max(0, layout.starts.length - 1);
   const rowHeight = artHeight + 44 + GAP + 10;
@@ -227,7 +227,7 @@ function GridView({ cache, total, lead, slots, shape, params }: ViewProps) {
             const from = layout.starts[row.index];
             const to = layout.starts[row.index + 1];
             return (
-              <div key={row.key} className="grid-row flow" style={{ transform: `translateY(${row.start}px)`, left: layout.offset, columnGap: GAP, ["--row" as string]: row.index }}>
+              <div key={row.key} className="grid-row flow" style={{ transform: `translateY(${row.start}px)`, left: layout.offsets[row.index] ?? 0, columnGap: GAP, ["--row" as string]: row.index }}>
                 {Array.from({ length: to - from }, (_, k) => {
                   const index = from + k;
                   const item = cache.get(index);
@@ -874,7 +874,11 @@ export function LibraryView({
   // "Online" is offered where links are imported to: Music and Videos.
   const withOnline = handler === "audio" || base.category === "videos";
   const filters = OWNERSHIP.filter((option) => (option.value !== "online" || withOnline) && (option.value !== "collections" || !!collections));
-  const remembered: Filter = preferences.ownership[shared] ?? preferences.ownership[other] ?? "";
+  // Inside a collection the filter starts at "All" every time and isn't remembered (D-043).
+  const inCollection = base.collection != null;
+  const [collectionFilter, setCollectionFilter] = useState<Filter>("");
+  useEffect(() => setCollectionFilter(""), [viewKey]);
+  const remembered: Filter = inCollection ? collectionFilter : (preferences.ownership[shared] ?? preferences.ownership[other] ?? "");
   const filter: Filter = filters.some((option) => option.value === remembered) ? remembered : "";
   const ownership: Ownership | "" = filter === "collections" ? "" : filter;
   // The sort is remembered per view; a custom order belongs to its view too.
@@ -973,7 +977,7 @@ export function LibraryView({
     });
     void transition.finished.finally(clearCoverNames);
   };
-  const setOwnership = (next: Filter) => update((current) => ({ ownership: { ...current.ownership, [shared]: next } }));
+  const setOwnership = (next: Filter) => (inCollection ? setCollectionFilter(next) : update((current) => ({ ownership: { ...current.ownership, [shared]: next } })));
   const [materials, setMaterials] = useState(false);
 
   return (
@@ -981,7 +985,36 @@ export function LibraryView({
       <GridDragProvider value={cardDrag}>
       <div className={`library-view${selection.active ? " selecting" : ""}${cardDrag ? " arranging-in-place" : ""}`}>
         <div style={{ padding: "16px 40px 0" }}>
-          <CategoryStrip />
+          <CategoryStrip
+            tools={
+              <>
+          {!base.search && (
+                <label className="arcade-search view-find">
+                  <Search size={15} aria-hidden />
+                  <input type="search" placeholder="Find in this view" value={find} onChange={(event) => setFind(event.target.value)} aria-label="Find in this view" />
+                </label>
+              )}
+              {total != null && total > 0 && <SelectToggle base={params} collections={leadCards.map((c) => c.id)} itemsShown={!onlyCollections} />}
+              {layout !== "list" && layout !== "carousel" && (
+                <label className="arcade-size">
+                  <span>Size</span>
+                  <CardSizeSlider value={preferences.cardSize} onChange={(cardSize) => update({ cardSize })} />
+                </label>
+              )}
+              <label className="arcade-sort">
+                <span>Sort</span>
+                <select value={sort} onChange={(event) => setSort(event.target.value as SortKey | "")}>
+                  {base.search && <option value="">Best match</option>}
+                  {sorts.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              </>
+            }
+          />
           <div className="page-header">
             <div className="title-row">
               {icon && <span className="title-badge">{icon}</span>}
@@ -1030,13 +1063,6 @@ export function LibraryView({
                 </button>
               ))}
             </div>
-            {!base.search && (
-              <label className="arcade-search view-find">
-                <Search size={15} aria-hidden />
-                <input type="search" placeholder="Find in this view" value={find} onChange={(event) => setFind(event.target.value)} aria-label="Find in this view" />
-              </label>
-            )}
-            {total != null && total > 0 && <SelectToggle base={params} collections={leadCards.map((c) => c.id)} itemsShown={!onlyCollections} />}
             {layout === "shelf" && (
               <>
                 <div className="segmented" role="group" aria-label="Shelf style">
@@ -1060,23 +1086,6 @@ export function LibraryView({
                 </Popover.Root>
               </>
             )}
-            {layout !== "list" && layout !== "carousel" && (
-              <label className="arcade-size">
-                <span>Size</span>
-                <CardSizeSlider value={preferences.cardSize} onChange={(cardSize) => update({ cardSize })} />
-              </label>
-            )}
-            <label className="arcade-sort">
-              <span>Sort</span>
-              <select value={sort} onChange={(event) => setSort(event.target.value as SortKey | "")}>
-                {base.search && <option value="">Best match</option>}
-                {sorts.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
             {arrangeable && total != null && total > 1 && (
               <button type="button" className="btn btn-sm" onClick={() => setArranging(true)}>
                 <GripVertical size={15} /> Arrange…

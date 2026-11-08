@@ -28,8 +28,11 @@ export function Featured({ item }: { item: ItemCard }) {
         <Cover item={item} size="cover" />
       </Link>
       <div className="featured-body">
-        <span className="featured-eyebrow">
-          <Award size={16} strokeWidth={2.6} aria-hidden /> Featured today <span className="section-source">(Library)</span>
+        <span className="featured-eyebrow-row">
+          <span className="featured-eyebrow">
+            <Award size={16} strokeWidth={2.6} aria-hidden /> Featured today
+          </span>
+          <span className="section-source">(Library)</span>
         </span>
         <h2 className="display featured-title">{item.title}</h2>
         {(item.subtitle || item.year) && <p className="featured-sub">{[item.subtitle, item.year].filter(Boolean).join(" · ")}</p>}

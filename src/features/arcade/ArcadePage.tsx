@@ -260,7 +260,7 @@ export function ArcadePage() {
 function GameTile({ game, index, running, selecting, checked, onOpen, onPlay }: { game: ArcadeGame; index: number; running: boolean; selecting: boolean; checked: boolean; onOpen: () => void; onPlay: () => void }) {
   const drag = useGridDragProps(game.id);
   return (
-    <div className={`arcade-tile${running ? " running" : ""}${checked ? " checked" : ""}`} data-platform={game.platform} style={{ ["--i" as string]: index }} {...drag}>
+    <div className={`arcade-tile${running ? " running" : ""}${checked ? " checked" : ""}`} data-platform={game.platform} style={{ ["--i" as string]: index, ["--aspect" as string]: PLATFORM_ASPECT[game.platform] }} {...drag}>
       <button
         type="button"
         className="arcade-tile-art"
@@ -282,9 +282,56 @@ function GameTile({ game, index, running, selecting, checked, onOpen, onPlay }: 
       )}
       <div className="arcade-tile-text">
         <strong title={game.title}>{game.title}</strong>
-        <span>{game.playSeconds > 0 ? playTime(game.playSeconds) : consoleOf(game)}</span>
+        <span>{game.playSeconds > 0 ? `${consoleOf(game)} · ${playTime(game.playSeconds)}` : consoleOf(game)}</span>
       </div>
     </div>
+  );
+}
+
+/** Time played outside Digitify (D-043): hours and minutes added to what Digitify counts. */
+function ExtraTime({ game, onSave }: { game: ArcadeGame; onSave: (seconds: number) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [hours, setHours] = useState("");
+  const [minutes, setMinutes] = useState("");
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className="btn btn-sm btn-ghost arcade-extra-edit"
+        onClick={() => {
+          setHours(String(Math.floor(game.extraSeconds / 3600)));
+          setMinutes(String(Math.floor((game.extraSeconds % 3600) / 60)));
+          setEditing(true);
+        }}
+      >
+        <Pencil size={13} /> {game.extraSeconds > 0 ? "Change time added" : "Add time played elsewhere"}
+      </button>
+    );
+  }
+  const seconds = (Math.max(0, Number(hours) || 0) * 60 + Math.max(0, Number(minutes) || 0)) * 60;
+  return (
+    <form
+      className="arcade-extra-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSave(seconds);
+        setEditing(false);
+      }}
+    >
+      <span>Played outside Digitify</span>
+      <label>
+        <input className="input" type="number" min={0} inputMode="numeric" value={hours} onChange={(event) => setHours(event.target.value)} aria-label="Hours" autoFocus /> h
+      </label>
+      <label>
+        <input className="input" type="number" min={0} max={59} inputMode="numeric" value={minutes} onChange={(event) => setMinutes(event.target.value)} aria-label="Minutes" /> min
+      </label>
+      <button type="submit" className="btn btn-sm btn-primary">
+        Save
+      </button>
+      <button type="button" className="btn btn-sm" onClick={() => setEditing(false)}>
+        Cancel
+      </button>
+    </form>
   );
 }
 
@@ -481,6 +528,8 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
             <dd>
               {playTime(game.playSeconds)}
               {game.playCount > 0 ? ` · ${game.playCount} ${game.playCount === 1 ? "session" : "sessions"}` : ""}
+              {game.extraSeconds > 0 && <span className="arcade-extra"> · {playTime(game.extraSeconds)} added by you</span>}
+              <ExtraTime game={game} onSave={(seconds) => void run(() => api.arcadeSetExtraTime(game.id, seconds))} />
             </dd>
           </div>
           {played && (

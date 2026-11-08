@@ -47,7 +47,7 @@ function GameCard({ game, running, onPlay }: { game: ArcadeGame; running: boolea
       </button>
       <div className="arcade-tile-text">
         <strong title={game.title}>{game.title}</strong>
-        <span>{game.playSeconds > 0 ? `${playTime(game.playSeconds)}${when ? ` · ${when}` : ""}` : consoleOf(game)}</span>
+        <span>{game.playSeconds > 0 ? `${consoleOf(game)} · ${playTime(game.playSeconds)}${when ? ` · ${when}` : ""}` : consoleOf(game)}</span>
       </div>
     </div>
   );
@@ -95,8 +95,11 @@ export function FeaturedGame({ game, running }: { game: ArcadeGame; running: boo
           <GameCover game={game} size="cover" />
         </Link>
         <div className="featured-body">
-          <span className="featured-eyebrow">
-            <Gamepad2 size={16} strokeWidth={2.6} aria-hidden /> Game of the day <span className="section-source">(Arcade)</span>
+          <span className="featured-eyebrow-row">
+            <span className="featured-eyebrow">
+              <Gamepad2 size={16} strokeWidth={2.6} aria-hidden /> Game of the day
+            </span>
+            <span className="section-source">(Arcade)</span>
           </span>
           <h2 className="display featured-title">{game.title}</h2>
           <p className="featured-sub">{consoleOf(game)}</p>

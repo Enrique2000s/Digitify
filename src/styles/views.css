@@ -2168,3 +2168,81 @@ body:has(.import-panel) .online-queue {
   height: 100%;
   object-fit: cover;
 }
+
+/* ---------------------------------------------------------------- D-043 */
+
+/* Arcade: every console's covers at one height (a GameCube box at the chosen size), each as wide
+   as its shape, so Nintendo 64 boxes aren't shorter; each row centered. */
+.arcade-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 26px 20px;
+}
+.arcade-grid > .arcade-tile {
+  width: calc(var(--card, 160px) / 0.71 * var(--aspect, 0.71));
+  flex: 0 0 auto;
+}
+
+/* Library: the sections and the view's find, Select, Size and Sort in one toolbar, like Arcade's. */
+.library-toolbar {
+  margin: 6px 0 14px;
+}
+.library-toolbar .segmented.category-strip {
+  margin: 0;
+}
+/* Library's title, description and section buttons arrive like the rest of the view. */
+.library-head {
+  animation: view-in 320ms var(--ease) both;
+}
+.library-toolbar .strip-pill {
+  animation: pop-in 420ms var(--spring) both;
+  animation-delay: calc(var(--i, 0) * 30ms);
+}
+
+/* "(Library)" and "(Arcade)" beside the golden banner, not inside it. */
+.featured-eyebrow-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+/* Arcade's panel: time played outside Digitify. */
+.arcade-extra {
+  color: var(--muted);
+}
+.arcade-extra-edit {
+  display: inline-flex;
+  margin-top: 6px;
+}
+.arcade-extra-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.arcade-extra-form > span {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 800;
+}
+.arcade-extra-form label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 700;
+}
+.arcade-extra-form .input {
+  width: 72px;
+  min-height: 32px;
+}
+/* One line under each game, so a longer line (console · time) never lifts its cover out of line. */
+.arcade-tile-text span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

@@ -669,6 +669,7 @@ export const api = {
   arcadeGames: () => invoke<ArcadeGame[]>("arcade_games"),
   arcadeSetFavorite: (id: number, favorite: boolean) => invoke<void>("arcade_set_favorite", { id, favorite }),
   arcadeSetCover: (id: number, path: string) => invoke<void>("arcade_set_cover", { id, path }),
+  arcadeSetExtraTime: (id: number, seconds: number) => invoke<void>("arcade_set_extra_time", { id, seconds }),
   arcadeForget: (id: number) => invoke<void>("arcade_forget", { id }),
   arcadeReveal: (id: number) => invoke<void>("arcade_reveal", { id }),
   /** Starts the game in its emulator; `n64` picks Project64 or RMG for Nintendo 64 games. */
@@ -825,7 +826,10 @@ export interface ArcadeGame {
   coverKey: string | null;
   coverColor: string | null;
   isFavorite: boolean;
+  /** Time played in all, including `extraSeconds` (D-043). */
   playSeconds: number;
+  /** Time played outside Digitify, added by hand. */
+  extraSeconds: number;
   playCount: number;
   lastPlayedAt: string | null;
   addedAt: string;

@@ -196,6 +196,7 @@ pub fn run() {
             arcade::arcade_set_favorite_many,
             arcade::arcade_forget_many,
             arcade::arcade_find_covers,
+            arcade::arcade_set_extra_time,
             arcade::arcade_rename,
             arcade::arcade_reorder,
             library::custom_order_slots,

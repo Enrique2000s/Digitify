@@ -1,7 +1,7 @@
 import { CircleAlert, Heart, Joystick } from "lucide-react";
 import type { ArcadeGame } from "../../lib/api";
 import { usePad } from "../../lib/gamepad";
-import { badgeOf, FILTER_LABELS, GameCover, PLATFORM_ASPECT, playTime, useArcade, useArcadeFilters, useLaunch, useShownGames } from "./shared";
+import { badgeOf, consoleOf, FILTER_LABELS, GameCover, PLATFORM_ASPECT, playTime, useArcade, useArcadeFilters, useLaunch, useShownGames } from "./shared";
 
 /**
  * Arcade in Big Picture (D-034): the games as big tiles a controller reaches. A plays, LB and RB
@@ -67,7 +67,7 @@ export function ArcadeTile({ game, autofocus, onPlay, height = 270 }: { game: Ar
         {game.isFavorite && <Heart className="arcade-fav" size={22} fill="currentColor" />}
       </span>
       <span className="bp-tile-title">{game.title}</span>
-      {game.playSeconds > 0 && <span className="bp-tile-sub">{playTime(game.playSeconds)}</span>}
+      <span className="bp-tile-sub">{game.playSeconds > 0 ? `${consoleOf(game)} · ${playTime(game.playSeconds)}` : consoleOf(game)}</span>
     </button>
   );
 }

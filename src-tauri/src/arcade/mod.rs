@@ -575,7 +575,10 @@ pub struct GameCard {
     pub cover_key: Option<String>,
     pub cover_color: Option<String>,
     pub is_favorite: bool,
+    /// Time played in all: what Digitify counted plus what the user added (D-043).
     pub play_seconds: i64,
+    /// The part added by hand: time played outside Digitify.
+    pub extra_seconds: i64,
     pub play_count: i64,
     pub last_played_at: Option<String>,
     pub added_at: String,
@@ -592,8 +595,8 @@ pub async fn arcade_games(state: State<'_, AppState>) -> AppResult<Vec<GameCard>
         library.db.with(|conn| {
             let rows = conn
                 .prepare(
-                    "SELECT id, title, platform, game_id, path, size, cover_key, cover_color, is_favorite, play_seconds, play_count, \
-                     last_played_at, added_at, missing, position, store FROM arcade_games WHERE hidden = 0 ORDER BY sort_title, id",
+                    "SELECT id, title, platform, game_id, path, size, cover_key, cover_color, is_favorite, play_seconds + extra_seconds, play_count, \
+                     last_played_at, added_at, missing, position, store, extra_seconds FROM arcade_games WHERE hidden = 0 ORDER BY sort_title, id",
                 )?
                 .query_map([], |row| {
                     Ok(GameCard {
@@ -613,6 +616,7 @@ pub async fn arcade_games(state: State<'_, AppState>) -> AppResult<Vec<GameCard>
                         missing: row.get::<_, i64>(13)? != 0,
                         position: row.get(14)?,
                         store: row.get(15)?,
+                        extra_seconds: row.get(16)?,
                     })
                 })?
                 .collect::<Result<_, _>>()?;
@@ -757,6 +761,22 @@ pub async fn arcade_reorder(state: State<'_, AppState>, ids: Vec<i64>) -> AppRes
         })
     })
     .await
+}
+
+/// Time played outside Digitify (D-043), added to the game's total; what Digitify counts stays apart.
+#[tauri::command]
+pub async fn arcade_set_extra_time(app: AppHandle, state: State<'_, AppState>, id: i64, seconds: i64) -> AppResult<()> {
+    // At most 100,000 hours.
+    let seconds = seconds.clamp(0, 360_000_000);
+    with_library(&state, move |library| {
+        library.db.with(|conn| {
+            conn.execute("UPDATE arcade_games SET extra_seconds = ?2 WHERE id = ?1", params![id, seconds])?;
+            Ok(())
+        })
+    })
+    .await?;
+    let _ = app.emit("arcade-changed", ());
+    Ok(())
 }
 
 /// Brings back every store game taken off the list.
