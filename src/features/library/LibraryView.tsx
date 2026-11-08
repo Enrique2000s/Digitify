@@ -1026,14 +1026,17 @@ export function LibraryView({
               {icon && <span className="title-badge">{icon}</span>}
               <div>
                 {eyebrow && <div className="eyebrow">{eyebrow}</div>}
-                <h1 className="display">{title}</h1>
+                {/* Music's tabs go on the title's line, so the count under it can't push them (D-046). */}
+                <div className="title-line">
+                  <h1 className="display">{title}</h1>
+                  {titleExtra}
+                </div>
                 <div className="count">
                   {itemTotal == null ? " " : onlyCollections ? `${lead.toLocaleString()} ${lead === 1 ? "collection" : "collections"}` : `${itemTotal.toLocaleString()} ${itemTotal === 1 ? "item" : "items"}`}
                   {!onlyCollections && lead > 0 && ` · ${lead.toLocaleString()} ${lead === 1 ? "collection" : "collections"}`}
                   {description && <span className="view-description"> · {description}</span>}
                 </div>
               </div>
-              {titleExtra}
             </div>
             <div className="header-actions">
               {handler === "audio" && total != null && total > 0 && <PlayAll params={params} />}

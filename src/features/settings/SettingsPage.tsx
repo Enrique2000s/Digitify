@@ -196,6 +196,9 @@ export function SettingsPage() {
           <Setting title="Shelf view" text="What the shelves in the shelf view are made of.">
             <ShelfLookPicker />
           </Setting>
+          <Setting title="Open maximized" text="Digitify fills the screen when it opens. Off, it opens at its regular size (it can still be maximized from the title bar).">
+            <Switch checked={preferences.startMaximized} label="Open maximized" onChange={(startMaximized) => update({ startMaximized })} />
+          </Setting>
           <Setting title="Cover size" text="Width of covers in the grid, shelf and detailed views.">
             <CardSizeSlider value={preferences.cardSize} onChange={(cardSize) => update({ cardSize })} style={{ width: 180 }} />
           </Setting>

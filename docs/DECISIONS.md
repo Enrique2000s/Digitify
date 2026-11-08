@@ -101,6 +101,12 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-046 · Opens maximized; Music's tabs and Tags hold their place
+- **Date:** 2026-11-08 · **Approved by:** project owner (asked for each of these)
+- **Opens maximized** by default; Settings › Appearance › Open maximized (on by default) turned off opens it at its regular size. The core reads the saved preference when the window is made, so it's maximized before it shows.
+- **Music's tabs** sit on the title's own line, so the count under it ("1,234 items · 3 collections") can't push them: they're in the same place in every tab.
+- **Tags** uses the same frame as the other Library views: the header and section buttons no longer fade in again or shift a few pixels when going to Tags or between tags; only the list arrives.
+
 ### D-045 · Library animates what arrives, not what stays
 - **Date:** 2026-11-08 · **Approved by:** project owner (asked for Library to arrive like Arcade, and for what stays in place not to animate)
 - **Library's header and section buttons** fade up when Library is opened (from Home, Arcade or anywhere else), as Arcade's page does, and hold still when the category, Music tab or a setting changes.

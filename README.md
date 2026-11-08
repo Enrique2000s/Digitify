@@ -16,7 +16,7 @@ Digitify is an offline-first desktop app for **Windows and Linux**. It brings yo
 - **Players:** video through mpv (subtitles, audio tracks, chapters, resume for films and series), music with a queue, playlists and a mini-player, and the menu music (Digitify's own theme or your music).
 - **Discs:** play and rip audio CDs (verified), play and import home-made DVDs and Blu-rays. Copy-protected discs are recognized and never worked around (D-007).
 - **Big Picture:** a full-screen TV interface for Xbox and PlayStation controllers (or the mouse), with its own Home, library, search with an on-screen keyboard, and players.
-- **Make it yours:** Breeze and Cinematic looks, palettes, accent colors, a customizable Home with Arcade's games and statistics of what you read, watch, listen to and play, keyboard shortcuts, animations you can turn off, and a light mode for slower computers.
+- **Make it yours:** Breeze and Cinematic looks, palettes, accent colors, a customizable Home with Arcade's games and statistics of what you read, watch, listen to and play, keyboard shortcuts, animations you can turn off, opening maximized or at a regular size, and a light mode for slower computers.
 
 Progress, test results and known limits are in [docs/STATUS.md](docs/STATUS.md); every decision is in [docs/DECISIONS.md](docs/DECISIONS.md).
 

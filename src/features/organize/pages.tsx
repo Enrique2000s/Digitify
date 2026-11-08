@@ -7,13 +7,15 @@ import { api, type Tag } from "../../lib/api";
 import { plural } from "../../lib/format";
 import { libraryChanged, useTags } from "../../lib/queries";
 import { CategoryStrip } from "../../components/CategoryStrip";
+import { useArrival } from "../../lib/arrival";
 import { LibraryView } from "../library/LibraryView";
 import { ConfirmDialog, NameDialog } from "./dialogs";
 
 function PageTitle({ icon, title, count, children }: { icon: React.ReactNode; title: string; count: string; children?: React.ReactNode }) {
+  const arriving = useArrival(`title:${title}`);
   return (
     <div className="page-header">
-      <div className="title-row">
+      <div className={`title-row${arriving ? " arriving" : ""}`}>
         <span className="title-badge">{icon}</span>
         <div>
           <h1 className="display">{title}</h1>
@@ -98,10 +100,14 @@ export function TagsPage() {
   const tags = useTags();
   const [selected, setSelected] = useState<{ tag: Tag; dialog: "rename" | "delete" } | null>(null);
   const list = tags.data ?? [];
+  // Laid out like the other Library views (D-046): the header and buttons hold their place, and
+  // only the list arrives.
   return (
-    <div className="page">
+    <div className="library-view">
+      <div className="tags-view">
       <CategoryStrip />
       <PageTitle icon={<TagIcon size={26} strokeWidth={2.2} aria-hidden />} title="Tags" count={tags.data ? plural(list.length, "tag") : " "} />
+      <div className="tags-stage">
       {tags.data && list.length === 0 ? (
         <div className="empty">
           <h2 className="display">No tags yet</h2>
@@ -129,7 +135,9 @@ export function TagsPage() {
           ))}
         </ul>
       )}
+      </div>
       {selected && <TagDialogs tag={selected.tag} dialog={selected.dialog} onClose={() => setSelected(null)} />}
+      </div>
     </div>
   );
 }

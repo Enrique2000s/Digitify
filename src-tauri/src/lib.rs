@@ -104,6 +104,13 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let state = AppState::new(config::ConfigStore::load(config::config_dir(app.handle())?));
+            // The window opens maximized unless Settings says otherwise (D-046).
+            let maximized = state.config.get().preferences.get("startMaximized").and_then(|v| v.as_bool()).unwrap_or(true);
+            if maximized {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.maximize();
+                }
+            }
             if let Some(path) = state.config.get().library_path {
                 match setup::open_library(&path) {
                     Ok(library) => state.set_library(library),

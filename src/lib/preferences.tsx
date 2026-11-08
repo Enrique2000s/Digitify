@@ -106,6 +106,8 @@ export interface Preferences {
   motion: MotionChoice;
   /** Light mode for slower computers: no blur, reflections, heavy shadows or animations (D-030). */
   lightMode: boolean;
+  /** The window opens maximized (D-046); off, it opens at its regular size. */
+  startMaximized: boolean;
   /** Cover width in the grid and shelf views, in pixels. */
   cardSize: number;
   /** Last layout used per view (all, favorites, a category key, search), or for every view under "*". */
@@ -225,6 +227,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   accent: "#1592d0",
   motion: "system",
   lightMode: false,
+  startMaximized: true,
   cardSize: 160,
   layouts: {},
   syncViews: true,
@@ -416,6 +419,7 @@ function sanitize(raw: unknown): Preferences {
     accent: breeze ? pick("accent", (v) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v)) : DEFAULT_PREFERENCES.accent,
     motion: pick("motion", (v) => ["system", "full", "reduced", "off"].includes(v as string)),
     lightMode: pick("lightMode", isBoolean),
+    startMaximized: pick("startMaximized", isBoolean),
     cardSize: pick("cardSize", (v) => typeof v === "number" && v >= 110 && v <= 260),
     layouts: pick("layouts", (v) => !!v && typeof v === "object"),
     syncViews: pick("syncViews", isBoolean),
