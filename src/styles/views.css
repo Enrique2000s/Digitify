@@ -1930,7 +1930,7 @@ body:has(.import-panel) .online-queue {
   min-height: 0;
 }
 /* A category's or a collection's title slides in with it. */
-.library-view .page-header .title-row {
+.library-view .page-header .title-row.arriving {
   animation: view-in 320ms var(--ease) both;
 }
 /* Home's sections, one after another; any page arrives with a fade. */
@@ -2265,4 +2265,13 @@ body:has(.import-panel) .online-queue {
    (Music's other tabs), so the buttons sit at the same height in every view. */
 .library-toolbar {
   margin-top: 0;
+}
+
+/* ---------------------------------------------------------------- D-045 */
+
+/* Library's header and buttons arrive like Arcade's page (a fade up), only when Library is opened;
+   changing category or tab leaves them where they are. */
+.library-head.arriving,
+.library-toolbar.arriving {
+  animation: view-in 300ms var(--ease) both;
 }

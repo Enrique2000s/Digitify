@@ -9,6 +9,7 @@ import { usePreferences } from "../../lib/preferences";
 import { AddMusicDialog } from "./AddMusic";
 import { CategoryIcon } from "../../components/common";
 import { CategoryStrip } from "../../components/CategoryStrip";
+import { useArrival } from "../../lib/arrival";
 import { duration, NewPlaylistDialog, TrackList, usePlaylists } from "./Tracks";
 
 export const MUSIC_TABS = ["tracks", "artists", "playlists", "recent", "favorites"] as const;
@@ -48,11 +49,12 @@ export function MusicTabs({ category, tab }: { category: Category; tab: MusicTab
 }
 
 function Header({ category, tab }: { category: Category; tab: MusicTab }) {
+  const titleArriving = useArrival(`title:${category.name}`);
   return (
     <>
       <CategoryStrip />
       <div className="page-header">
-        <div className="title-row">
+        <div className={`title-row${titleArriving ? " arriving" : ""}`}>
           <span className="title-badge">
             <CategoryIcon icon={category.icon} size={26} />
           </span>

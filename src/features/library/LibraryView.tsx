@@ -19,6 +19,7 @@ import { actionFor, isTyping } from "../../lib/shortcuts";
 import { SelectionProvider, useSelectable, useSelection, useSelectionState } from "../../lib/selection";
 import { AddMenu } from "../../components/AddMenu";
 import { CategoryStrip } from "../../components/CategoryStrip";
+import { useArrival } from "../../lib/arrival";
 import { CardSizeSlider, Cover } from "../../components/common";
 import { CardSkeleton, caseBand, MediaCard } from "../../components/MediaCard";
 import { CollectionCard, collectionCard, CollectionCarouselItem, CollectionDetailRow, CollectionRowItem, CollectionShelfItem } from "../../components/CollectionCard";
@@ -861,6 +862,8 @@ export function LibraryView({
   empty: ReactNode;
 }) {
   const { preferences, update } = usePreferences();
+  // The title slides in when it changes, not when the same title is redrawn (Music's tabs, D-045).
+  const titleArriving = useArrival(`title:${title}`);
   // "Find in this view" (D-041, like Arcade's search): narrows the view by words; the search page
   // has its own.
   const [find, setFind] = useState("");
@@ -1019,7 +1022,7 @@ export function LibraryView({
             }
           />
           <div className="page-header">
-            <div className="title-row">
+            <div className={`title-row${titleArriving ? " arriving" : ""}`}>
               {icon && <span className="title-badge">{icon}</span>}
               <div>
                 {eyebrow && <div className="eyebrow">{eyebrow}</div>}

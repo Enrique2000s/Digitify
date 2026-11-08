@@ -101,6 +101,12 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-045 · Library animates what arrives, not what stays
+- **Date:** 2026-11-08 · **Approved by:** project owner (asked for Library to arrive like Arcade, and for what stays in place not to animate)
+- **Library's header and section buttons** fade up when Library is opened (from Home, Arcade or anywhere else), as Arcade's page does, and hold still when the category, Music tab or a setting changes.
+- **A view's title** slides in when it changes (Pictures to Books) and holds still when it's the same (Music's tabs), with its tabs; changing the layout, filter or sort animates only the items.
+- **How:** changing view rebuilds it, and the new view draws while the old one is still there; a part still on screen, or gone a moment ago, is a redraw, not an arrival (`lib/arrival.ts`).
+
 ### D-044 · Library's header and buttons hold still; one Size; Select after Size; Music's tabs beside its title
 - **Date:** 2026-11-07 · **Approved by:** project owner (asked for each of these)
 - **No replay on a category change:** D-043's pop-in of Library's title, description and section buttons is gone: they stay as they are from one view to the next, as Arcade's do.
