@@ -22,6 +22,10 @@ export function AppShortcuts() {
         case "app.search":
           window.dispatchEvent(new Event("digitify:search"));
           break;
+        // The command palette (D-048) opens on its event.
+        case "app.palette":
+          window.dispatchEvent(new Event("digitify:palette"));
+          break;
         case "app.home":
           void navigate({ to: "/" });
           break;

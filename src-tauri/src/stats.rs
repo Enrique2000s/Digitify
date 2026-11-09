@@ -59,6 +59,10 @@ pub struct Stats {
     pub top_games: Vec<NamedCount>,
     /// Items per category, largest first.
     pub categories: Vec<NamedCount>,
+    /// Days in a row with any reading, watching, listening or playing, up to today (or up to
+    /// yesterday, until something is done today), and the longest such run (D-052).
+    pub streak: i64,
+    pub best_streak: i64,
 }
 
 /// Adds time spent with an item today (local date).
@@ -144,7 +148,10 @@ pub fn stats(conn: &Connection) -> AppResult<Stats> {
         categories.push(NamedCount { key: "arcade".into(), name: "Games".into(), count: games });
         categories.sort_by(|a, b| b.count.cmp(&a.count));
     }
+    let (streak, best_streak) = streaks(conn)?;
     Ok(Stats {
+        streak,
+        best_streak,
         month: time_since(conn, MONTH)?,
         year: time_since(conn, YEAR)?,
         since: conn.query_row(&format!("SELECT min(day) FROM {ALL_ACTIVITY}"), [], |row| row.get(0))?,
@@ -159,6 +166,39 @@ pub fn stats(conn: &Connection) -> AppResult<Stats> {
     })
 }
 
+/// The current streak and the best one (D-052), from the days anything was recorded.
+fn streaks(conn: &Connection) -> AppResult<(i64, i64)> {
+    // Days as day numbers (julianday), newest first.
+    let days: Vec<i64> = conn
+        .prepare(&format!("SELECT DISTINCT CAST(julianday(day) AS INTEGER) FROM {ALL_ACTIVITY} WHERE seconds > 0 ORDER BY 1 DESC"))?
+        .query_map([], |row| row.get(0))?
+        .collect::<Result<_, _>>()?;
+    let today: i64 = conn.query_row("SELECT CAST(julianday(date('now', 'localtime')) AS INTEGER)", [], |row| row.get(0))?;
+    Ok(streak_runs(&days, today))
+}
+
+/// From day numbers (newest first): the run ending today or yesterday, and the longest run.
+fn streak_runs(days: &[i64], today: i64) -> (i64, i64) {
+    let mut best = 0;
+    let mut run = 0;
+    let mut previous: Option<i64> = None;
+    let mut current = 0;
+    let mut current_done = false;
+    for &day in days {
+        run = if previous == Some(day + 1) { run + 1 } else { 1 };
+        best = best.max(run);
+        if !current_done {
+            if (previous.is_none() && (day == today || day == today - 1)) || (previous == Some(day + 1) && current > 0) {
+                current = run;
+            } else {
+                current_done = true;
+            }
+        }
+        previous = Some(day);
+    }
+    (current, best)
+}
+
 #[tauri::command]
 pub async fn library_stats(state: State<'_, AppState>) -> AppResult<Stats> {
     with_library(&state, |library| library.db.with(|conn| stats(conn))).await
@@ -168,6 +208,15 @@ pub async fn library_stats(state: State<'_, AppState>) -> AppResult<Stats> {
 mod tests {
     use super::*;
     use crate::db;
+
+    #[test]
+    fn streaks_count_days_in_a_row() {
+        assert_eq!(streak_runs(&[], 100), (0, 0));
+        assert_eq!(streak_runs(&[100, 99, 98, 90, 89], 100), (3, 3));
+        assert_eq!(streak_runs(&[99, 98], 100), (2, 2)); // nothing yet today: yesterday's run still counts
+        assert_eq!(streak_runs(&[97, 96, 95, 94], 100), (0, 4)); // broken
+        assert_eq!(streak_runs(&[100, 95, 94, 93, 92], 100), (1, 4));
+    }
 
     #[test]
     fn activity_adds_up_per_day_and_kind() {

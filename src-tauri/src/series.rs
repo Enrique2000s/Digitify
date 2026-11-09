@@ -135,6 +135,57 @@ pub async fn series_get(state: State<'_, AppState>, id: i64) -> AppResult<Option
     .await
 }
 
+/// The next volume of each series lately finished (D-050, Home's Up next): for the series of the
+/// items finished most recently, the first volume after the finished one that isn't finished or
+/// started yet (started ones are already in Pick up where you left off). Newest first, at most `limit`.
+pub fn next_after_finished(conn: &rusqlite::Connection, limit: usize) -> AppResult<Vec<i64>> {
+    let finished: Vec<(i64, i64, String)> = conn
+        .prepare(
+            "SELECT i.id, i.category_id, json_extract(i.metadata, '$.series') FROM progress pr JOIN items i ON i.id = pr.item_id \
+             WHERE pr.part_id = 0 AND pr.completed = 1 AND trim(coalesce(json_extract(i.metadata, '$.series'), '')) <> '' \
+             ORDER BY pr.updated_at DESC LIMIT 60",
+        )?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .collect::<Result<_, _>>()?;
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for (id, category, series) in finished {
+        if out.len() >= limit || !seen.insert((category, series.to_lowercase())) {
+            continue;
+        }
+        let mut rows: Vec<Row> = conn
+            .prepare(&format!(
+                "SELECT i.id, i.title, i.sort_title, i.cover_key, json_extract(i.metadata, '$.volume'), json_extract(i.metadata, '$.number'), \
+                 pr.fraction, pr.completed FROM items i LEFT JOIN progress pr ON pr.item_id = i.id AND pr.part_id = 0 \
+                 WHERE i.category_id = ?1 AND lower(json_extract(i.metadata, '$.series')) = lower(?2) LIMIT {MAX_ENTRIES}"
+            ))?
+            .query_map(rusqlite::params![category, series], |row| {
+                Ok(Row {
+                    entry: SeriesEntry {
+                        id: row.get(0)?,
+                        title: row.get(1)?,
+                        cover_key: row.get(3)?,
+                        label: None,
+                        progress: row.get(6)?,
+                        completed: row.get::<_, Option<bool>>(7)?.unwrap_or(false),
+                    },
+                    volume: numeric(&row.get::<_, SqlValue>(4)?),
+                    number: numeric(&row.get::<_, SqlValue>(5)?),
+                    sort_title: row.get(2)?,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
+        rows.sort_by(order);
+        let Some(at) = rows.iter().position(|r| r.entry.id == id) else { continue };
+        if let Some(next) = rows[at + 1..].iter().find(|r| !r.entry.completed) {
+            if next.entry.progress.unwrap_or(0.0) <= 0.01 {
+                out.push(next.entry.id);
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// A series and its number from a comic's file name, when the name marks one: "Saga Vol. 2",
 /// "Saga v02", "Saga #12", "Saga Ch. 5", or a zero-padded number ("Saga 001"). A bare number
 /// without padding ("Catch 22") isn't taken as one. Returns the series, the metadata key

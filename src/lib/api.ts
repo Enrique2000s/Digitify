@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 export type Handler = "book" | "comic" | "video" | "audio" | "generic" | "image";
 /** The library filter (D-029): with files in the library, or added from a link and played online. */
 export type Ownership = "digital" | "online";
-export type SortKey = "title" | "added" | "year" | "creator" | "durationAsc" | "durationDesc" | "takenDesc" | "takenAsc" | "relevance" | "custom";
+export type SortKey = "title" | "added" | "year" | "creator" | "rating" | "durationAsc" | "durationDesc" | "takenDesc" | "takenAsc" | "relevance" | "custom";
 export type ImportMode = "reference" | "copy";
 
 export interface NamedRef {
@@ -167,6 +167,9 @@ export interface LibraryStats {
   topArtists: NamedCount[];
   /** Most played games this year; `count` is minutes (D-041). */
   topGames: NamedCount[];
+  /** Days in a row with any activity, and the longest run (D-052). */
+  streak: number;
+  bestStreak: number;
   categories: NamedCount[];
 }
 
@@ -191,8 +194,44 @@ export interface QueryParams {
   custom?: string | null;
   /** Only items of this kind of category (photos for the image viewer, D-033). */
   handler?: Handler | null;
+  /** Smart lists' rules (D-051). */
+  progress?: "unstarted" | "inProgress" | "finished" | null;
+  yearFrom?: number | null;
+  yearTo?: number | null;
+  addedDays?: number | null;
+  minRating?: number | null;
   offset: number;
   limit: number;
+}
+
+/** A smart list's rules: the fields of a library query it keeps (D-051). */
+export type SmartQuery = Pick<QueryParams, "category" | "tag" | "favorites" | "ownership" | "progress" | "yearFrom" | "yearTo" | "addedDays" | "minRating">;
+
+/** How automatic backups went last (D-056). */
+export interface AutoBackupStatus {
+  last: string | null;
+  missingFolder: string | null;
+  error: string | null;
+}
+
+/** A file in the library check (D-057). */
+export interface CheckedFile {
+  itemId: number;
+  title: string;
+  category: string;
+  path: string;
+  size: number | null;
+}
+
+export interface LibraryCheck {
+  missing: CheckedFile[];
+  duplicates: CheckedFile[][];
+}
+
+export interface SmartList {
+  id: number;
+  name: string;
+  query: SmartQuery;
 }
 
 export interface QueryResult {
@@ -213,6 +252,8 @@ export interface Dashboard {
   continueItems: ItemCard[];
   /** Films and series in progress. */
   continueWatching: ItemCard[];
+  /** The next volume of series lately finished (D-050). */
+  nextVolumes: ItemCard[];
   recent: ItemCard[];
   recentlyOpened: ItemCard[];
   favorites: ItemCard[];
@@ -495,6 +536,9 @@ export interface ItemDetail {
   progress: number | null;
   /** Where it was imported from, if from a link (D-028). */
   online: OnlineSource | null;
+  /** The user's rating (1-5) and note (D-049). */
+  rating: number | null;
+  note: string | null;
 }
 
 export interface Tag {
@@ -673,6 +717,14 @@ export const api = {
   arcadeSetFavorite: (id: number, favorite: boolean) => invoke<void>("arcade_set_favorite", { id, favorite }),
   arcadeSetCover: (id: number, path: string) => invoke<void>("arcade_set_cover", { id, path }),
   arcadeSetExtraTime: (id: number, seconds: number) => invoke<void>("arcade_set_extra_time", { id, seconds }),
+  arcadeSetReview: (id: number, rating: number | null, note: string | null) => invoke<void>("arcade_set_review", { id, rating, note }),
+  itemSetReview: (id: number, rating: number | null, note: string | null) => invoke<void>("item_set_review", { id, rating, note }),
+  smartLists: () => invoke<SmartList[]>("smart_lists"),
+  backupAutoStatus: () => invoke<AutoBackupStatus>("backup_auto_status"),
+  backupAutoNow: () => invoke<AutoBackupStatus>("backup_auto_now"),
+  libraryCheck: () => invoke<LibraryCheck>("library_check"),
+  smartListSave: (id: number | null, name: string, query: SmartQuery) => invoke<number>("smart_list_save", { id, name, query }),
+  smartListDelete: (id: number) => invoke<void>("smart_list_delete", { id }),
   arcadeForget: (id: number) => invoke<void>("arcade_forget", { id }),
   arcadeReveal: (id: number) => invoke<void>("arcade_reveal", { id }),
   /** Starts the game in its emulator; `n64` picks Project64 or RMG for Nintendo 64 games. */
@@ -833,6 +885,9 @@ export interface ArcadeGame {
   playSeconds: number;
   /** Time played outside Digitify, added by hand. */
   extraSeconds: number;
+  /** The user's rating (1-5) and note (D-049). */
+  rating: number | null;
+  note: string | null;
   playCount: number;
   lastPlayedAt: string | null;
   addedAt: string;

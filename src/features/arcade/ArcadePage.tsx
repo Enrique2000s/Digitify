@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearch } from "@tanstack/react-router";
+import { ReviewPanel } from "../../components/Review";
 import { createPortal } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -533,6 +534,12 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
               {game.playCount > 0 ? ` · ${game.playCount} ${game.playCount === 1 ? "session" : "sessions"}` : ""}
               {game.extraSeconds > 0 && <span className="arcade-extra"> · {playTime(game.extraSeconds)} added by you</span>}
               <ExtraTime game={game} onSave={(seconds) => void run(() => api.arcadeSetExtraTime(game.id, seconds))} />
+            </dd>
+          </div>
+          <div>
+            <dt>Your review</dt>
+            <dd>
+              <ReviewPanel compact rating={game.rating} note={game.note} onSave={(rating, note) => void run(() => api.arcadeSetReview(game.id, rating, note))} />
             </dd>
           </div>
           {played && (

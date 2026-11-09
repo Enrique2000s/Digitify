@@ -14,12 +14,35 @@ export type Palette = "breeze" | "sunset" | "midnight" | "contrast";
 /** What the shelves in the shelf view are made of (D-023). */
 export type ShelfLook = "breeze" | "wood" | "glass" | "metal";
 
+/** Each section's own color, when colors per section are on (D-054). */
+export const SECTION_COLORS: Record<string, string> = {
+  pictures: "#0ea5e9",
+  music: "#16a34a",
+  videos: "#ea580c",
+  video: "#dc2626",
+  books: "#2563eb",
+  comics: "#d97706",
+  manga: "#db2777",
+  arcade: "#7c3aed",
+};
+export const SECTION_COLOR_NAMES: Record<string, string> = {
+  pictures: "Pictures",
+  music: "Music",
+  videos: "Videos",
+  video: "Movies & Series",
+  books: "Books",
+  comics: "Comics",
+  manga: "Manga",
+  arcade: "Arcade",
+};
+
 /** Home's sections (D-023), in their default order. */
 export const HOME_SECTIONS = [
   "discs",
   "tiles",
   "featured",
   "featuredGame",
+  "upNext",
   "favorites",
   "favoriteGames",
   "continueWatching",
@@ -37,6 +60,8 @@ const OLD_HOME_ORDERS = [
   // Before Arcade's sections (D-041, D-042).
   "discs,tiles,featured,favorites,continueWatching,continueReading,recentlyOpened,recentlyAdded,stats",
   "discs,tiles,featured,continuePlaying,favorites,continueWatching,continueReading,recentlyOpened,recentlyAdded,favoriteGames,featuredGame,stats",
+  // Before Up next (D-050).
+  "discs,tiles,featured,featuredGame,favorites,favoriteGames,continueWatching,continuePlaying,continueReading,recentlyAdded,recentlyOpened,stats",
 ];
 export type HomeSection = (typeof HOME_SECTIONS)[number];
 export interface HomeLayout {
@@ -108,6 +133,12 @@ export interface Preferences {
   lightMode: boolean;
   /** The window opens maximized (D-046); off, it opens at its regular size. */
   startMaximized: boolean;
+  /** Monthly goals in Statistics (D-052): items finished, and hours of each activity; 0 is no goal. */
+  goals: Goals;
+  /** Automatic backups (D-056): how often, a folder to copy them to (another drive), how many to keep. */
+  autoBackup: { every: "off" | "daily" | "weekly" | "monthly"; folder: string | null; keep: number };
+  /** A color of its own for each section (D-054), off by default; Breeze only. */
+  sectionColors: { enabled: boolean; colors: Record<string, string> };
   /** Cover width in the grid and shelf views, in pixels. */
   cardSize: number;
   /** Last layout used per view (all, favorites, a category key, search), or for every view under "*". */
@@ -166,7 +197,7 @@ export interface ArcadePreferences {
   /** What Digitify does while a game runs (D-041): stays open with its music silenced (the default;
    *  the music can be switched back on), hides and comes back when the game ends, or quits. */
   whilePlaying: "stay" | "hide" | "quit";
-  sort: "title" | "played" | "most" | "added" | "custom";
+  sort: "title" | "played" | "most" | "added" | "rating" | "custom";
 }
 
 /** The page color under each look and palette, for accent text contrast. */
@@ -228,6 +259,9 @@ export const DEFAULT_PREFERENCES: Preferences = {
   motion: "system",
   lightMode: false,
   startMaximized: true,
+  goals: { finished: 0, read: 0, watch: 0, listen: 0, play: 0 },
+  sectionColors: { enabled: false, colors: { ...SECTION_COLORS } },
+  autoBackup: { every: "off", folder: null, keep: 8 },
   cardSize: 160,
   layouts: {},
   syncViews: true,
@@ -333,6 +367,38 @@ function sanitizeBigPicture(raw: unknown): Preferences["bigPicture"] {
   };
 }
 
+function sanitizeAutoBackup(raw: unknown): Preferences["autoBackup"] {
+  const value = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const every = ["off", "daily", "weekly", "monthly"].includes(value.every as string) ? (value.every as Preferences["autoBackup"]["every"]) : "off";
+  const folder = typeof value.folder === "string" && value.folder.trim() ? value.folder : null;
+  const keep = typeof value.keep === "number" && value.keep >= 1 ? Math.min(100, Math.round(value.keep)) : 8;
+  return { every, folder, keep };
+}
+
+function sanitizeSectionColors(raw: unknown): Preferences["sectionColors"] {
+  const value = (raw && typeof raw === "object" ? raw : {}) as { enabled?: unknown; colors?: Record<string, unknown> };
+  const colors = { ...SECTION_COLORS };
+  for (const key of Object.keys(SECTION_COLORS)) {
+    const c = value.colors?.[key];
+    if (typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c)) colors[key] = c;
+  }
+  return { enabled: value.enabled === true, colors };
+}
+
+export interface Goals {
+  finished: number;
+  read: number;
+  watch: number;
+  listen: number;
+  play: number;
+}
+
+function sanitizeGoals(raw: unknown): Goals {
+  const value = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const n = (k: keyof Goals, max: number) => (typeof value[k] === "number" && (value[k] as number) >= 0 ? Math.min(Math.round(value[k] as number), max) : 0);
+  return { finished: n("finished", 999), read: n("read", 744), watch: n("watch", 744), listen: n("listen", 744), play: n("play", 744) };
+}
+
 const isArcadeFilter = (v: unknown): v is ArcadeFilter => v === "all" || ARCADE_FILTER_ORDER.includes(v as ArcadeFilter);
 
 function sanitizeArcade(raw: unknown): ArcadePreferences {
@@ -352,7 +418,7 @@ function sanitizeArcade(raw: unknown): ArcadePreferences {
     hiddenFilters: Array.isArray(value.hiddenFilters) ? [...new Set(value.hiddenFilters.filter(isArcadeFilter))] : [],
     combineAll: pick("combineAll", isBoolean),
     whilePlaying: pick("whilePlaying", (v) => v === "stay" || v === "hide" || v === "quit"),
-    sort: pick("sort", (v) => ["title", "played", "most", "added", "custom"].includes(v as string)),
+    sort: pick("sort", (v) => ["title", "played", "most", "added", "rating", "custom"].includes(v as string)),
   };
 }
 
@@ -420,6 +486,9 @@ function sanitize(raw: unknown): Preferences {
     motion: pick("motion", (v) => ["system", "full", "reduced", "off"].includes(v as string)),
     lightMode: pick("lightMode", isBoolean),
     startMaximized: pick("startMaximized", isBoolean),
+    goals: sanitizeGoals((raw as Raw<Preferences>)?.goals),
+    sectionColors: sanitizeSectionColors((raw as Raw<Preferences>)?.sectionColors),
+    autoBackup: sanitizeAutoBackup((raw as Raw<Preferences>)?.autoBackup),
     cardSize: pick("cardSize", (v) => typeof v === "number" && v >= 110 && v <= 260),
     layouts: pick("layouts", (v) => !!v && typeof v === "object"),
     syncViews: pick("syncViews", isBoolean),
@@ -454,6 +523,8 @@ interface PreferencesContext {
   preferences: Preferences;
   resolvedTheme: "dark" | "light";
   update: (change: Change) => void;
+  /** The section on screen, for colors per section (D-054); null outside one. */
+  setSection: (section: string | null) => void;
 }
 
 const Context = createContext<PreferencesContext | null>(null);
@@ -477,6 +548,10 @@ export function PreferencesProvider({ initial, children }: { initial: unknown; c
   const resolvedTheme =
     breezePalette === "midnight" ? "dark" : preferences.theme === "system" ? (systemDark ? "dark" : "light") : preferences.theme;
   const saveTimer = useRef(0);
+  const [section, setSection] = useState<string | null>(null);
+  // Colors per section (D-054): the section's own color stands in for the accent, in Breeze.
+  const sectionColor = preferences.sectionColors.enabled && preferences.look === "breeze" && section ? preferences.sectionColors.colors[section] : undefined;
+  const accent = sectionColor ?? preferences.accent;
   // Handlers read the shortcuts outside React, so they're current before any key is pressed.
   setCustomShortcuts(preferences.shortcuts);
 
@@ -489,10 +564,10 @@ export function PreferencesProvider({ initial, children }: { initial: unknown; c
     root.dataset.perf = preferences.lightMode ? "light" : "";
     const page = PAGE_BACKGROUNDS[preferences.look === "cinematic" ? "cinematic" : breezePalette][resolvedTheme];
     const ratio = breezePalette === "contrast" ? 7 : 4.5;
-    for (const [name, value] of Object.entries(accentVariables(preferences.accent, resolvedTheme, page, ratio))) {
+    for (const [name, value] of Object.entries(accentVariables(accent, resolvedTheme, page, ratio))) {
       root.style.setProperty(name, value);
     }
-  }, [resolvedTheme, preferences.look, breezePalette, preferences.motion, preferences.lightMode, preferences.accent]);
+  }, [resolvedTheme, preferences.look, breezePalette, preferences.motion, preferences.lightMode, accent]);
 
   const update = useCallback((change: Change) => {
     setPreferences((current) => {
@@ -505,7 +580,7 @@ export function PreferencesProvider({ initial, children }: { initial: unknown; c
     });
   }, []);
 
-  const value = useMemo(() => ({ preferences, resolvedTheme, update }), [preferences, resolvedTheme, update]);
+  const value = useMemo(() => ({ preferences, resolvedTheme, update, setSection }), [preferences, resolvedTheme, update]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 

@@ -7,7 +7,7 @@ import { MusicProvider } from "../lib/music/MusicProvider";
 import { DiscsProvider } from "../lib/discs";
 import { DiscNotice } from "../features/discs/DiscsPage";
 import { ImporterProvider } from "../lib/importer";
-import { PreferencesProvider } from "../lib/preferences";
+import { PreferencesProvider, usePreferences } from "../lib/preferences";
 import { useAppStatus, useLibraryEvents } from "../lib/queries";
 import { TitleBar } from "../components/TitleBar";
 import { DropOverlay, ImportPanel, ImportReviewDialog } from "../features/import/ImportUI";
@@ -18,7 +18,21 @@ import { BuilderContext, ImportUrlContext } from "./catalog";
 import { AppShortcuts } from "./AppShortcuts";
 import { ArcadeSession } from "../features/arcade/ArcadeSession";
 import { useSegmentedGlide } from "../lib/segmentedGlide";
+import { CommandPalette } from "../features/palette/CommandPalette";
+import { FloatingVideo } from "../features/player/FloatingVideo";
 import { BigPictureCursor, BigPictureLauncher } from "../features/bigpicture/Launcher";
+
+/** Colors per section (D-054): tells the preferences which section is on screen. */
+function SectionColor() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const { setSection } = usePreferences();
+  useEffect(() => {
+    const library = /^\/library\/([^/]+)/.exec(pathname);
+    const section = pathname.startsWith("/arcade") ? "arcade" : library && !["all", "favorites"].includes(library[1]) ? decodeURIComponent(library[1]) : null;
+    setSection(section);
+  }, [pathname, setSection]);
+  return null;
+}
 
 export function Root() {
   // Button groups' highlight slides to the chosen button (D-047).
@@ -49,6 +63,7 @@ export function Root() {
         <MusicProvider>
         <DiscsProvider>
         <AppShortcuts />
+        <SectionColor />
         <ArcadeSession />
         <BigPictureLauncher />
         {fullWindow ? (
@@ -81,6 +96,8 @@ export function Root() {
                   <ImportUrlDialog open={importUrlOpen} onOpenChange={setImportUrlOpen} />
                   <OnlineQueuePanel />
                   <DiscNotice />
+                  <CommandPalette />
+                  <FloatingVideo />
                 </>
               )}
             </ImportUrlContext.Provider>

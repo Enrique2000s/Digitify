@@ -25,6 +25,20 @@ html.video-mode #root {
   background: transparent;
 }
 
+/* A video in the corner (D-053), on Windows: the window shows through a hole in the page where the
+   picture is (mpv draws under the window); everything else stays as it is. */
+html.pip-mode:not(.on-linux),
+html.pip-mode:not(.on-linux) body {
+  background: transparent;
+}
+html.pip-mode:not(.on-linux) #root {
+  -webkit-mask:
+    linear-gradient(#000 0 0) 0 0 / 100% 100% no-repeat,
+    linear-gradient(#000 0 0) var(--pip-x, -10px) var(--pip-y, -10px) / var(--pip-w, 1px) var(--pip-h, 1px) no-repeat;
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
 /* On Linux the video window sits above the page (D-031), so nothing needs to show through: black,
    never the desktop behind the window. */
 html.video-mode.on-linux,

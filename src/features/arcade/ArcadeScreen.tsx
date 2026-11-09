@@ -60,7 +60,7 @@ export function ArcadeScreen() {
 export function ArcadeTile({ game, autofocus, onPlay, height = 270 }: { game: ArcadeGame; autofocus: boolean; onPlay: () => void; height?: number }) {
   const width = Math.round(height * PLATFORM_ASPECT[game.platform]);
   return (
-    <button type="button" className="bp-tile" style={{ width }} data-bp-focus data-bp-autofocus={autofocus || undefined} data-game={game.id} onClick={onPlay}>
+    <button type="button" className="bp-tile" style={{ width }} data-bp-focus data-bp-autofocus={autofocus || undefined} data-game={game.id} data-favorite={game.isFavorite || undefined} onClick={onPlay}>
       <span className="bp-tile-art arcade-bp-art" style={{ width, height }}>
         <GameCover game={game} size="cover" />
         <span className="arcade-badge" data-platform={game.platform} data-store={game.store ?? undefined}>{badgeOf(game)}</span>

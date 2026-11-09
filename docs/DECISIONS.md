@@ -101,6 +101,46 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-057 · Library check
+- **Date:** 2026-11-09 · **Approved by:** project owner (asked for this set of features)
+- Settings › Backups and maintenance › Check the library opens one page with the files that aren't at their saved place (with Find moved files) and the same file content in more than one item (by quick hash and size), each linking to its item.
+
+### D-056 · Automatic backups
+- **Date:** 2026-11-09 · **Approved by:** project owner
+- Off until switched on: every day, week or month, kept in the library's backups folder (the last 3–30) and, when a folder is chosen, copied to `Digitify backups` inside it (another drive is best). The folder is never created out of nothing: when it can't be reached (a drive not connected), the backup is still made in the library and Home and Settings say so. The core checks a little after start and then every half hour; "Back up now" runs one at once.
+
+### D-055 · Big Picture: favorites from the controller
+- **Date:** 2026-11-09 · **Approved by:** project owner
+- View (Xbox) / Create (PlayStation) marks the selected item or game as a favorite, or stops it being one; tiles show a heart. LB/RB already switch categories and consoles, X already plays and pauses the music. Big Picture's Home also has Up next.
+
+### D-054 · Colors per section
+- **Date:** 2026-11-09 · **Approved by:** project owner (chose off by default)
+- Settings › Appearance › Colors per section (Breeze): each section's own color stands in for the accent while you're in it (Pictures, Music, Videos, Movies & Series, Books, Comics, Manga, Arcade), each changeable, with "Default colors". Off, everything uses the accent as before.
+
+### D-053 · Video in the corner
+- **Date:** 2026-11-09 · **Approved by:** project owner (chose the video in a corner, music stays in the title bar)
+- The player's "Keep watching in a corner" hands its running mpv session to a small frame at the bottom right that stays while you browse: play/pause, back to the full player (it takes the same session back, no restart) and close; progress keeps being saved; the menu music stays held. On Windows the picture is under the window, so the page gets a hole there (a CSS mask); on Linux it sits above the page in the frame. Not for disc titles.
+
+### D-052 · Goals and streak
+- **Date:** 2026-11-09 · **Approved by:** project owner (chose goals you set plus a streak)
+- Statistics show the days in a row with any reading, watching, listening or playing (and the best run), and this month's goals you set (things finished, hours of each activity), with how far along each is. Goals live in the preferences; the streak comes from the activity days.
+
+### D-051 · Smart lists
+- **Date:** 2026-11-09 · **Approved by:** project owner (chose Library only)
+- Library › Smart lists: saved rules that fill a list by themselves (a section, progress, your rating, years, how recently added, a tag, favorites, with files), with the count while you set them; each opens as a Library view, can be edited or deleted (its items stay put). Migration 19 adds `smart_lists`; the library query takes the new rules.
+
+### D-050 · Up next
+- **Date:** 2026-11-09 · **Approved by:** project owner
+- A Home section (and in Big Picture) mixing what comes next: the film or series being watched, the book being read, the next volume of a series just finished, and the games played lately, taken in turns.
+
+### D-049 · Your rating and notes
+- **Date:** 2026-11-09 · **Approved by:** project owner
+- 1–5 stars and a personal note on every item (its page) and game (its panel); choosing the same star again clears it, the note saves when you leave the box. "Your rating" sorts in the Library and Arcade. Migration 18 adds the note (items already had a rating column) and both to games.
+
+### D-048 · Command palette
+- **Date:** 2026-11-09 · **Approved by:** project owner
+- Ctrl+K (changeable in Settings › Keyboard) opens a box to find anything: Library's sections, smart lists, Arcade, Discs, Settings, Big Picture, actions (import, link, theme, menu music), items in the library and games, with the keyboard (↑ ↓ Enter, Esc). The app's own shortcut handler opens it (a first version let that handler swallow the key).
+
 ### D-047 · Start with the computer; sliding highlight in button groups; Linux checked against Windows
 - **Date:** 2026-11-08 · **Approved by:** project owner (asked for each of these)
 - **Start with your computer** (Settings › Appearance, off by default): Windows adds a value under the user's own `HKCU\…\CurrentVersion\Run` key (no admin rights), Linux writes `~/.config/autostart/digitify.desktop` (the freedesktop autostart entry; the AppImage's own path when run from one). The entry itself is the setting, so Settings always shows what the system will do. `DIGITIFY_AUTOSTART_NAME` gives tests another entry name.

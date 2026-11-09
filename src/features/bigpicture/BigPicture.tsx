@@ -31,7 +31,7 @@ function useButtons() {
   const [kind, setKind] = useState(controllerKind);
   useEffect(() => onControllerChange(() => setKind(controllerKind())), []);
   const ps = kind === "playstation";
-  return { kind, a: ps ? "✕" : "A", b: ps ? "○" : "B", x: ps ? "□" : "X", y: ps ? "△" : "Y", start: ps ? "Options" : "Menu" };
+  return { kind, a: ps ? "✕" : "A", b: ps ? "○" : "B", x: ps ? "□" : "X", y: ps ? "△" : "Y", start: ps ? "Options" : "Menu", view: ps ? "Create" : "View" };
 }
 
 function Clock() {
@@ -58,11 +58,14 @@ function Tile({ item, autofocus, height = 300 }: { item: ItemCard; autofocus?: b
       style={{ width }}
       data-bp-focus
       data-bp-autofocus={autofocus || undefined}
+      data-item={item.id}
+      data-favorite={item.isFavorite || undefined}
       onClick={() => void navigate({ to: "/bp", search: { screen: "item", id: item.id } })}
     >
       <span className="bp-tile-art" data-shape={shape} style={{ width, height }} {...sourceProps(item.source)}>
         <Cover item={item} size="cover" />
         <SourceTag service={item.source} />
+        {item.isFavorite && <Heart className="bp-tile-fav" size={22} fill="currentColor" aria-label="Favorite" />}
         {item.progress != null && item.progress > 0 && item.progress < 1 && (
           <span className="bp-tile-progress">
             <span style={{ width: `${Math.round(item.progress * 100)}%` }} />
@@ -176,6 +179,31 @@ function GameRowBP({ title, games }: { title: ReactNode; games: ArcadeGame[] }) 
   );
 }
 
+/** "Up next" in Big Picture (D-050): what comes next, mixed; A opens an item or plays a game. */
+function UpNextBP({ watching, reading, next, games }: { watching: ItemCard[]; reading: ItemCard[]; next: ItemCard[]; games: ArcadeGame[] }) {
+  const { launch } = useLaunch();
+  const lists = [watching.slice(0, 4), reading.slice(0, 4), next.slice(0, 4)];
+  const items: ItemCard[] = [];
+  const seen = new Set<number>();
+  for (let n = 0; n < 4; n++) for (const list of lists) if (list[n] && !seen.has(list[n].id)) (seen.add(list[n].id), items.push(list[n]));
+  if (!items.length && !games.length) return null;
+  return (
+    <section className="bp-row">
+      <h2>
+        <SectionTitle section="upNext" />
+      </h2>
+      <Scroller>
+        {items.map((item) => (
+          <Tile key={`i${item.id}`} item={item} height={240} />
+        ))}
+        {games.slice(0, 4).map((game) => (
+          <ArcadeTile key={`g${game.id}`} game={game} autofocus={false} height={240} onPlay={() => void launch(game)} />
+        ))}
+      </Scroller>
+    </section>
+  );
+}
+
 /** "Game of the day" in Big Picture: A plays it. */
 function FeaturedGameBP({ game }: { game: ArcadeGame }) {
   const { launch, error } = useLaunch();
@@ -252,6 +280,7 @@ function HomeScreen() {
       </section>
     ),
     continuePlaying: <GameRowBP title={<SectionTitle section="continuePlaying" />} games={games.recent} />,
+    upNext: <UpNextBP watching={data.continueWatching} reading={data.continueItems} next={data.nextVolumes} games={games.recent} />,
     favoriteGames: <GameRowBP title={<SectionTitle section="favoriteGames" />} games={games.favorites} />,
     featuredGame: games.featured && <FeaturedGameBP game={games.featured} />,
     featured: data.featured && <FeaturedCard item={data.featured} />,
@@ -579,6 +608,7 @@ export function BigPicturePage() {
   const music = useMusic();
   const { preferences } = usePreferences();
   const buttons = useButtons();
+  const queryClient = useQueryClient();
   const main = useRef<HTMLDivElement>(null);
   const shell = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState(false);
@@ -663,6 +693,19 @@ export function BigPicturePage() {
         if (screen === "search" || screen === "online" || !music.active) return;
         music.toggle();
         break;
+      case "select": {
+        // View / Create: the selected item or game becomes a favorite, or stops being one (D-055).
+        const focused = document.activeElement as HTMLElement | null;
+        const tile = focused?.closest<HTMLElement>("[data-item], [data-game]");
+        if (!tile) return;
+        const favorite = !tile.hasAttribute("data-favorite");
+        if (tile.dataset.item) {
+          void api.itemSetFavorite(Number(tile.dataset.item), favorite).then(() => libraryChanged(queryClient));
+        } else if (tile.dataset.game) {
+          void api.arcadeSetFavorite(Number(tile.dataset.game), favorite).then(() => queryClient.invalidateQueries({ queryKey: ["arcade-games"] }));
+        }
+        break;
+      }
       case "start":
       case "guide":
         setMenu(true);
@@ -763,6 +806,11 @@ export function BigPicturePage() {
               <b>LB</b> <b>RB</b> 10 s back / ahead
             </span>
           </>
+        )}
+        {(screen === "home" || screen === "library" || screen === "arcade" || screen === "search") && (
+          <span>
+            <b>{buttons.view}</b> Favorite
+          </span>
         )}
         <span>
           <b>{buttons.start}</b> Menu

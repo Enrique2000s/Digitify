@@ -9,6 +9,7 @@ mod backup;
 mod bookmarks;
 mod builder;
 mod categories;
+mod check;
 mod chapters;
 mod config;
 mod db;
@@ -34,6 +35,7 @@ mod player;
 mod reshape;
 mod series;
 mod setup;
+mod smart;
 mod stats;
 mod tools;
 mod watch;
@@ -135,6 +137,7 @@ pub fn run() {
             app.manage(pages::PageEngine::default());
             dev::configure_window(app)?;
             setup::spawn_maintenance(app.handle().clone());
+            backup::watch_auto(app.handle().clone());
             Ok(())
         })
         .register_asynchronous_uri_scheme_protocol("digitify", media_protocol::handle)
@@ -153,6 +156,9 @@ pub fn run() {
             backup::backup_create,
             backup::backup_restore,
             backup::backup_reveal,
+            backup::backup_auto_status,
+            backup::backup_auto_now,
+            check::library_check,
             files::files_relink,
             library::categories_list,
             library::library_query,
@@ -168,6 +174,10 @@ pub fn run() {
             library::item_update,
             library::item_create,
             library::item_set_favorite,
+            library::item_set_review,
+            smart::smart_lists,
+            smart::smart_list_save,
+            smart::smart_list_delete,
             library::item_set_cover,
             library::items_set_cover,
             library::item_set_backdrop,
@@ -207,6 +217,7 @@ pub fn run() {
             arcade::arcade_forget_many,
             arcade::arcade_find_covers,
             arcade::arcade_set_extra_time,
+            arcade::arcade_set_review,
             arcade::arcade_rename,
             arcade::arcade_reorder,
             library::custom_order_slots,

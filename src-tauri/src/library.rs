@@ -186,6 +186,20 @@ pub struct QueryParams {
     /// Only items of this kind of category (`image` for the image viewer's photos, D-033).
     #[serde(default)]
     pub handler: Option<String>,
+    /// Smart lists' rules (D-051): `unstarted`, `inProgress` or `finished`…
+    #[serde(default)]
+    pub progress: Option<String>,
+    /// …a range of years…
+    #[serde(default)]
+    pub year_from: Option<i64>,
+    #[serde(default)]
+    pub year_to: Option<i64>,
+    /// …added within so many days…
+    #[serde(default)]
+    pub added_days: Option<i64>,
+    /// …and at least this many stars of your rating.
+    #[serde(default)]
+    pub min_rating: Option<i64>,
 }
 
 
@@ -386,6 +400,29 @@ impl QueryParts {
             args.push(SqlValue::Text(handler.clone()));
             conditions.push(format!("i.category_id IN (SELECT id FROM categories WHERE handler = ?{})", args.len()));
         }
+        // Smart lists' rules (D-051).
+        match params.progress.as_deref() {
+            Some("unstarted") => conditions.push("NOT EXISTS (SELECT 1 FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0 AND (pr.fraction > 0.01 OR pr.completed = 1))".into()),
+            Some("inProgress") => conditions.push("EXISTS (SELECT 1 FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0 AND pr.fraction > 0.01 AND pr.completed = 0)".into()),
+            Some("finished") => conditions.push("EXISTS (SELECT 1 FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0 AND pr.completed = 1)".into()),
+            _ => {}
+        }
+        if let Some(year) = params.year_from {
+            args.push(SqlValue::Integer(year));
+            conditions.push(format!("i.year >= ?{}", args.len()));
+        }
+        if let Some(year) = params.year_to {
+            args.push(SqlValue::Integer(year));
+            conditions.push(format!("i.year <= ?{}", args.len()));
+        }
+        if let Some(days) = params.added_days.filter(|d| *d > 0) {
+            args.push(SqlValue::Text(format!("-{days} days")));
+            conditions.push(format!("i.added_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?{})", args.len()));
+        }
+        if let Some(stars) = params.min_rating.filter(|s| (1..=5).contains(s)) {
+            args.push(SqlValue::Integer(stars));
+            conditions.push(format!("i.rating >= ?{}", args.len()));
+        }
         // Digital: files in the library; Online: imported from a link and played online (D-029).
         match params.ownership.as_deref() {
             Some("digital") => conditions.push("EXISTS (SELECT 1 FROM versions v WHERE v.item_id = i.id AND v.kind = 'digital')".into()),
@@ -411,6 +448,8 @@ impl QueryParts {
             Some("added") => "i.added_at DESC, i.id DESC".to_string(),
             Some("opened") => "i.last_opened_at IS NULL, i.last_opened_at DESC, i.id DESC".to_string(),
             Some("year") => "i.year IS NULL, i.year DESC, i.sort_title".to_string(),
+            // Your rating, best first; unrated last (D-049).
+            Some("rating") => "i.rating IS NULL, i.rating DESC, i.sort_title, i.id".to_string(),
             // Photos by the date they were taken (D-033); anything else by when it was added.
             Some("takenDesc") => format!("{TAKEN_SORT} DESC, i.id DESC"),
             Some("takenAsc") => format!("{TAKEN_SORT}, i.id"),
@@ -687,6 +726,8 @@ pub struct Dashboard {
     pub continue_items: Vec<ItemCard>,
     /// Films and series in progress (Phase 3).
     pub continue_watching: Vec<ItemCard>,
+    /// The next volume of series lately finished (D-050).
+    pub next_volumes: Vec<ItemCard>,
     pub recent: Vec<ItemCard>,
     pub recently_opened: Vec<ItemCard>,
     pub favorites: Vec<ItemCard>,
@@ -786,6 +827,7 @@ pub async fn dashboard_get(state: State<'_, AppState>) -> AppResult<Dashboard> {
                 featured: cards_by_ids(conn, &featured_id)?.into_iter().next(),
                 continue_items: cards_by_ids(conn, &continue_ids)?,
                 continue_watching: cards_by_ids(conn, &watching_ids)?,
+                next_volumes: cards_by_ids(conn, &crate::series::next_after_finished(conn, 8)?)?,
                 recent: cards_by_ids(conn, &recent_ids)?,
                 recently_opened: cards_by_ids(conn, &opened_ids)?,
                 favorites: cards_by_ids(conn, &favorite_ids)?,
@@ -877,6 +919,9 @@ pub struct ItemDetail {
     pub progress: Option<f64>,
     /// Where it was imported from, if from a link (D-028).
     pub online: Option<crate::online::OnlineSource>,
+    /// The user's own rating, 1-5 stars, and note (D-049).
+    pub rating: Option<i64>,
+    pub note: Option<String>,
 }
 
 #[tauri::command]
@@ -889,7 +934,7 @@ fn item_detail(conn: &Connection, library: &Library, id: i64) -> AppResult<ItemD
         .query_row(
             "SELECT i.id, c.key, c.name, c.handler, i.title, i.subtitle, i.year, i.description, i.cover_key, \
              i.cover_color, i.is_favorite, i.metadata, i.added_at, i.updated_at, \
-             (SELECT pr.fraction FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0), i.collection_id \
+             (SELECT pr.fraction FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0), i.collection_id, i.rating, i.note \
              FROM items i JOIN categories c ON c.id = i.category_id WHERE i.id = ?1",
             [id],
             |row| {
@@ -917,6 +962,8 @@ fn item_detail(conn: &Connection, library: &Library, id: i64) -> AppResult<ItemD
                     tags: Vec::new(),
                     collection_path: Vec::new(),
                     online: None,
+                    rating: row.get(16)?,
+                    note: row.get(17)?,
                 }))
             },
         )
@@ -1130,6 +1177,23 @@ pub async fn item_set_favorite(state: State<'_, AppState>, id: i64, favorite: bo
                 params![id, favorite],
             )?;
             conn.execute("UPDATE parts SET is_favorite = ?2 WHERE item_id = ?1 AND kind = 'track'", params![id, favorite])?;
+            Ok(())
+        })
+    })
+    .await
+}
+
+/// The user's rating (1-5 stars, or none) and note for an item (D-049).
+#[tauri::command]
+pub async fn item_set_review(state: State<'_, AppState>, id: i64, rating: Option<i64>, note: Option<String>) -> AppResult<()> {
+    let rating = rating.filter(|r| (1..=5).contains(r));
+    let note = note.map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).map(|n| n.chars().take(10_000).collect::<String>());
+    with_library(&state, move |library| {
+        library.db.with(|conn| {
+            conn.execute(
+                "UPDATE items SET rating = ?2, note = ?3, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
+                params![id, rating, note],
+            )?;
             Ok(())
         })
     })

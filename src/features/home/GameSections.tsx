@@ -32,7 +32,7 @@ export function useHomeGames() {
 const GAME_ART_HEIGHT = 200;
 
 /** A game in a Home row: its cover opens it in Arcade; ▶ starts it. */
-function GameCard({ game, running, onPlay }: { game: ArcadeGame; running: boolean; onPlay: () => void }) {
+export function GameCard({ game, running, onPlay }: { game: ArcadeGame; running: boolean; onPlay: () => void }) {
   const aspect = PLATFORM_ASPECT[game.platform];
   const when = lastPlayed(game.lastPlayedAt);
   return (

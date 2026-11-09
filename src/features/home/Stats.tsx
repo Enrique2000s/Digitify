@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Flame, Target } from "lucide-react";
+import { usePreferences, type Goals } from "../../lib/preferences";
+import { Dialog, Field } from "../../components/common";
 import { useQuery } from "@tanstack/react-query";
 import { api, type ActivityTime, type LibraryStats } from "../../lib/api";
 import { plural } from "../../lib/format";
@@ -94,6 +97,104 @@ function DaysChart({ days }: { days: LibraryStats["days"] }) {
   );
 }
 
+const GOAL_ROWS: { key: keyof Goals; label: string; unit: "items" | "hours"; series?: keyof ActivityTime }[] = [
+  { key: "finished", label: "Finished", unit: "items" },
+  { key: "read", label: "Reading", unit: "hours", series: "read" },
+  { key: "watch", label: "Watching", unit: "hours", series: "watch" },
+  { key: "listen", label: "Listening", unit: "hours", series: "listen" },
+  { key: "play", label: "Playing", unit: "hours", series: "play" },
+];
+
+/** This month's goals (D-052): how far along each one is; set them in a small dialog. */
+function GoalsRow({ stats }: { stats: LibraryStats }) {
+  const { preferences, update } = usePreferences();
+  const goals = preferences.goals;
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<Goals>(goals);
+  useEffect(() => {
+    if (open) setDraft(goals);
+  }, [open, goals]);
+  const set = GOAL_ROWS.filter((row) => goals[row.key] > 0);
+  const done = (row: (typeof GOAL_ROWS)[number]) => (row.unit === "items" ? stats.finishedMonth : stats.month[row.series!] / 3600);
+  return (
+    <div className="goals">
+      <div className="goals-head">
+        <span className="stat-label">
+          <Target size={14} aria-hidden /> This month's goals
+        </span>
+        <button type="button" className="btn btn-sm" onClick={() => setOpen(true)}>
+          {set.length ? "Change goals" : "Set goals"}
+        </button>
+      </div>
+      {set.length === 0 ? (
+        <p className="stats-none">No goals yet: set how many things to finish, or how many hours to read, watch, listen or play this month.</p>
+      ) : (
+        <ul className="goal-list">
+          {set.map((row) => {
+            const value = done(row);
+            const target = goals[row.key];
+            const fraction = Math.min(1, value / target);
+            const reached = value >= target;
+            return (
+              <li key={row.key} className={reached ? "reached" : undefined}>
+                <span className="goal-name">
+                  {row.series && <i className={`stats-swatch series-${row.series}`} aria-hidden />}
+                  {row.label}
+                </span>
+                <span className="goal-meter" role="progressbar" aria-valuenow={Math.round(fraction * 100)} aria-valuemin={0} aria-valuemax={100} aria-label={`${row.label}: ${Math.round(fraction * 100)}%`}>
+                  <span className={row.series ? `series-${row.series}` : "goal-finished"} style={{ width: `${fraction * 100}%` }} />
+                </span>
+                <b>
+                  {row.unit === "items" ? value.toLocaleString() : value < 1 && value > 0 ? "<1" : Math.floor(value).toLocaleString()} / {target} {row.unit === "items" ? "" : "h"}
+                  {reached && " ✓"}
+                </b>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <Dialog
+        open={open}
+        onOpenChange={setOpen}
+        title="This month's goals"
+        description="Leave a goal at 0 to have none. Goals start over every month."
+        footer={
+          <>
+            <button type="button" className="btn" onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                update({ goals: draft });
+                setOpen(false);
+              }}
+            >
+              Save goals
+            </button>
+          </>
+        }
+      >
+        <div className="goal-fields">
+          {GOAL_ROWS.map((row) => (
+            <Field key={row.key} label={row.unit === "items" ? "Things to finish (books, comics, films…)" : `Hours of ${row.label.toLowerCase()}`}>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                inputMode="numeric"
+                value={draft[row.key]}
+                onChange={(event) => setDraft({ ...draft, [row.key]: Math.max(0, Math.round(Number(event.target.value) || 0)) })}
+              />
+            </Field>
+          ))}
+        </div>
+      </Dialog>
+    </div>
+  );
+}
+
 /** Home's statistics widget (D-023). */
 export function StatsPanel() {
   const stats = useQuery({ queryKey: ["stats"], queryFn: api.stats, staleTime: 60_000 });
@@ -113,6 +214,13 @@ export function StatsPanel() {
             <span className="stat-note">{timeLabel(s.year[series.key])} this year</span>
           </div>
         ))}
+        <div className="stat-tile streak-tile">
+          <span className="stat-label">
+            <Flame size={14} aria-hidden /> Streak
+          </span>
+          <strong className="stat-value">{s.streak === 1 ? "1 day" : `${s.streak.toLocaleString()} days`}</strong>
+          <span className="stat-note">Best: {s.bestStreak === 1 ? "1 day" : `${s.bestStreak.toLocaleString()} days`} in a row</span>
+        </div>
         <div className="stat-tile">
           <span className="stat-label">Finished this month</span>
           <strong className="stat-value">{s.finishedMonth.toLocaleString()}</strong>
@@ -121,6 +229,7 @@ export function StatsPanel() {
           </span>
         </div>
       </div>
+      <GoalsRow stats={s} />
       <div className="stats-row">
         <DaysChart days={s.days} />
         <div className="stats-lists">

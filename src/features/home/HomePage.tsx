@@ -24,7 +24,7 @@ import {
   VolumeOff,
   Joystick,
 } from "lucide-react";
-import { type Category, type ItemCard, type TileCover, pictureUrl } from "../../lib/api";
+import { type Category, type ArcadeGame, type ItemCard, type TileCover, pictureUrl } from "../../lib/api";
 import { plural } from "../../lib/format";
 import { useImporter } from "../../lib/importer";
 import { arrayMove, useReorder } from "../../lib/reorder";
@@ -35,11 +35,12 @@ import { AddMenu } from "../../components/AddMenu";
 import { Collage } from "../../components/Collage";
 import { CategoryIcon, Cover } from "../../components/common";
 import { MediaCard } from "../../components/MediaCard";
-import { useRelink } from "../settings/LibraryTools";
+import { useLaunch } from "../arcade/shared";
+import { useAutoBackupStatus, useRelink } from "../settings/LibraryTools";
 import { Featured } from "./Featured";
 import { DiscsBanner } from "./DiscsBanner";
 import { StatsPanel } from "./Stats";
-import { FeaturedGame, GameRow, useHomeGames } from "./GameSections";
+import { FeaturedGame, GameCard, GameRow, useHomeGames } from "./GameSections";
 
 /** Each section's name and what it shows, Library or Arcade (D-042). */
 export const SECTION_TITLES: Record<HomeSection, [string, string | null]> = {
@@ -47,6 +48,7 @@ export const SECTION_TITLES: Record<HomeSection, [string, string | null]> = {
   tiles: ["Library sections", null],
   featured: ["Featured today", "Library"],
   featuredGame: ["Game of the day", "Arcade"],
+  upNext: ["Up next", "Library & Arcade"],
   favorites: ["Favorites", "Library"],
   favoriteGames: ["Favorites", "Arcade"],
   continueWatching: ["Continue watching", "Library"],
@@ -187,6 +189,54 @@ function Row({ title, items, more }: { title: ReactNode; items: ItemCard[]; more
   );
 }
 
+/**
+ * "Up next" (D-050): one row of what comes next, mixed — the film or series being watched, the
+ * book being read, the next volume of a series just finished, the game played lately.
+ */
+function UpNext({ watching, reading, next, games, running }: { watching: ItemCard[]; reading: ItemCard[]; next: ItemCard[]; games: ArcadeGame[]; running: number | null }) {
+  const shapeOf = useCoverShape();
+  const { launch } = useLaunch();
+  const lists: ({ kind: "item"; item: ItemCard } | { kind: "game"; game: ArcadeGame })[][] = [
+    watching.slice(0, 4).map((item) => ({ kind: "item" as const, item })),
+    reading.slice(0, 4).map((item) => ({ kind: "item" as const, item })),
+    next.slice(0, 4).map((item) => ({ kind: "item" as const, item })),
+    games.slice(0, 4).map((game) => ({ kind: "game" as const, game })),
+  ];
+  // Taken in turns, so each kind has its first entries near the front.
+  const entries: (typeof lists)[number] = [];
+  const seen = new Set<number>();
+  for (let n = 0; n < 4; n++) {
+    for (const list of lists) {
+      const entry = list[n];
+      if (!entry) continue;
+      if (entry.kind === "item") {
+        if (seen.has(entry.item.id)) continue;
+        seen.add(entry.item.id);
+      }
+      entries.push(entry);
+    }
+  }
+  if (!entries.length) return null;
+  return (
+    <section className="section">
+      <div className="section-head">
+        <h2>
+          <SectionTitle section="upNext" />
+        </h2>
+      </div>
+      <div className="row-scroller home-games">
+        {entries.map((entry) =>
+          entry.kind === "item" ? (
+            <MediaCard key={`i${entry.item.id}`} item={entry.item} width={Math.round(ROW_ART_HEIGHT * shapeOf(entry.item).aspect * 0.88)} />
+          ) : (
+            <GameCard key={`g${entry.game.id}`} game={entry.game} running={running === entry.game.id} onPlay={() => void launch(entry.game)} />
+          ),
+        )}
+      </div>
+    </section>
+  );
+}
+
 /** In "Customize Home", each section is a row to drag (or move with the arrows) and to hide or show. */
 function EditBar({
   section,
@@ -240,6 +290,7 @@ export function HomePage() {
   const ambient = useAmbient();
   const [editing, setEditing] = useState(false);
   const games = useHomeGames();
+  const autoBackup = useAutoBackupStatus();
   const reorder = useReorder((from, to) => update((current) => ({ home: { ...current.home, order: arrayMove(current.home.order, from, to) } })));
   const data = dashboard.data;
   if (!data) return <div className="page" />;
@@ -252,6 +303,7 @@ export function HomePage() {
     continuePlaying: games.recent.length > 0 && <GameRow title={<SectionTitle section="continuePlaying" />} games={games.recent} running={games.running} starting={games.starting} />,
     favoriteGames: games.favorites.length > 0 && <GameRow title={<SectionTitle section="favoriteGames" />} games={games.favorites} running={games.running} starting={games.starting} />,
     featuredGame: games.featured && <FeaturedGame game={games.featured} running={games.running === games.featured.id} />,
+    upNext: <UpNext watching={data.continueWatching} reading={data.continueItems} next={data.nextVolumes} games={games.recent} running={games.running} />,
     featured: data.featured && (
       <section className="section" aria-label="Featured today">
         <Featured item={data.featured} />
@@ -390,6 +442,18 @@ export function HomePage() {
             </button>
           </div>
         </section>
+      )}
+
+      {autoBackup.data?.missingFolder && (
+        <div className="notice warning" style={{ marginTop: 20 }}>
+          <TriangleAlert size={18} aria-hidden style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>
+            The automatic backup couldn't be copied to {autoBackup.data.missingFolder}: connect its drive. The backup itself was kept in the library's backups folder.
+          </span>
+          <Link to="/settings" className="btn btn-sm" style={{ marginLeft: "auto", flexShrink: 0 }}>
+            Settings
+          </Link>
+        </div>
       )}
 
       {data.totals.missingFiles > 0 && (

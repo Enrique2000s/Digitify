@@ -1,17 +1,117 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Archive, FolderSearch, RotateCcw } from "lucide-react";
-import { api, errorText, type BackupInfo } from "../../lib/api";
+import { Archive, FolderOpen, FolderSearch, RotateCcw, ScanSearch, TriangleAlert } from "lucide-react";
+import { useEffect } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { Link } from "@tanstack/react-router";
+import { usePreferences } from "../../lib/preferences";
+import { api, errorText, type AutoBackupStatus, type BackupInfo } from "../../lib/api";
 import { bytes, dateTime } from "../../lib/format";
 import { libraryChanged } from "../../lib/queries";
 import { Dialog } from "../../components/common";
 
 const KIND_LABELS: Record<string, string> = {
   manual: "Manual",
+  auto: "Automatic",
   "before-upgrade": "Before an update",
   "before-restore": "Before a restore",
 };
+
+/** How automatic backups went last (D-056), kept fresh by the core's events. */
+export function useAutoBackupStatus() {
+  const queryClient = useQueryClient();
+  const status = useQuery({ queryKey: ["backup-auto"], queryFn: api.backupAutoStatus });
+  useEffect(() => {
+    const off = listen<AutoBackupStatus>("backup-status", (event) => {
+      queryClient.setQueryData(["backup-auto"], event.payload);
+      void queryClient.invalidateQueries({ queryKey: ["backups"] });
+    });
+    return () => void off.then((stop) => stop());
+  }, [queryClient]);
+  return status;
+}
+
+/** Automatic backups (D-056): how often, where to copy them, how many to keep, and how it went. */
+function AutoBackups() {
+  const { preferences, update } = usePreferences();
+  const auto = preferences.autoBackup;
+  const status = useAutoBackupStatus();
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const set = (change: Partial<typeof auto>) => update((c) => ({ autoBackup: { ...c.autoBackup, ...change } }));
+  const choose = async () => {
+    const folder = await open({ directory: true, multiple: false, title: "Where should automatic backups be copied? (another drive is best)" });
+    if (typeof folder === "string") set({ folder });
+  };
+  const now = async () => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const result = await api.backupAutoNow();
+      setNote(result.missingFolder ? null : result.error ?? "Backed up.");
+    } catch (reason) {
+      setNote(errorText(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const s = status.data;
+  return (
+    <>
+      <div className="setting">
+        <div className="setting-text">
+          <strong>Automatic backups</strong>
+          <p>
+            Backs up the catalog by itself, kept in the library's backups folder{auto.folder ? " and copied to the folder below" : ""}. The last {auto.keep} are kept.
+            {s?.last && ` Last one: ${dateTime(s.last)}.`}
+          </p>
+        </div>
+        <select className="select" style={{ width: 160 }} value={auto.every} aria-label="Automatic backups" onChange={(e) => set({ every: e.target.value as typeof auto.every })}>
+          <option value="off">Off</option>
+          <option value="daily">Every day</option>
+          <option value="weekly">Every week</option>
+          <option value="monthly">Every month</option>
+        </select>
+      </div>
+      {auto.every !== "off" && (
+        <div className="setting">
+          <div className="setting-text">
+            <strong>Copy them to</strong>
+            <p>{auto.folder ?? "Only the library's backups folder. Choose a folder on another drive to keep a copy safe if this one fails."}</p>
+            {s?.missingFolder && (
+              <p className="auto-backup-warning">
+                <TriangleAlert size={14} /> The folder couldn't be reached: is its drive connected? The backup was kept in the library's backups folder.
+              </p>
+            )}
+            {s?.error && <p className="auto-backup-warning">{s.error}</p>}
+            {note && <p style={{ color: "var(--accent-text)" }}>{note}</p>}
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button type="button" className="btn" onClick={() => void choose()}>
+              <FolderOpen size={16} /> {auto.folder ? "Change folder" : "Choose folder"}
+            </button>
+            {auto.folder && (
+              <button type="button" className="btn btn-ghost" onClick={() => set({ folder: null })}>
+                No copy
+              </button>
+            )}
+            <select className="select" style={{ width: 120 }} value={auto.keep} aria-label="Backups to keep" onChange={(e) => set({ keep: Number(e.target.value) })}>
+              {[3, 5, 8, 12, 20, 30].map((n) => (
+                <option key={n} value={n}>
+                  Keep {n}
+                </option>
+              ))}
+            </select>
+            <button type="button" className="btn" disabled={busy} onClick={() => void now()}>
+              Back up now
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 /** "Find moved files…": relinks missing files found under a folder the user picks. */
 export function useRelink() {
@@ -115,6 +215,16 @@ export function BackupsPanel() {
         </ul>
       )}
       {message && <p className="hint">{message}</p>}
+      <AutoBackups />
+      <div className="setting">
+        <div className="setting-text">
+          <strong>Library check</strong>
+          <p>Files that can't be found where they were saved, and the same file in more than one item, in one list to review.</p>
+        </div>
+        <Link to="/check" className="btn">
+          <ScanSearch size={16} /> Check the library
+        </Link>
+      </div>
       <div className="setting">
         <div className="setting-text">
           <strong>Find moved files</strong>

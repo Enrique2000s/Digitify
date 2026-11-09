@@ -745,6 +745,7 @@ const SORTS: { value: SortKey; label: string }[] = [
   { value: "added", label: "Recently added" },
   { value: "year", label: "Year" },
   { value: "creator", label: "Creator" },
+  { value: "rating", label: "Your rating" },
 ];
 
 /** For photos (D-033): by the date they were taken. */

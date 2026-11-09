@@ -6,6 +6,7 @@ import { BookOpen, Cloud, CloudDownload, ExternalLink, FolderOpen, HardDrive, Im
 import { api, artworkUrl, errorText, type CoverShape, type ItemDetail, type VersionInfo } from "../../lib/api";
 import { bytes, date, formatLabel, longDuration, ROLE_LABELS } from "../../lib/format";
 import { libraryChanged, useItem } from "../../lib/queries";
+import { ReviewPanel } from "../../components/Review";
 import { Cover } from "../../components/common";
 import { SourceTag, sourceProps } from "../../components/SourceTag";
 import { coverShapeOf, FILMS, SHAPE_ASPECT, usePreferences } from "../../lib/preferences";
@@ -381,6 +382,19 @@ export function ItemPage() {
           <EpisodesPanel item={item} />
           {readable && <ChaptersPanel itemId={item.id} />}
           <SeriesPanel itemId={item.id} handler={item.handler} />
+          <section className="panel">
+            <h2>Your review</h2>
+            <ReviewPanel
+              rating={item.rating}
+              note={item.note}
+              onSave={(rating, note) =>
+                void api
+                  .itemSetReview(item.id, rating, note)
+                  .then(() => libraryChanged(queryClient))
+                  .catch((e) => setError(errorText(e)))
+              }
+            />
+          </section>
           <section className="panel">
             <h2>Details</h2>
             <dl className="facts">

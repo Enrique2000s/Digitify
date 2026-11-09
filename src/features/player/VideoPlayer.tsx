@@ -21,6 +21,7 @@ import {
   Volume2,
   VolumeX,
   RotateCcw,
+  PictureInPicture2,
 } from "lucide-react";
 import { api, artworkUrl, errorText, onLinux, type WatchTarget } from "../../lib/api";
 import { useAmbientHold } from "../../lib/ambient/AmbientProvider";
@@ -37,6 +38,7 @@ import { useBigPicture } from "../../lib/bigpicture";
 import { SeekBar } from "../../components/SeekBar";
 import { actionFor, hint, isTyping } from "../../lib/shortcuts";
 import { useAutoHide, useFullscreen } from "../reader/chrome";
+import { pip } from "../../lib/pip";
 
 /** A message from mpv's JSON IPC, forwarded by the core. */
 interface MpvMessage {
@@ -227,6 +229,8 @@ function VideoPlayer({ source }: { source: Source }) {
   const [busy, setBusy] = useState(false);
   const latest = useRef(playback);
   latest.current = playback;
+  // Set when the video moves to the corner (D-053): mpv keeps running instead of closing.
+  const keepRunning = useRef(false);
 
   // The player opens and closes behind a curtain with the item's artwork, so moving between the
   // library and a video is one continuous picture instead of the app vanishing into black while
@@ -244,6 +248,15 @@ function VideoPlayer({ source }: { source: Source }) {
       document.documentElement.dataset.motion === "off" ? 0 : 180,
     );
   }, [navigate, id]);
+  // To the corner (D-053): the video keeps playing small while you browse.
+  const toCorner = useCallback(() => {
+    if (!target || target.itemId === 0) return;
+    keepRunning.current = true;
+    const now = latest.current;
+    pip.set({ target, time: now.time, duration: now.duration, paused: now.paused });
+    if (window.history.length > 1) window.history.back();
+    else void navigate({ to: "/item/$id", params: { id: String(target.itemId) } });
+  }, [target, navigate]);
   const playPart = useCallback(
     (partId: number) => void navigate({ to: "/watch/$id", params: { id }, search: { part: partId }, replace: true }),
     [navigate, id],
@@ -270,6 +283,18 @@ function VideoPlayer({ source }: { source: Source }) {
     setError(null);
     setPlayback(EMPTY);
     setCountdown(null);
+    // A video coming back from the corner (D-053): take over its running session.
+    const corner = pip.get();
+    if (source.kind === "item" && corner && corner.target.itemId === Number(id) && (part == null || corner.target.partId === part)) {
+      pip.set(null);
+      setTarget(corner.target);
+      setResumed(false);
+      setPlayback({ ...EMPTY, time: corner.time, duration: corner.duration, paused: corner.paused });
+      setReady(true);
+      return () => {
+        if (!keepRunning.current) void api.playerClose().catch(() => {});
+      };
+    }
     const opening: Promise<WatchTarget> =
       source.kind === "disc"
         ? api.discPlay(source.letter, source.title, preferences.volumes.video).then((disc) => ({
@@ -293,7 +318,7 @@ function VideoPlayer({ source }: { source: Source }) {
     );
     return () => {
       cancelled = true;
-      void api.playerClose().catch(() => {});
+      if (!keepRunning.current) void api.playerClose().catch(() => {});
     };
   }, [id, part, source.kind === "disc" ? `${source.letter}:${source.title}` : ""]);
 
@@ -545,6 +570,11 @@ function VideoPlayer({ source }: { source: Source }) {
           {target?.episode && <span>{target.episode}</span>}
         </div>
         <span className="appbar-drag" data-tauri-drag-region />
+        {target && target.itemId !== 0 && !fullscreen && (
+          <button type="button" className="round-btn" aria-label="Keep watching in a corner" title="Keep watching in a corner while you browse" onClick={toCorner}>
+            <PictureInPicture2 size={18} strokeWidth={2.4} />
+          </button>
+        )}
         {!fullscreen && <WindowButtons />}
       </header>
 

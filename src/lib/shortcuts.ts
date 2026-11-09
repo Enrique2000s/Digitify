@@ -17,6 +17,7 @@ export const SCOPE_NAMES: Record<ShortcutScope, string> = {
 
 export const SHORTCUTS = [
   { id: "app.search", scope: "app", label: "Search the library", keys: ["Ctrl+F"] },
+  { id: "app.palette", scope: "app", label: "Find anything (command palette)", keys: ["Ctrl+K"] },
   { id: "app.home", scope: "app", label: "Go to Home", keys: ["Alt+Home"] },
   { id: "app.settings", scope: "app", label: "Open Settings", keys: ["Ctrl+,"] },
   { id: "app.musicPause", scope: "app", label: "Play or pause library music", keys: ["Ctrl+P"] },

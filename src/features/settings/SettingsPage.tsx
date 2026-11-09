@@ -5,7 +5,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { FolderOpen, Monitor, Moon, Settings, Sun } from "lucide-react";
 import { api, errorText, onLinux } from "../../lib/api";
 import { ACCENT_PRESETS } from "../../lib/color";
-import { LOOK_ACCENTS, PALETTE_ACCENTS, usePreferences, type Look, type MotionChoice, type Palette, type ThemeChoice } from "../../lib/preferences";
+import { LOOK_ACCENTS, PALETTE_ACCENTS, SECTION_COLOR_NAMES, SECTION_COLORS, usePreferences, type Look, type MotionChoice, type Palette, type ThemeChoice } from "../../lib/preferences";
 import { keys, libraryChanged, useAppStatus } from "../../lib/queries";
 import { CardSizeSlider, Switch } from "../../components/common";
 import { ShelfLookPicker } from "../../components/ShelfLookPicker";
@@ -167,6 +167,36 @@ export function SettingsPage() {
               </label>
             </div>
           </Setting>
+          {preferences.look === "breeze" && (
+            <Setting title="Colors per section" text="Each section gets a color of its own, used for its highlights while you're in it: Arcade purple, Music green… Off, everything uses your accent color.">
+              <Switch
+                checked={preferences.sectionColors.enabled}
+                label="Colors per section"
+                onChange={(enabled) => update((c) => ({ sectionColors: { ...c.sectionColors, enabled } }))}
+              />
+            </Setting>
+          )}
+          {preferences.look === "breeze" && preferences.sectionColors.enabled && (
+            <div className="section-colors">
+              {Object.keys(SECTION_COLORS).map((key) => (
+                <label key={key} className="section-color">
+                  <input
+                    type="color"
+                    value={preferences.sectionColors.colors[key]}
+                    aria-label={`${SECTION_COLOR_NAMES[key]} color`}
+                    onChange={(event) => {
+                      const color = event.target.value;
+                      update((c) => ({ sectionColors: { ...c.sectionColors, colors: { ...c.sectionColors.colors, [key]: color } } }));
+                    }}
+                  />
+                  <span>{SECTION_COLOR_NAMES[key]}</span>
+                </label>
+              ))}
+              <button type="button" className="btn btn-sm" onClick={() => update((c) => ({ sectionColors: { ...c.sectionColors, colors: { ...SECTION_COLORS } } }))}>
+                Default colors
+              </button>
+            </div>
+          )}
           <Setting
             title="Animations"
             text={`Transitions when you change category, view, filter or sort, covers popping into place, sections fading in. ${onLinux ? "“Follow the system” uses your desktop's reduce-animations setting" : "“Follow Windows” uses its “Animation effects” setting"}; “Reduced” keeps only gentle fades.`}

@@ -92,6 +92,7 @@ export const SORTS: { key: ArcadePreferences["sort"]; label: string }[] = [
   { key: "played", label: "Recently played" },
   { key: "most", label: "Most played" },
   { key: "added", label: "Recently added" },
+  { key: "rating", label: "Your rating" },
   { key: "custom", label: "Custom order" },
 ];
 
@@ -146,6 +147,7 @@ export function useShownGames(games: ArcadeGame[] | undefined, search: string) {
       title: byTitle,
       played: (a, b) => (b.lastPlayedAt ?? "").localeCompare(a.lastPlayedAt ?? "") || byTitle(a, b),
       most: (a, b) => b.playSeconds - a.playSeconds || byTitle(a, b),
+      rating: (a, b) => (b.rating ?? 0) - (a.rating ?? 0) || byTitle(a, b),
       added: (a, b) => b.addedAt.localeCompare(a.addedAt) || b.id - a.id,
       // Placed games first, in their places; the rest after, by title (D-035).
       custom: (a, b) => (a.position ?? Infinity) - (b.position ?? Infinity) || byTitle(a, b),

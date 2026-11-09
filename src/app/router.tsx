@@ -6,6 +6,8 @@ import { PictureViewerPage } from "../features/pictures/PictureViewer";
 import { ArcadePage } from "../features/arcade/ArcadePage";
 import { LibraryPage, SearchPage } from "../features/library/LibraryPage";
 import { TagPage, TagsPage } from "../features/organize/pages";
+import { SmartListPage, SmartListsPage } from "../features/organize/SmartLists";
+import { LibraryCheckPage } from "../features/settings/LibraryCheck";
 import { ReaderPage } from "../features/reader/ReaderPage";
 import { DiscPlayPage, WatchPage } from "../features/player/VideoPlayer";
 import { DiscsPage } from "../features/discs/DiscsPage";
@@ -48,6 +50,9 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({ getParentRoute: () => rootRoute, path: "/tags", component: TagsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/tag/$id", component: TagPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/smart", component: SmartListsPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/check", component: LibraryCheckPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/smart/$id", component: SmartListPage }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/search",

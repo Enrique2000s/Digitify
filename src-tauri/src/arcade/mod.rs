@@ -579,6 +579,9 @@ pub struct GameCard {
     pub play_seconds: i64,
     /// The part added by hand: time played outside Digitify.
     pub extra_seconds: i64,
+    /// The user's rating, 1-5 stars, and note (D-049).
+    pub rating: Option<i64>,
+    pub note: Option<String>,
     pub play_count: i64,
     pub last_played_at: Option<String>,
     pub added_at: String,
@@ -596,7 +599,7 @@ pub async fn arcade_games(state: State<'_, AppState>) -> AppResult<Vec<GameCard>
             let rows = conn
                 .prepare(
                     "SELECT id, title, platform, game_id, path, size, cover_key, cover_color, is_favorite, play_seconds + extra_seconds, play_count, \
-                     last_played_at, added_at, missing, position, store, extra_seconds FROM arcade_games WHERE hidden = 0 ORDER BY sort_title, id",
+                     last_played_at, added_at, missing, position, store, extra_seconds, rating, note FROM arcade_games WHERE hidden = 0 ORDER BY sort_title, id",
                 )?
                 .query_map([], |row| {
                     Ok(GameCard {
@@ -617,6 +620,8 @@ pub async fn arcade_games(state: State<'_, AppState>) -> AppResult<Vec<GameCard>
                         position: row.get(14)?,
                         store: row.get(15)?,
                         extra_seconds: row.get(16)?,
+                        rating: row.get(17)?,
+                        note: row.get(18)?,
                     })
                 })?
                 .collect::<Result<_, _>>()?;
@@ -771,6 +776,22 @@ pub async fn arcade_set_extra_time(app: AppHandle, state: State<'_, AppState>, i
     with_library(&state, move |library| {
         library.db.with(|conn| {
             conn.execute("UPDATE arcade_games SET extra_seconds = ?2 WHERE id = ?1", params![id, seconds])?;
+            Ok(())
+        })
+    })
+    .await?;
+    let _ = app.emit("arcade-changed", ());
+    Ok(())
+}
+
+/// The user's rating (1-5 stars, or none) and note for a game (D-049).
+#[tauri::command]
+pub async fn arcade_set_review(app: AppHandle, state: State<'_, AppState>, id: i64, rating: Option<i64>, note: Option<String>) -> AppResult<()> {
+    let rating = rating.filter(|r| (1..=5).contains(r));
+    let note = note.map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).map(|n| n.chars().take(10_000).collect::<String>());
+    with_library(&state, move |library| {
+        library.db.with(|conn| {
+            conn.execute("UPDATE arcade_games SET rating = ?2, note = ?3 WHERE id = ?1", params![id, rating, note])?;
             Ok(())
         })
     })
