@@ -101,6 +101,12 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-047 · Start with the computer; sliding highlight in button groups; Linux checked against Windows
+- **Date:** 2026-11-08 · **Approved by:** project owner (asked for each of these)
+- **Start with your computer** (Settings › Appearance, off by default): Windows adds a value under the user's own `HKCU\…\CurrentVersion\Run` key (no admin rights), Linux writes `~/.config/autostart/digitify.desktop` (the freedesktop autostart entry; the AppImage's own path when run from one). The entry itself is the setting, so Settings always shows what the system will do. `DIGITIFY_AUTOSTART_NAME` gives tests another entry name.
+- **Sliding highlight:** every button group (Library's sections, Arcade's views, layouts, filters, Music's tabs, Settings' choices) has one highlight that slides to the chosen button, with a little spring, instead of jumping; a group drawn again in a new view (changing category) slides from where its highlight was. Off with reduced or no animations and in light mode.
+- **Linux against Windows:** the core's tests pass on Linux too (75; two episode tests used Windows-only paths and were made portable); a sweep of Home, Library, Arcade, Settings and Big Picture on Arch matched Windows with a clean log. Settings' Animations said "follow Windows" on Linux: it now says "follow the system" there, and its box is wide enough for either.
+
 ### D-046 · Opens maximized; Music's tabs and Tags hold their place
 - **Date:** 2026-11-08 · **Approved by:** project owner (asked for each of these)
 - **Opens maximized** by default; Settings › Appearance › Open maximized (on by default) turned off opens it at its regular size. The core reads the saved preference when the window is made, so it's maximized before it shows.

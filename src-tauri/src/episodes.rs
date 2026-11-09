@@ -100,30 +100,31 @@ pub fn parse(path: &Path) -> Option<EpisodeName> {
 mod tests {
     use super::*;
 
+    // Paths with "/", a folder separator on Windows and Linux alike.
     fn parsed(path: &str) -> Option<(String, i64, f64, Option<String>)> {
         parse(Path::new(path)).map(|e| (e.series, e.season, e.episode, e.title))
     }
 
     #[test]
     fn episode_names() {
-        assert_eq!(parsed(r"C:\TV\Harbor Watch S01E02 - The Fog.mkv"), Some(("Harbor Watch".into(), 1, 2.0, Some("The Fog".into()))));
-        assert_eq!(parsed(r"C:\TV\harbor.watch.s02e10.mkv"), Some(("harbor watch".into(), 2, 10.0, None)));
-        assert_eq!(parsed(r"C:\TV\Harbor Watch 1x03 Lights.mp4"), Some(("Harbor Watch".into(), 1, 3.0, Some("Lights".into()))));
-        assert_eq!(parsed(r"C:\TV\Show S01 E04.mkv").map(|e| e.2), Some(4.0));
+        assert_eq!(parsed("/TV/Harbor Watch S01E02 - The Fog.mkv"), Some(("Harbor Watch".into(), 1, 2.0, Some("The Fog".into()))));
+        assert_eq!(parsed("/TV/harbor.watch.s02e10.mkv"), Some(("harbor watch".into(), 2, 10.0, None)));
+        assert_eq!(parsed("/TV/Harbor Watch 1x03 Lights.mp4"), Some(("Harbor Watch".into(), 1, 3.0, Some("Lights".into()))));
+        assert_eq!(parsed("/TV/Show S01 E04.mkv").map(|e| e.2), Some(4.0));
     }
 
     #[test]
     fn series_from_folders() {
-        assert_eq!(parsed(r"C:\TV\Harbor Watch\Season 1\S01E05.mkv").map(|e| e.0), Some("Harbor Watch".into()));
-        assert_eq!(parsed(r"C:\TV\Harbor Watch\S01E06 Storm.mkv").map(|e| e.0), Some("Harbor Watch".into()));
+        assert_eq!(parsed("/TV/Harbor Watch/Season 1/S01E05.mkv").map(|e| e.0), Some("Harbor Watch".into()));
+        assert_eq!(parsed("/TV/Harbor Watch/S01E06 Storm.mkv").map(|e| e.0), Some("Harbor Watch".into()));
     }
 
     #[test]
     fn films_are_not_episodes() {
-        assert_eq!(parsed(r"C:\Movies\Blade Runner 2049 (2017).mkv"), None);
-        assert_eq!(parsed(r"C:\Movies\1917.mkv"), None);
-        assert_eq!(parsed(r"C:\Movies\Mission 2x4.mkv"), None);
-        assert_eq!(parsed(r"C:\Movies\Sample 1080p.mkv"), None);
+        assert_eq!(parsed("/Movies/Blade Runner 2049 (2017).mkv"), None);
+        assert_eq!(parsed("/Movies/1917.mkv"), None);
+        assert_eq!(parsed("/Movies/Mission 2x4.mkv"), None);
+        assert_eq!(parsed("/Movies/Sample 1080p.mkv"), None);
         assert!(is_season_folder("Season 02") && is_season_folder("S1") && !is_season_folder("Specs"));
     }
 }

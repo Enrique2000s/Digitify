@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { open } from "@tauri-apps/plugin-dialog";
 import { FolderOpen, Monitor, Moon, Settings, Sun } from "lucide-react";
-import { api, errorText } from "../../lib/api";
+import { api, errorText, onLinux } from "../../lib/api";
 import { ACCENT_PRESETS } from "../../lib/color";
 import { LOOK_ACCENTS, PALETTE_ACCENTS, usePreferences, type Look, type MotionChoice, type Palette, type ThemeChoice } from "../../lib/preferences";
 import { keys, libraryChanged, useAppStatus } from "../../lib/queries";
@@ -36,6 +36,31 @@ function LookPreview({ variant }: { variant: string }) {
       <i />
       <i />
     </span>
+  );
+}
+
+/** Starting Digitify when the user signs in (D-047): the system's own startup entry is the setting. */
+function StartWithComputer() {
+  const queryClient = useQueryClient();
+  const enabled = useQuery({ queryKey: ["autostart"], queryFn: api.autostartGet });
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <Setting
+      title="Start with your computer"
+      text={error ?? "Digitify opens by itself when you sign in to your computer. Off by default."}
+    >
+      <Switch
+        checked={enabled.data ?? false}
+        label="Start with your computer"
+        onChange={(on) => {
+          setError(null);
+          api
+            .autostartSet(on)
+            .then((now) => queryClient.setQueryData(["autostart"], now))
+            .catch((reason) => setError(errorText(reason)));
+        }}
+      />
+    </Setting>
   );
 }
 
@@ -144,10 +169,10 @@ export function SettingsPage() {
           </Setting>
           <Setting
             title="Animations"
-            text="Transitions when you change category, view, filter or sort, covers popping into place, sections fading in. “Follow Windows” uses its “Animation effects” setting; “Reduced” keeps only gentle fades."
+            text={`Transitions when you change category, view, filter or sort, covers popping into place, sections fading in. ${onLinux ? "“Follow the system” uses your desktop's reduce-animations setting" : "“Follow Windows” uses its “Animation effects” setting"}; “Reduced” keeps only gentle fades.`}
           >
-            <select className="select" style={{ width: 180 }} value={preferences.motion} onChange={(event) => update({ motion: event.target.value as MotionChoice })}>
-              <option value="system">On (follow Windows)</option>
+            <select className="select" style={{ width: 230 }} value={preferences.motion} onChange={(event) => update({ motion: event.target.value as MotionChoice })}>
+              <option value="system">{onLinux ? "On (follow the system)" : "On (follow Windows)"}</option>
               <option value="full">On</option>
               <option value="reduced">Reduced</option>
               <option value="off">Off</option>
@@ -196,6 +221,7 @@ export function SettingsPage() {
           <Setting title="Shelf view" text="What the shelves in the shelf view are made of.">
             <ShelfLookPicker />
           </Setting>
+          <StartWithComputer />
           <Setting title="Open maximized" text="Digitify fills the screen when it opens. Off, it opens at its regular size (it can still be maximized from the title bar).">
             <Switch checked={preferences.startMaximized} label="Open maximized" onChange={(startMaximized) => update({ startMaximized })} />
           </Setting>

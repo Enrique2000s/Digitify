@@ -17,9 +17,12 @@ import { Onboarding } from "../features/onboarding/Onboarding";
 import { BuilderContext, ImportUrlContext } from "./catalog";
 import { AppShortcuts } from "./AppShortcuts";
 import { ArcadeSession } from "../features/arcade/ArcadeSession";
+import { useSegmentedGlide } from "../lib/segmentedGlide";
 import { BigPictureCursor, BigPictureLauncher } from "../features/bigpicture/Launcher";
 
 export function Root() {
+  // Button groups' highlight slides to the chosen button (D-047).
+  useSegmentedGlide();
   const status = useAppStatus();
   const devMode = useQuery({ queryKey: ["dev-mode"], queryFn: api.devMode, staleTime: Infinity });
   const navigate = useNavigate();

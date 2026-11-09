@@ -60,6 +60,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_Security_Cryptography",
     "Win32_UI_Shell",
+    "Win32_System_Registry",
 ] }
 
 # Linux (D-031): drive ioctls, the X11 video host inside the GTK window, and the desktop keyring.

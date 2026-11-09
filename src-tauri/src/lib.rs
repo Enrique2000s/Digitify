@@ -3,6 +3,7 @@
 mod ambient;
 mod arcade;
 mod archives;
+mod autostart;
 mod artwork;
 mod backup;
 mod bookmarks;
@@ -144,6 +145,8 @@ pub fn run() {
             setup::library_reveal,
             setup::path_cloud_sync,
             setup::notices_reveal,
+            autostart::autostart_get,
+            autostart::autostart_set,
             ambient::ambient_playlist,
             ambient::ambient_track_info,
             backup::backup_list,

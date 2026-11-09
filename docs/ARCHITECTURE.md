@@ -40,6 +40,7 @@ Digitify.exe (Tauri 2)
 | `backup` | Library backups in `backups\` (`library-YYYYMMDD-HHMMSS-<kind>.db`); validate and restore, keeping the current state as a backup first |
 | `library` | Catalog queries (views, dashboard, details, full-text search, "select all" ids) and edits (items, people, physical copies, favorites, artwork, removal) |
 | `organize` | Nested collections (tree queries with recursive CTEs, moving without cycles, deleting by moving contents up), tags (merge on rename, pruned when unused), and bulk edits applied in one transaction, limited to what fits every selected item (`bulk_actions`, D-027) |
+| `autostart` | Starting Digitify at sign-in: the user's Run key on Windows, a freedesktop autostart entry on Linux (D-047) |
 | `categories` | Category order and visibility (categories are fixed, D-039; old custom field values stay in `metadata.custom`) |
 | `import` | Background import jobs: scan, then in parallel fingerprint, skip duplicates and extract metadata, then save. Also attaches files to existing items. |
 | `formats` | Embedded metadata readers: EPUB OPF, ComicInfo.xml in any comic archive, audio tags (lofty), ffprobe |

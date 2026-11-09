@@ -615,6 +615,9 @@ export const api = {
   appStatus: () => invoke<AppStatus>("app_status"),
   libraryChoose: (path: string) => invoke<AppStatus>("library_choose", { path }),
   preferencesSet: (preferences: unknown) => invoke<void>("preferences_set", { preferences }),
+  /** Starting Digitify when the user signs in (D-047). */
+  autostartGet: () => invoke<boolean>("autostart_get"),
+  autostartSet: (on: boolean) => invoke<boolean>("autostart_set", { on }),
   libraryReveal: () => invoke<void>("library_reveal"),
   pathCloudSync: (path: string) => invoke<string | null>("path_cloud_sync", { path }),
   noticesReveal: () => invoke<void>("notices_reveal"),

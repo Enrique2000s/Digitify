@@ -2293,3 +2293,50 @@ body:has(.import-panel) .online-queue {
 .tags-stage {
   animation: view-in 300ms var(--ease) both;
 }
+
+/* ---------------------------------------------------------------- D-047: sliding highlight */
+
+/* One highlight per button group that slides to the chosen button; the chosen button itself
+   keeps only its color, so the highlight is what moves. */
+.segmented.glide {
+  position: relative;
+  isolation: isolate;
+}
+.seg-glider {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: -1;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: var(--gloss);
+  box-shadow: var(--raise-sm);
+  pointer-events: none;
+  transition:
+    transform 340ms cubic-bezier(0.3, 1.25, 0.5, 1),
+    width 340ms cubic-bezier(0.3, 1.25, 0.5, 1),
+    height 340ms var(--ease),
+    opacity 200ms var(--ease);
+}
+.segmented.glide > [aria-pressed="true"],
+.segmented.glide > [aria-selected="true"],
+.segmented.glide > [data-status="active"],
+.segmented.category-strip.glide .strip-pill[data-status="active"] {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+.segmented.glide > button,
+.segmented.glide > a {
+  transition: color 220ms var(--ease);
+}
+:root[data-motion="reduced"] .seg-glider,
+:root[data-motion="off"] .seg-glider,
+:root[data-perf="light"] .seg-glider {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .seg-glider {
+    transition: none;
+  }
+}
