@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { Dialog as RadixDialog } from "radix-ui";
 import { Award, CalendarDays, ChevronLeft, ChevronRight, X, CalendarHeart } from "lucide-react";
 import { api, type Achievement } from "../../lib/api";
@@ -128,45 +129,90 @@ function checkAchievements(): Promise<Achievement[]> {
   });
 }
 
-/** Achievements (D-066): reached by themselves as you use the library. */
-export function AchievementsList() {
+/** Statistics' achievements (D-093): how many are reached, the latest, and the way to their screen. */
+export function AchievementsSummary() {
   const list = useQuery({ queryKey: ["achievements"], queryFn: checkAchievements, staleTime: 60_000 });
   if (!list.data) return null;
-  const all = families(list.data);
-  const count = list.data.filter((a) => a.unlockedAt).length;
+  const reached = list.data.filter((a) => a.unlockedAt).sort((a, b) => (b.unlockedAt ?? "").localeCompare(a.unlockedAt ?? ""));
+  const latest = reached[0];
   return (
-    <section className="achievements">
-      <h3>
-        <Award size={15} aria-hidden /> Achievements <span className="achievements-count">{count} of {list.data.length}</span>
-      </h3>
-      <ul className="achievement-list">
-        {all.map(({ family, levels, reached, top, next }) => (
-          <li key={family} className={top ? "reached" : undefined}>
-            <span className="achievement-medal" aria-hidden>
-              <Award size={20} />
-            </span>
-            <span className="achievement-text">
-              <b>{top ? top.title : levels[0].title.replace(/ I$/, "")}</b>
-              <span>
-                {next
-                  ? `Next: ${next.description} (${next.progress.toLocaleString()} / ${next.goal.toLocaleString()})`
-                  : `All ${levels.length} levels reached`}
-              </span>
-              {next && (
-                <span className="achievement-meter" role="progressbar" aria-valuenow={Math.round((next.progress / next.goal) * 100)} aria-valuemin={0} aria-valuemax={100} aria-label={`${next.title}: ${next.progress} of ${next.goal}`}>
-                  <span style={{ width: `${(next.progress / next.goal) * 100}%` }} />
-                </span>
-              )}
-            </span>
-            <span className="achievement-dots" aria-label={`${reached.length} of ${levels.length} levels`}>
-              {levels.map((l) => (
-                <i key={l.key} className={l.unlockedAt ? "on" : undefined} title={`${l.title}: ${l.description}${l.unlockedAt ? ` · reached ${new Date(l.unlockedAt).toLocaleDateString()}` : ""}`} />
-              ))}
-            </span>
-          </li>
-        ))}
-      </ul>
+    <section className="achievements-summary">
+      <span className="achievement-medal" aria-hidden>
+        <Award size={22} />
+      </span>
+      <div>
+        <h3>Achievements</h3>
+        <span>
+          {reached.length} of {list.data.length} reached{latest ? ` · latest: ${latest.title}` : ""}
+        </span>
+      </div>
+      <Link to="/achievements" className="btn btn-sm">
+        See all
+      </Link>
     </section>
+  );
+}
+
+const longDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+
+/**
+ * `/achievements` (D-093): every achievement on a screen of its own. Each family with its levels
+ * as medals (reached ones lit, with the day), what it counts, and how far to the next.
+ */
+export function AchievementsPage() {
+  const list = useQuery({ queryKey: ["achievements"], queryFn: checkAchievements, staleTime: 30_000 });
+  const all = list.data ? families(list.data) : [];
+  const count = list.data?.filter((a) => a.unlockedAt).length ?? 0;
+  return (
+    <div className="page achievements-page">
+      <div className="page-header">
+        <div className="title-row">
+          <span className="title-badge">
+            <Award size={26} strokeWidth={2.2} aria-hidden />
+          </span>
+          <div>
+            <h1 className="display">Achievements</h1>
+            <p className="achievements-lead">
+              {list.data ? `${count} of ${list.data.length} reached` : "…"} · They come by themselves as you read, watch, listen and play.
+            </p>
+          </div>
+        </div>
+        {list.data && (
+          <span className="achievements-total" role="progressbar" aria-valuenow={count} aria-valuemin={0} aria-valuemax={list.data.length} aria-label="Achievements reached">
+            <span style={{ width: `${(count / Math.max(1, list.data.length)) * 100}%` }} />
+          </span>
+        )}
+      </div>
+      <div className="achievement-families">
+        {all.map(({ family, levels, reached, next }) => (
+          <section key={family} className={`panel achievement-family${reached.length ? " reached" : ""}`}>
+            <header>
+              <span className="achievement-medal" aria-hidden>
+                <Award size={22} />
+              </span>
+              <div>
+                <h2>{levels[0].title.replace(/ I$/, "")}</h2>
+                <span>{next ? `Next: ${next.description} · ${next.progress.toLocaleString()} of ${next.goal.toLocaleString()}` : `All ${levels.length} levels reached`}</span>
+              </div>
+            </header>
+            {next && (
+              <span className="achievement-meter">
+                <span style={{ width: `${(next.progress / next.goal) * 100}%` }} />
+              </span>
+            )}
+            <ol className="achievement-levels">
+              {levels.map((level, n) => (
+                <li key={level.key} className={level.unlockedAt ? "on" : undefined} title={level.unlockedAt ? `Reached ${longDate(level.unlockedAt)}` : `${level.progress.toLocaleString()} of ${level.goal.toLocaleString()}`}>
+                  <span className="achievement-level-medal">{["I", "II", "III", "IV", "V"][n] ?? n + 1}</span>
+                  <strong>{level.description}</strong>
+                  <span>{level.unlockedAt ? longDate(level.unlockedAt) : "Not yet"}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        ))}
+      </div>
+    </div>
   );
 }
 

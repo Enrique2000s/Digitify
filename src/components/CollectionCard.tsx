@@ -112,7 +112,6 @@ export function CollectionShelfItem({ item, height, index }: { item: ItemCard; h
 
 /** A collection in the detailed view. */
 export function CollectionDetailRow({ item, top, height, index }: { item: ItemCard; top: number; height: number; index?: number }) {
-  const c = item.collection!;
   const { selecting, checked, props } = useSelectable(item.id, index);
   return (
     <Link {...to(item)} className="detail-row" style={{ top, height }} data-blip {...props}>
@@ -127,7 +126,6 @@ export function CollectionDetailRow({ item, top, height, index }: { item: ItemCa
         <div className="detail-facts">
           <span className="chip">Collection</span>
           <span className="detail-fact">{item.subtitle}</span>
-          {c.childCount > 0 && <span className="detail-fact">{c.childCount === 1 ? "1 collection inside" : `${c.childCount} collections inside`}</span>}
         </div>
       </div>
     </Link>

@@ -49,7 +49,6 @@ export const SECTION_TITLES: Record<HomeSection, [string, string | null]> = {
   featured: ["Featured today", "Library"],
   featuredGame: ["Game of the day", "Arcade"],
   upNext: ["Up next", "Library & Arcade"],
-  later: ["Later", "Library"],
   because: ["Because you liked…", "Library"],
   favorites: ["Favorites", "Library"],
   favoriteGames: ["Favorites", "Arcade"],
@@ -307,7 +306,6 @@ export function HomePage() {
     continuePlaying: games.recent.length > 0 && <GameRow title={<SectionTitle section="continuePlaying" />} games={games.recent} running={games.running} starting={games.starting} />,
     favoriteGames: games.favorites.length > 0 && <GameRow title={<SectionTitle section="favoriteGames" />} games={games.favorites} running={games.running} starting={games.starting} />,
     featuredGame: games.featured && <FeaturedGame game={games.featured} running={games.running === games.featured.id} />,
-    later: data.later.length > 0 && <Row title={<SectionTitle section="later" />} items={data.later} more={{ scope: "later" }} />,
     because: data.because && (
       <Row
         title={

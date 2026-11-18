@@ -6,7 +6,7 @@ import { PictureViewerPage } from "../features/pictures/PictureViewer";
 import { ArcadePage } from "../features/arcade/ArcadePage";
 import { LibraryPage, SearchPage } from "../features/library/LibraryPage";
 import { NowPlayingPage } from "../features/music/NowPlayingPage";
-import { TagPage, TagsPage } from "../features/organize/pages";
+import { AchievementsPage } from "../features/home/YearViews";
 import { SmartListPage, SmartListsPage } from "../features/organize/SmartLists";
 import { LibraryCheckPage } from "../features/settings/LibraryCheck";
 import { ReaderPage } from "../features/reader/ReaderPage";
@@ -49,8 +49,6 @@ const routeTree = rootRoute.addChildren([
     },
     component: LibraryPage,
   }),
-  createRoute({ getParentRoute: () => rootRoute, path: "/tags", component: TagsPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: "/tag/$id", component: TagPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/smart", component: SmartListsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/check", component: LibraryCheckPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/smart/$id", component: SmartListPage }),
@@ -100,6 +98,7 @@ const routeTree = rootRoute.addChildren([
   createRoute({ getParentRoute: () => rootRoute, path: "/discs", component: DiscsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/settings", component: SettingsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/now-playing", component: NowPlayingPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/achievements", component: AchievementsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/lab", component: Lab }),
   createRoute({
     getParentRoute: () => rootRoute,

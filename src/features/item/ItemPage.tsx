@@ -2,7 +2,8 @@ import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { open } from "@tauri-apps/plugin-dialog";
-import { BookOpen, Cloud, CloudDownload, ExternalLink, FolderOpen, HardDrive, ImagePlus, Pause, Pencil, Play, Star, Trash, Eye, Clock } from "lucide-react";
+import { BookOpen, Cloud, CloudDownload, ExternalLink, FolderOpen, HardDrive, ImagePlus, Pause, Pencil, Play, Star, Trash, Eye } from "lucide-react";
+import { viewList } from "../../lib/routes";
 import { api, artworkUrl, errorText, type CoverShape, type ItemDetail, type VersionInfo } from "../../lib/api";
 import { bytes, date, formatLabel, longDuration, ROLE_LABELS } from "../../lib/format";
 import { libraryChanged, useItem } from "../../lib/queries";
@@ -279,7 +280,16 @@ export function ItemPage() {
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={() => void run(() => (music.current?.id === track.id ? Promise.resolve(music.toggle()) : music.play([track.id], 0)))}
+                onClick={() =>
+                  void run(async () => {
+                    if (music.current?.id === track.id) return music.toggle();
+                    // The rest of the list it was opened from plays after it (D-091).
+                    const items = await viewList(item.id, "audio").catch(() => null);
+                    const tracks = items ? await api.musicTracks({ items }).catch(() => []) : [];
+                    const at = tracks.findIndex((t) => t.id === track.id);
+                    return at >= 0 ? music.play(tracks.map((t) => t.id), at) : music.play([track.id], 0);
+                  })
+                }
               >
                 {trackPlaying ? <Pause size={16} /> : <Play size={16} />} {trackPlaying ? "Pause" : "Play"}
               </button>
@@ -303,15 +313,6 @@ export function ItemPage() {
             >
               <Star size={16} fill={item.isFavorite ? "currentColor" : "none"} />
               {item.isFavorite ? "Favorite" : "Add to favorites"}
-            </button>
-            <button
-              type="button"
-              className="btn"
-              aria-pressed={item.inLater}
-              title={item.inLater ? "In Later: click to take it out" : "Keep it in Later, to watch, read or listen to soon"}
-              onClick={() => void run(() => api.laterSet([item.id], !item.inLater))}
-            >
-              <Clock size={16} /> {item.inLater ? "In Later" : "Later"}
             </button>
             <button type="button" className="btn" onClick={() => setEditing(true)}>
               <Pencil size={16} /> Edit details

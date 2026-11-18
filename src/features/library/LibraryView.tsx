@@ -487,7 +487,7 @@ function ShelfView({ cache, total, lead, slots, square, shape, params }: ViewPro
 
 // ------------------------------------------------------------------ detailed view (Phase 5)
 
-/** Blurbs (description, tags, facts) for the items on screen, fetched as they scroll into view. */
+/** Blurbs (description, facts) for the items on screen, fetched as they scroll into view. */
 function useBlurbs(ids: number[]): Map<number, Blurb> {
   const store = useRef(new Map<number, Blurb>());
   const asked = useRef(new Set<number>());
@@ -551,15 +551,6 @@ function DetailedRow({ item, index, top, height, blurb }: { item: ItemCard; inde
           {availability && <span className="detail-fact">{availability}</span>}
         </div>
         {blurb?.description ? <p className="detail-description">{blurb.description}</p> : blurb && <p className="detail-description none">No description yet.</p>}
-        {blurb && blurb.tags.length > 0 && (
-          <div className="detail-tags">
-            {blurb.tags.slice(0, 8).map((tag) => (
-              <span key={tag} className="detail-tag">
-                #{tag}
-              </span>
-            ))}
-          </div>
-        )}
       </div>
       {progress > 0 && (
         <div className="detail-progress" title={progress >= 0.999 ? "Finished" : `${Math.round(progress * 100)}%`}>
@@ -570,7 +561,7 @@ function DetailedRow({ item, index, top, height, blurb }: { item: ItemCard; inde
   );
 }
 
-/** Rows with big artwork, the description, facts and tags (the brief's "Detailed view"). */
+/** Rows with big artwork, the description and facts (the brief's "Detailed view"). */
 function DetailedView({ cache, total }: ViewProps) {
   const { preferences } = usePreferences();
   const scroll = useRef<HTMLDivElement>(null);

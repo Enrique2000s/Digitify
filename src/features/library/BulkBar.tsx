@@ -1,18 +1,17 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { open as openFile } from "@tauri-apps/plugin-dialog";
 import { DropdownMenu } from "radix-ui";
-import { FolderInput, ImagePlus, ListMusic, Pencil, Plus, Tags, Trash } from "lucide-react";
+import { FolderInput, ImagePlus, ListMusic, Pencil, Plus, Trash } from "lucide-react";
 import { api, errorText, type BulkActions, type BulkOp, type CoverShape, type QueryParams } from "../../lib/api";
 import { plural } from "../../lib/format";
 import { libraryChanged, useCategories } from "../../lib/queries";
 import { useSelection } from "../../lib/selection";
 import { Dialog, Field } from "../../components/common";
 import { MoveDialog } from "../organize/dialogs";
-import { tagNames, TagSuggestions } from "../organize/TagEditor";
 import { NewPlaylistDialog, usePlaylists } from "../music/Tracks";
 
-type BulkDialog = "tags" | "move" | "edit" | "cover" | "remove" | null;
+type BulkDialog = "move" | "edit" | "cover" | "remove" | null;
 
 const SHAPE_LABELS: Record<CoverShape, string> = { square: "Square", disc: "CD", landscape: "Horizontal", poster: "Vertical" };
 
@@ -77,43 +76,6 @@ function BulkDialogFrame({
   );
 }
 
-function TagsDialog({ ids, open, onOpenChange }: { ids: number[]; open: boolean; onOpenChange: (open: boolean) => void }) {
-  const queryClient = useQueryClient();
-  const listId = useId();
-  const [add, setAdd] = useState("");
-  const [remove, setRemove] = useState("");
-  useEffect(() => {
-    if (open) {
-      setAdd("");
-      setRemove("");
-    }
-  }, [open]);
-  const ops: BulkOp[] = [];
-  if (tagNames(add).length) ops.push({ op: "addTags", names: tagNames(add) });
-  if (tagNames(remove).length) ops.push({ op: "removeTags", names: tagNames(remove) });
-  return (
-    <BulkDialogFrame
-      open={open}
-      onOpenChange={onOpenChange}
-      title={`Tags for ${plural(ids.length, "item")}`}
-      description="Separate several tags with commas."
-      confirm="Apply"
-      disabled={ops.length === 0}
-      onConfirm={async () => {
-        await api.itemsBulk(ids, ops);
-        libraryChanged(queryClient);
-      }}
-    >
-      <Field label="Add tags">
-        <input className="input" list={listId} value={add} onChange={(event) => setAdd(event.target.value)} placeholder="e.g. signed, first edition" autoFocus />
-      </Field>
-      <Field label="Remove tags">
-        <input className="input" list={listId} value={remove} onChange={(event) => setRemove(event.target.value)} />
-      </Field>
-      <TagSuggestions id={listId} />
-    </BulkDialogFrame>
-  );
-}
 
 /** A field that only changes when its box is ticked; an empty value clears it. */
 function OptionalField({ label, enabled, onEnabled, children }: { label: string; enabled: boolean; onEnabled: (enabled: boolean) => void; children: React.ReactNode }) {
@@ -397,9 +359,6 @@ export function BulkBar({
         )}
         <span className="bulk-sep" aria-hidden />
         {fits?.playlist && <PlaylistMenu ids={ids} onError={setError} />}
-        <button type="button" className="btn btn-sm" disabled={none} onClick={() => setDialog("tags")}>
-          <Tags size={15} /> Tags…
-        </button>
         <button type="button" className="btn btn-sm" disabled={nothing} onClick={() => setDialog("move")}>
           <FolderInput size={15} /> Move…
         </button>
@@ -417,7 +376,6 @@ export function BulkBar({
         </button>
         {error && <div className="dialog-error bulk-error">{error}</div>}
       </div>
-      <TagsDialog ids={ids} open={dialog === "tags"} onOpenChange={close} />
       <EditDialog ids={ids} actions={fits} open={dialog === "edit"} onOpenChange={close} />
       <CoverDialog ids={ids} actions={fits} open={dialog === "cover"} onOpenChange={close} />
       <RemoveDialog ids={ids} collections={collectionIds} open={dialog === "remove"} onOpenChange={close} onRemoved={() => selection.set([])} />

@@ -1,12 +1,13 @@
 import { useEffect } from "react";
-import { useParams, useSearch } from "@tanstack/react-router";
-import { FilePlus, FolderOpen, FolderPlus, LibraryBig, Search, Star, Clock } from "lucide-react";
+import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import { FilePlus, FolderPlus, LibraryBig, Search, Star } from "lucide-react";
 import type { Category } from "../../lib/api";
 import { useImporter } from "../../lib/importer";
-import { useCategories, useCollections } from "../../lib/queries";
+import { useCategories } from "../../lib/queries";
 import { usePreferences } from "../../lib/preferences";
 import { CategoryIcon } from "../../components/common";
-import { CollectionActions, CollectionCrumbs } from "../organize/collections";
+import { CollectionActions } from "../organize/collections";
+import { CollectionDialog } from "../organize/CollectionDialog";
 import { LibraryView } from "./LibraryView";
 import { MUSIC_TABS, MusicPage, MusicTabs, type MusicTab } from "../music/MusicPage";
 
@@ -27,37 +28,27 @@ function EmptyLibrary({ text }: { text: string }) {
   );
 }
 
-/** A category, or one of its collections (with everything inside it). */
+/** A category; a collection opens over it as a folder (D-090). */
 function CategoryView({ category, collection }: { category: Category; collection: number | null }) {
-  const level = useCollections(category.key, collection);
-  if (collection != null && !level.data) return null;
-  const path = level.data?.path ?? [];
-  const current = collection != null ? path.at(-1) : undefined;
+  const navigate = useNavigate();
   return (
-    <LibraryView
-      viewKey={category.key}
-      base={{ category: category.key, collection }}
-      title={current?.name ?? category.name}
-      eyebrow={current ? <CollectionCrumbs category={category} path={path} /> : undefined}
-      icon={current ? <FolderOpen size={26} strokeWidth={2.2} aria-hidden /> : <CategoryIcon icon={category.icon} size={26} />}
-      square={category.handler === "audio"}
-      handler={category.handler}
-      actions={<CollectionActions category={category} path={current ? path : []} />}
-      titleExtra={category.handler === "audio" && collection == null ? <MusicTabs category={category} tab="tracks" /> : undefined}
-      collections={{ category: category.key, parent: collection }}
-      empty={
-        current ? (
-          <div className="empty">
-            <p>
-              Nothing in this collection yet. Open an item and choose Organize › Move, or select several items in any view
-              and choose “Move”.
-            </p>
-          </div>
-        ) : (
-          <EmptyLibrary text={`No ${category.name.toLowerCase()} in your library yet.`} />
-        )
-      }
-    />
+    <>
+      <LibraryView
+        viewKey={category.key}
+        base={{ category: category.key, collection: null }}
+        title={category.name}
+        icon={<CategoryIcon icon={category.icon} size={26} />}
+        square={category.handler === "audio"}
+        handler={category.handler}
+        actions={<CollectionActions category={category} />}
+        titleExtra={category.handler === "audio" ? <MusicTabs category={category} tab="tracks" /> : undefined}
+        collections={{ category: category.key, parent: null }}
+        empty={<EmptyLibrary text={`No ${category.name.toLowerCase()} in your library yet.`} />}
+      />
+      {collection != null && (
+        <CollectionDialog category={category} id={collection} onClose={() => void navigate({ to: "/library/$scope", params: { scope: category.key }, search: {}, replace: true })} />
+      )}
+    </>
   );
 }
 
@@ -68,7 +59,7 @@ export function LibraryPage() {
   const { preferences, update } = usePreferences();
   // The section opened last is where the Library button goes next time (D-075).
   useEffect(() => {
-    const remembered = scope === "favorites" || scope === "later" || (scope === "all" && preferences.showEverything) || !!categories.data?.some((c) => c.key === scope);
+    const remembered = scope === "favorites" || (scope === "all" && preferences.showEverything) || !!categories.data?.some((c) => c.key === scope);
     if (remembered && preferences.libraryScope !== scope) update({ libraryScope: scope });
   }, [scope, categories.data, preferences.showEverything, preferences.libraryScope, update]);
 
@@ -81,19 +72,6 @@ export function LibraryPage() {
         title="Everything"
         icon={<LibraryBig size={26} strokeWidth={2.2} aria-hidden />}
         empty={<EmptyLibrary text="Nothing here yet." />}
-      />
-    );
-  }
-  if (scope === "later") {
-    return (
-      <LibraryView
-        key="later"
-        viewKey="later"
-        base={{ later: true }}
-        title="Later"
-        description="To watch, read or listen to soon"
-        icon={<Clock size={26} strokeWidth={2.2} aria-hidden />}
-        empty={<div className="empty"><p>Add films, books, albums or anything else to Later from their page (the clock button), and they wait for you here.</p></div>}
       />
     );
   }
@@ -127,7 +105,7 @@ export function SearchPage() {
       eyebrow="Search"
       title={`“${q}”`}
       icon={<Search size={26} strokeWidth={2.4} aria-hidden />}
-      empty={<div className="empty"><p>No matches for “{q}”. Search looks at titles, people, series, albums, genres, tags and collections.</p></div>}
+      empty={<div className="empty"><p>No matches for “{q}”. Search looks at titles, people, series, albums, genres and collections.</p></div>}
     />
   );
 }

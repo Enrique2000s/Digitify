@@ -43,7 +43,6 @@ export const HOME_SECTIONS = [
   "featured",
   "featuredGame",
   "upNext",
-  "later",
   "favorites",
   "favoriteGames",
   "because",

@@ -35,7 +35,6 @@ export function SmartListDialog({ list, open, onOpenChange }: { list: SmartList 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const categories = useCategories();
-  const tags = useTags();
   const [name, setName] = useState("");
   const [rules, setRules] = useState<SmartQuery>({});
   const [error, setError] = useState<string | null>(null);
@@ -132,16 +131,6 @@ export function SmartListDialog({ list, open, onOpenChange }: { list: SmartList 
         </Field>
       </div>
       <div className="field-row">
-        <Field label="Tag">
-          <select className="select" value={rules.tag ?? ""} onChange={(e) => set({ tag: e.target.value ? Number(e.target.value) : undefined })}>
-            <option value="">Any</option>
-            {tags.data?.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </Field>
         <Field label="Only">
           <div className="smart-checks">
             <label>

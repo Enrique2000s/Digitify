@@ -1,7 +1,7 @@
 {
   "name": "digitify",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Digitify: your physical collection, digitally preserved and beautifully organized.",
   "type": "module",
   "scripts": {

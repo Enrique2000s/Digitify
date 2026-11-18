@@ -3758,3 +3758,176 @@ a.mini-player-open {
   flex: 0 0 calc((100% - (var(--cols, 6) - 1) * var(--tile-gap, 20px)) / var(--cols, 6));
   min-width: 0;
 }
+
+/* ---------------------------------------------------------------- a collection as a folder (D-090) */
+
+.collection-window {
+  width: min(1180px, calc(100vw - 48px));
+  height: min(820px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.collection-window-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px 16px 22px;
+  border-bottom: 1px solid var(--line);
+}
+.collection-window-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent-bright) 15%, transparent);
+  color: var(--accent-text);
+}
+.collection-window-title {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.collection-window-title .dialog-title {
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.collection-window-title span {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.collection-window-body {
+  flex: 1;
+  overflow: auto;
+  padding: 22px;
+}
+.collection-window-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 22px;
+}
+
+/* ---------------------------------------------------------------- achievements screen (D-093) */
+
+.achievements-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+}
+.achievements-summary .achievement-medal {
+  color: #fff;
+  background: var(--gel, var(--accent));
+}
+.achievements-summary > div {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.achievements-summary h3 {
+  margin: 0;
+}
+.achievements-summary span {
+  overflow: hidden;
+  font-size: 12.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+.achievements-lead {
+  margin: 2px 0 0;
+  color: var(--muted);
+}
+.achievements-total {
+  display: block;
+  width: min(320px, 40vw);
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.achievements-total span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--bar, var(--accent-bright));
+}
+.achievement-families {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 18px;
+  margin-top: 18px;
+}
+.achievement-family {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+.achievement-family header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.achievement-family.reached header .achievement-medal {
+  color: #fff;
+  background: var(--gel, var(--accent));
+}
+.achievement-family h2 {
+  margin: 0;
+  font-size: 19px;
+}
+.achievement-family header span {
+  font-size: 13px;
+  color: var(--muted);
+}
+.achievement-levels {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.achievement-levels li {
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  color: var(--muted);
+}
+.achievement-levels li.on {
+  background: color-mix(in srgb, var(--accent-bright) 10%, transparent);
+  color: var(--text);
+}
+.achievement-level-medal {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 900;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+.achievement-levels li.on .achievement-level-medal {
+  color: #fff;
+  background: var(--gel, var(--accent));
+}
+.achievement-levels strong {
+  font-size: 13.5px;
+  font-weight: 800;
+}
+.achievement-levels li > span:last-child {
+  font-size: 12px;
+}

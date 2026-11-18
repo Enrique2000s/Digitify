@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Flame, Target, CalendarHeart } from "lucide-react";
-import { AchievementsList, ActivityCalendar, YearReview } from "./YearViews";
+import { AchievementsSummary, ActivityCalendar, YearReview } from "./YearViews";
 import { usePreferences, type Goals } from "../../lib/preferences";
 import { Dialog, Field } from "../../components/common";
 import { useQuery } from "@tanstack/react-query";
@@ -271,7 +271,7 @@ export function StatsPanel() {
               </ol>
             </section>
           )}
-          <AchievementsList />
+          <AchievementsSummary />
           <section>
             <h3>Your library</h3>
             <ul className="stats-categories">

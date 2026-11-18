@@ -12,6 +12,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.4.0",
+    date: "2026-11-18",
+    added: [
+      { icon: "library", title: "Collections are folders", text: "A collection opens in its own window over its category, with Rename and Delete. They're one level now: collections that were inside another moved up beside it, with all their items." },
+      { icon: "music", title: "Next follows the list", text: "Play a song from Library and the rest of the list comes after it. In Videos, next and previous go through the videos in the order you see them." },
+      { icon: "chart", title: "Achievements screen", text: "See every achievement, its levels and the day you reached each one, from Statistics on Home (or Ctrl+K)." },
+      { icon: "shield", title: "Less clutter", text: "Tags and Later are gone, so Library keeps to categories, collections, favorites and smart lists." },
+    ],
+    fixed: [],
+  },
+  {
     version: "0.3.0",
     date: "2026-11-18",
     added: [

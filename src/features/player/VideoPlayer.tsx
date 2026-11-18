@@ -42,6 +42,7 @@ import { SeekBar } from "../../components/SeekBar";
 import { actionFor, hint, isTyping } from "../../lib/shortcuts";
 import { useAutoHide, useFullscreen } from "../reader/chrome";
 import { pip } from "../../lib/pip";
+import { viewList } from "../../lib/routes";
 import { setVideoMedia } from "../../lib/mediaKeys";
 import { SleepTimerButton, sleepTimer } from "../../lib/sleepTimer";
 
@@ -478,6 +479,22 @@ function VideoPlayer({ source }: { source: Source }) {
   // controls to move through like a console (D-071).
   const driving = usePlayerController(root, VIDEO_PAD, poke);
   const bigPicture = useBigPicture();
+  // Outside a series, previous and next are the videos before and after this one in the library
+  // view it was opened from (D-091).
+  const list = useQuery({
+    queryKey: ["video-list", id],
+    enabled: source.kind === "item" && !!id,
+    staleTime: Infinity,
+    queryFn: () => viewList(Number(id), "video").catch(() => null),
+  });
+  const at = list.data ? list.data.indexOf(Number(id)) : -1;
+  const listPrevious = at > 0 ? list.data![at - 1] : null;
+  const listNext = at >= 0 && at < (list.data?.length ?? 0) - 1 ? list.data![at + 1] : null;
+  const openVideo = (other: number) => void navigate({ to: "/watch/$id", params: { id: String(other) }, replace: true });
+  const goNext = () => (target?.next ? playPart(target.next) : listNext != null ? openVideo(listNext) : undefined);
+  const goPrevious = () => (target?.previous ? playPart(target.previous) : listPrevious != null ? openVideo(listPrevious) : undefined);
+  const hasNext = !!target?.next || listNext != null;
+  const hasPrevious = !!target?.previous || listPrevious != null;
   const buttons = useButtonNames();
   const hints = usePlayerHints(driving, [
     { keys: [buttons.x], label: "Play / pause" },
@@ -541,7 +558,7 @@ function VideoPlayer({ source }: { source: Source }) {
           void toggleFullscreen();
           break;
         case "video.nextEpisode":
-          if (target?.next) playPart(target.next);
+          goNext();
           break;
         case "video.close":
           if (menu) setMenu(null);
@@ -593,8 +610,8 @@ function VideoPlayer({ source }: { source: Source }) {
       toggle: () => togglePlayRef.current(),
       play: () => command(["set_property", "pause", false]),
       pause: () => command(["set_property", "pause", true]),
-      next: target.next ? () => playPart(target.next!) : undefined,
-      previous: target.previous ? () => playPart(target.previous!) : undefined,
+      next: hasNext ? goNext : undefined,
+      previous: hasPrevious ? goPrevious : undefined,
     });
   }, [target, playback.paused, playPart]);
   useEffect(() => () => setVideoMedia(null), []);
@@ -660,7 +677,7 @@ function VideoPlayer({ source }: { source: Source }) {
             <SeekBar time={playback.time} duration={duration} marks={playback.chapters} clock={clock} timeClassName="watch-time" onSeek={seek} />
           </div>
           <div className="watch-controls">
-            <button type="button" className="round-btn" aria-label="Previous episode" disabled={!target.previous} onClick={() => target.previous && playPart(target.previous)}>
+            <button type="button" className="round-btn" aria-label={target.previous || !listPrevious ? "Previous episode" : "Previous video"} disabled={!hasPrevious} onClick={goPrevious}>
               <SkipBack size={17} />
             </button>
             <button
@@ -673,7 +690,7 @@ function VideoPlayer({ source }: { source: Source }) {
             >
               {playback.ended ? <RotateCcw size={20} /> : playback.paused ? <Play size={20} /> : <Pause size={20} />}
             </button>
-            <button type="button" className="round-btn" aria-label="Next episode" title={target.nextLabel ?? undefined} disabled={!target.next} onClick={() => target.next && playPart(target.next)}>
+            <button type="button" className="round-btn" aria-label={target.next || !listNext ? "Next episode" : "Next video"} title={target.nextLabel ?? undefined} disabled={!hasNext} onClick={goNext}>
               <SkipForward size={17} />
             </button>
             <button type="button" className="round-btn" aria-label={playback.muted ? "Unmute" : "Mute"} onClick={() => command(["cycle", "mute"])}>

@@ -314,6 +314,10 @@ pub async fn collection_create(state: State<'_, AppState>, category: String, par
 }
 
 pub fn create_collection(conn: &Connection, category: &str, parent: Option<i64>, name: &str) -> AppResult<i64> {
+    // Collections are one level (D-090): folders inside a category, never inside each other.
+    if parent.is_some() {
+        return Err(AppError::msg("Collections can't go inside another collection."));
+    }
     let category = category_id(conn, category)?;
     if let Some(parent) = parent {
         if collection_category(conn, parent)? != category {
@@ -354,6 +358,9 @@ pub async fn collection_move(state: State<'_, AppState>, id: i64, parent: Option
 }
 
 pub fn move_collection(conn: &mut Connection, id: i64, parent: Option<i64>) -> AppResult<()> {
+    if parent.is_some() {
+        return Err(AppError::msg("Collections can't go inside another collection."));
+    }
     let tx = conn.transaction()?;
     let category = collection_category(&tx, id)?;
     if let Some(parent) = parent {
@@ -637,28 +644,27 @@ mod tests {
     }
 
     #[test]
-    fn collections_nest_move_and_delete_without_losing_items() {
+    fn collections_are_one_level_and_delete_without_losing_items() {
         let mut conn = db::memory();
         let piece = create_collection(&conn, "manga", None, "One Piece").unwrap();
-        let arc = create_collection(&conn, "manga", Some(piece), "East Blue").unwrap();
+        // One level only (D-090): nothing goes inside a collection but items.
+        assert!(create_collection(&conn, "manga", Some(piece), "East Blue").is_err());
+        let other = create_collection(&conn, "manga", None, "Naruto").unwrap();
+        assert!(move_collection(&mut conn, other, Some(piece)).is_err());
         let volume = item(&conn, "manga", "Volume 1");
-        apply_bulk(&mut conn, &[volume], &[BulkOp::Move { category: "manga".into(), collection: Some(arc) }]).unwrap();
+        apply_bulk(&mut conn, &[volume], &[BulkOp::Move { category: "manga".into(), collection: Some(piece) }]).unwrap();
 
-        // Search finds the item through its collections, and the collection counts it.
+        // Search finds the item through its collection, and the collection counts it.
         assert_eq!(search(&conn, "one piece"), vec![volume]);
         let level = collections(&conn, "manga", None).unwrap();
-        assert_eq!((level.children[0].item_count, level.children[0].child_count), (1, 1));
-        assert_eq!(collection_path(&conn, arc).unwrap().iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["One Piece", "East Blue"]);
+        let found = level.children.iter().find(|c| c.id == piece).unwrap();
+        assert_eq!((found.item_count, found.child_count), (1, 0));
 
-        // No cycles, and no moving into another category's collection.
-        assert!(move_collection(&mut conn, piece, Some(arc)).is_err());
+        // No moving into another category's collection.
         let books = create_collection(&conn, "books", None, "Classics").unwrap();
         assert!(apply_bulk(&mut conn, &[volume], &[BulkOp::Move { category: "manga".into(), collection: Some(books) }]).is_err());
 
-        // Deleting a collection moves its contents up a level.
-        delete_collection(&mut conn, arc).unwrap();
-        let home: Option<i64> = conn.query_row("SELECT collection_id FROM items WHERE id = ?1", [volume], |row| row.get(0)).unwrap();
-        assert_eq!(home, Some(piece));
+        // Deleting a collection leaves its items in the category.
         delete_collection(&mut conn, piece).unwrap();
         let home: Option<i64> = conn.query_row("SELECT collection_id FROM items WHERE id = ?1", [volume], |row| row.get(0)).unwrap();
         assert_eq!(home, None);

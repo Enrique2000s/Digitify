@@ -172,7 +172,7 @@ export function TitleBar({ searchEnabled }: { searchEnabled: boolean }) {
               to="/library/$scope"
               params={{ scope: libraryScope }}
               className="appbar-nav-item"
-              aria-current={/^\/(library|tags|tag|item|online)\b/.test(location.pathname) ? "page" : undefined}
+              aria-current={/^\/(library|item|online)\b/.test(location.pathname) ? "page" : undefined}
             >
               <LibraryBig size={16} strokeWidth={2.5} aria-hidden /> <span className="appbar-nav-label">Library</span>
             </Link>

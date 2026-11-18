@@ -101,6 +101,22 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-093 · Achievements screen
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose a summary in Statistics plus a screen)
+- `/achievements` shows every family with its levels as medals, what each counts, how far to the next, and the day each was reached. Statistics on Home keeps a small card ("3 of 40 reached · latest: Player I") with "See all"; Ctrl+K has Achievements too.
+
+### D-092 · No more Tags or Later (removes D-062 and the tags of Phase 2)
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose to remove them and their records)
+- To keep Library simple, Tags (the Tags page, tag editing on an item, tags in the detailed view, bulk tags, the smart-list tag rule) and Later (its section, Home and Big Picture rows, the item button, Ctrl+K) are gone. The upgrade (v23) deletes their records; the library is backed up before it, as before every schema change.
+
+### D-091 · Next follows the list
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose next and previous by button only for videos)
+- As photos already did (D-033), what's opened from a library view knows its list: in the video player, outside a series, previous and next go to the videos before and after it in that view's order (also from the media keys); a song played from its page queues the rest of the view's songs after it, in order.
+
+### D-090 · Collections as folders, one level (changes D-030)
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose to move nested collections up)
+- A collection opens in a window over its category (its items, its name and count, Rename and Delete; Back or Esc closes it) instead of becoming the page. Collections are one level: the core refuses one inside another, and the upgrade (v23) moves any that were nested up to the top of their category with their items. "New collection" is only on a category.
+
 ### D-089 · Builds on GitHub that keep passing
 - **Date:** 2026-11-18 · **Approved by:** project owner (asked for the failing builds to be fixed for good)
 - **What failed:** the Linux build couldn't keep its packages (the account's artifact storage was full: every push kept about 120 MB for 90 days), and the Windows build couldn't download FFmpeg (BtbN had removed the pinned autobuild).

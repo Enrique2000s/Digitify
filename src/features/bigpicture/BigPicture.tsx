@@ -285,7 +285,6 @@ function HomeScreen() {
       </section>
     ),
     continuePlaying: <GameRowBP title={<SectionTitle section="continuePlaying" />} games={games.recent} />,
-    later: <Row title={<SectionTitle section="later" />} items={data.later} />,
     because: data.because && (
       <Row
         title={

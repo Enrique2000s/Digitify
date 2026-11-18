@@ -3,7 +3,6 @@ import { Link } from "@tanstack/react-router";
 import { ChevronRight, FolderInput } from "lucide-react";
 import type { ItemDetail } from "../../lib/api";
 import { MoveDialog } from "./dialogs";
-import { TagEditor } from "./TagEditor";
 
 /** Category › collection links for an item's home. */
 export function HomePath({ item }: { item: ItemDetail }) {
@@ -24,7 +23,7 @@ export function HomePath({ item }: { item: ItemDetail }) {
   );
 }
 
-/** Where an item lives (category and collection), and its tags. */
+/** Where an item lives: its category and collection. */
 export function OrganizePanel({ item }: { item: ItemDetail }) {
   const [moving, setMoving] = useState(false);
   return (
@@ -38,10 +37,6 @@ export function OrganizePanel({ item }: { item: ItemDetail }) {
             <FolderInput size={14} /> Move…
           </button>
         </div>
-      </div>
-      <div className="organize-row">
-        <span className="organize-label">Tags</span>
-        <TagEditor item={item} />
       </div>
       <MoveDialog
         open={moving}
