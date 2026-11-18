@@ -20,9 +20,41 @@ pub fn after(conn: &Connection, version: i64) -> AppResult<()> {
     if version == 14 {
         widen_check(conn, "arcade_games", "CHECK (platform IN ('gamecube', 'wii', 'n64'))", "CHECK (platform IN ('gamecube', 'wii', 'n64', 'pc'))")?;
     }
+    if version == 24 {
+        d095(conn)?;
+    }
     if version == 15 {
         // D-039: category names back and custom field values out of search.
         let items: Vec<i64> = conn.prepare("SELECT id FROM items")?.query_map([], |row| row.get(0))?.collect::<Result<_, _>>()?;
+        for item in items {
+            reindex(conn, item)?;
+        }
+    }
+    Ok(())
+}
+
+/// D-095: Music has no collections. Each music collection becomes a playlist of the same name
+/// with its songs (in the collection's order); the songs stay in Music, and the collection goes.
+fn d095(conn: &Connection) -> AppResult<()> {
+    let collections: Vec<(i64, String)> = conn
+        .prepare(
+            "SELECT c.id, c.name FROM collections c JOIN categories k ON k.id = c.category_id \
+             WHERE k.handler = 'audio' ORDER BY c.sort_order, c.sort_name, c.id",
+        )?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    for (collection, name) in collections {
+        conn.execute("INSERT INTO playlists (name) VALUES (?1)", [&name])?;
+        let playlist = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT OR IGNORE INTO playlist_tracks (playlist_id, part_id, position) \
+             SELECT ?1, p.id, row_number() OVER (ORDER BY i.position, i.sort_title, i.id, p.id) - 1 \
+             FROM items i JOIN parts p ON p.item_id = i.id AND p.kind = 'track' WHERE i.collection_id = ?2",
+            rusqlite::params![playlist, collection],
+        )?;
+        let items: Vec<i64> = conn.prepare("SELECT id FROM items WHERE collection_id = ?1")?.query_map([collection], |row| row.get(0))?.collect::<Result<_, _>>()?;
+        conn.execute("UPDATE items SET collection_id = NULL WHERE collection_id = ?1", [collection])?;
+        conn.execute("DELETE FROM collections WHERE id = ?1", [collection])?;
         for item in items {
             reindex(conn, item)?;
         }
@@ -313,6 +345,34 @@ fn copy_item(conn: &Connection, album: i64, part: i64) -> AppResult<i64> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn music_collections_become_playlists() {
+        let conn = crate::db::memory();
+        let music = "(SELECT id FROM categories WHERE key = 'music')";
+        conn.execute(&format!("INSERT INTO collections (category_id, name, sort_name) VALUES ({music}, 'Road trip', 'road trip')"), []).unwrap();
+        let collection = conn.last_insert_rowid();
+        for (n, title) in ["Second", "First"].iter().enumerate() {
+            conn.execute(&format!("INSERT INTO items (category_id, title, sort_title, collection_id, position) VALUES ({music}, ?1, ?1, ?2, ?3)"), rusqlite::params![title, collection, 1 - n as i64]).unwrap();
+            let item = conn.last_insert_rowid();
+            conn.execute("INSERT INTO parts (item_id, kind, title, position) VALUES (?1, 'track', ?2, 0)", rusqlite::params![item, title]).unwrap();
+        }
+        d095(&conn).unwrap();
+        let name: String = conn.query_row("SELECT name FROM playlists", [], |row| row.get(0)).unwrap();
+        assert_eq!(name, "Road trip");
+        let order: Vec<String> = conn
+            .prepare("SELECT p.title FROM playlist_tracks t JOIN parts p ON p.id = t.part_id ORDER BY t.position")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(order, ["First", "Second"]);
+        let left: i64 = conn.query_row("SELECT count(*) FROM collections", [], |row| row.get(0)).unwrap();
+        let loose: i64 = conn.query_row("SELECT count(*) FROM items WHERE collection_id IS NULL", [], |row| row.get(0)).unwrap();
+        assert_eq!((left, loose), (0, 2));
+    }
+
     use super::*;
 
     #[test]

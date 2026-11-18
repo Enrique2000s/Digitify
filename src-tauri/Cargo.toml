@@ -1,6 +1,6 @@
 [package]
 name = "digitify"
-version = "0.4.0"
+version = "0.5.0"
 description = "Digitify: your physical collection, digitally preserved and beautifully organized"
 authors = ["Digitify contributors"]
 edition = "2021"

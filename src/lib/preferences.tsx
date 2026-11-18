@@ -173,6 +173,8 @@ export interface Preferences {
   coverShapes: { audio: "square" | "disc"; videos: "poster" | "landscape" };
   /** The music category's tab, opened again next time. */
   musicTab: string;
+  /** The tab each category was left on (D-094): media, collections or favorites. */
+  categoryTabs: Record<string, CategoryTab>;
   /** Big Picture (D-025): moving with the selection or with a cursor, and the cursor's speed. */
   /** Big Picture: how to move around, the cursor's speed, and its startup animation (D-070). */
   bigPicture: { navigation: "focus" | "cursor"; cursorSpeed: number; intro: boolean };
@@ -297,6 +299,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   sorts: {},
   coverShapes: { audio: "square", videos: "landscape" },
   musicTab: "tracks",
+  categoryTabs: {},
   bigPicture: { navigation: "focus", cursorSpeed: 1000, intro: true },
   shelfStyle: "covers",
   shelfLook: "breeze",
@@ -436,6 +439,10 @@ function sanitizeNightFilter(raw: unknown): NightFilter {
   };
 }
 
+/** A category's tabs (D-094): its media, its collections, its favorites. */
+export const CATEGORY_TABS = ["media", "collections", "favorites"] as const;
+export type CategoryTab = (typeof CATEGORY_TABS)[number];
+
 export interface Goals {
   finished: number;
   read: number;
@@ -564,6 +571,12 @@ function sanitize(raw: unknown): Preferences {
     coverShapes: sanitizeShapes((raw as Raw<Preferences>)?.coverShapes),
     // "albums" (D-024) became the Tracks view (D-027).
     musicTab: (raw as Raw<Preferences>)?.musicTab === "albums" ? "tracks" : pick("musicTab", (v) => typeof v === "string" && v.length < 20),
+    categoryTabs: (() => {
+      const value = ((raw as Raw<Preferences>)?.categoryTabs ?? {}) as Record<string, unknown>;
+      const out: Record<string, CategoryTab> = {};
+      for (const [key, tab] of Object.entries(value)) if (key.length < 40 && CATEGORY_TABS.includes(tab as CategoryTab)) out[key] = tab as CategoryTab;
+      return out;
+    })(),
     bigPicture: sanitizeBigPicture((raw as Raw<Preferences>)?.bigPicture),
     shelfStyle: pick("shelfStyle", (v) => v === "covers" || v === "spines"),
     shelfLook: pick("shelfLook", (v) => ["breeze", "wood", "glass", "metal"].includes(v as string)),

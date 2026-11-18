@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { Award, BookOpen, ChartColumn, ChevronLeft, ChevronRight, Delete, Gamepad2, Heart, House, LibraryBig, LogOut, MousePointer2, Pause, Play, Search, Settings2, SkipBack, SkipForward, Space, Star, X, Eye, Joystick, Music, VolumeOff, Clapperboard } from "lucide-react";
+import { Award, BookOpen, ChartColumn, ChevronLeft, ChevronRight, Delete, Gamepad2, Heart, House, LibraryBig, LogOut, MousePointer2, Pause, Play, Search, Settings2, SkipBack, SkipForward, Space, X, Eye, Joystick, Music, VolumeOff, Clapperboard } from "lucide-react";
 import { api, type ArcadeGame, type ItemCard } from "../../lib/api";
 import { exitBigPicture, focusFirst, moveFocus, takeIntro } from "../../lib/bigpicture";
 import { ambientEngine } from "../../lib/ambient/engine";
@@ -277,10 +277,6 @@ function HomeScreen() {
             <strong>Arcade</strong>
             <span>{games.count.toLocaleString()}</span>
           </button>
-          <button type="button" className="bp-category" data-bp-focus onClick={() => void navigate({ to: "/bp", search: { screen: "library", scope: "favorites" } })}>
-            <Star size={46} />
-            <strong>Favorites</strong>
-          </button>
         </Scroller>
       </section>
     ),
@@ -342,7 +338,6 @@ function LibraryScreen({ scope }: { scope: string }) {
   const tabs = [
     ...(preferences.showEverything ? [{ key: "all", name: "Everything" }] : []),
     ...(categories.data?.filter((c) => !c.isHidden).map((c) => ({ key: c.key, name: c.name })) ?? []),
-    { key: "favorites", name: "Favorites" },
   ];
   // LB and RB switch between the categories.
   usePad((action) => {

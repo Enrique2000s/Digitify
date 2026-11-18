@@ -46,9 +46,6 @@ export function CategoryStrip({ tools }: { tools?: ReactNode }) {
               <span className="count">{category.itemCount.toLocaleString()}</span>
             </Link>
           ))}
-        <Link to="/library/$scope" params={{ scope: "favorites" }} className="strip-pill" data-blip>
-          Favorites
-        </Link>
         <Link to="/smart" className="strip-pill" activeOptions={{ exact: false }} data-blip>
           Smart lists
         </Link>

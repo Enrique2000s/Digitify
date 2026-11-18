@@ -12,6 +12,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.5.0",
+    date: "2026-11-18",
+    added: [
+      { icon: "library", title: "Tabs in every category", text: "Each category has Media, Collections and Favorites as tabs, beside All, Digital and Online; Music keeps its own tabs in the same place. Collections no longer mix in with everything else." },
+      { icon: "music", title: "Music uses playlists", text: "Music has no collections anymore: any you had became playlists with the same songs." },
+      { icon: "image", title: "Simpler Pictures", text: "Pictures shows just its tabs, without the All and Digital filter it didn't need." },
+    ],
+    fixed: [],
+  },
+  {
     version: "0.4.0",
     date: "2026-11-18",
     added: [

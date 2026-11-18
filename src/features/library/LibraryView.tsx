@@ -849,13 +849,11 @@ function PlayAll({ params }: { params: Omit<QueryParams, "offset" | "limit"> }) 
 }
 
 /** All, what has files in the library, and (in Music and Videos) what was added from a link and plays online (D-029). */
-type Filter = Ownership | "" | "collections";
+type Filter = Ownership | "";
 const OWNERSHIP: { value: Filter; label: string }[] = [
   { value: "", label: "All" },
   { value: "digital", label: "Digital" },
   { value: "online", label: "Online" },
-  // Where the view has collections (D-030): "All" shows them first, "Collections" alone.
-  { value: "collections", label: "Collections" },
 ];
 
 /** The "Select" toggle; Ctrl+A selects everything and Esc stops selecting. */
@@ -896,6 +894,8 @@ export function LibraryView({
   actions,
   prelude,
   titleExtra,
+  tabs,
+  mode = "items",
   beforeItems,
   square,
   handler,
@@ -912,8 +912,12 @@ export function LibraryView({
   actions?: ReactNode;
   /** Shown between the header and the toolbar. */
   prelude?: ReactNode;
-  /** Shown beside the title (Music's tabs, D-044). */
+  /** Shown beside the title. */
   titleExtra?: ReactNode;
+  /** The view's tabs (D-094): a category's Media · Collections · Favorites, or Music's tabs. */
+  tabs?: ReactNode;
+  /** Items, or the category's collections alone (its Collections tab, D-094). */
+  mode?: "items" | "collections";
   /** Shown under the toolbar, above the items (a category's collections). */
   beforeItems?: ReactNode;
   square?: boolean;
@@ -941,14 +945,17 @@ export function LibraryView({
   const layout: Layout = preferences.layouts[shared] ?? preferences.layouts[other] ?? "grid";
   // "Online" is offered where links are imported to: Music and Videos.
   const withOnline = handler === "audio" || base.category === "videos";
-  const filters = OWNERSHIP.filter((option) => (option.value !== "online" || withOnline) && (option.value !== "collections" || !!collections));
+  // Photos are all on this computer, and collections have no copies: no filter there (D-094).
+  const filters = handler === "image" || mode === "collections" ? [] : OWNERSHIP.filter((option) => option.value !== "online" || withOnline);
   // Inside a collection the filter starts at "All" every time and isn't remembered (D-043).
   const inCollection = base.collection != null;
   const [collectionFilter, setCollectionFilter] = useState<Filter>("");
   useEffect(() => setCollectionFilter(""), [viewKey]);
-  const remembered: Filter = inCollection ? collectionFilter : (preferences.ownership[shared] ?? preferences.ownership[other] ?? "");
+  // A filter saved as "collections" (before D-094) reads as All.
+  const savedFilter = preferences.ownership[shared] ?? preferences.ownership[other] ?? "";
+  const remembered: Filter = inCollection ? collectionFilter : savedFilter === "collections" ? "" : savedFilter;
   const filter: Filter = filters.some((option) => option.value === remembered) ? remembered : "";
-  const ownership: Ownership | "" = filter === "collections" ? "" : filter;
+  const ownership: Ownership | "" = filter;
   // The sort is remembered per view; a custom order belongs to its view too.
   const orderKey = base.search
     ? null
@@ -978,13 +985,13 @@ export function LibraryView({
   // The image viewer steps through what this view shows (D-033).
   photoContext.params = params;
   const { cache, total: itemTotal, error } = usePagedItems(params);
-  // The view's collections lead its items in "All", and are all there is in "Collections".
-  const level = useCollections(collections?.category ?? "", collections?.parent ?? null, !!collections && (filter === "" || filter === "collections"));
+  // Collections show in their own tab, never mixed with the items (D-094).
+  const onlyCollections = mode === "collections" && !!collections;
+  const level = useCollections(collections?.category ?? "", collections?.parent ?? null, onlyCollections);
   const leadCards = useMemo(
-    () => (collections && (filter === "" || filter === "collections") ? (level.data?.children ?? []).map((c) => collectionCard(c, collections.category)) : []),
+    () => (onlyCollections && collections ? (level.data?.children ?? []).map((c) => collectionCard(c, collections.category)) : []),
     [collections, filter, level.data],
   );
-  const onlyCollections = filter === "collections";
   // In a custom order, collections stand where they were put among the items (D-036).
   const slotsQuery = useQuery({
     queryKey: ["custom-slots", params, leadCards.map((c) => c.id)],
@@ -993,7 +1000,7 @@ export function LibraryView({
   });
   const places = useMemo(() => (sort === "custom" && !onlyCollections && slotsQuery.data ? new Map(slotsQuery.data) : null), [sort, onlyCollections, slotsQuery.data]);
   const source = useMemo(() => new LedSource(leadCards, places, onlyCollections ? null : cache), [leadCards, places, onlyCollections, cache]);
-  const waiting = itemTotal == null || (!!collections && (filter === "" || onlyCollections) && !level.data);
+  const waiting = itemTotal == null || (onlyCollections && !level.data);
   const total = waiting ? null : leadCards.length + (onlyCollections ? 0 : itemTotal);
   const lead = leadCards.length;
   const selection = useSelectionState(source);
@@ -1112,6 +1119,16 @@ export function LibraryView({
           </div>
           {prelude}
           <div className="toolbar arcade-toolbar">
+            {tabs}
+            {filters.length > 0 && (
+            <div className="segmented" role="group" aria-label="Ownership">
+              {filters.map((option) => (
+                <button key={option.value} type="button" aria-pressed={filter === option.value} onClick={() => setOwnership(option.value)}>
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            )}
             <div className="segmented layout-switch" role="group" aria-label="Layout">
               {(
                 [
@@ -1125,13 +1142,6 @@ export function LibraryView({
                 <button key={value} type="button" aria-pressed={layout === value} aria-label={label} title={label} onClick={() => setLayout(value)}>
                   <Icon size={16} aria-hidden />
                   {layout === value && <span className="layout-name">{label}</span>}
-                </button>
-              ))}
-            </div>
-            <div className="segmented" role="group" aria-label="Ownership">
-              {filters.map((option) => (
-                <button key={option.value} type="button" aria-pressed={filter === option.value} onClick={() => setOwnership(option.value)}>
-                  {option.label}
                 </button>
               ))}
             </div>

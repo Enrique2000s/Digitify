@@ -318,6 +318,11 @@ pub fn create_collection(conn: &Connection, category: &str, parent: Option<i64>,
     if parent.is_some() {
         return Err(AppError::msg("Collections can't go inside another collection."));
     }
+    // Music groups its songs in playlists, not collections (D-095).
+    let handler: Option<String> = conn.query_row("SELECT handler FROM categories WHERE key = ?1", [category], |row| row.get(0)).optional()?;
+    if handler.as_deref() == Some("audio") {
+        return Err(AppError::msg("Music uses playlists instead of collections."));
+    }
     let category = category_id(conn, category)?;
     if let Some(parent) = parent {
         if collection_category(conn, parent)? != category {

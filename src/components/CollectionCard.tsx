@@ -52,7 +52,7 @@ function Art({ item }: { item: ItemCard }) {
   );
 }
 
-const to = (item: ItemCard) => ({ to: "/library/$scope" as const, params: { scope: item.category }, search: { collection: item.collection!.id } });
+const to = (item: ItemCard) => ({ to: "/library/$scope" as const, params: { scope: item.category }, search: { tab: "collections", collection: item.collection!.id } });
 
 /** The tick on a selected collection, like an item's (D-036). */
 function Tick({ selecting, checked }: { selecting: boolean; checked: boolean }) {

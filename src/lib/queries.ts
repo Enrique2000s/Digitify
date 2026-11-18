@@ -130,6 +130,6 @@ export function useLibraryScope(): string {
   const { preferences } = usePreferences();
   const visible = categories.data?.filter((c) => !c.isHidden).map((c) => c.key) ?? [];
   const last = preferences.libraryScope;
-  const valid = !!last && (visible.includes(last) || last === "favorites" || (last === "all" && preferences.showEverything));
-  return valid ? last! : (visible[0] ?? (preferences.showEverything ? "all" : "favorites"));
+  const valid = !!last && (visible.includes(last) || (last === "all" && preferences.showEverything));
+  return valid ? last! : (visible[0] ?? (preferences.showEverything ? "all" : "pictures"));
 }

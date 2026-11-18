@@ -101,6 +101,14 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-095 · Music has no collections
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose to turn them into playlists)
+- Music groups songs with playlists only. The upgrade (v24, `reshape::d095`) turns each music collection into a playlist of the same name with its songs in order, then removes the collection (the songs stay in Music); the core refuses new music collections.
+
+### D-094 · A category's tabs: Media, Collections, Favorites (changes D-030, D-044)
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose Music's tabs in the same place, and to drop the Favorites tile but keep Home's Favorites row)
+- Every category has tabs in its toolbar, first and always in the same place, beside All / Digital / Online: Media (its items, with no collections mixed in), Collections (its collections alone) and Favorites (its favorites). Music's tabs (Tracks, Artists, Playlists, Recently played, Favorites) moved there too. The tab is remembered per category. Pictures shows no ownership filter (every photo is on this computer), nor does the Collections tab. The global Favorites left Library's strip, Home's tiles, Big Picture's library and Ctrl+K; Home's Favorites row stays.
+
 ### D-093 · Achievements screen
 - **Date:** 2026-11-18 · **Approved by:** project owner (chose a summary in Statistics plus a screen)
 - `/achievements` shows every family with its levels as medals, what each counts, how far to the next, and the day each was reached. Statistics on Home keeps a small card ("3 of 40 reached · latest: Player I") with "See all"; Ctrl+K has Achievements too.

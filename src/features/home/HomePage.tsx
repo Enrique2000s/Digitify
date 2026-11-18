@@ -17,7 +17,6 @@ import {
   Music,
   Plus,
   RotateCcw,
-  Star,
   Sun,
   TriangleAlert,
   Volume2,
@@ -124,7 +123,7 @@ function tileColumns(count: number): number {
 function Tiles({ categories, covers, total, games }: { categories: Category[]; covers: Record<string, TileCover[]>; total: number; games: { count: number; covers: TileCover[] } }) {
   const visible = categories.filter((category) => !category.isHidden);
   const { preferences } = usePreferences();
-  const columns = tileColumns(visible.length + (preferences.showEverything ? 3 : 2));
+  const columns = tileColumns(visible.length + (preferences.showEverything ? 2 : 1));
   return (
     // Rows that come out shorter than the others stay centered under them (D-086).
     <section className="tiles" aria-label="Library sections" style={{ "--cols": columns } as React.CSSProperties}>
@@ -143,7 +142,6 @@ function Tiles({ categories, covers, total, games }: { categories: Category[]; c
       <Link to="/arcade" className="tile" data-blip>
         <TileBody label="Arcade" screen={SCREENS.arcade} covers={games.covers} icon={<Joystick size={36} strokeWidth={2.2} aria-hidden />} count={games.count} />
       </Link>
-      <SectionTile scope="favorites" label="Favorites" screen={SCREENS.favorites} covers={covers.favorites ?? []} icon={<Star size={36} strokeWidth={2.2} aria-hidden />} />
     </section>
   );
 }

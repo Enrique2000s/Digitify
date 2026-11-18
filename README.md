@@ -9,7 +9,7 @@ Digitify is an offline-first desktop app for **Windows and Linux**. It brings yo
 - **Import** files and folders (kept where they are, or copied into the library folder), with their metadata and artwork; duplicates are recognized by content.
 - **Import from URL:** YouTube, YouTube Music, Spotify and SoundCloud links are saved as online items that play in the services' own players; files are downloaded only where the service allows it (direct file links, SoundCloud tracks their uploader made downloadable). An import queue shows progress, with cancel and retry.
 - **Views:** Grid, Shelf (with wood, glass or metal shelves), List, Detailed and a 3D Carousel; sort by title, date, year, creator, duration or your own order (drag covers into place); filter by All, Digital, Online (Music and Videos) and Collections.
-- **Organize:** collections that open like folders, favorites, and multi-select edits that offer only what fits every selected item (cover image and shape, add to playlist, move…).
+- **Organize:** each category's Media, Collections (folders that open in a window; Music uses playlists) and Favorites, as tabs, and multi-select edits that offer only what fits every selected item (cover image and shape, add to playlist, move…).
 - **Pictures:** photos with their albums (from folders), shown whole at one height (justified rows in the grid), EXIF details and an image viewer with zoom, slideshow, photo info, turn and mirror; a photo can be an album's cover or Home's background.
 - **Arcade:** a launcher for your installed PC games (Steam, Epic Games (the classic and the new launcher) and Xbox on Windows; Steam and Heroic on Linux), with their launchers' covers, which it keeps up to date as you install and remove them, and for the games of Dolphin (GameCube, Wii), Project64 (Windows) and RMG (Nintendo 64): it finds the games in their folders, shows their covers (Dolphin's or GameTDB's), and starts each in its emulator with the emulator's own settings, counting play time. While a game runs Digitify stays open with its music silenced (you can turn it back on), or hides until the game ends, or closes, as set in Settings › Arcade. Its views (All PC games, All ROM games, each store, each console, Favorites) can be reordered, hidden or have the two All views combined in Settings › Arcade. Game folders can be set per emulator; games can be selected, removed or put in your own order by dragging. Covers come from Dolphin, GameTDB or libretro-thumbnails. No games, BIOS or emulators are included.
 - **Readers:** ebooks (EPUB and more), PDFs, comics and manga (CBZ, CBR, CB7, CBT, image folders) with right-to-left reading, page-turn effects and bookmarks.
@@ -36,13 +36,13 @@ Progress, test results and known limits are in [docs/STATUS.md](docs/STATUS.md);
 ## Installing
 
 ### Windows 11 (x64)
-Run `Digitify_0.4.0_x64-setup.exe`. It installs for the current user in `%LOCALAPPDATA%\Digitify` without admin rights, and adds Start menu and desktop shortcuts. Uninstall it from Settings › Apps; that removes the program, never your library folder, settings or logs.
+Run `Digitify_0.5.0_x64-setup.exe`. It installs for the current user in `%LOCALAPPDATA%\Digitify` without admin rights, and adds Start menu and desktop shortcuts. Uninstall it from Settings › Apps; that removes the program, never your library folder, settings or logs.
 
 ### Linux (x64)
 Built by GitHub Actions:
-- **`.deb`** (Ubuntu, Debian, Linux Mint, Pop!_OS…): `sudo apt install ./Digitify_0.4.0_amd64.deb`. It brings in `mpv`, `ffmpeg`, `udisks2` and GStreamer (the web view's sound, and the decoders YouTube's player needs) from the distribution. Digitify then appears in the applications menu. Uninstall with `sudo apt remove digitify`.
+- **`.deb`** (Ubuntu, Debian, Linux Mint, Pop!_OS…): `sudo apt install ./Digitify_0.5.0_amd64.deb`. It brings in `mpv`, `ffmpeg`, `udisks2` and GStreamer (the web view's sound, and the decoders YouTube's player needs) from the distribution. Digitify then appears in the applications menu. Uninstall with `sudo apt remove digitify`.
 - **Arch Linux and Arch-based** (Manjaro, EndeavourOS, CachyOS…): put `install-arch.sh` next to the `.deb` and run `bash install-arch.sh` as your normal user. It installs only the missing packages Digitify needs, YouTube's video decoders included (never `pacman -Syu`), turns the `.deb` into a pacman package and installs it. Uninstall with `sudo pacman -R digitify`. If pacman reports missing files (404), your package lists are out of date: update your system as you normally do, then run it again.
-- **AppImage** (any distribution; it carries its own GStreamer for the app's sounds, without an H.264 decoder, so YouTube videos don't play in it: on Ubuntu-like and Arch-based systems use the `.deb` or `install-arch.sh` for that): install `mpv` and `ffmpeg` with your package manager first, then `chmod +x Digitify_0.4.0_amd64.AppImage` and run it. Nothing is installed; delete the file to remove it.
+- **AppImage** (any distribution; it carries its own GStreamer for the app's sounds, without an H.264 decoder, so YouTube videos don't play in it: on Ubuntu-like and Arch-based systems use the `.deb` or `install-arch.sh` for that): install `mpv` and `ffmpeg` with your package manager first, then `chmod +x Digitify_0.5.0_amd64.AppImage` and run it. Nothing is installed; delete the file to remove it.
 
 On Wayland desktops Digitify runs through XWayland (needed to show video inside its window). Disc drives appear as `sr0`, `sr1`…; your user needs read access to them (usually the `cdrom` or `optical` group).
 
@@ -52,8 +52,8 @@ Send the file itself (a USB stick, Google Drive, WeTransfer, a chat app): the Wi
 ## Getting the installers
 | Platform | How | Where it ends up |
 |---|---|---|
-| Windows | `npm run installer` on this PC | `installer\Digitify_0.4.0_x64-setup.exe` |
-| Linux | GitHub builds and tests every push to `main`, and keeps the packages for a week when you run Actions › **Build installers** › **Run workflow** (or push a version tag such as `v0.4.0`); then `npm run installer:linux` downloads them (needs the [GitHub CLI](https://cli.github.com), signed in with `gh auth login`) | `installer\linux\*.deb`, `*.AppImage` and `install-arch.sh` |
+| Windows | `npm run installer` on this PC | `installer\Digitify_0.5.0_x64-setup.exe` |
+| Linux | GitHub builds and tests every push to `main`, and keeps the packages for a week when you run Actions › **Build installers** › **Run workflow** (or push a version tag such as `v0.5.0`); then `npm run installer:linux` downloads them (needs the [GitHub CLI](https://cli.github.com), signed in with `gh auth login`) | `installer\linux\*.deb`, `*.AppImage` and `install-arch.sh` |
 
 Without the GitHub CLI: open the repository's **Actions** tab, the latest **Build installers** run started by hand, and download **digitify-linux** (and **digitify-windows**) under **Artifacts**. The `installer` folder isn't committed.
 

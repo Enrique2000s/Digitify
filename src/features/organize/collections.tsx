@@ -26,7 +26,7 @@ export function CollectionActions({ category }: { category: Category }) {
         onSubmit={async (name) => {
           const id = await api.collectionCreate(category.key, null, name);
           libraryChanged(queryClient);
-          await navigate({ to: "/library/$scope", params: { scope: category.key }, search: { collection: id } });
+          await navigate({ to: "/library/$scope", params: { scope: category.key }, search: { tab: "collections", collection: id } });
         }}
       />
     </>

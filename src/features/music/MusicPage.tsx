@@ -61,11 +61,14 @@ function Header({ category, tab }: { category: Category; tab: MusicTab }) {
           <div>
             <div className="title-line">
               <h1 className="display">{category.name}</h1>
-              <MusicTabs category={category} tab={tab} />
             </div>
             <div className="count">{LABELS[tab][0]}</div>
           </div>
         </div>
+      </div>
+      {/* The tabs sit where every category has its tabs (D-094). */}
+      <div className="toolbar arcade-toolbar">
+        <MusicTabs category={category} tab={tab} />
       </div>
     </>
   );
