@@ -163,6 +163,10 @@ pub fn run() {
                     let _ = window.hide();
                     // The page pauses what's playing until the window comes back (D-076).
                     let _ = window.emit("app-hidden", ());
+                } else if window.label() == "main" && tray::confirm_close(window.app_handle()) {
+                    // Closing quits: the page asks first, so a stray click doesn't (D-080).
+                    api.prevent_close();
+                    let _ = window.emit("close-asked", ());
                 }
             }
         })
@@ -213,6 +217,7 @@ pub fn run() {
             library::item_set_review,
             library::later_set,
             library::resume_get,
+            tray::app_quit,
             smart::smart_lists,
             smart::smart_list_save,
             smart::smart_list_delete,

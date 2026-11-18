@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { Award, BookOpen, ChartColumn, ChevronLeft, ChevronRight, Delete, Gamepad2, Heart, House, LibraryBig, LogOut, MousePointer2, Pause, Play, Search, Settings2, SkipBack, SkipForward, Space, Sparkles, Star, X, Eye, Joystick, Music, VolumeOff } from "lucide-react";
+import { Award, BookOpen, ChartColumn, ChevronLeft, ChevronRight, Delete, Gamepad2, Heart, House, LibraryBig, LogOut, MousePointer2, Pause, Play, Search, Settings2, SkipBack, SkipForward, Space, Star, X, Eye, Joystick, Music, VolumeOff, Clapperboard } from "lucide-react";
 import { api, type ArcadeGame, type ItemCard } from "../../lib/api";
 import { exitBigPicture, focusFirst, moveFocus, takeIntro } from "../../lib/bigpicture";
 import { ambientEngine } from "../../lib/ambient/engine";
@@ -580,7 +580,7 @@ function Menu({ onClose }: { onClose: () => void }) {
           <span>Startup animation</span>
           <div className="bp-choice">
             <button type="button" className="bp-button" data-bp-focus aria-pressed={bp.intro} onClick={() => update((c) => ({ bigPicture: { ...c.bigPicture, intro: true } }))}>
-              <Sparkles size={22} /> On
+              <Clapperboard size={22} /> On
             </button>
             <button type="button" className="bp-button" data-bp-focus aria-pressed={!bp.intro} onClick={() => update((c) => ({ bigPicture: { ...c.bigPicture, intro: false } }))}>
               <X size={22} /> Off

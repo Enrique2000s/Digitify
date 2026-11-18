@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { Pencil, Plus, Sparkles, Trash } from "lucide-react";
+import { Pencil, Plus, Trash, ListFilter } from "lucide-react";
 import { api, errorText, type SmartList, type SmartQuery } from "../../lib/api";
 import { plural } from "../../lib/format";
 import { useCategories, useTags } from "../../lib/queries";
@@ -173,7 +173,7 @@ export function SmartListsPage() {
         <div className="page-header">
           <div className={`title-row${arriving ? " arriving" : ""}`}>
             <span className="title-badge">
-              <Sparkles size={26} strokeWidth={2.2} aria-hidden />
+              <ListFilter size={26} strokeWidth={2.2} aria-hidden />
             </span>
             <div>
               <h1 className="display">Smart lists</h1>
@@ -200,7 +200,7 @@ export function SmartListsPage() {
               {list.map((smart) => (
                 <li key={smart.id}>
                   <Link to="/smart/$id" params={{ id: String(smart.id) }} className="smart-card" data-blip>
-                    <Sparkles size={18} aria-hidden />
+                    <ListFilter size={18} aria-hidden />
                     <span>
                       <strong>{smart.name}</strong>
                       <span className="muted">{describeRules(smart.query, (k) => categories.data?.find((c) => c.key === k)?.name, (id) => tags.data?.find((t) => t.id === id)?.name)}</span>
@@ -260,7 +260,7 @@ export function SmartListPage() {
           </Link>
         }
         description={describeRules(smart.query, (k) => categories.data?.find((c) => c.key === k)?.name, (t) => tags.data?.find((x) => x.id === t)?.name)}
-        icon={<Sparkles size={26} strokeWidth={2.2} aria-hidden />}
+        icon={<ListFilter size={26} strokeWidth={2.2} aria-hidden />}
         handler={smart.query.category ? categories.data?.find((c) => c.key === smart.query.category)?.handler : undefined}
         actions={
           <>

@@ -16,6 +16,19 @@ pub fn close_to_tray(app: &AppHandle) -> bool {
         .unwrap_or(false)
 }
 
+/// Whether closing the window (with the tray off) asks first (D-080), on unless turned off.
+pub fn confirm_close(app: &AppHandle) -> bool {
+    app.try_state::<AppState>()
+        .and_then(|state| state.config.get().preferences.get("confirmClose").and_then(|v| v.as_bool()))
+        .unwrap_or(true)
+}
+
+/// Quits Digitify, after the page asked (D-080).
+#[tauri::command]
+pub fn app_quit(app: AppHandle) {
+    app.exit(0);
+}
+
 pub fn show_main(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         // Coming back from the tray, the page plays again what it paused (D-076).

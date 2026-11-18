@@ -22,7 +22,13 @@ export function ResumeNotice() {
   useEffect(() => {
     if (offered || !preferences.resumeOnOpen) return;
     offered = true;
-    const t = window.setTimeout(() => void api.resumeGet().then(setResume).catch(() => {}), 1_200);
+    // What's new (D-081), when it shows, goes first; the offer comes once it's closed.
+    let t = 0;
+    const ask = () => {
+      if (document.querySelector(".whats-new")) t = window.setTimeout(ask, 700);
+      else void api.resumeGet().then(setResume).catch(() => {});
+    };
+    t = window.setTimeout(ask, 2_000);
     return () => window.clearTimeout(t);
   }, [preferences.resumeOnOpen]);
 

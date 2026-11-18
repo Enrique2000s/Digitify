@@ -101,6 +101,22 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-082 · Settings in order
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose one page, well grouped)
+- One page, each panel with what belongs together: Appearance (style, palette, theme, accent, colors per section, animations, light mode); Library (the folder, its categories, then Views: Everything, same view everywhere, cover size and shapes, shelves; then Importing: when importing, watched folders); Window and startup (start with the computer, open maximized, keep in the tray, ask before closing, offer to continue, what's new after updates); Reading (night filter); Sound; Arcade; Online services; Keyboard; Backups and maintenance; About (version, What's new, notices). New icons replace the sparkle one everywhere (Smart lists: a filtered list; Big Picture's startup switch: a clapperboard; Your year: a calendar).
+
+### D-081 · What's new after an update
+- **Date:** 2026-11-18 · **Approved by:** project owner (version 0.2.0)
+- Digitify's version is now 0.2.0 (0.x until a first public release; bigger updates raise the middle number, small fixes the last). After an update, a clean window says what's new and what was fixed, in plain words, with the version and its date, once; "Don't show these after updates" turns it off (Settings › Window and startup turns it back on) and Settings › About shows it any time. A new library doesn't get it. The notes live in `src/lib/releaseNotes.ts`, one entry per version.
+
+### D-080 · Ask before closing
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- With "Keep running in the tray" off, the window's X (and Alt+F4) asks "Close Digitify?" before quitting, with "Don't ask again"; on by default, and switched in Settings › Window and startup. With the tray on it never asks, since closing only hides the window.
+
+### D-079 · Epic's new launcher
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- The new Epic Games launcher keeps its installs in `%LOCALAPPDATA%\com.epicgames.eglv2\installations.jsonl` (and titles, kinds and art in its `cache\prod\catalog-cache.json`) instead of the classic launcher's manifests in ProgramData. Arcade reads both, each game once, leaving out parts of another install, unfinished installs and anything that isn't a game; games start through the same `com.epicgames.launcher://` link, which the new launcher answers.
+
 ### D-078 · Now playing page
 - **Date:** 2026-11-18 · **Approved by:** project owner (chose a full page)
 - The music player gets a page of its own (`/now-playing`), like Big Picture's Now playing in the app's own look: the cover big over its blurred colors, title, artist and album, the favorite heart, the timeline, big controls, the volume and the sleep timer, and the queue: jump to a track, move it up or down, remove it, or stop and clear. The mini player's cover and title open it (it replaces the small Now playing panel); Back returns to where you were.

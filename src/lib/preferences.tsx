@@ -141,6 +141,10 @@ export interface Preferences {
   closeToTray: boolean;
   /** When the app opens, offer to continue the last thing left halfway (D-068). */
   resumeOnOpen: boolean;
+  /** Closing the window (tray off) asks first (D-080). */
+  confirmClose: boolean;
+  /** What's new after an update (D-081): shown unless turned off; `seen` is the last version shown. */
+  whatsNew: { show: boolean; seen: string | null };
   /** Library's Everything view (D-074): off, every item is in its own category only. */
   showEverything: boolean;
   /** The Library section opened last (D-075), opened again by the Library button. */
@@ -277,6 +281,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   closeToTray: false,
   resumeOnOpen: true,
   showEverything: false,
+  confirmClose: true,
+  whatsNew: { show: true, seen: null },
   libraryScope: null,
   nightFilter: { schedule: false, from: "21:00", to: "07:00", strength: 35 },
   goals: { finished: 0, read: 0, watch: 0, listen: 0, play: 0 },
@@ -534,6 +540,11 @@ function sanitize(raw: unknown): Preferences {
     closeToTray: pick("closeToTray", isBoolean),
     resumeOnOpen: pick("resumeOnOpen", isBoolean),
     showEverything: pick("showEverything", isBoolean),
+    confirmClose: pick("confirmClose", isBoolean),
+    whatsNew: (() => {
+      const w = ((raw as Raw<Preferences>)?.whatsNew ?? {}) as { show?: unknown; seen?: unknown };
+      return { show: typeof w.show === "boolean" ? w.show : true, seen: typeof w.seen === "string" ? w.seen : null };
+    })(),
     libraryScope: pick("libraryScope", (v) => v === null || (typeof v === "string" && v.length > 0 && v.length < 64)),
     nightFilter: sanitizeNightFilter((raw as Raw<Preferences>)?.nightFilter),
     goals: sanitizeGoals((raw as Raw<Preferences>)?.goals),

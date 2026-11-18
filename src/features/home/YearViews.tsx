@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog as RadixDialog } from "radix-ui";
-import { Award, CalendarDays, ChevronLeft, ChevronRight, Sparkles, X } from "lucide-react";
+import { Award, CalendarDays, ChevronLeft, ChevronRight, X, CalendarHeart } from "lucide-react";
 import { api, type Achievement } from "../../lib/api";
 import { plural } from "../../lib/format";
 import { timeLabel } from "./Stats";
@@ -240,7 +240,7 @@ export function YearReview({ year, open, onOpenChange }: { year: number; open: b
             <X size={20} />
           </RadixDialog.Close>
           <RadixDialog.Title className="year-title">
-            <Sparkles size={22} aria-hidden /> Your {year} in Digitify
+            <CalendarHeart size={22} aria-hidden /> Your {year} in Digitify
           </RadixDialog.Title>
           {!r ? (
             <div className="year-loading" aria-busy />

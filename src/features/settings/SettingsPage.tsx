@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { open } from "@tauri-apps/plugin-dialog";
-import { FolderOpen, Monitor, Moon, Settings, Sun } from "lucide-react";
+import { FolderOpen, Monitor, Moon, ScrollText, Settings, Sun } from "lucide-react";
+import { openWhatsNew } from "../app/AppDialogs";
 import { api, errorText, onLinux } from "../../lib/api";
 import { ACCENT_PRESETS } from "../../lib/color";
 import { LOOK_ACCENTS, PALETTE_ACCENTS, SECTION_COLOR_NAMES, SECTION_COLORS, usePreferences, type Look, type MotionChoice, type Palette, type ThemeChoice } from "../../lib/preferences";
@@ -241,11 +242,39 @@ export function SettingsPage() {
           >
             <Switch checked={preferences.lightMode} label="Light mode for slower computers" onChange={(lightMode) => update({ lightMode })} />
           </Setting>
+        </section>
+
+        <section className="panel">
+          <h2>Library</h2>
+          <Setting title="Library folder" text={status.data?.libraryPath ?? ""}>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" className="btn" onClick={() => api.libraryReveal().catch((e) => setError(errorText(e)))}>
+                <FolderOpen size={16} /> Open
+              </button>
+              <button type="button" className="btn" onClick={() => void switchLibrary()}>
+                Switch library…
+              </button>
+            </div>
+          </Setting>
+          {status.data?.cloudSync && (
+            <div className="notice warning">
+              This library is inside a {status.data.cloudSync} folder. Syncing a live database can corrupt it and uploads your
+              library; consider moving the folder outside {status.data.cloudSync}.
+            </div>
+          )}
+          <CategoriesPanel embedded />
+          <h3 className="settings-subhead">Views</h3>
+          <Setting title="Show Everything" text="A view of the whole library at once in Library, on Home, in Big Picture and in the command palette. Off, everything stays in its own category.">
+            <Switch checked={preferences.showEverything} label="Show Everything" onChange={(showEverything) => update({ showEverything })} />
+          </Setting>
           <Setting
             title="Same view in every category"
             text="The layout (grid, shelf, list, detailed, carousel) and the All / Digital / Online filter stay as you left them everywhere. Turn off to keep a different one per category."
           >
             <Switch checked={preferences.syncViews} label="Same view in every category" onChange={(syncViews) => update({ syncViews })} />
+          </Setting>
+          <Setting title="Cover size" text="Width of covers in the grid, shelf and detailed views.">
+            <CardSizeSlider value={preferences.cardSize} onChange={(cardSize) => update({ cardSize })} style={{ width: 180 }} />
           </Setting>
           <Setting title="Music covers" text="Square covers, or round CDs. Each track can also be set on its own page.">
             <div className="segmented" role="group" aria-label="Music covers">
@@ -278,56 +307,7 @@ export function SettingsPage() {
           <Setting title="Shelf view" text="What the shelves in the shelf view are made of.">
             <ShelfLookPicker />
           </Setting>
-          <StartWithComputer />
-          <Setting
-            title="Keep running in the tray when closed"
-            text="Closing the window leaves Digitify by the clock, quiet: the music and videos pause until you open it again, and then the music goes on. Its icon can still play, pause or skip, and quits Digitify from its menu. Started with your computer, it then starts there."
-          >
-            <Switch checked={preferences.closeToTray} label="Keep running in the tray when closed" onChange={(closeToTray) => update({ closeToTray })} />
-          </Setting>
-          <Setting title="Offer to continue when opening" text="When Digitify opens, a small notice offers the book, comic, film, series or game you left halfway lately.">
-            <Switch checked={preferences.resumeOnOpen} label="Offer to continue when opening" onChange={(resumeOnOpen) => update({ resumeOnOpen })} />
-          </Setting>
-          <NightFilterSetting />
-          <Setting title="Open maximized" text="Digitify fills the screen when it opens. Off, it opens at its regular size (it can still be maximized from the title bar).">
-            <Switch checked={preferences.startMaximized} label="Open maximized" onChange={(startMaximized) => update({ startMaximized })} />
-          </Setting>
-          <Setting title="Cover size" text="Width of covers in the grid, shelf and detailed views.">
-            <CardSizeSlider value={preferences.cardSize} onChange={(cardSize) => update({ cardSize })} style={{ width: 180 }} />
-          </Setting>
-        </section>
-
-        <CategoriesPanel />
-
-        <ArcadeSettings />
-
-        <SoundSettings />
-
-        <OnlineServicesPanel />
-
-        <KeyboardSettings />
-
-        <section className="panel">
-          <h2>Library</h2>
-          <Setting title="Library folder" text={status.data?.libraryPath ?? ""}>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button type="button" className="btn" onClick={() => api.libraryReveal().catch((e) => setError(errorText(e)))}>
-                <FolderOpen size={16} /> Open
-              </button>
-              <button type="button" className="btn" onClick={() => void switchLibrary()}>
-                Switch library…
-              </button>
-            </div>
-          </Setting>
-          {status.data?.cloudSync && (
-            <div className="notice warning">
-              This library is inside a {status.data.cloudSync} folder. Syncing a live database can corrupt it and uploads your
-              library; consider moving the folder outside {status.data.cloudSync}.
-            </div>
-          )}
-          <Setting title="Show Everything" text="A view of the whole library at once in Library, on Home, in Big Picture and in the command palette. Off, everything stays in its own category.">
-            <Switch checked={preferences.showEverything} label="Show Everything" onChange={(showEverything) => update({ showEverything })} />
-          </Setting>
+          <h3 className="settings-subhead">Importing</h3>
           <Setting title="When importing" text="Keep files where they are, or copy them into the library folder.">
             <select className="select" style={{ width: 230 }} value={preferences.importMode} onChange={(event) => update({ importMode: event.target.value as typeof preferences.importMode })}>
               <option value="ask">Ask every time</option>
@@ -339,6 +319,45 @@ export function SettingsPage() {
           {error && <div className="dialog-error">{error}</div>}
         </section>
 
+        <section className="panel">
+          <h2>Window and startup</h2>
+          <StartWithComputer />
+          <Setting title="Open maximized" text="Digitify fills the screen when it opens. Off, it opens at its regular size (it can still be maximized from the title bar).">
+            <Switch checked={preferences.startMaximized} label="Open maximized" onChange={(startMaximized) => update({ startMaximized })} />
+          </Setting>
+          <Setting
+            title="Keep running in the tray when closed"
+            text="Closing the window leaves Digitify by the clock, quiet: the music and videos pause until you open it again, and then the music goes on. Its icon can still play, pause or skip, and quits Digitify from its menu. Started with your computer, it then starts there."
+          >
+            <Switch checked={preferences.closeToTray} label="Keep running in the tray when closed" onChange={(closeToTray) => update({ closeToTray })} />
+          </Setting>
+          <Setting
+            title="Ask before closing"
+            text={preferences.closeToTray ? "Not needed while Digitify keeps running in the tray: closing the window only hides it." : "Closing the window quits Digitify, so it asks first, in case the X was clicked by mistake."}
+          >
+            <Switch checked={preferences.confirmClose} label="Ask before closing" onChange={(confirmClose) => update({ confirmClose })} />
+          </Setting>
+          <Setting title="Offer to continue when opening" text="When Digitify opens, a small notice offers the book, comic, film, series or game you left halfway lately.">
+            <Switch checked={preferences.resumeOnOpen} label="Offer to continue when opening" onChange={(resumeOnOpen) => update({ resumeOnOpen })} />
+          </Setting>
+          <Setting title="Show what's new after updates" text="After Digitify is updated, a short note says what's new and what was fixed. It can always be seen in About.">
+            <Switch checked={preferences.whatsNew.show} label="Show what's new after updates" onChange={(show) => update((c) => ({ whatsNew: { ...c.whatsNew, show } }))} />
+          </Setting>
+        </section>
+
+        <section className="panel">
+          <h2>Reading</h2>
+          <NightFilterSetting />
+        </section>
+
+        <SoundSettings />
+
+        <ArcadeSettings />
+
+        <OnlineServicesPanel />
+
+        <KeyboardSettings />
+
         <BackupsPanel />
 
         <section className="panel">
@@ -348,6 +367,11 @@ export function SettingsPage() {
             text="Works fully offline. No accounts, no telemetry, and nothing is uploaded. Helper engines: mpv (GPL) and FFmpeg (LGPL), run as separate programs. The ambient theme “Digitify Main Menu Music” is original to Digitify."
           >
             <span />
+          </Setting>
+          <Setting title="What's new" text="What changed in this version and the ones before: new things and fixes.">
+            <button type="button" className="btn" onClick={openWhatsNew}>
+              <ScrollText size={16} /> What's new
+            </button>
           </Setting>
           <Setting title="Third-party notices" text="Licenses for the bundled helper engines, fonts and libraries.">
             <button type="button" className="btn" onClick={() => api.noticesReveal().catch((e) => setError(errorText(e)))}>

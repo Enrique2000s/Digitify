@@ -19,12 +19,12 @@ import {
   PanelsTopLeft,
   Palette,
   Puzzle,
-  Sparkles,
   Trophy,
   SquarePlay,
   Tv,
   X,
   type LucideProps,
+  ListFilter,
 } from "lucide-react";
 import { artworkUrl, type Handler } from "../lib/api";
 
@@ -89,7 +89,7 @@ export const CATEGORY_ICONS: Record<string, ComponentType<LucideProps>> = {
   puzzle: Puzzle,
   mic: Mic,
   image: ImageIcon,
-  sparkles: Sparkles,
+  sparkles: ListFilter,
   trophy: Trophy,
   box: Box,
   play: SquarePlay,

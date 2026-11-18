@@ -1,7 +1,7 @@
 // Copies the Windows installer the build made (deep inside src-tauri\target\release\bundle\nsis)
 // to the project's own `installer` folder, so it's easy to find. Run after `tauri build`, or use
 // `npm run installer`, which builds and then copies.
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -22,5 +22,9 @@ if (!newest) {
   process.exit(1);
 }
 mkdirSync(out, { recursive: true });
+// Only the newest version's installer stays here, so an older one is never picked up by mistake.
+for (const name of readdirSync(out)) {
+  if (/^Digitify_.*-setup\.exe$/.test(name) && name !== newest.name) rmSync(join(out, name));
+}
 copyFileSync(join(built, newest.name), join(out, newest.name));
 console.log(`Installer copied to ${join(out, newest.name)}`);

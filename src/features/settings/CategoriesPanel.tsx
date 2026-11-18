@@ -8,7 +8,8 @@ import { arrayMove, useReorder } from "../../lib/reorder";
 import { CategoryIcon, Switch } from "../../components/common";
 
 /** Settings › Categories: order and visibility (Home tiles and section pills). Categories are fixed (D-039). */
-export function CategoriesPanel() {
+/** The categories' order and visibility; `embedded` puts it inside Settings › Library (D-082). */
+export function CategoriesPanel({ embedded = false }: { embedded?: boolean }) {
   const queryClient = useQueryClient();
   const categories = useCategories();
   const [error, setError] = useState<string | null>(null);
@@ -32,11 +33,11 @@ export function CategoriesPanel() {
   const order = useReorder((from, to) => void arrange(arrayMove(list, from, to)));
 
   return (
-    <section className="panel" id="categories">
-      <h2>Categories</h2>
+    <section className={embedded ? "settings-group" : "panel"} id="categories">
+      {embedded ? <h3 className="settings-subhead">Categories</h3> : <h2>Categories</h2>}
       <p className="hint" style={{ marginBottom: 10 }}>
         Drag categories (or use the arrows) to set the order of the tiles on Home and of the section buttons. Hidden categories keep their items, which still
-        appear in Everything and in search. The categories themselves are fixed, so the library keeps its structure.
+        appear in search (and in Everything, when it's on). The categories themselves are fixed, so the library keeps its structure.
       </p>
       <ul ref={order.listRef} className="category-list">
         {list.map((category, index) => (

@@ -747,6 +747,7 @@ export const api = {
   yearReview: (year: number) => invoke<YearReview>("year_review", { year }),
   achievementsList: () => invoke<Achievement[]>("achievements_list"),
   resumeGet: () => invoke<Resume | null>("resume_get"),
+  appQuit: () => invoke<void>("app_quit"),
   tags: () => invoke<Tag[]>("tags_list"),
   itemTagsSet: (id: number, names: string[]) => invoke<void>("item_tags_set", { id, names }),
   tagRename: (id: number, name: string) => invoke<void>("tag_rename", { id, name }),

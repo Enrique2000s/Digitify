@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Flame, Sparkles, Target } from "lucide-react";
+import { Flame, Target, CalendarHeart } from "lucide-react";
 import { AchievementsList, ActivityCalendar, YearReview } from "./YearViews";
 import { usePreferences, type Goals } from "../../lib/preferences";
 import { Dialog, Field } from "../../components/common";
@@ -236,7 +236,7 @@ export function StatsPanel() {
       <div className="calendar-row">
         <ActivityCalendar year={year} onYear={setYear} />
         <button type="button" className="btn year-button" onClick={() => setReview(true)}>
-          <Sparkles size={16} /> Your {year}
+          <CalendarHeart size={16} /> Your {year}
         </button>
       </div>
       <YearReview year={year} open={review} onOpenChange={setReview} />

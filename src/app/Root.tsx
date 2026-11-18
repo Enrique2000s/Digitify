@@ -25,6 +25,7 @@ import { CommandPalette } from "../features/palette/CommandPalette";
 import { FloatingVideo } from "../features/player/FloatingVideo";
 import { AchievementNotice } from "../features/home/YearViews";
 import { ResumeNotice } from "../features/home/ResumeNotice";
+import { CloseConfirm, WhatsNew } from "../features/app/AppDialogs";
 import { BigPictureCursor, BigPictureLauncher } from "../features/bigpicture/Launcher";
 
 /** Colors per section (D-054): tells the preferences which section is on screen. */
@@ -71,6 +72,7 @@ export function Root() {
         <MediaKeys />
         <SleepTimerRunner />
         <TrayHold />
+        <CloseConfirm />
         <SectionColor />
         <ArcadeSession />
         <BigPictureLauncher />
@@ -108,6 +110,7 @@ export function Root() {
                   <FloatingVideo />
                   <AchievementNotice />
                   <ResumeNotice />
+                  <WhatsNew />
                 </>
               )}
             </ImportUrlContext.Provider>

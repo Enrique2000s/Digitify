@@ -389,8 +389,34 @@ fn epic_manifests() -> PathBuf {
     std::env::var_os("ProgramData").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("C:\\ProgramData")).join("Epic\\EpicGamesLauncher\\Data\\Manifests")
 }
 
+/// The new Epic Games launcher's own folder (D-079): `%LOCALAPPDATA%\com.epicgames.eglv2`.
+#[cfg(windows)]
+fn epic_v2_dir() -> Option<PathBuf> {
+    std::env::var_os("LOCALAPPDATA").map(PathBuf::from).map(|local| local.join("com.epicgames.eglv2"))
+}
+
+/// Epic's games from both launchers: the classic one's manifests and the new one's install list
+/// (D-079), each game once.
 #[cfg(windows)]
 fn epic() -> (Option<String>, Vec<StoreGame>) {
+    let (classic_found, mut games) = epic_classic();
+    let mut found = classic_found;
+    if let Some(dir) = epic_v2_dir() {
+        if let Ok(list) = std::fs::read_to_string(dir.join("installations.jsonl")) {
+            let catalog = std::fs::read_to_string(dir.join("cache").join("prod").join("catalog-cache.json")).unwrap_or_default();
+            found = Some("Epic Games Launcher".into());
+            for game in epic_v2(&list, &catalog) {
+                if !games.iter().any(|g| g.key == game.key) {
+                    games.push(game);
+                }
+            }
+        }
+    }
+    (found, games)
+}
+
+#[cfg(windows)]
+fn epic_classic() -> (Option<String>, Vec<StoreGame>) {
     let dir = epic_manifests();
     let Ok(entries) = std::fs::read_dir(&dir) else { return (None, Vec::new()) };
     // The launcher's catalog cache, beside the manifests: its art for each game.
@@ -411,6 +437,74 @@ fn epic() -> (Option<String>, Vec<StoreGame>) {
 #[cfg(not(windows))]
 fn epic() -> (Option<String>, Vec<StoreGame>) {
     (None, Vec::new())
+}
+
+/// The new Epic launcher's games (D-079): `installations.jsonl` (a header line, then one line per
+/// install, written again as it changes, so the last line for an install wins) with titles, kinds
+/// and art from its `catalog-cache.json`. Parts of another install (Fortnite's modes), unfinished
+/// installs and anything the catalog doesn't call a game (soundtracks, add-ons) are left out.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn epic_v2(list: &str, catalog: &str) -> Vec<StoreGame> {
+    use serde_json::Value;
+    let catalog: Value = serde_json::from_str(catalog).unwrap_or(Value::Null);
+    let items = catalog.get("items");
+    let mut installs: Vec<(String, Value)> = Vec::new();
+    for line in list.lines() {
+        let Ok(entry) = serde_json::from_str::<Value>(line.trim()) else { continue };
+        let Some(id) = entry.get("installationId").and_then(Value::as_str) else { continue };
+        let id = id.to_string();
+        if let Some(at) = installs.iter().position(|(known, _)| *known == id) {
+            installs[at].1 = entry;
+        } else {
+            installs.push((id, entry));
+        }
+    }
+    let mut out: Vec<StoreGame> = Vec::new();
+    for (_, entry) in installs {
+        let s = |k: &str| entry.get(k).and_then(Value::as_str).map(str::to_string);
+        if entry.get("complete").and_then(Value::as_bool) == Some(false) {
+            continue;
+        }
+        if s("parentInstallationId").is_some_and(|p| !p.is_empty()) {
+            continue;
+        }
+        let (Some(app), Some(namespace), Some(item), Some(dir)) = (s("artifactId"), s("namespace"), s("itemId"), s("dir")) else { continue };
+        let info = items.and_then(|items| items.get(&item)).and_then(|cached| cached.get("item"));
+        let categories: Vec<&str> = info
+            .and_then(|i| i.get("categories"))
+            .and_then(Value::as_array)
+            .map(|list| list.iter().filter_map(|c| c.get("path").and_then(Value::as_str)).collect())
+            .unwrap_or_default();
+        if !categories.is_empty() && !categories.contains(&"games") {
+            continue;
+        }
+        if info.and_then(|i| i.get("mainGameItem")).is_some_and(|main| !main.is_null()) {
+            continue; // add-on content
+        }
+        let images = info.and_then(|i| i.get("keyImages")).and_then(Value::as_array).cloned().unwrap_or_default();
+        let image = |kind: &str| images.iter().find(|i| i.get("type").and_then(Value::as_str) == Some(kind)).and_then(|i| i.get("url")?.as_str().map(str::to_string));
+        let folder = PathBuf::from(&dir);
+        let title = info
+            .and_then(|i| i.get("title"))
+            .and_then(Value::as_str)
+            .map(|t| t.trim_end_matches(['\u{ae}', '\u{2122}']).trim().to_string())
+            .filter(|t| !t.is_empty())
+            .or_else(|| folder.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .unwrap_or_else(|| app.clone());
+        if out.iter().any(|g| g.key == app) {
+            continue;
+        }
+        out.push(StoreGame {
+            store: Store::Epic,
+            title,
+            install_dir: folder,
+            launch: format!("com.epicgames.launcher://apps/{namespace}%3A{item}%3A{app}?action=launch&silent=true"),
+            cover: None,
+            cover_url: image("DieselGameBoxTall").or_else(|| image("DieselGameBox")),
+            key: app,
+        });
+    }
+    out
 }
 
 /// Epic's catalog cache (`catcache.bin`, Base64 of a JSON list): each app's tall cover, the one the
@@ -713,6 +807,28 @@ pub fn steam_cover_urls(id: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn epic_new_launcher_lists_its_games_once() {
+        let list = r#"{"version":1,"writtenAt":"2026-11-18T17:18:05Z","entries":4}
+{"installationId":"A","complete":true,"dir":"D:\\Epic Games\\rocketleague","namespace":"ns1","itemId":"rl","artifactId":"Sugar"}
+{"installationId":"B","complete":true,"dir":"D:\\Epic Games\\Fortnite","namespace":"fn","itemId":"mode","artifactId":"94bc","parentInstallationId":"C"}
+{"installationId":"C","complete":true,"dir":"D:\\Epic Games\\Fortnite","namespace":"fn","itemId":"fort","artifactId":"Fortnite"}
+{"installationId":"C","complete":true,"dir":"D:\\Epic Games\\Fortnite","namespace":"fn","itemId":"fort","artifactId":"Fortnite"}
+{"installationId":"D","complete":false,"dir":"D:\\Epic Games\\Half","namespace":"x","itemId":"half","artifactId":"Half"}
+{"installationId":"E","complete":true,"dir":"D:\\Epic Games\\Sound","namespace":"y","itemId":"ost","artifactId":"Ost"}"#;
+        let catalog = r#"{"items":{
+            "rl":{"item":{"title":"Rocket League\u00ae","categories":[{"path":"games"}],"mainGameItem":null,"keyImages":[{"type":"DieselGameBoxTall","url":"https://x/rl.jpg"}]}},
+            "fort":{"item":{"title":"Fortnite","categories":[{"path":"games"}],"keyImages":[]}},
+            "ost":{"item":{"title":"A Soundtrack","categories":[{"path":"addons"}],"mainGameItem":{"id":"z"}}}
+        }}"#;
+        let games = epic_v2(list, catalog);
+        let titles: Vec<&str> = games.iter().map(|g| g.title.as_str()).collect();
+        assert_eq!(titles, ["Rocket League", "Fortnite"]);
+        assert_eq!(games[0].cover_url.as_deref(), Some("https://x/rl.jpg"));
+        assert!(games[0].launch.starts_with("com.epicgames.launcher://apps/ns1%3Arl%3ASugar"));
+    }
+
     use super::*;
 
     #[test]
