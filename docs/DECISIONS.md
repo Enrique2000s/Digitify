@@ -101,6 +101,22 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-073 · Photos at one height
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose justified rows)
+- Every photo card carries its own proportions (width / height, upright, kept between 0.4 and 2.6), from the core (`aspect` on the card, `library_query_aspects` for a whole view). In Grid a view of photos is laid out in justified rows: each full row fills the width and its photos share one height, none cropped; the last row keeps the usual height. On shelves photos stand at the same height as the collections beside them and each shelf holds as many as fit; Detailed, Carousel, Home's rows and Big Picture's tiles draw each photo whole at their one height.
+
+### D-072 · Now playing in Big Picture
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- A full-screen Big Picture screen for the music: the cover big over its own blurred colors, title and artist, the timeline, big controls (shuffle, previous, play/pause, next, repeat) and Up next, whose tracks can be picked. It opens from the music in the top bar and when an album or song is played from Big Picture. LB/RB skip tracks, LT/RT move 10 seconds, X plays or pauses.
+
+### D-071 · Players driven like a console in Big Picture
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose buttons with the D-pad over the cursor)
+- The video player, the readers and the photo viewer opened from Big Picture wear its look: dark glass bars sized for the TV, big round buttons, the clock, the button hints, and its bright ring on what's selected. With the bars away the controller's quick buttons act at once (X plays or pauses, the bumpers skip or zoom, the D-pad turns pages or seeks). A (or Menu) brings the bars and selects the main button; the D-pad moves from button to button, A presses, left and right move a slider (the timeline too) or change a list, B closes an open menu or puts the bars away, and B with the bars away goes back. Moving and pressing tick softly with the interface sounds. In Big Picture's cursor mode they work as before, with the cursor.
+
+### D-070 · Big Picture's startup
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose the logo with light and a chord)
+- Entering Big Picture plays a short startup: the Digitify logo draws itself in the accent color with a glow, a sweep of light crosses it, "Digitify · Big Picture" comes in, and an original sound made by the app (a rising whoosh opening into a soft chord with a sparkle, Web Audio, nothing recorded or licensed) plays with it; about three seconds, then Home arrives with its own animation. Any button, key or click skips it; without animations it's a brief still. Big Picture's menu › Startup animation turns it off (on by default). Screens in Big Picture also arrive softly, and moving the selection ticks.
+
 ### D-069 · Night reading filter
 - **Date:** 2026-11-18 · **Approved by:** project owner (chose a button plus an optional schedule)
 - The readers (books, comics, manga, PDFs) have a moon-and-sun button that lays a warm tone over the pages, under the bars. Settings › Appearance › Night reading filter sets how warm (10–80%) and an optional schedule ("On by itself from 21:00 to 07:00", off by default; it can run past midnight). The button wins over the schedule until the app closes.

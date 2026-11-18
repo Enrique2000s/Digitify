@@ -106,6 +106,14 @@ pub(crate) fn clean(text: Option<String>) -> Option<String> {
 // Categories
 
 /// A photo's card shape from its proportions (D-033): wide ones landscape, tall ones poster.
+/// A photo's width / height, kept between 0.4 and 2.6 (a panorama is shown cropped to that), or
+/// NULL when it isn't known (D-073).
+macro_rules! photo_aspect {
+    () => {
+        "(SELECT max(0.4, min(2.6, CAST(json_extract(i.metadata, '$.width') AS REAL) / json_extract(i.metadata, '$.height')))            WHERE json_extract(i.metadata, '$.height') > 0 AND json_extract(i.metadata, '$.width') > 0)"
+    };
+}
+
 macro_rules! photo_shape {
     () => {
         "(CASE WHEN json_extract(i.metadata, '$.width') >= 1.2 * json_extract(i.metadata, '$.height') THEN 'landscape' \
@@ -231,6 +239,8 @@ pub struct ItemCard {
     pub source: Option<String>,
     /// A film's disc format (`dvd`, `bluray`, `uhd-bluray`, `bluray-3d`), for the case band.
     pub disc_format: Option<String>,
+    /// A photo's own proportions (width / height, upright), so it's drawn whole at any height (D-073).
+    pub aspect: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -272,6 +282,24 @@ pub async fn library_query_shapes(state: State<'_, AppState>, params: QueryParam
     .await
 }
 
+/// Each matching item's proportions in view order (D-073): a photo's own width / height, or 0 for
+/// anything else (which takes its kind's cover shape). The grid lays photos out in justified rows.
+#[tauri::command]
+pub async fn library_query_aspects(state: State<'_, AppState>, params: QueryParams) -> AppResult<Vec<f32>> {
+    with_library(&state, move |library| {
+        library.db.with(|conn| {
+            let QueryParts { joins, filter, args, order, .. } = QueryParts::new(&params);
+            let aspect = photo_aspect!();
+            let mut stmt = conn.prepare(&format!(
+                "SELECT CASE WHEN (SELECT c.handler FROM categories c WHERE c.id = i.category_id) = 'image' THEN coalesce({aspect}, 0) ELSE 0 END                  FROM items i{joins}{filter} ORDER BY {order} LIMIT 100000"
+            ))?;
+            let out = stmt.query_map(params_from_iter(args.iter()), |row| row.get::<_, f64>(0).map(|a| a as f32))?.collect::<Result<_, _>>()?;
+            Ok(out)
+        })
+    })
+    .await
+}
+
 /// Every id matching `params`, in view order (for "Select all"). Capped at 100,000.
 #[tauri::command]
 pub async fn library_query_ids(state: State<'_, AppState>, params: QueryParams) -> AppResult<Vec<i64>> {
@@ -306,7 +334,7 @@ const CARD_COLUMNS: &str = concat!("i.id, i.title, \
     (SELECT pr.fraction FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0), \
     coalesce(json_extract(i.metadata, '$.coverShape'), CASE WHEN c.handler = 'image' THEN ", photo_shape!(), " END),     EXISTS (SELECT 1 FROM online_sources o WHERE o.item_id = i.id AND o.downloaded = 0), \
     (SELECT o.service FROM online_sources o WHERE o.item_id = i.id AND o.provider <> 'web'), \
-    json_extract(i.metadata, '$.discFormat')");
+    json_extract(i.metadata, '$.discFormat'),     CASE WHEN c.handler = 'image' THEN ", photo_aspect!(), " END");
 
 fn card(row: &Row<'_>) -> rusqlite::Result<ItemCard> {
     let formats: Option<String> = row.get(9)?;
@@ -333,6 +361,7 @@ fn card(row: &Row<'_>) -> rusqlite::Result<ItemCard> {
         online: row.get::<_, i64>(15)? != 0,
         source: row.get(16)?,
         disc_format: row.get(17)?,
+        aspect: row.get(18)?,
     })
 }
 
@@ -1608,6 +1637,19 @@ mod tests {
         assert_eq!(shape(&conn, song), None);
         assert!(crate::organize::apply_bulk(&mut conn, &[a], &[crate::organize::BulkOp::SetCoverShape { shape: Some("star".into()) }]).is_err());
     }
+    #[test]
+    fn photos_carry_their_own_proportions() {
+        let conn = crate::db::memory();
+        let pictures = "(SELECT id FROM categories WHERE key = 'pictures')";
+        for (title, w, h) in [("Wide", 4000, 3000), ("Tall", 100, 1000), ("Unknown", 0, 0)] {
+            conn.execute(&format!("INSERT INTO items (category_id, title, sort_title, metadata) VALUES ({pictures}, ?1, ?1, json_object('width', ?2, 'height', ?3))"), params![title, w, h]).unwrap();
+        }
+        let cards = cards_by_ids(&conn, &[1, 2, 3]).unwrap();
+        assert!((cards[0].aspect.unwrap() - 4.0 / 3.0).abs() < 1e-6);
+        assert_eq!(cards[1].aspect, Some(0.4), "a very tall photo is kept to 0.4");
+        assert_eq!(cards[2].aspect, None);
+    }
+
     #[test]
     fn resume_offers_the_newest_unfinished_thing() {
         let conn = crate::db::memory();

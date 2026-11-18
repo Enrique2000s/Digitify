@@ -165,7 +165,8 @@ export interface Preferences {
   /** The music category's tab, opened again next time. */
   musicTab: string;
   /** Big Picture (D-025): moving with the selection or with a cursor, and the cursor's speed. */
-  bigPicture: { navigation: "focus" | "cursor"; cursorSpeed: number };
+  /** Big Picture: how to move around, the cursor's speed, and its startup animation (D-070). */
+  bigPicture: { navigation: "focus" | "cursor"; cursorSpeed: number; intro: boolean };
   shelfStyle: "covers" | "spines";
   shelfLook: ShelfLook;
   importMode: "ask" | ImportMode;
@@ -282,7 +283,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   sorts: {},
   coverShapes: { audio: "square", videos: "landscape" },
   musicTab: "tracks",
-  bigPicture: { navigation: "focus", cursorSpeed: 1000 },
+  bigPicture: { navigation: "focus", cursorSpeed: 1000, intro: true },
   shelfStyle: "covers",
   shelfLook: "breeze",
   importMode: "ask",
@@ -373,8 +374,9 @@ function sanitizeVolumes(raw: unknown): Preferences["volumes"] {
 }
 
 function sanitizeBigPicture(raw: unknown): Preferences["bigPicture"] {
-  const value = (raw && typeof raw === "object" ? raw : {}) as { navigation?: unknown; cursorSpeed?: unknown };
+  const value = (raw && typeof raw === "object" ? raw : {}) as { navigation?: unknown; cursorSpeed?: unknown; intro?: unknown };
   return {
+    intro: typeof value.intro === "boolean" ? value.intro : true,
     navigation: value.navigation === "cursor" ? "cursor" : "focus",
     cursorSpeed: typeof value.cursorSpeed === "number" && value.cursorSpeed >= 300 && value.cursorSpeed <= 3000 ? value.cursorSpeed : 1000,
   };
@@ -487,9 +489,11 @@ export const SHAPE_ASPECT: Record<CoverShape | "book", number> = { square: 1, di
 /** The cover shape of an item, with the user's defaults. */
 export function useCoverShape() {
   const { preferences } = usePreferences();
-  return (item: { handler: string; category?: string | null; coverShape?: CoverShape | null; collection?: unknown }) => {
+  return (item: { handler: string; category?: string | null; coverShape?: CoverShape | null; collection?: unknown; aspect?: number | null }) => {
     const shape = coverShapeOf(item, preferences.coverShapes);
-    return { shape, aspect: SHAPE_ASPECT[shape] };
+    // A photo keeps its own proportions, so photos side by side share one height (D-073).
+    const own = item.handler === "image" && !item.collection && item.aspect && item.aspect > 0 ? item.aspect : null;
+    return { shape, aspect: own ?? SHAPE_ASPECT[shape] };
   };
 }
 

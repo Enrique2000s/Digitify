@@ -8,7 +8,8 @@ import { accentVariables } from "../../lib/color";
 import { usePreferences, type ReaderPreferences } from "../../lib/preferences";
 import { libraryChanged } from "../../lib/queries";
 import { useActivity } from "../../lib/activity";
-import { READER_PAD, useControllerShortcuts } from "../bigpicture/Launcher";
+import { READER_PAD } from "../bigpicture/Launcher";
+import { BpClock, PlayerHints, useButtonNames, usePlayerController, usePlayerHints } from "../bigpicture/consoleControls";
 import { actionFor, hint, isTyping } from "../../lib/shortcuts";
 import { WindowButtons } from "../../components/TitleBar";
 import { useBigPicture } from "../../lib/bigpicture";
@@ -278,8 +279,16 @@ export function PageReader({ book, startPage, onClose, next: nextVolume, onNext 
   // Progress is saved once the reader moves; just opening a book doesn't change where it stopped.
   const reached = scroll ? page : view[view.length - 1];
   const nudge = useActivity(book.itemId, "read", true);
-  useControllerShortcuts(READER_PAD);
+  // In Big Picture the controller turns pages, zooms and closes, and A brings the controls to move
+  // through like a console (D-071).
+  const driving = usePlayerController(root, READER_PAD, poke);
   const bigPicture = useBigPicture();
+  const buttons = useButtonNames();
+  const hints = usePlayerHints(driving, [
+    { keys: ["◀", "▶"], label: "Turn pages" },
+    { keys: ["LT", "RT"], label: "Zoom" },
+    { keys: [buttons.y], label: "Bookmark" },
+  ]);
   useEffect(nudge, [reached, nudge]);
   const latest = useRef(reached);
   const moved = useRef(false);
@@ -371,7 +380,7 @@ export function PageReader({ book, startPage, onClose, next: nextVolume, onNext 
     }
   }, [scroll, views, viewIndex, pages, box, settings.fit, zoom, book.versionId, dpr]);
 
-  const showBars = chrome || panel !== null;
+  const showBars = chrome || driving || panel !== null;
   const chapter = chapterAt(chapters, scroll ? page : view[0]);
   const pagesLabel =
     scroll || view.length === 1 ? `Page ${page + 1} of ${total}` : `Pages ${view[0] + 1}–${view[view.length - 1] + 1} of ${total}`;
@@ -506,6 +515,7 @@ export function PageReader({ book, startPage, onClose, next: nextVolume, onNext 
           </button>
         </div>
         <span className="appbar-drag" data-tauri-drag-region />
+        {bigPicture && <BpClock />}
         <BookmarksMenu
           itemId={book.itemId}
           container={root.current}
@@ -546,10 +556,11 @@ export function PageReader({ book, startPage, onClose, next: nextVolume, onNext 
           style={{ "--fill": `${sliderFill}%` } as CSSProperties}
           onChange={(event) => go(Number(event.target.value) - 1)}
         />
-        <button type="button" className="round-btn" aria-label={rtl ? "Previous page" : "Next page"} onClick={rtl ? prev : next}>
+        <button type="button" className="round-btn" data-bp-autofocus aria-label={rtl ? "Previous page" : "Next page"} onClick={rtl ? prev : next}>
           <ChevronRight size={19} strokeWidth={2.6} />
         </button>
       </footer>
+      <PlayerHints shown={showBars} hints={hints} />
       {atEnd && nextVolume && onNext && (
         <button type="button" className="btn btn-primary next-volume" onClick={onNext}>
           Next: {nextVolume.label ? `${nextVolume.label} · ` : ""}

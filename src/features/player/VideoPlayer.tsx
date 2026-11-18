@@ -34,7 +34,8 @@ import { libraryChanged, useItem } from "../../lib/queries";
 import { Cover } from "../../components/common";
 import { useCoverShape } from "../../lib/preferences";
 import { useActivity } from "../../lib/activity";
-import { useControllerShortcuts, VIDEO_PAD } from "../bigpicture/Launcher";
+import { VIDEO_PAD } from "../bigpicture/Launcher";
+import { BpClock, PlayerHints, useButtonNames, usePlayerController, usePlayerHints } from "../bigpicture/consoleControls";
 import { WindowButtons } from "../../components/TitleBar";
 import { useBigPicture } from "../../lib/bigpicture";
 import { SeekBar } from "../../components/SeekBar";
@@ -473,9 +474,16 @@ function VideoPlayer({ source }: { source: Source }) {
   }, [resumed]);
 
   useActivity(target?.itemId, "watch", !!target && !playback.paused && !playback.ended);
-  // In Big Picture the controller plays, seeks, changes the volume and closes; A also pokes the controls.
-  useControllerShortcuts(VIDEO_PAD);
+  // In Big Picture the controller plays, seeks, changes the volume and closes, and A brings the
+  // controls to move through like a console (D-071).
+  const driving = usePlayerController(root, VIDEO_PAD, poke);
   const bigPicture = useBigPicture();
+  const buttons = useButtonNames();
+  const hints = usePlayerHints(driving, [
+    { keys: [buttons.x], label: "Play / pause" },
+    { keys: ["LB", "RB"], label: "Skip" },
+    { keys: ["RT"], label: "Next episode" },
+  ]);
 
   // A seek or a wait for data that takes a moment shows a spinner, so it's clear the click landed.
   const waiting = playback.seeking || playback.buffering;
@@ -555,7 +563,7 @@ function VideoPlayer({ source }: { source: Source }) {
   const duration = playback.duration;
   const audio = playback.tracks.filter((t) => t.type === "audio");
   const subs = playback.tracks.filter((t) => t.type === "sub");
-  const showBars = shown || playback.paused || menu !== null || !target || countdown !== null;
+  const showBars = shown || driving || playback.paused || menu !== null || !target || countdown !== null;
   // What the Linux video window keeps clear of (see `place`), read when it's placed again.
   latestLayout.current = { shown: showBars, menu: menu !== null, ready: ready && !leaving };
   useEffect(() => {
@@ -637,6 +645,7 @@ function VideoPlayer({ source }: { source: Source }) {
           {target?.episode && <span>{target.episode}</span>}
         </div>
         <span className="appbar-drag" data-tauri-drag-region />
+        {bigPicture && <BpClock />}
         {target && target.itemId !== 0 && !fullscreen && (
           <button type="button" className="round-btn" aria-label="Keep watching in a corner" title="Keep watching in a corner while you browse" onClick={toCorner}>
             <PictureInPicture2 size={18} strokeWidth={2.4} />
@@ -657,6 +666,7 @@ function VideoPlayer({ source }: { source: Source }) {
             <button
               type="button"
               className="round-btn watch-play"
+              data-bp-autofocus
               aria-label={playback.ended ? "Watch again" : playback.paused ? "Play" : "Pause"}
               title={playback.ended ? "Watch again" : undefined}
               onClick={togglePlay}
@@ -733,6 +743,7 @@ function VideoPlayer({ source }: { source: Source }) {
           </div>
         </footer>
       )}
+      <PlayerHints shown={showBars} hints={hints} />
 
       {resumed && target && (
         <div className="ebook-link watch-note" role="status">

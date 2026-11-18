@@ -43,7 +43,16 @@ export function useBigPicture(): boolean {
   );
 }
 
+/** Set when Big Picture is entered, so its page plays the startup animation once (D-070). */
+let introPending = false;
+export function takeIntro(): boolean {
+  const pending = introPending;
+  introPending = false;
+  return pending;
+}
+
 export async function enterBigPicture(go: () => void) {
+  introPending = !active;
   set(true);
   go();
   await getCurrentWindow().setFullscreen(true).catch(() => {});
@@ -65,8 +74,8 @@ function visible(element: HTMLElement): boolean {
 }
 
 /** The selectable elements inside `root`. */
-export function focusables(root: ParentNode): HTMLElement[] {
-  return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(visible);
+export function focusables(root: ParentNode, selector = FOCUSABLE): HTMLElement[] {
+  return [...root.querySelectorAll<HTMLElement>(selector)].filter(visible);
 }
 
 function select(element: HTMLElement) {
@@ -85,12 +94,13 @@ export function focusFirst(root: ParentNode) {
  * Moves the selection to the nearest selectable element in a direction: the closest one ahead,
  * preferring those in line with the current one.
  */
-export function moveFocus(root: HTMLElement, direction: "up" | "down" | "left" | "right"): boolean {
-  const list = focusables(root);
-  const current = document.activeElement instanceof HTMLElement && root.contains(document.activeElement) && document.activeElement.matches(FOCUSABLE) ? document.activeElement : null;
+export function moveFocus(root: HTMLElement, direction: "up" | "down" | "left" | "right", selector = FOCUSABLE): boolean {
+  const list = focusables(root, selector);
+  const current = document.activeElement instanceof HTMLElement && root.contains(document.activeElement) && document.activeElement.matches(selector) ? document.activeElement : null;
   if (!current) {
-    focusFirst(root);
-    return true;
+    const first = list.find((e) => e.hasAttribute("data-bp-autofocus")) ?? list[0];
+    if (first) select(first);
+    return !!first;
   }
   const from = current.getBoundingClientRect();
   const cx = from.left + from.width / 2;

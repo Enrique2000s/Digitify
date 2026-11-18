@@ -68,5 +68,7 @@ export const VIDEO_PAD: Partial<Record<PadAction, ShortcutId>> = {
 export function BigPictureCursor() {
   const active = useBigPicture();
   const { preferences } = usePreferences();
-  return active ? <Cursor speed={preferences.bigPicture.cursorSpeed} autoHide /> : null;
+  // With selection (the console way, D-071) the controller moves through the controls and the round
+  // cursor is the mouse's alone.
+  return active ? <Cursor speed={preferences.bigPicture.cursorSpeed} autoHide mouseOnly={preferences.bigPicture.navigation === "focus"} /> : null;
 }

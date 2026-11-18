@@ -169,6 +169,63 @@ class AmbientEngine {
     this.scheduleIdle();
   }
 
+  /**
+   * Big Picture's startup sound (D-070), original and made here: a rising whoosh of filtered noise
+   * that opens into a soft major-ninth chord with a little sparkle on top, about three seconds.
+   */
+  introSound() {
+    const { ctx, synth, ui } = this.audioGraph();
+    if (ctx.state !== "running") void ctx.resume().catch(() => {});
+    const t = ctx.currentTime + 0.03;
+    // The whoosh: noise through a band-pass that sweeps up, swelling then falling away.
+    const length = Math.floor(ctx.sampleRate * 1.6);
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const band = ctx.createBiquadFilter();
+    band.type = "bandpass";
+    band.Q.value = 1.4;
+    band.frequency.setValueAtTime(260, t);
+    band.frequency.exponentialRampToValueAtTime(3600, t + 1.05);
+    const swell = ctx.createGain();
+    swell.gain.setValueAtTime(0.0001, t);
+    swell.gain.exponentialRampToValueAtTime(0.22, t + 0.85);
+    swell.gain.exponentialRampToValueAtTime(0.0001, t + 1.55);
+    noise.connect(band).connect(swell).connect(ui);
+    noise.start(t);
+    noise.stop(t + 1.6);
+    noise.onended = () => [noise, band, swell].forEach((n) => n.disconnect());
+    // A small echo so the chord rings in the room.
+    const echo = ctx.createDelay(1);
+    echo.delayTime.value = 0.23;
+    const feedback = ctx.createGain();
+    feedback.gain.value = 0.32;
+    const wet = ctx.createGain();
+    wet.gain.value = 0.35;
+    echo.connect(feedback).connect(echo);
+    echo.connect(wet).connect(ui);
+    const out = ctx.createGain();
+    out.connect(ui);
+    out.connect(echo);
+    window.setTimeout(() => [echo, feedback, wet, out].forEach((n) => n.disconnect()), 6000);
+    // The chord: D major add 9, warm low notes first, then the top.
+    const hit = t + 0.9;
+    const pad = { attack: 0.06, decay: 2.6, lowpass: 3200, partials: [[1, 1], [2, 0.25], [3, 0.08]] as [number, number][] };
+    [
+      [38, 0.07],
+      [50, 0.09],
+      [57, 0.08],
+      [62, 0.07],
+      [66, 0.06],
+      [76, 0.045],
+    ].forEach(([midi, gain], index) => synth.voice(hit + index * 0.018, midi, { ...pad, gain }, out));
+    // The sparkle: a quick rising arpeggio high up.
+    [81, 86, 90, 93].forEach((midi, index) => synth.voice(hit + 0.12 + index * 0.075, midi, { gain: 0.03, attack: 0.005, decay: 0.5 }, out));
+    this.scheduleIdle();
+  }
+
   private customActive(): boolean {
     const { play, mode } = this.settings;
     return play && mode === "custom" && this.tracks.length > 0 && !this.state.failed;

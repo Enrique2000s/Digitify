@@ -8,7 +8,8 @@ import { accentVariables } from "../../lib/color";
 import { EBOOK_SIZES, EBOOK_SPACINGS, usePreferences, type EbookPreferences } from "../../lib/preferences";
 import { libraryChanged } from "../../lib/queries";
 import { useActivity } from "../../lib/activity";
-import { READER_PAD, useControllerShortcuts } from "../bigpicture/Launcher";
+import { READER_PAD } from "../bigpicture/Launcher";
+import { BpClock, PlayerHints, useButtonNames, usePlayerController, usePlayerHints } from "../bigpicture/consoleControls";
 import { actionFor, hint, isTyping } from "../../lib/shortcuts";
 import { Switch } from "../../components/common";
 import { WindowButtons } from "../../components/TitleBar";
@@ -141,8 +142,16 @@ export function EbookReader({ book, onClose, next: nextVolume, onNext }: {
   const viewRef = useRef<View | null>(null);
   // Page turns inside the book count as reading (its input doesn't reach the window).
   const nudgeRef = useRef(useActivity(book.itemId, "read", true));
-  useControllerShortcuts(READER_PAD);
+  // In Big Picture the controller turns pages, zooms and closes, and A brings the controls to move
+  // through like a console (D-071).
+  const driving = usePlayerController(root, READER_PAD, poke);
   const bigPicture = useBigPicture();
+  const buttons = useButtonNames();
+  const hints = usePlayerHints(driving, [
+    { keys: ["◀", "▶"], label: "Turn pages" },
+    { keys: ["LT", "RT"], label: "Zoom" },
+    { keys: [buttons.y], label: "Bookmark" },
+  ]);
   const [state, setState] = useState<{ status: "opening" | "ready" } | { status: "failed"; message: string }>({ status: "opening" });
   const [toc, setToc] = useState<TocItem[]>([]);
   const [rtl, setRtl] = useState(false);
@@ -370,7 +379,7 @@ export function EbookReader({ book, onClose, next: nextVolume, onNext }: {
   const fraction = location?.fraction ?? 0;
   const percent = Math.round(fraction * 100);
   const chapter = location?.tocItem?.label?.trim();
-  const showBars = shown || panel !== null;
+  const showBars = shown || driving || panel !== null;
   const goTo = (href: string) => {
     setPanel(null);
     void viewRef.current?.goTo(href);
@@ -437,6 +446,7 @@ export function EbookReader({ book, onClose, next: nextVolume, onNext }: {
           ))}
         </div>
         <span className="appbar-drag" data-tauri-drag-region />
+        {bigPicture && <BpClock />}
         <BookmarksMenu
           itemId={book.itemId}
           container={root.current}
@@ -566,10 +576,11 @@ export function EbookReader({ book, onClose, next: nextVolume, onNext }: {
           onChange={(event) => void viewRef.current?.goToFraction(Number(event.target.value) / 1000)}
         />
         <span className="ebook-percent">{percent}%</span>
-        <button type="button" className="round-btn" aria-label={rtl ? "Previous page" : "Next page"} disabled={!ready} onClick={() => void viewRef.current?.goRight()}>
+        <button type="button" className="round-btn" data-bp-autofocus aria-label={rtl ? "Previous page" : "Next page"} disabled={!ready} onClick={() => void viewRef.current?.goRight()}>
           <ChevronRight size={19} strokeWidth={2.6} />
         </button>
       </footer>
+      <PlayerHints shown={showBars} hints={hints} />
 
       {atEnd && nextVolume && onNext && (
         <button type="button" className="btn btn-primary next-volume" onClick={onNext}>

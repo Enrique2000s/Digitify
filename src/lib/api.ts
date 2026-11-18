@@ -59,6 +59,8 @@ export interface ItemCard {
   source: string | null;
   /** A film's disc format (`dvd`, `bluray`, `uhd-bluray`, `bluray-3d`), for the case band. */
   discFormat: string | null;
+  /** A photo's own proportions (width / height), so it's drawn whole at any height (D-073). */
+  aspect?: number | null;
   /** Set when this stands for a collection among a view's items (D-030); its id is then negative. */
   collection?: { id: number; covers: TileCover[]; itemCount: number; childCount: number };
 }
@@ -732,6 +734,7 @@ export const api = {
   queryIds: (params: Omit<QueryParams, "offset" | "limit">) => invoke<number[]>("library_query_ids", { params: { ...params, offset: 0, limit: 0 } }),
   blurbs: (ids: number[]) => invoke<Blurb[]>("items_blurbs", { ids }),
   queryShapes: (params: Omit<QueryParams, "offset" | "limit">) => invoke<string>("library_query_shapes", { params: { ...params, offset: 0, limit: 0 } }),
+  queryAspects: (params: Omit<QueryParams, "offset" | "limit">) => invoke<number[]>("library_query_aspects", { params: { ...params, offset: 0, limit: 0 } }),
   cards: (ids: number[]) => invoke<ItemCard[]>("items_cards", { ids }),
   /** A view's custom order; negative ids are collections placed among the items (D-036). */
   customOrderSet: (view: string, ids: number[]) => invoke<void>("custom_order_set", { view, ids }),

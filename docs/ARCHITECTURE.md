@@ -47,6 +47,8 @@ Digitify.exe (Tauri 2)
 | `tray` | The tray icon and its menu, and keeping the window hidden when closed (D-059) |
 | `watched` | Watched folders: a look every 2 minutes that imports new files into each folder's category (D-060) |
 | `year` | Your year, achievements and the activity calendar, from the activity records (D-065…D-067) |
+
+Big Picture's players (D-071) share `features/bigpicture/consoleControls.tsx`: `usePlayerController` turns the controller into the bars' selection (or the quick buttons while they're away), with `PlayerHints` and `BpClock`; its startup is `Intro.tsx` with `ambientEngine.introSound()` (D-070), and Now playing is `NowPlayingScreen.tsx` (D-072).
 | `categories` | Category order and visibility (categories are fixed, D-039; old custom field values stay in `metadata.custom`) |
 | `import` | Background import jobs: scan, then in parallel fingerprint, skip duplicates and extract metadata, then save. Also attaches files to existing items. |
 | `formats` | Embedded metadata readers: EPUB OPF, ComicInfo.xml in any comic archive, audio tags (lofty), ffprobe |

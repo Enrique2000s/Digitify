@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { Award, BookOpen, ChartColumn, ChevronLeft, ChevronRight, Delete, Gamepad2, Heart, House, LibraryBig, LogOut, MousePointer2, Pause, Play, Search, Settings2, SkipBack, SkipForward, Space, Star, X, Eye, Joystick, Music, VolumeOff } from "lucide-react";
+import { Award, BookOpen, ChartColumn, ChevronLeft, ChevronRight, Delete, Gamepad2, Heart, House, LibraryBig, LogOut, MousePointer2, Pause, Play, Search, Settings2, SkipBack, SkipForward, Space, Sparkles, Star, X, Eye, Joystick, Music, VolumeOff } from "lucide-react";
 import { api, type ArcadeGame, type ItemCard } from "../../lib/api";
-import { exitBigPicture, focusFirst, moveFocus } from "../../lib/bigpicture";
+import { exitBigPicture, focusFirst, moveFocus, takeIntro } from "../../lib/bigpicture";
+import { ambientEngine } from "../../lib/ambient/engine";
+import { BigPictureIntro } from "./Intro";
+import { NowPlayingScreen } from "./NowPlayingScreen";
 import { controllerKind, onControllerChange, usePad, useSticks, type PadAction } from "../../lib/gamepad";
 import { Cursor } from "./Cursor";
 import { OnlineScreen } from "./OnlineScreen";
@@ -19,7 +22,7 @@ import { SourceTag, sourceProps } from "../../components/SourceTag";
 import { libraryChanged, useCategories, useDashboard } from "../../lib/queries";
 import { CategoryIcon, Cover } from "../../components/common";
 
-export type BigPictureScreen = "home" | "library" | "item" | "search" | "online" | "arcade";
+export type BigPictureScreen = "home" | "library" | "item" | "search" | "online" | "arcade" | "music";
 export interface BigPictureSearch {
   screen?: BigPictureScreen;
   scope?: string;
@@ -427,7 +430,7 @@ function ItemScreen({ id }: { id: number }) {
             </button>
           )}
           {data.handler === "audio" && ids.length > 0 && (
-            <button type="button" className="bp-button primary" data-bp-focus data-bp-autofocus onClick={() => void music.play(ids, 0)}>
+            <button type="button" className="bp-button primary" data-bp-focus data-bp-autofocus onClick={() => void music.play(ids, 0).then(() => navigate({ to: "/bp", search: { screen: "music" } }))}>
               <Play size={26} /> {music.current?.id === ids[0] && !music.paused ? "Playing" : "Play"}
             </button>
           )}
@@ -567,6 +570,17 @@ function Menu({ onClose }: { onClose: () => void }) {
           </div>
         )}
         <div className="bp-menu-setting">
+          <span>Startup animation</span>
+          <div className="bp-choice">
+            <button type="button" className="bp-button" data-bp-focus aria-pressed={bp.intro} onClick={() => update((c) => ({ bigPicture: { ...c.bigPicture, intro: true } }))}>
+              <Sparkles size={22} /> On
+            </button>
+            <button type="button" className="bp-button" data-bp-focus aria-pressed={!bp.intro} onClick={() => update((c) => ({ bigPicture: { ...c.bigPicture, intro: false } }))}>
+              <X size={22} /> Off
+            </button>
+          </div>
+        </div>
+        <div className="bp-menu-setting">
           <span>{ambient.inGame ? "Music while you play" : "Menu music"}</span>
           <div className="bp-choice">
             <button type="button" className="bp-button" data-bp-focus aria-pressed={ambient.musicOn} onClick={() => !ambient.musicOn && ambient.toggleMusic()}>
@@ -588,16 +602,20 @@ function Menu({ onClose }: { onClose: () => void }) {
 /** The music playing, in the top bar next to Search. */
 function NowPlaying() {
   const music = useMusic();
+  const navigate = useNavigate();
   if (!music.active || !music.current) return null;
   return (
     <div className="bp-now" role="group" aria-label="Music">
-      <div className="bp-now-art">
-        <Cover item={{ title: music.current.title, coverKey: music.current.coverKey, handler: "audio" }} />
-      </div>
-      <div className="bp-now-text">
-        <strong>{music.current.title}</strong>
-        <span>{[music.current.artist, music.current.album].filter(Boolean).join(" · ")}</span>
-      </div>
+      {/* The cover and title open Now playing (D-072). */}
+      <button type="button" className="bp-now-open" data-bp-focus aria-label="Open Now playing" onClick={() => void navigate({ to: "/bp", search: { screen: "music" } })}>
+        <span className="bp-now-art">
+          <Cover item={{ title: music.current.title, coverKey: music.current.coverKey, handler: "audio" }} />
+        </span>
+        <span className="bp-now-text">
+          <strong>{music.current.title}</strong>
+          <span>{[music.current.artist, music.current.album].filter(Boolean).join(" · ")}</span>
+        </span>
+      </button>
       <button type="button" className="bp-round" data-bp-focus aria-label="Previous track" onClick={music.previous}>
         <SkipBack size={22} />
       </button>
@@ -624,6 +642,15 @@ export function BigPicturePage() {
   const shell = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState(false);
   const cursor = preferences.bigPicture.navigation === "cursor";
+  // The startup animation, when Big Picture was just entered (D-070), then Home arriving.
+  const [intro, setIntro] = useState(() => takeIntro() && preferences.bigPicture.intro);
+  const [arrived, setArrived] = useState(false);
+  const introOn = useRef(intro);
+  introOn.current = intro;
+  // Moving and pressing make soft tones, like the rest of the app's interface sounds.
+  const tone = (kind: "hover" | "press") => {
+    if (preferences.interfaceSounds) ambientEngine.uiSound(kind);
+  };
 
   // A new screen selects its first (or marked) element once it has drawn.
   const key = `${screen}:${search.scope ?? ""}:${search.id ?? ""}`;
@@ -648,6 +675,8 @@ export function BigPicturePage() {
       selected.current?.classList.remove("bp-selected");
       target.classList.add("bp-selected");
       selected.current = target;
+      // Moving the selection with the controller ticks softly (the mouse has its own blips).
+      if (!cursor && !introOn.current && !target.matches(":hover") && preferences.interfaceSounds) ambientEngine.uiSound("hover");
     };
     const onOut = () =>
       window.setTimeout(() => {
@@ -675,6 +704,12 @@ export function BigPicturePage() {
 
   const back = () => (screen === "home" ? setMenu(true) : window.history.back());
   usePad((action: PadAction) => {
+    // During the startup animation any button skips it.
+    if (intro) {
+      setIntro(false);
+      setArrived(true);
+      return true;
+    }
     if (menu) return;
     switch (action) {
       case "up":
@@ -689,9 +724,11 @@ export function BigPicturePage() {
       case "accept":
         // In cursor mode A clicks where the cursor is (the cursor handles it).
         if (cursor) return;
+        tone("press");
         (document.activeElement as HTMLElement | null)?.click();
         break;
       case "back":
+        tone("press");
         back();
         break;
       case "y":
@@ -743,10 +780,18 @@ export function BigPicturePage() {
       {icon} {label}
     </button>
   );
-  const title = useMemo(() => ({ home: "Home", library: "Library", item: "", search: "Search", online: "", arcade: "Arcade" })[screen], [screen]);
+  const title = useMemo(() => ({ home: "Home", library: "Library", item: "", search: "Search", online: "", arcade: "Arcade", music: "" })[screen], [screen]);
 
   return (
-    <div ref={shell} className={`bp${cursor ? " bp-cursor-mode" : ""}`}>
+    <div ref={shell} className={`bp${cursor ? " bp-cursor-mode" : ""}${arrived ? " after-intro" : ""}`}>
+      {intro && (
+        <BigPictureIntro
+          onDone={() => {
+            setIntro(false);
+            setArrived(true);
+          }}
+        />
+      )}
       <header className="bp-top">
         <span className="bp-brand">
           <Gamepad2 size={30} /> Digitify
@@ -777,6 +822,7 @@ export function BigPicturePage() {
         {screen === "search" && <SearchScreen />}
         {screen === "online" && search.id != null && <OnlineScreen id={search.id} />}
         {screen === "arcade" && <ArcadeScreen />}
+        {screen === "music" && <NowPlayingScreen />}
       </main>
       <footer className="bp-hints">
         <span>
@@ -805,6 +851,16 @@ export function BigPicturePage() {
             </span>
             <span>
               <b>LB</b> <b>RB</b> Consoles
+            </span>
+          </>
+        )}
+        {screen === "music" && (
+          <>
+            <span>
+              <b>LB</b> <b>RB</b> Tracks
+            </span>
+            <span>
+              <b>LT</b> <b>RT</b> 10 s back / ahead
             </span>
           </>
         )}

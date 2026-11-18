@@ -187,6 +187,7 @@ pub fn run() {
             library::library_query,
             library::library_query_ids,
             library::library_query_shapes,
+            library::library_query_aspects,
             library::items_blurbs,
             library::custom_order_set,
             library::items_cards,

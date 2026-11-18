@@ -157,7 +157,7 @@ function clearCoverNames() {
 }
 
 const SHAPE_CODES: Record<string, CoverShape> = { s: "square", d: "disc", p: "poster", l: "landscape" };
-const HANDLER_CODES: Record<string, string> = { b: "book", c: "comic", v: "video", m: "video", a: "audio", g: "generic" };
+const HANDLER_CODES: Record<string, string> = { b: "book", c: "comic", v: "video", m: "video", a: "audio", g: "generic", i: "image" };
 
 /** The aspect of each item in a view, in view order, from the core's two-letter codes (`m` is Movies & Series). */
 function aspectsOf(codes: string, total: number, fallback: number, defaults: Parameters<typeof coverShapeOf>[1]): number[] {
@@ -173,6 +173,31 @@ function aspectsOf(codes: string, total: number, fallback: number, defaults: Par
 }
 
 /**
+ * Every card's proportions in view order (collections at their places): its kind's cover shape, or
+ * a photo's own width / height (D-073). `onlyPhotos` when the view holds photos and nothing else,
+ * so they can be laid out in justified rows.
+ */
+function useAspects(params: ViewProps["params"], slots: number[], total: number, lead: number, shape: ViewProps["shape"]) {
+  const { preferences } = usePreferences();
+  const shapes = useQuery({ queryKey: ["shapes", params], queryFn: () => api.queryShapes(params), staleTime: 30_000 });
+  const photos = useQuery({ queryKey: ["aspects", params], queryFn: () => api.queryAspects(params), staleTime: 30_000 });
+  return useMemo(() => {
+    const codes = shapes.data ?? "";
+    const count = total - lead;
+    const base = aspectsOf(codes, count, SHAPE_ASPECT[shape], preferences.coverShapes);
+    const own = photos.data ?? [];
+    const merged = base.map((a, i) => (own[i] > 0 ? own[i] : a));
+    let onlyPhotos = count > 0 && codes.length >= count * 2;
+    let hasPhotos = false;
+    for (let i = 0; i < count; i++) {
+      if (codes[i * 2] === "i") hasPhotos = true;
+      else onlyPhotos = false;
+    }
+    return { aspects: withSlots(slots, total, merged), onlyPhotos, hasPhotos };
+  }, [shapes.data, photos.data, total, lead, slots, shape, preferences.coverShapes]);
+}
+
+/**
  * Covers in rows of the same height: vertical, square, round and horizontal covers sit side by side
  * at one height, each as wide as its shape needs (the view's kinds and shapes come from the core,
  * so every row is known before its cards load).
@@ -181,17 +206,16 @@ function GridView({ cache, total, lead, slots, shape, params }: ViewProps) {
   const { preferences } = usePreferences();
   const scroll = useRef<HTMLDivElement>(null);
   const width = useWidth(scroll);
-  const shapes = useQuery({ queryKey: ["shapes", params], queryFn: () => api.queryShapes(params), staleTime: 30_000 });
+  const { aspects, onlyPhotos } = useAspects(params, slots, total, lead, shape);
   // One art height in every view, whatever its category, so a cover is the same size in Videos,
   // Music or Everything; each is as wide as its shape needs.
   const artHeight = Math.round(preferences.cardSize * 1.5);
-  const viewAspect = SHAPE_ASPECT[shape];
   const layout = useMemo(() => {
-    const widths = withSlots(slots, total, aspectsOf(shapes.data ?? "", total - lead, viewAspect, preferences.coverShapes)).map((aspect) => Math.round(artHeight * aspect));
+    const natural = aspects.map((aspect) => Math.round(artHeight * aspect));
     const rows: number[] = [0];
     const rowWidths: number[] = [];
     let used = 0;
-    widths.forEach((w, i) => {
+    natural.forEach((w, i) => {
       const need = used === 0 ? w : used + GAP + w;
       if (used > 0 && need > Math.max(width, w)) {
         rows.push(i);
@@ -203,16 +227,39 @@ function GridView({ cache, total, lead, slots, shape, params }: ViewProps) {
     });
     rowWidths.push(used);
     rows.push(total);
+    const widths = [...natural];
+    const heights = rowWidths.map(() => artHeight);
+    // Photos only (D-073): every full row is stretched to the view's width, its photos growing
+    // together at one height (justified rows); the last row keeps the usual height.
+    const MAX = 1.45;
+    if (onlyPhotos && width > 0) {
+      for (let r = 0; r < rowWidths.length - 1; r++) {
+        const from = rows[r];
+        const to = rows[r + 1];
+        const gaps = GAP * (to - from - 1);
+        const scale = Math.min(MAX, (width - gaps) / Math.max(1, rowWidths[r] - gaps));
+        heights[r] = Math.round(artHeight * scale);
+        let sum = 0;
+        for (let i = from; i < to; i++) {
+          widths[i] = Math.floor(natural[i] * scale);
+          sum += widths[i];
+        }
+        // Rounding leftovers go to the last photo, so a full row ends exactly at the edge.
+        const left = scale < MAX ? Math.max(0, width - gaps - sum) : 0;
+        widths[to - 1] += left;
+        rowWidths[r] = sum + left + gaps;
+      }
+    }
     // Every row centered on its own, so rows of different widths (mixed shapes, the last row)
     // don't leave one edge further out than another (D-043).
     const offsets = rowWidths.map((w) => Math.max(0, Math.floor((width - w) / 2)));
-    return { widths, starts: rows, offsets };
-  }, [shapes.data, total, lead, slots, width, artHeight, viewAspect, preferences.coverShapes]);
+    return { widths, starts: rows, offsets, heights };
+  }, [aspects, onlyPhotos, total, width, artHeight]);
   const rowCount = Math.max(0, layout.starts.length - 1);
-  const rowHeight = artHeight + 44 + GAP + 10;
+  const rowHeight = (index: number) => (layout.heights[index] ?? artHeight) + 44 + GAP + 10;
   // Light mode draws fewer rows ahead of the scroll.
-  const virtualizer = useVirtualizer({ count: rowCount, getScrollElement: () => scroll.current, estimateSize: () => rowHeight, overscan: preferences.lightMode ? 1 : 3 });
-  useEffect(() => virtualizer.measure(), [virtualizer, rowHeight]);
+  const virtualizer = useVirtualizer({ count: rowCount, getScrollElement: () => scroll.current, estimateSize: rowHeight, overscan: preferences.lightMode ? 1 : 3 });
+  useEffect(() => virtualizer.measure(), [virtualizer, layout, artHeight]);
   const rows = virtualizer.getVirtualItems();
   const first = rows.length ? layout.starts[rows[0].index] : 0;
   const last = rows.length ? layout.starts[rows[rows.length - 1].index + 1] - 1 : -1;
@@ -238,7 +285,7 @@ function GridView({ cache, total, lead, slots, shape, params }: ViewProps) {
                   ) : item ? (
                     <MediaCard key={index} item={item} index={index} width={w} transitionId={item.id} />
                   ) : (
-                    <CardSkeleton key={index} width={w} aspect={w / artHeight} />
+                    <CardSkeleton key={index} width={w} aspect={w / (layout.heights[row.index] ?? artHeight)} />
                   );
                 })}
               </div>
@@ -323,6 +370,9 @@ function jitter(id: number, salt: number): number {
 }
 
 /** A cover's size on a shelf `height` tall: square and round ones are a little lower, horizontal ones lower still. */
+/** On a shelf, photos stand at one height, each as wide as it is (D-073). */
+const PHOTO_ON_SHELF = 0.78;
+
 function shelfBox(shape: CoverShape | "book", height: number): { height: number; width: number } {
   if (shape === "square" || shape === "disc") return { height: height * 0.78, width: height * 0.78 };
   if (shape === "landscape") return { height, width: height * (16 / 9) };
@@ -354,7 +404,7 @@ function ShelfItem({ item, index, height, spines }: { item: ItemCard; index: num
   return (
     <Link to={itemPath(item)} params={{ id: String(item.id) }} className="shelf-item" title={item.title} data-blip {...props}>
       {/* Sized by width: if a full shelf narrows its covers, they shrink whole and keep their shape. */}
-      <div className="shelf-cover" data-shape={shape} style={{ width: shelfBox(shape, height).width, aspectRatio: aspect, position: "relative" }} {...vt(item.id)} {...sourceProps(item.source)}>
+      <div className="shelf-cover" data-shape={shape} style={{ width: item.handler === "image" && item.aspect ? Math.round(height * PHOTO_ON_SHELF * aspect) : shelfBox(shape, height).width, aspectRatio: aspect, position: "relative" }} {...vt(item.id)} {...sourceProps(item.source)}>
         <Cover item={item} />
         <SourceTag service={item.source} />
         {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
@@ -364,12 +414,13 @@ function ShelfItem({ item, index, height, spines }: { item: ItemCard; index: num
   );
 }
 
-function ShelfView({ cache, total, square, shape }: ViewProps) {
+function ShelfView({ cache, total, lead, slots, square, shape, params }: ViewProps) {
   const { preferences } = usePreferences();
   const scroll = useRef<HTMLDivElement>(null);
   const width = useWidth(scroll);
   const spines = preferences.shelfStyle === "spines";
   const height = Math.round(preferences.cardSize * 1.4);
+  const { aspects, hasPhotos } = useAspects(params, slots, total, lead, shape);
   // Shelves fill with as many items as fit at their usual width (album covers are square, shown at
   // 78% of the height; books and films 2:3; spines vary) and sit centered. When a shelf mixing
   // categories comes out a little wide, its items narrow slightly (see .shelf-item) rather than
@@ -378,11 +429,34 @@ function ShelfView({ cache, total, square, shape }: ViewProps) {
   const slot = (spines && !square ? Math.round(height * 0.2) + 4 : Math.ceil(cover)) + (spines && !square ? 0 : 16);
   const perShelf = Math.max(1, Math.floor((width - 50 + 16) / slot));
   const shelfHeight = height + 22 + 12 + 26;
-  const shelves = Math.ceil(total / perShelf);
+  // With photos (D-073) each shelf holds as many as fit by their own widths; otherwise the same
+  // number on every shelf.
+  const starts = useMemo(() => {
+    if (!hasPhotos || spines || width <= 0) return null;
+    const room = width - 50 + 16;
+    const out = [0];
+    let used = 0;
+    aspects.forEach((aspect, i) => {
+      const w = Math.round(height * PHOTO_ON_SHELF * aspect) + 16;
+      if (used > 0 && used + w > room) {
+        out.push(i);
+        used = 0;
+      }
+      used += w;
+    });
+    out.push(total);
+    return out;
+  }, [hasPhotos, spines, width, aspects, height, total]);
+  const shelves = starts ? starts.length - 1 : Math.ceil(total / perShelf);
+  const range = (shelf: number) => (starts ? [starts[shelf], starts[shelf + 1]] : [shelf * perShelf, Math.min(total, (shelf + 1) * perShelf)]);
   const virtualizer = useVirtualizer({ count: shelves, getScrollElement: () => scroll.current, estimateSize: () => shelfHeight, overscan: 2 });
-  useEffect(() => virtualizer.measure(), [virtualizer, shelfHeight]);
+  useEffect(() => virtualizer.measure(), [virtualizer, shelfHeight, starts]);
   const rows = virtualizer.getVirtualItems();
-  useEnsureRows(cache, total, perShelf, rows);
+  const firstShown = rows.length ? range(rows[0].index)[0] : 0;
+  const lastShown = rows.length ? range(rows[rows.length - 1].index)[1] - 1 : -1;
+  useEffect(() => {
+    if (lastShown >= firstShown) cache.ensure(firstShown, lastShown);
+  }, [cache, firstShown, lastShown]);
 
   return (
     <div ref={scroll} className={`view-scroll shelves shelves-${preferences.shelfLook}`}>
@@ -395,8 +469,8 @@ function ShelfView({ cache, total, square, shape }: ViewProps) {
             style={{ top: row.start, height: shelfHeight, paddingTop: 22 }}
           >
             <div className="shelf-items" style={{ height, gap: spines ? 4 : 16 }}>
-              {Array.from({ length: perShelf }, (_, i) => {
-                const index = row.index * perShelf + i;
+              {Array.from({ length: range(row.index)[1] - range(row.index)[0] }, (_, i) => {
+                const index = range(row.index)[0] + i;
                 if (index >= total) return null;
                 const item = cache.get(index);
                 if (item?.collection) return <CollectionShelfItem key={`c${item.id}`} item={item} height={height * 0.78} index={index} />;
@@ -541,11 +615,7 @@ function CarouselView({ cache, total, lead, slots, shape, params }: ViewProps) {
   const current = cache.get(index);
   const latest = useRef(current);
   latest.current = current;
-  const shapes = useQuery({ queryKey: ["shapes", params], queryFn: () => api.queryShapes(params), staleTime: 30_000 });
-  const aspects = useMemo(
-    () => withSlots(slots, total, aspectsOf(shapes.data ?? "", total - lead, SHAPE_ASPECT[shape], preferences.coverShapes)),
-    [shapes.data, total, lead, slots, shape, preferences.coverShapes],
-  );
+  const { aspects } = useAspects(params, slots, total, lead, shape);
 
   // A new sort or filter starts at the beginning; a shorter list keeps the index in range.
   const viewKey = JSON.stringify(params);

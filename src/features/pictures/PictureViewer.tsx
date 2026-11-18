@@ -9,6 +9,7 @@ import { SLIDESHOW_SECONDS, usePreferences } from "../../lib/preferences";
 import { WindowButtons } from "../../components/TitleBar";
 import { isTyping } from "../../lib/shortcuts";
 import { usePad } from "../../lib/gamepad";
+import { BpClock, PlayerHints, useButtonNames, usePlayerController, usePlayerHints } from "../bigpicture/consoleControls";
 import { useAutoHide, useFullscreen } from "../reader/chrome";
 import { bigPictureActive } from "../../lib/bigpicture";
 
@@ -186,7 +187,30 @@ export function PictureViewerPage() {
   });
 
   // A controller (Big Picture, D-025): left and right step, A zooms, X runs the slideshow, Y shows
-  // the info, LB/RB zoom out and in, B closes.
+  // the info, LB/RB zoom out and in, B closes. In Big Picture's selection mode A brings the
+  // controls instead, to move through like a console (D-071), and the rest stays the same.
+  const consoleMode = bigPicture && preferences.bigPicture.navigation === "focus";
+  const root = useRef<HTMLDivElement>(null);
+  const driving = usePlayerController(
+    root,
+    {
+      left: () => { setPlaying(false); go(prevId); },
+      right: () => { setPlaying(false); go(nextId); },
+      lb: () => zoomTo((z) => z / 1.25),
+      rb: () => zoomTo((z) => z * 1.25),
+      x: () => setPlaying((p) => !p),
+      y: () => setInfo((v) => !v),
+      back: () => (infoRef.current ? setInfo(false) : close()),
+    },
+    poke,
+  );
+  const buttons = useButtonNames();
+  const hints = usePlayerHints(driving, [
+    { keys: ["◀", "▶"], label: "Photos" },
+    { keys: [buttons.x], label: "Slideshow" },
+    { keys: ["LB", "RB"], label: "Zoom" },
+    { keys: [buttons.y], label: "Info" },
+  ]);
   usePad((action) => {
     poke();
     if (action !== "x") setPlaying(false);
@@ -219,7 +243,7 @@ export function PictureViewerPage() {
       default:
         return;
     }
-  });
+  }, !consoleMode);
 
   const onWheel = (event: ReactWheelEvent) => {
     poke();
@@ -268,10 +292,10 @@ export function PictureViewerPage() {
   const transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) rotate(${view.rotate}deg) scaleX(${view.flipH ? -1 : 1}) scaleY(${view.flipV ? -1 : 1})`;
   const position = index >= 0 && ids.length > 0 ? `${index + 1} of ${ids.length}` : "";
   const meta = (data?.metadata ?? {}) as Record<string, unknown>;
-  const showBars = shown || info || !data;
+  const showBars = shown || driving || info || !data;
 
   return (
-    <div className={`reader picture-viewer${showBars ? "" : " calm"}`} onMouseMove={poke}>
+    <div ref={root} className={`reader picture-viewer${showBars ? "" : " calm"}`} onMouseMove={poke}>
       <div
         ref={stage}
         className={`pv-stage${zoom > 1 ? " zoomed" : ""}`}
@@ -317,6 +341,7 @@ export function PictureViewerPage() {
           <span>{[album?.name, position].filter(Boolean).join(" · ")}</span>
         </div>
         <span className="pv-spacer" data-tauri-drag-region />
+        {bigPicture && <BpClock />}
         <button type="button" className={`round-btn${info ? " active" : ""}`} aria-label="Photo info" aria-pressed={info} title="Info (I)" onClick={() => setInfo((v) => !v)}>
           <Info size={17} />
         </button>
@@ -334,7 +359,7 @@ export function PictureViewerPage() {
       </header>
 
       <footer className={`reader-bar bottom pv-bar${showBars ? "" : " hidden"}`} {...barProps}>
-        <button type="button" className={`round-btn${playing ? " active" : ""}`} aria-label={playing ? "Stop the slideshow" : "Start a slideshow"} title="Slideshow (Space)" disabled={ids.length < 2} onClick={() => setPlaying((p) => !p)}>
+        <button type="button" data-bp-autofocus className={`round-btn${playing ? " active" : ""}`} aria-label={playing ? "Stop the slideshow" : "Start a slideshow"} title="Slideshow (Space)" disabled={ids.length < 2} onClick={() => setPlaying((p) => !p)}>
           {playing ? <Pause size={17} /> : <Play size={17} />}
         </button>
         <select
@@ -389,6 +414,7 @@ export function PictureViewerPage() {
         </button>
       </footer>
 
+      <PlayerHints shown={showBars} hints={hints} />
       {info && data && <InfoPanel item={data} meta={meta} />}
       {notice && <div className="pv-notice" role="status">{notice}</div>}
     </div>
