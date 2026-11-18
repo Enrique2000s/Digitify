@@ -2822,3 +2822,488 @@ body:has(.import-panel) .online-queue {
   color: inherit;
   opacity: 0.75;
 }
+
+/* ---------------------------------------------------------------- D-060: watched folders */
+
+.watched-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  margin: -4px 0 12px;
+  list-style: none;
+}
+.watched-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 200px auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--field);
+}
+.watched-list .path {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------- D-061: sleep timer */
+
+.sleep-trigger {
+  position: relative;
+}
+.sleep-trigger[aria-pressed="true"] {
+  color: var(--accent-text);
+}
+.sleep-left {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  min-width: 16px;
+  padding: 0 3px;
+  border-radius: var(--pill);
+  background: var(--accent);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 900;
+  line-height: 15px;
+  text-align: center;
+}
+.sleep-menu {
+  min-width: 190px;
+}
+.menu-label {
+  padding: 6px 12px 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ---------------------------------------------------------------- D-062..D-064 */
+
+.because-seed {
+  font-style: normal;
+  color: var(--accent-text);
+}
+.video-marks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 260px;
+}
+.video-marks > .btn {
+  align-self: flex-start;
+  margin-bottom: 4px;
+}
+.video-mark {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.video-mark .menu-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.video-mark-label {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+.video-mark-label:focus {
+  border-bottom: 1px solid var(--accent-bright);
+}
+
+/* ---------------------------------------------------------------- D-065..D-067 */
+
+.calendar-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 18px;
+}
+.calendar {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.calendar .stats-chart-head > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.calendar-total {
+  font-weight: 600;
+  color: var(--muted);
+}
+.calendar-years {
+  display: flex;
+  gap: 2px;
+}
+.calendar-scroll {
+  overflow-x: auto;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+.calendar-months,
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(53, minmax(9px, 1fr));
+  gap: 3px;
+  min-width: 640px;
+  max-width: 1100px;
+}
+.calendar-months {
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.calendar-months span {
+  grid-row: 1;
+  white-space: nowrap;
+}
+.calendar-grid {
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, auto);
+}
+.calendar-grid .calendar-day {
+  width: auto;
+  height: auto;
+  aspect-ratio: 1;
+}
+.calendar-day {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+.calendar-day.level-1 {
+  background: color-mix(in srgb, var(--accent-bright) 30%, transparent);
+}
+.calendar-day.level-2 {
+  background: color-mix(in srgb, var(--accent-bright) 55%, transparent);
+}
+.calendar-day.level-3 {
+  background: color-mix(in srgb, var(--accent-bright) 80%, transparent);
+}
+.calendar-day.level-4 {
+  background: var(--accent-bright);
+}
+.calendar-day.future {
+  opacity: 0.35;
+}
+.calendar-day.today {
+  outline: 1.5px solid var(--text);
+  outline-offset: 1px;
+}
+.calendar-grid .calendar-day:hover {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}
+.calendar-tip {
+  bottom: auto;
+  transform: translate(-50%, calc(-100% - 6px));
+  min-width: 0;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.calendar-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 3px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.calendar-legend .calendar-day {
+  margin: 0 1px;
+}
+.year-button {
+  flex: none;
+  margin-top: 30px;
+}
+
+.achievements h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.achievements-count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.achievement-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.achievement-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.achievement-medal {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+.achievement-list li.reached .achievement-medal,
+.achievement-notice .achievement-medal {
+  color: #fff;
+  background: var(--gel, var(--accent));
+}
+.achievement-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+.achievement-text > span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.achievement-meter {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.achievement-meter span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent-bright);
+}
+.achievement-dots {
+  display: flex;
+  gap: 3px;
+}
+.achievement-dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text) 15%, transparent);
+}
+.achievement-dots i.on {
+  background: var(--accent-bright);
+}
+.achievement-notice {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 380px;
+  padding: 12px 12px 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--panel);
+  box-shadow: var(--pop-shadow);
+  animation: pop-in 200ms var(--ease);
+}
+.achievement-notice div {
+  display: grid;
+}
+.achievement-notice div span {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.year-overlay {
+  backdrop-filter: blur(10px);
+}
+.year-review {
+  position: fixed;
+  inset: 40px;
+  z-index: 101;
+  max-width: 1200px;
+  height: fit-content;
+  max-height: calc(100vh - 80px);
+  margin: auto;
+  overflow: auto;
+  padding: 44px 52px;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 0%, color-mix(in srgb, var(--accent-bright) 22%, transparent), transparent 70%),
+    var(--panel);
+  box-shadow: var(--pop-shadow);
+  animation: pop-in 220ms var(--ease);
+}
+.year-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+}
+.year-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 30px;
+  font-weight: 900;
+}
+.year-lead {
+  margin: 14px 0 26px;
+  font-size: 19px;
+  color: var(--muted);
+}
+.year-lead b {
+  color: var(--text);
+}
+.year-tiles,
+.year-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.year-tile,
+.year-facts > div {
+  display: grid;
+  gap: 6px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+}
+.year-tile strong {
+  font-size: 26px;
+  font-weight: 900;
+}
+.year-facts strong {
+  font-size: 20px;
+  font-weight: 900;
+}
+.year-facts span {
+  font-size: 13px;
+  color: var(--muted);
+}
+.year-lists {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 22px;
+  margin-top: 8px;
+}
+.year-lists ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+}
+.year-lists li {
+  display: flex;
+  gap: 12px;
+}
+.year-lists li span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.year-lists li b {
+  font-weight: 700;
+  color: var(--muted);
+}
+.year-loading {
+  height: 200px;
+}
+
+/* ---------------------------------------------------------------- D-068, D-069 */
+
+.resume-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 10px 10px 10px 18px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--panel);
+  box-shadow: var(--pop-shadow);
+  transform: translateX(-50%);
+  animation: resume-in 260ms var(--ease);
+}
+@keyframes resume-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 14px);
+  }
+}
+.resume-notice div {
+  display: grid;
+  min-width: 0;
+}
+.resume-notice div span {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.resume-notice strong {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.resume-notice .btn {
+  flex: none;
+}
+
+.night-filter {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: #ff8a2a;
+  mix-blend-mode: multiply;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 500ms var(--ease);
+}
+.night-filter.on {
+  opacity: var(--night, 0.35);
+}
+.night-setting {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+.night-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.night-row input[type="range"] {
+  width: 150px;
+}
+.night-time {
+  width: 136px;
+}

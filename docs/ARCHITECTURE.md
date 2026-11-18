@@ -43,6 +43,10 @@ Digitify.exe (Tauri 2)
 | `autostart` | Starting Digitify at sign-in: the user's Run key on Windows, a freedesktop autostart entry on Linux (D-047) |
 | `smart` | Smart lists: saved rules run as library queries (D-051) |
 | `check` | Library check: missing files and duplicates (D-057) |
+| `media` | System media controls through `souvlaki`: Windows' media overlay, Linux's MPRIS; reports what's playing and turns its buttons into `media-key` events (D-058) |
+| `tray` | The tray icon and its menu, and keeping the window hidden when closed (D-059) |
+| `watched` | Watched folders: a look every 2 minutes that imports new files into each folder's category (D-060) |
+| `year` | Your year, achievements and the activity calendar, from the activity records (D-065…D-067) |
 | `categories` | Category order and visibility (categories are fixed, D-039; old custom field values stay in `metadata.custom`) |
 | `import` | Background import jobs: scan, then in parallel fingerprint, skip duplicates and extract metadata, then save. Also attaches files to existing items. |
 | `formats` | Embedded metadata readers: EPUB OPF, ComicInfo.xml in any comic archive, audio tags (lofty), ffprobe |

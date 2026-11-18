@@ -18,8 +18,12 @@ import { BuilderContext, ImportUrlContext } from "./catalog";
 import { AppShortcuts } from "./AppShortcuts";
 import { ArcadeSession } from "../features/arcade/ArcadeSession";
 import { useSegmentedGlide } from "../lib/segmentedGlide";
+import { MediaKeys } from "../lib/mediaKeys";
+import { SleepTimerRunner } from "../lib/sleepTimer";
 import { CommandPalette } from "../features/palette/CommandPalette";
 import { FloatingVideo } from "../features/player/FloatingVideo";
+import { AchievementNotice } from "../features/home/YearViews";
+import { ResumeNotice } from "../features/home/ResumeNotice";
 import { BigPictureCursor, BigPictureLauncher } from "../features/bigpicture/Launcher";
 
 /** Colors per section (D-054): tells the preferences which section is on screen. */
@@ -63,6 +67,8 @@ export function Root() {
         <MusicProvider>
         <DiscsProvider>
         <AppShortcuts />
+        <MediaKeys />
+        <SleepTimerRunner />
         <SectionColor />
         <ArcadeSession />
         <BigPictureLauncher />
@@ -98,6 +104,8 @@ export function Root() {
                   <DiscNotice />
                   <CommandPalette />
                   <FloatingVideo />
+                  <AchievementNotice />
+                  <ResumeNotice />
                 </>
               )}
             </ImportUrlContext.Provider>

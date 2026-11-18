@@ -26,6 +26,7 @@ RUNTIME_DEPS=(
   mpv ffmpeg                                # the video and music engines
   udisks2                                   # mounting data discs
   xdg-utils hicolor-icon-theme              # opening links and folders, the menu icon
+  libayatana-appindicator                   # the icon by the clock (D-059)
 )
 # What turning the .deb into a pacman package needs (makepkg comes with pacman; bsdtar with libarchive).
 BUILD_DEPS=(fakeroot libarchive)

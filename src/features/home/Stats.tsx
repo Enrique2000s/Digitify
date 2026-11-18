@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Flame, Target } from "lucide-react";
+import { Flame, Sparkles, Target } from "lucide-react";
+import { AchievementsList, ActivityCalendar, YearReview } from "./YearViews";
 import { usePreferences, type Goals } from "../../lib/preferences";
 import { Dialog, Field } from "../../components/common";
 import { useQuery } from "@tanstack/react-query";
@@ -198,6 +199,8 @@ function GoalsRow({ stats }: { stats: LibraryStats }) {
 /** Home's statistics widget (D-023). */
 export function StatsPanel() {
   const stats = useQuery({ queryKey: ["stats"], queryFn: api.stats, staleTime: 60_000 });
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [review, setReview] = useState(false);
   const s = stats.data;
   if (!s) return <div className="stats panel stats-loading" aria-busy />;
   const largest = Math.max(...s.categories.map((c) => c.count), 1);
@@ -230,6 +233,13 @@ export function StatsPanel() {
         </div>
       </div>
       <GoalsRow stats={s} />
+      <div className="calendar-row">
+        <ActivityCalendar year={year} onYear={setYear} />
+        <button type="button" className="btn year-button" onClick={() => setReview(true)}>
+          <Sparkles size={16} /> Your {year}
+        </button>
+      </div>
+      <YearReview year={year} open={review} onOpenChange={setReview} />
       <div className="stats-row">
         <DaysChart days={s.days} />
         <div className="stats-lists">
@@ -261,6 +271,7 @@ export function StatsPanel() {
               </ol>
             </section>
           )}
+          <AchievementsList />
           <section>
             <h3>Your library</h3>
             <ul className="stats-categories">

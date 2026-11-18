@@ -16,6 +16,7 @@ import { useBigPicture } from "../../lib/bigpicture";
 import type { Location, TocItem, View } from "../../vendor/foliate-js/view.js";
 import { BookmarksMenu, toggleBookmark, useBookmarks, type Place } from "./Bookmarks";
 import { motionAllowed, useAutoHide, useFullscreen } from "./chrome";
+import { NightFilterButton, NightFilterLayer } from "../../lib/nightFilter";
 import { BrightnessRow, pageFilter } from "./DisplayPanel";
 
 const THEMES = {
@@ -400,6 +401,8 @@ export function EbookReader({ book, onClose, next: nextVolume, onNext }: {
         </div>
       )}
 
+      <NightFilterLayer />
+
       <header className={`reader-bar top${showBars ? "" : " hidden"}`} data-tauri-drag-region {...barProps}>
         <button type="button" className="round-btn" aria-label="Close the reader" title={`Close${hint("readers.close")}`} onClick={onClose}>
           <ArrowLeft size={18} strokeWidth={2.6} />
@@ -538,6 +541,7 @@ export function EbookReader({ book, onClose, next: nextVolume, onNext }: {
             </Popover.Content>
           </Popover.Portal>
         </Popover.Root>
+        <NightFilterButton />
         {/* In Big Picture the whole app is full screen already: no full-screen or window buttons. */}
         {!bigPicture && <button type="button" className="round-btn" aria-label={fullscreen ? "Leave full screen" : "Full screen"} title={`Full screen${hint("readers.fullscreen")}`} onClick={() => void toggleFullscreen()}>
           {fullscreen ? <Shrink size={17} /> : <Expand size={17} />}

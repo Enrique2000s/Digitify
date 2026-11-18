@@ -15,6 +15,7 @@ import { useBigPicture } from "../../lib/bigpicture";
 import { BookmarksMenu, toggleBookmark, useBookmarks } from "./Bookmarks";
 import { chapterAt, ChaptersMenu } from "./Chapters";
 import { motionAllowed, useAutoHide, useFullscreen } from "./chrome";
+import { NightFilterButton, NightFilterLayer } from "../../lib/nightFilter";
 import { buildTurn, PageTurnLayer, type Turn, type TurnPage } from "./PageTurn";
 import { backgroundCss, DisplayPanel, pageFilter } from "./DisplayPanel";
 import { buildViews, stripWidth, viewHeight, viewOf, type Box } from "./layout";
@@ -446,6 +447,8 @@ export function PageReader({ book, startPage, onClose, next: nextVolume, onNext 
         )}
       </div>
 
+      <NightFilterLayer />
+
       <header className={`reader-bar top${showBars ? "" : " hidden"}`} data-tauri-drag-region {...barProps}>
         <button type="button" className="round-btn" aria-label="Close the reader" title={`Close${hint("readers.close")}`} onClick={onClose}>
           <ArrowLeft size={18} strokeWidth={2.6} />
@@ -520,6 +523,7 @@ export function PageReader({ book, startPage, onClose, next: nextVolume, onNext 
           open={panel === "display"}
           onOpenChange={(open) => setPanel(open ? "display" : null)}
         />
+        <NightFilterButton />
         {/* In Big Picture the whole app is full screen already: no full-screen or window buttons. */}
         {!bigPicture && <button type="button" className="round-btn" aria-label={fullscreen ? "Leave full screen" : "Full screen"} title={`Full screen${hint("readers.fullscreen")}`} onClick={() => void toggleFullscreen()}>
           {fullscreen ? <Shrink size={17} /> : <Expand size={17} />}

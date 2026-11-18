@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Archive, FolderOpen, FolderSearch, RotateCcw, ScanSearch, TriangleAlert } from "lucide-react";
+import { Archive, Eye, FolderOpen, FolderSearch, RotateCcw, ScanSearch, Trash, TriangleAlert } from "lucide-react";
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Link } from "@tanstack/react-router";
 import { usePreferences } from "../../lib/preferences";
 import { api, errorText, type AutoBackupStatus, type BackupInfo } from "../../lib/api";
 import { bytes, dateTime } from "../../lib/format";
-import { libraryChanged } from "../../lib/queries";
+import { libraryChanged, useCategories } from "../../lib/queries";
 import { Dialog } from "../../components/common";
 
 const KIND_LABELS: Record<string, string> = {
@@ -258,5 +258,83 @@ export function BackupsPanel() {
         <p className="hint">Media files are not touched; only the library's catalog is restored.</p>
       </Dialog>
     </section>
+  );
+}
+
+/** Settings › Library › Watched folders (D-060): what's new in them is imported by itself. */
+export function WatchedFolders() {
+  const queryClient = useQueryClient();
+  const folders = useQuery({ queryKey: ["watched"], queryFn: api.watchedList });
+  const categories = useCategories();
+  const [message, setMessage] = useState<string | null>(null);
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: ["watched"] });
+  const add = async () => {
+    const path = await open({ directory: true, multiple: false, title: "Choose a folder to watch" });
+    if (typeof path !== "string") return;
+    const first = categories.data?.find((c) => !c.isHidden)?.key ?? "videos";
+    try {
+      await api.watchedAdd(path, first);
+      setMessage("Watching it. Pick the category its new files go to.");
+      refresh();
+    } catch (reason) {
+      setMessage(errorText(reason));
+    }
+  };
+  const look = async () => {
+    try {
+      const n = await api.watchedLookNow();
+      setMessage(n === 0 ? "Nothing new in the watched folders." : `Importing ${n} new ${n === 1 ? "file" : "files"}…`);
+    } catch (reason) {
+      setMessage(errorText(reason));
+    }
+  };
+  const list = folders.data ?? [];
+  return (
+    <>
+      <div className="setting">
+        <div className="setting-text">
+          <strong>Watched folders</strong>
+          <p>New files in these folders are imported by themselves into the category you choose, left where they are. Digitify looks every two minutes, and waits for a file that's still being written.</p>
+          {message && <p style={{ color: "var(--accent-text)" }}>{message}</p>}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" className="btn" onClick={() => void add()}>
+            <Eye size={16} /> Watch a folder…
+          </button>
+          {list.length > 0 && (
+            <button type="button" className="btn btn-ghost" onClick={() => void look()}>
+              Look now
+            </button>
+          )}
+        </div>
+      </div>
+      {list.length > 0 && (
+        <ul className="watched-list">
+          {list.map((folder) => (
+            <li key={folder.id}>
+              <span className="path" title={folder.path}>
+                {folder.path}
+                {folder.missing && <span className="muted"> · not connected</span>}
+              </span>
+              <select
+                className="select"
+                aria-label={`Category for ${folder.path}`}
+                value={folder.category}
+                onChange={(e) => void api.watchedSetCategory(folder.id, e.target.value).then(refresh)}
+              >
+                {categories.data?.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="icon-btn" aria-label={`Stop watching ${folder.path}`} title="Stop watching (what was imported stays)" onClick={() => void api.watchedRemove(folder.id).then(refresh)}>
+                <Trash size={15} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }

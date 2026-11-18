@@ -173,6 +173,44 @@ export interface LibraryStats {
   categories: NamedCount[];
 }
 
+/** What to offer to continue when the app opens (D-068). */
+export type Resume = { kind: "item"; card: ItemCard } | { kind: "game"; id: number; title: string };
+
+/** A day of the activity calendar (D-067). */
+export interface CalendarDay {
+  day: string;
+  seconds: number;
+}
+
+/** Your year in Digitify (D-065); times in seconds, top lists' `count` in minutes (artists: plays). */
+export interface YearReview {
+  year: number;
+  read: number;
+  watch: number;
+  listen: number;
+  play: number;
+  finished: number;
+  added: number;
+  daysActive: number;
+  longestStreak: number;
+  bestMonth: [number, number] | null;
+  bestDay: [string, number] | null;
+  topGames: NamedCount[];
+  topItems: NamedCount[];
+  topArtists: NamedCount[];
+}
+
+/** An achievement (D-066); `new` when this check just reached it. */
+export interface Achievement {
+  key: string;
+  title: string;
+  description: string;
+  progress: number;
+  goal: number;
+  unlockedAt: string | null;
+  new: boolean;
+}
+
 /** The detailed view's extra lines for an item (Phase 5). */
 export interface Blurb {
   id: number;
@@ -200,6 +238,8 @@ export interface QueryParams {
   yearTo?: number | null;
   addedDays?: number | null;
   minRating?: number | null;
+  /** Only what's in Later (D-062). */
+  later?: boolean;
   offset: number;
   limit: number;
 }
@@ -228,6 +268,14 @@ export interface LibraryCheck {
   duplicates: CheckedFile[][];
 }
 
+/** A folder whose new files are imported by themselves (D-060). */
+export interface WatchedFolder {
+  id: number;
+  path: string;
+  category: string;
+  missing: boolean;
+}
+
 export interface SmartList {
   id: number;
   name: string;
@@ -254,6 +302,10 @@ export interface Dashboard {
   continueWatching: ItemCard[];
   /** The next volume of series lately finished (D-050). */
   nextVolumes: ItemCard[];
+  /** What's in Later, newest first (D-062). */
+  later: ItemCard[];
+  /** "Because you liked …" (D-064). */
+  because: { seed: ItemCard; items: ItemCard[] } | null;
   recent: ItemCard[];
   recentlyOpened: ItemCard[];
   favorites: ItemCard[];
@@ -460,7 +512,7 @@ export interface Episode {
 }
 
 /** A page of a page-based book, or a place in an ebook. */
-export type BookmarkLocator = { page: number } | { cfi: string; fraction: number; location?: number | null };
+export type BookmarkLocator = { page: number } | { cfi: string; fraction: number; location?: number | null } | { time: number; part?: number | null };
 
 export interface Bookmark {
   id: number;
@@ -539,6 +591,8 @@ export interface ItemDetail {
   /** The user's rating (1-5) and note (D-049). */
   rating: number | null;
   note: string | null;
+  /** In Later (D-062). */
+  inLater: boolean;
 }
 
 export interface Tag {
@@ -686,6 +740,10 @@ export const api = {
     invoke<[number, number][]>("custom_order_slots", { params: { ...params, offset: 0, limit: 0 }, collections }),
   activityAdd: (item: number, kind: "read" | "watch" | "listen", seconds: number) => invoke<void>("activity_add", { item, kind, seconds }),
   stats: () => invoke<LibraryStats>("library_stats"),
+  activityCalendar: (year: number) => invoke<CalendarDay[]>("activity_calendar", { year }),
+  yearReview: (year: number) => invoke<YearReview>("year_review", { year }),
+  achievementsList: () => invoke<Achievement[]>("achievements_list"),
+  resumeGet: () => invoke<Resume | null>("resume_get"),
   tags: () => invoke<Tag[]>("tags_list"),
   itemTagsSet: (id: number, names: string[]) => invoke<void>("item_tags_set", { id, names }),
   tagRename: (id: number, name: string) => invoke<void>("tag_rename", { id, name }),
@@ -719,10 +777,16 @@ export const api = {
   arcadeSetExtraTime: (id: number, seconds: number) => invoke<void>("arcade_set_extra_time", { id, seconds }),
   arcadeSetReview: (id: number, rating: number | null, note: string | null) => invoke<void>("arcade_set_review", { id, rating, note }),
   itemSetReview: (id: number, rating: number | null, note: string | null) => invoke<void>("item_set_review", { id, rating, note }),
+  laterSet: (ids: number[], later: boolean) => invoke<void>("later_set", { ids, later }),
   smartLists: () => invoke<SmartList[]>("smart_lists"),
   backupAutoStatus: () => invoke<AutoBackupStatus>("backup_auto_status"),
   backupAutoNow: () => invoke<AutoBackupStatus>("backup_auto_now"),
   libraryCheck: () => invoke<LibraryCheck>("library_check"),
+  watchedList: () => invoke<WatchedFolder[]>("watched_list"),
+  watchedAdd: (path: string, category: string) => invoke<void>("watched_add", { path, category }),
+  watchedSetCategory: (id: number, category: string) => invoke<void>("watched_set_category", { id, category }),
+  watchedRemove: (id: number) => invoke<void>("watched_remove", { id }),
+  watchedLookNow: () => invoke<number>("watched_look_now"),
   smartListSave: (id: number | null, name: string, query: SmartQuery) => invoke<number>("smart_list_save", { id, name, query }),
   smartListDelete: (id: number) => invoke<void>("smart_list_delete", { id }),
   arcadeForget: (id: number) => invoke<void>("arcade_forget", { id }),

@@ -200,6 +200,9 @@ pub struct QueryParams {
     /// …and at least this many stars of your rating.
     #[serde(default)]
     pub min_rating: Option<i64>,
+    /// Only what's in Later (D-062), newest first unless sorted otherwise.
+    #[serde(default)]
+    pub later: bool,
 }
 
 
@@ -419,6 +422,9 @@ impl QueryParts {
             args.push(SqlValue::Text(format!("-{days} days")));
             conditions.push(format!("i.added_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?{})", args.len()));
         }
+        if params.later {
+            conditions.push("i.id IN (SELECT item_id FROM later)".into());
+        }
         if let Some(stars) = params.min_rating.filter(|s| (1..=5).contains(s)) {
             args.push(SqlValue::Integer(stars));
             conditions.push(format!("i.rating >= ?{}", args.len()));
@@ -445,6 +451,8 @@ impl QueryParts {
                 format!("{position} IS NULL, {position}, i.sort_title, i.id")
             }
             None | Some("relevance") if search.is_some() => "f.rank".to_string(),
+            // In Later, "Recently added" means added to Later (D-062).
+            Some("added") if params.later => "(SELECT l.added_at FROM later l WHERE l.item_id = i.id) DESC, i.id DESC".to_string(),
             Some("added") => "i.added_at DESC, i.id DESC".to_string(),
             Some("opened") => "i.last_opened_at IS NULL, i.last_opened_at DESC, i.id DESC".to_string(),
             Some("year") => "i.year IS NULL, i.year DESC, i.sort_title".to_string(),
@@ -728,6 +736,11 @@ pub struct Dashboard {
     pub continue_watching: Vec<ItemCard>,
     /// The next volume of series lately finished (D-050).
     pub next_volumes: Vec<ItemCard>,
+    /// What's in Later, newest first (D-062).
+    pub later: Vec<ItemCard>,
+    /// "Because you liked …" (D-064): an item you rated well or marked favorite lately, and
+    /// others of your library like it that you haven't finished.
+    pub because: Option<Because>,
     pub recent: Vec<ItemCard>,
     pub recently_opened: Vec<ItemCard>,
     pub favorites: Vec<ItemCard>,
@@ -795,6 +808,108 @@ fn featured_of_the_day(conn: &Connection) -> AppResult<Vec<i64>> {
     Ok(Vec::new())
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Because {
+    pub seed: ItemCard,
+    pub items: Vec<ItemCard>,
+}
+
+/// Items like `seed` in your own library (D-064), best first: the same series, people, tags,
+/// genre or collection, in the same category; finished ones and the seed itself left out.
+pub fn similar(conn: &Connection, seed: i64, limit: i64) -> AppResult<Vec<i64>> {
+    ids(
+        conn,
+        &format!(
+            "WITH s AS (SELECT id, category_id, collection_id, lower(coalesce(json_extract(metadata, '$.series'), '')) AS series, \
+               lower(coalesce(json_extract(metadata, '$.genre'), '')) AS genre FROM items WHERE id = ?1) \
+             SELECT i.id FROM items i, s WHERE i.id <> s.id AND i.category_id = s.category_id \
+               AND NOT EXISTS (SELECT 1 FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0 AND pr.completed = 1) \
+             ORDER BY ( \
+               (s.series <> '' AND lower(coalesce(json_extract(i.metadata, '$.series'), '')) = s.series) * 4 + \
+               (SELECT count(*) FROM item_people a JOIN item_people b ON a.person_id = b.person_id WHERE a.item_id = i.id AND b.item_id = s.id) * 3 + \
+               (SELECT count(*) FROM item_tags a JOIN item_tags b ON a.tag_id = b.tag_id WHERE a.item_id = i.id AND b.item_id = s.id) * 2 + \
+               (s.genre <> '' AND lower(coalesce(json_extract(i.metadata, '$.genre'), '')) = s.genre) * 2 + \
+               (s.collection_id IS NOT NULL AND i.collection_id = s.collection_id) * 1 \
+             ) DESC, i.rating IS NULL, i.rating DESC, i.added_at DESC LIMIT {limit}"
+        ),
+        &[SqlValue::Integer(seed)],
+    )
+    .and_then(|found| {
+        // Only items that share something with the seed.
+        let mut keep = Vec::new();
+        for id in found {
+            let shared: i64 = conn.query_row(
+                "SELECT (SELECT count(*) FROM item_people a JOIN item_people b ON a.person_id = b.person_id WHERE a.item_id = ?1 AND b.item_id = ?2) + \
+                        (SELECT count(*) FROM item_tags a JOIN item_tags b ON a.tag_id = b.tag_id WHERE a.item_id = ?1 AND b.item_id = ?2) + \
+                        (SELECT count(*) FROM items x, items y WHERE x.id = ?1 AND y.id = ?2 AND ( \
+                           (trim(coalesce(json_extract(x.metadata, '$.series'), '')) <> '' AND lower(json_extract(x.metadata, '$.series')) = lower(json_extract(y.metadata, '$.series'))) OR \
+                           (trim(coalesce(json_extract(x.metadata, '$.genre'), '')) <> '' AND lower(json_extract(x.metadata, '$.genre')) = lower(json_extract(y.metadata, '$.genre'))) OR \
+                           (x.collection_id IS NOT NULL AND x.collection_id = y.collection_id)))",
+                params![id, seed],
+                |row| row.get(0),
+            )?;
+            if shared > 0 {
+                keep.push(id);
+            }
+        }
+        Ok(keep)
+    })
+}
+
+fn because(conn: &Connection) -> AppResult<Option<Because>> {
+    let seeds = ids(
+        conn,
+        "SELECT id FROM items WHERE rating >= 4 OR is_favorite = 1 ORDER BY updated_at DESC LIMIT 12",
+        &[],
+    )?;
+    for seed in seeds {
+        let found = similar(conn, seed, 12)?;
+        if found.len() >= 2 {
+            let Some(card) = cards_by_ids(conn, &[seed])?.into_iter().next() else { continue };
+            return Ok(Some(Because { seed: card, items: cards_by_ids(conn, &found)? }));
+        }
+    }
+    Ok(None)
+}
+
+/// What to offer to continue when the app opens (D-068): the book, comic, film or series left
+/// halfway most lately, or the game played most lately, whichever is newer, from the last week.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum Resume {
+    Item { card: ItemCard },
+    Game { id: i64, title: String },
+}
+
+pub fn resume(conn: &Connection) -> AppResult<Option<Resume>> {
+    let item: Option<(i64, String)> = conn
+        .query_row(
+            "SELECT pr.item_id, pr.updated_at FROM progress pr JOIN items i ON i.id = pr.item_id JOIN categories c ON c.id = i.category_id              WHERE pr.part_id = 0 AND pr.fraction > 0.01 AND pr.completed = 0 AND c.handler IN ('book', 'comic', 'video')                AND pr.updated_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days')              ORDER BY pr.updated_at DESC LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .ok();
+    let game: Option<(i64, String, String)> = conn
+        .query_row(
+            "SELECT id, title, last_played_at FROM arcade_games WHERE hidden = 0 AND missing = 0 AND last_played_at IS NOT NULL                AND last_played_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days') ORDER BY last_played_at DESC LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .ok();
+    match (item, game) {
+        (Some((_, at)), Some((id, title, played))) if played > at => Ok(Some(Resume::Game { id, title })),
+        (Some((id, _)), _) => Ok(cards_by_ids(conn, &[id])?.into_iter().next().map(|card| Resume::Item { card })),
+        (None, Some((id, title, _))) => Ok(Some(Resume::Game { id, title })),
+        (None, None) => Ok(None),
+    }
+}
+
+#[tauri::command]
+pub async fn resume_get(state: State<'_, AppState>) -> AppResult<Option<Resume>> {
+    with_library(&state, |library| library.db.with(|conn| resume(conn))).await
+}
+
 #[tauri::command]
 pub async fn dashboard_get(state: State<'_, AppState>) -> AppResult<Dashboard> {
     with_library(&state, |library| {
@@ -828,6 +943,8 @@ pub async fn dashboard_get(state: State<'_, AppState>) -> AppResult<Dashboard> {
                 continue_items: cards_by_ids(conn, &continue_ids)?,
                 continue_watching: cards_by_ids(conn, &watching_ids)?,
                 next_volumes: cards_by_ids(conn, &crate::series::next_after_finished(conn, 8)?)?,
+                later: cards_by_ids(conn, &ids(conn, "SELECT item_id FROM later ORDER BY added_at DESC LIMIT 18", &[])?)?,
+                because: because(conn)?,
                 recent: cards_by_ids(conn, &recent_ids)?,
                 recently_opened: cards_by_ids(conn, &opened_ids)?,
                 favorites: cards_by_ids(conn, &favorite_ids)?,
@@ -922,6 +1039,8 @@ pub struct ItemDetail {
     /// The user's own rating, 1-5 stars, and note (D-049).
     pub rating: Option<i64>,
     pub note: Option<String>,
+    /// In Later (D-062).
+    pub in_later: bool,
 }
 
 #[tauri::command]
@@ -934,7 +1053,8 @@ fn item_detail(conn: &Connection, library: &Library, id: i64) -> AppResult<ItemD
         .query_row(
             "SELECT i.id, c.key, c.name, c.handler, i.title, i.subtitle, i.year, i.description, i.cover_key, \
              i.cover_color, i.is_favorite, i.metadata, i.added_at, i.updated_at, \
-             (SELECT pr.fraction FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0), i.collection_id, i.rating, i.note \
+             (SELECT pr.fraction FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0), i.collection_id, i.rating, i.note, \
+             EXISTS (SELECT 1 FROM later l WHERE l.item_id = i.id) \
              FROM items i JOIN categories c ON c.id = i.category_id WHERE i.id = ?1",
             [id],
             |row| {
@@ -964,6 +1084,7 @@ fn item_detail(conn: &Connection, library: &Library, id: i64) -> AppResult<ItemD
                     online: None,
                     rating: row.get(16)?,
                     note: row.get(17)?,
+                    in_later: row.get(18)?,
                 }))
             },
         )
@@ -1177,6 +1298,26 @@ pub async fn item_set_favorite(state: State<'_, AppState>, id: i64, favorite: bo
                 params![id, favorite],
             )?;
             conn.execute("UPDATE parts SET is_favorite = ?2 WHERE item_id = ?1 AND kind = 'track'", params![id, favorite])?;
+            Ok(())
+        })
+    })
+    .await
+}
+
+/// Puts an item in Later, or takes it out (D-062); returns whether it's in now.
+#[tauri::command]
+pub async fn later_set(state: State<'_, AppState>, ids: Vec<i64>, later: bool) -> AppResult<()> {
+    with_library(&state, move |library| {
+        library.db.with(|conn| {
+            let tx = conn.transaction()?;
+            for id in &ids {
+                if later {
+                    tx.execute("INSERT OR IGNORE INTO later (item_id) SELECT id FROM items WHERE id = ?1", [id])?;
+                } else {
+                    tx.execute("DELETE FROM later WHERE item_id = ?1", [id])?;
+                }
+            }
+            tx.commit()?;
             Ok(())
         })
     })
@@ -1467,4 +1608,36 @@ mod tests {
         assert_eq!(shape(&conn, song), None);
         assert!(crate::organize::apply_bulk(&mut conn, &[a], &[crate::organize::BulkOp::SetCoverShape { shape: Some("star".into()) }]).is_err());
     }
+    #[test]
+    fn resume_offers_the_newest_unfinished_thing() {
+        let conn = crate::db::memory();
+        assert!(resume(&conn).unwrap().is_none());
+        conn.execute("INSERT INTO items (category_id, title, sort_title) VALUES ((SELECT id FROM categories WHERE key = 'books'), 'Dune', 'dune')", []).unwrap();
+        conn.execute("INSERT INTO progress (item_id, part_id, fraction, updated_at) VALUES (1, 0, 0.4, strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 hours'))", []).unwrap();
+        assert!(matches!(resume(&conn).unwrap(), Some(Resume::Item { card }) if card.id == 1));
+        conn.execute("INSERT INTO arcade_games (path, platform, title, sort_title, last_played_at) VALUES ('/g.iso', 'wii', 'Game', 'game', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))", []).unwrap();
+        assert!(matches!(resume(&conn).unwrap(), Some(Resume::Game { title, .. }) if title == "Game"), "the game is newer");
+        conn.execute("UPDATE arcade_games SET last_played_at = '2000-01-01T00:00:00.000Z'", []).unwrap();
+        conn.execute("UPDATE progress SET completed = 1", []).unwrap();
+        assert!(resume(&conn).unwrap().is_none(), "finished, and the game is too old");
+    }
+
+    #[test]
+    fn similar_items_share_people_or_series() {
+        let conn = crate::db::memory();
+        let books = "(SELECT id FROM categories WHERE key = 'books')";
+        for (title, series) in [("Dune", "Dune"), ("Dune Messiah", "Dune"), ("Other", ""), ("By her", "")] {
+            conn.execute(&format!("INSERT INTO items (category_id, title, sort_title, metadata) VALUES ({books}, ?1, ?1, json_object('series', ?2))"), params![title, series]).unwrap();
+        }
+        conn.execute("INSERT INTO people (name, sort_name) VALUES ('Ann', 'ann')", []).unwrap();
+        let ann = conn.last_insert_rowid();
+        for item in [1, 4] {
+            conn.execute("INSERT INTO item_people (item_id, person_id, role, position) VALUES (?1, ?2, 'author', 0)", params![item, ann]).unwrap();
+        }
+        let found = similar(&conn, 1, 10).unwrap();
+        assert!(found.contains(&2), "same series");
+        assert!(found.contains(&4), "same author");
+        assert!(!found.contains(&3), "nothing shared");
+    }
+
 }

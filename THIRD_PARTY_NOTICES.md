@@ -182,6 +182,8 @@ SOFTWARE.
 | sha2 (Xbox package names, D-037) | MIT or Apache-2.0 |
 | sysinfo (recognizing a running game, D-037) | MIT |
 | tiny_http (Linux: YouTube's host page, D-032) | MIT or Apache-2.0 |
+| souvlaki (media keys and system media controls, D-058) | MIT |
 | Linux only: libc, x11-dl, gtk, gdkx11, keyring | MIT or Apache-2.0 |
+| Linux only, loaded at run time (the system's, or the AppImage's copy): libayatana-appindicator, libayatana-indicator, libdbusmenu (the tray icon, D-059) | LGPL-2.1 or LGPL-3.0 |
 
 These are the direct dependencies. A complete, machine-generated list covering every transitive dependency (Rust crates and npm packages), plus a written offer for GPL source code with a contact address, will be produced before the first public release.

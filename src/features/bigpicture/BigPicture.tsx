@@ -280,6 +280,17 @@ function HomeScreen() {
       </section>
     ),
     continuePlaying: <GameRowBP title={<SectionTitle section="continuePlaying" />} games={games.recent} />,
+    later: <Row title={<SectionTitle section="later" />} items={data.later} />,
+    because: data.because && (
+      <Row
+        title={
+          <>
+            Because you liked {data.because.seed.title} <span className="section-source">(Library)</span>
+          </>
+        }
+        items={data.because.items}
+      />
+    ),
     upNext: <UpNextBP watching={data.continueWatching} reading={data.continueItems} next={data.nextVolumes} games={games.recent} />,
     favoriteGames: <GameRowBP title={<SectionTitle section="favoriteGames" />} games={games.favorites} />,
     featuredGame: games.featured && <FeaturedGameBP game={games.featured} />,

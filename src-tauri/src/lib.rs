@@ -22,6 +22,7 @@ mod formats;
 mod import;
 mod library;
 mod library_folder;
+mod media;
 mod localhost;
 mod media_protocol;
 mod music;
@@ -38,7 +39,10 @@ mod setup;
 mod smart;
 mod stats;
 mod tools;
+mod tray;
 mod watch;
+mod watched;
+mod year;
 
 use std::sync::{Arc, RwLock};
 
@@ -134,11 +138,24 @@ pub fn run() {
             app.manage(optical::OpticalState::default());
             optical::watch(app.handle().clone());
             app.manage(ambient::AmbientState::default());
+            app.manage(media::MediaState::default());
+            media::start(app);
+            tray::start(app);
             app.manage(pages::PageEngine::default());
             dev::configure_window(app)?;
             setup::spawn_maintenance(app.handle().clone());
             backup::watch_auto(app.handle().clone());
+            watched::watch(app.handle().clone());
             Ok(())
+        })
+        // Closing the window can keep Digitify running in the tray (D-059).
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" && tray::close_to_tray(window.app_handle()) && window.app_handle().tray_by_id("main").is_some() {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         .register_asynchronous_uri_scheme_protocol("digitify", media_protocol::handle)
         .invoke_handler(tauri::generate_handler![
@@ -149,6 +166,7 @@ pub fn run() {
             setup::path_cloud_sync,
             setup::notices_reveal,
             autostart::autostart_get,
+            media::media_now_playing,
             autostart::autostart_set,
             ambient::ambient_playlist,
             ambient::ambient_track_info,
@@ -159,6 +177,11 @@ pub fn run() {
             backup::backup_auto_status,
             backup::backup_auto_now,
             check::library_check,
+            watched::watched_list,
+            watched::watched_add,
+            watched::watched_set_category,
+            watched::watched_remove,
+            watched::watched_look_now,
             files::files_relink,
             library::categories_list,
             library::library_query,
@@ -169,12 +192,17 @@ pub fn run() {
             library::items_cards,
             stats::activity_add,
             stats::library_stats,
+            year::activity_calendar,
+            year::year_review,
+            year::achievements_list,
             library::dashboard_get,
             library::item_get,
             library::item_update,
             library::item_create,
             library::item_set_favorite,
             library::item_set_review,
+            library::later_set,
+            library::resume_get,
             smart::smart_lists,
             smart::smart_list_save,
             smart::smart_list_delete,

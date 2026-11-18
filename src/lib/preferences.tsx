@@ -43,8 +43,10 @@ export const HOME_SECTIONS = [
   "featured",
   "featuredGame",
   "upNext",
+  "later",
   "favorites",
   "favoriteGames",
+  "because",
   "continueWatching",
   "continuePlaying",
   "continueReading",
@@ -62,6 +64,8 @@ const OLD_HOME_ORDERS = [
   "discs,tiles,featured,continuePlaying,favorites,continueWatching,continueReading,recentlyOpened,recentlyAdded,favoriteGames,featuredGame,stats",
   // Before Up next (D-050).
   "discs,tiles,featured,featuredGame,favorites,favoriteGames,continueWatching,continuePlaying,continueReading,recentlyAdded,recentlyOpened,stats",
+  // Before Later and Because you liked (D-062, D-064).
+  "discs,tiles,featured,featuredGame,upNext,favorites,favoriteGames,continueWatching,continuePlaying,continueReading,recentlyAdded,recentlyOpened,stats",
 ];
 export type HomeSection = (typeof HOME_SECTIONS)[number];
 export interface HomeLayout {
@@ -133,6 +137,12 @@ export interface Preferences {
   lightMode: boolean;
   /** The window opens maximized (D-046); off, it opens at its regular size. */
   startMaximized: boolean;
+  /** Closing the window keeps Digitify running in the tray (D-059), off by default. */
+  closeToTray: boolean;
+  /** When the app opens, offer to continue the last thing left halfway (D-068). */
+  resumeOnOpen: boolean;
+  /** The readers' night filter (D-069): an optional schedule, and how warm. */
+  nightFilter: NightFilter;
   /** Monthly goals in Statistics (D-052): items finished, and hours of each activity; 0 is no goal. */
   goals: Goals;
   /** Automatic backups (D-056): how often, a folder to copy them to (another drive), how many to keep. */
@@ -259,6 +269,9 @@ export const DEFAULT_PREFERENCES: Preferences = {
   motion: "system",
   lightMode: false,
   startMaximized: true,
+  closeToTray: false,
+  resumeOnOpen: true,
+  nightFilter: { schedule: false, from: "21:00", to: "07:00", strength: 35 },
   goals: { finished: 0, read: 0, watch: 0, listen: 0, play: 0 },
   sectionColors: { enabled: false, colors: { ...SECTION_COLORS } },
   autoBackup: { every: "off", folder: null, keep: 8 },
@@ -385,6 +398,28 @@ function sanitizeSectionColors(raw: unknown): Preferences["sectionColors"] {
   return { enabled: value.enabled === true, colors };
 }
 
+export interface NightFilter {
+  /** Comes on by itself between `from` and `to` ("HH:MM", may run past midnight). */
+  schedule: boolean;
+  from: string;
+  to: string;
+  /** How warm, 10-80 (%). */
+  strength: number;
+}
+
+const isTime = (v: unknown): v is string => typeof v === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+
+function sanitizeNightFilter(raw: unknown): NightFilter {
+  const value = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const d = DEFAULT_PREFERENCES.nightFilter;
+  return {
+    schedule: typeof value.schedule === "boolean" ? value.schedule : d.schedule,
+    from: isTime(value.from) ? value.from : d.from,
+    to: isTime(value.to) ? value.to : d.to,
+    strength: typeof value.strength === "number" ? Math.min(80, Math.max(10, Math.round(value.strength))) : d.strength,
+  };
+}
+
 export interface Goals {
   finished: number;
   read: number;
@@ -486,6 +521,9 @@ function sanitize(raw: unknown): Preferences {
     motion: pick("motion", (v) => ["system", "full", "reduced", "off"].includes(v as string)),
     lightMode: pick("lightMode", isBoolean),
     startMaximized: pick("startMaximized", isBoolean),
+    closeToTray: pick("closeToTray", isBoolean),
+    resumeOnOpen: pick("resumeOnOpen", isBoolean),
+    nightFilter: sanitizeNightFilter((raw as Raw<Preferences>)?.nightFilter),
     goals: sanitizeGoals((raw as Raw<Preferences>)?.goals),
     sectionColors: sanitizeSectionColors((raw as Raw<Preferences>)?.sectionColors),
     autoBackup: sanitizeAutoBackup((raw as Raw<Preferences>)?.autoBackup),

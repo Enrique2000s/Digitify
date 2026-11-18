@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Dialog as RadixDialog } from "radix-ui";
-import { CornerDownLeft, FilePlus, FolderPlus, Gamepad2, Home, Joystick, LibraryBig, Link as LinkIcon, Monitor, Moon, Music, Search, Settings, Sparkles, Star, Tag, Disc3 } from "lucide-react";
+import { Clock, CornerDownLeft, FilePlus, FolderPlus, Gamepad2, Home, Joystick, LibraryBig, Link as LinkIcon, Monitor, Moon, Music, Search, Settings, Sparkles, Star, Tag, Disc3 } from "lucide-react";
 import { api, artworkUrl, type ArcadeGame, type ItemCard } from "../../lib/api";
 import { useCategories } from "../../lib/queries";
 import { usePreferences } from "../../lib/preferences";
@@ -96,6 +96,7 @@ export function CommandPalette() {
           run: go(() => void navigate({ to: "/library/$scope", params: { scope: c.key } })),
         })),
       { id: "favorites", group: "Go to", label: "Favorites", hint: "Library", icon: <Star size={17} />, run: go(() => void navigate({ to: "/library/$scope", params: { scope: "favorites" } })) },
+      { id: "later", group: "Go to", label: "Later", hint: "Library", icon: <Clock size={17} />, words: "watch read listen soon queue", run: go(() => void navigate({ to: "/library/$scope", params: { scope: "later" } })) },
       { id: "tags", group: "Go to", label: "Tags", hint: "Library", icon: <Tag size={17} />, run: go(() => void navigate({ to: "/tags" })) },
       { id: "smart", group: "Go to", label: "Smart lists", hint: "Library", icon: <Sparkles size={17} />, run: go(() => void navigate({ to: "/smart" })) },
       ...(smartLists.data ?? []).map<Entry>((l) => ({

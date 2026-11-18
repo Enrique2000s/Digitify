@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Maximize2, Pause, Play, X } from "lucide-react";
 import { api, onLinux } from "../../lib/api";
 import { pip, usePip } from "../../lib/pip";
+import { setVideoMedia } from "../../lib/mediaKeys";
 import { useAmbientHold } from "../../lib/ambient/AmbientProvider";
 import { libraryChanged } from "../../lib/queries";
 
@@ -101,6 +102,20 @@ function Floating() {
       window.clearInterval(timer);
     };
   }, [save, close]);
+
+  // The media keys reach the corner video too (D-058).
+  useEffect(() => {
+    setVideoMedia({
+      title: session.target.title,
+      subtitle: session.target.episode,
+      paused,
+      toggle: () => void api.playerCommand(["cycle", "pause"]).catch(() => {}),
+      play: () => void api.playerCommand(["set_property", "pause", false]).catch(() => {}),
+      pause: () => void api.playerCommand(["set_property", "pause", true]).catch(() => {}),
+      stop: close,
+    });
+  }, [paused, session.target, close]);
+  useEffect(() => () => setVideoMedia(null), []);
 
   const expand = () => {
     // The player takes the running session back.

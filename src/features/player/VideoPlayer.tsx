@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -22,6 +22,8 @@ import {
   VolumeX,
   RotateCcw,
   PictureInPicture2,
+  Bookmark as BookmarkIcon,
+  Trash2,
 } from "lucide-react";
 import { api, artworkUrl, errorText, onLinux, type WatchTarget } from "../../lib/api";
 import { useAmbientHold } from "../../lib/ambient/AmbientProvider";
@@ -39,6 +41,8 @@ import { SeekBar } from "../../components/SeekBar";
 import { actionFor, hint, isTyping } from "../../lib/shortcuts";
 import { useAutoHide, useFullscreen } from "../reader/chrome";
 import { pip } from "../../lib/pip";
+import { setVideoMedia } from "../../lib/mediaKeys";
+import { SleepTimerButton, sleepTimer } from "../../lib/sleepTimer";
 
 /** A message from mpv's JSON IPC, forwarded by the core. */
 interface MpvMessage {
@@ -200,6 +204,47 @@ export function DiscPlayPage() {
   return <VideoPlayer source={{ kind: "disc", letter, title: Number(title) }} />;
 }
 
+/** Moments of a film or an episode worth coming back to (D-063): add one here, jump to one, remove one. */
+function VideoBookmarks({ itemId, partId, time, onSeek }: { itemId: number; partId: number | null; time: number; onSeek: (time: number) => void }) {
+  const marks = useQuery({ queryKey: ["bookmarks", itemId], queryFn: () => api.bookmarksList(itemId) });
+  const queryClient = useQueryClient();
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: ["bookmarks", itemId] });
+  const here = (marks.data ?? []).filter((b) => "time" in b.locator && (b.locator.part ?? null) === (partId ?? null));
+  return (
+    <div className="video-marks">
+      <button
+        type="button"
+        className="btn btn-sm"
+        onClick={() => void api.bookmarkAdd(itemId, { time, part: partId }, clock(time)).then(refresh)}
+      >
+        <BookmarkIcon size={14} /> Bookmark {clock(time)}
+      </button>
+      {here.length === 0 ? (
+        <p className="hint">No bookmarks here yet.</p>
+      ) : (
+        here.map((mark) => (
+          <div key={mark.id} className="video-mark">
+            <button type="button" className="menu-item" onClick={() => "time" in mark.locator && onSeek(mark.locator.time)}>
+              <span className="toc-page">{"time" in mark.locator ? clock(mark.locator.time) : ""}</span>
+              <input
+                className="video-mark-label"
+                defaultValue={mark.label ?? ""}
+                aria-label="Bookmark name"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+                onBlur={(e) => void api.bookmarkRename(mark.id, e.target.value || null).then(refresh)}
+              />
+            </button>
+            <button type="button" className="icon-btn" aria-label="Remove bookmark" onClick={() => void api.bookmarkRemove(mark.id).then(refresh)}>
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 /** Films, episodes and disc titles, played by mpv under the window (Phase 3). */
 function VideoPlayer({ source }: { source: Source }) {
   const id = source.kind === "item" ? source.id : "";
@@ -223,7 +268,7 @@ function VideoPlayer({ source }: { source: Source }) {
   const [target, setTarget] = useState<WatchTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [playback, setPlayback] = useState<Playback>(EMPTY);
-  const [menu, setMenu] = useState<"speed" | "audio" | "subs" | "chapters" | null>(null);
+  const [menu, setMenu] = useState<"speed" | "audio" | "subs" | "chapters" | "marks" | null>(null);
   const [resumed, setResumed] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -405,6 +450,11 @@ function VideoPlayer({ source }: { source: Source }) {
   useEffect(() => {
     if (!playback.ended || !target) return;
     void save(playback);
+    // The sleep timer waits for the end of the episode (D-061): it stops here, no next episode.
+    if (sleepTimer.atEnd()) {
+      sleepTimer.set(null);
+      return;
+    }
     if (target.next) setCountdown(NEXT_COUNTDOWN);
   }, [playback.ended]);
   useEffect(() => {
@@ -523,6 +573,23 @@ function VideoPlayer({ source }: { source: Source }) {
       command(["cycle", "pause"]);
     }
   }
+  // The keyboard's and headphones' media keys, and the system's now-playing card (D-058).
+  const togglePlayRef = useRef(togglePlay);
+  togglePlayRef.current = togglePlay;
+  useEffect(() => {
+    if (!target) return;
+    setVideoMedia({
+      title: target.title,
+      subtitle: target.episode,
+      paused: playback.paused,
+      toggle: () => togglePlayRef.current(),
+      play: () => command(["set_property", "pause", false]),
+      pause: () => command(["set_property", "pause", true]),
+      next: target.next ? () => playPart(target.next!) : undefined,
+      previous: target.previous ? () => playPart(target.previous!) : undefined,
+    });
+  }, [target, playback.paused, playPart]);
+  useEffect(() => () => setVideoMedia(null), []);
   // Dragging previews with fast keyframe seeks; letting go (or a click) lands on the exact frame.
   const seek = (seconds: number, exact: boolean) => command(["seek", seconds, exact ? "absolute+exact" : "absolute+keyframes"]);
   const loadSubtitles = async () => {
@@ -623,6 +690,12 @@ function VideoPlayer({ source }: { source: Source }) {
                 ))}
               </Menu>
             )}
+            {target.itemId !== 0 && (
+              <Menu label="Bookmarks" icon={<BookmarkIcon size={17} />} open={menu === "marks"} onOpenChange={(o) => setMenu(o ? "marks" : null)} container={root.current}>
+                <VideoBookmarks itemId={target.itemId} partId={target.partId} time={playback.time} onSeek={(t) => choose(command(["seek", t, "absolute+exact"]))} />
+              </Menu>
+            )}
+            <SleepTimerButton className="round-btn" endLabel="End of this episode" />
             <Menu label="Subtitles" icon={<Captions size={17} />} open={menu === "subs"} onOpenChange={(o) => setMenu(o ? "subs" : null)} container={root.current}>
               <Choice selected={!subs.some((t) => t.selected)} onSelect={() => choose(command(["set_property", "sid", "no"]))}>
                 Off

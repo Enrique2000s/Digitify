@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { open } from "@tauri-apps/plugin-dialog";
-import { BookOpen, Cloud, CloudDownload, ExternalLink, FolderOpen, HardDrive, ImagePlus, Pause, Pencil, Play, Star, Trash, Eye } from "lucide-react";
+import { BookOpen, Cloud, CloudDownload, ExternalLink, FolderOpen, HardDrive, ImagePlus, Pause, Pencil, Play, Star, Trash, Eye, Clock } from "lucide-react";
 import { api, artworkUrl, errorText, type CoverShape, type ItemDetail, type VersionInfo } from "../../lib/api";
 import { bytes, date, formatLabel, longDuration, ROLE_LABELS } from "../../lib/format";
 import { libraryChanged, useItem } from "../../lib/queries";
@@ -303,6 +303,15 @@ export function ItemPage() {
             >
               <Star size={16} fill={item.isFavorite ? "currentColor" : "none"} />
               {item.isFavorite ? "Favorite" : "Add to favorites"}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              aria-pressed={item.inLater}
+              title={item.inLater ? "In Later: click to take it out" : "Keep it in Later, to watch, read or listen to soon"}
+              onClick={() => void run(() => api.laterSet([item.id], !item.inLater))}
+            >
+              <Clock size={16} /> {item.inLater ? "In Later" : "Later"}
             </button>
             <button type="button" className="btn" onClick={() => setEditing(true)}>
               <Pencil size={16} /> Edit details

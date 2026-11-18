@@ -12,7 +12,7 @@ import { ShelfLookPicker } from "../../components/ShelfLookPicker";
 import { ArcadeSettings } from "./ArcadeSettings";
 import { CategoriesPanel } from "./CategoriesPanel";
 import { KeyboardSettings } from "./KeyboardSettings";
-import { BackupsPanel } from "./LibraryTools";
+import { BackupsPanel, WatchedFolders } from "./LibraryTools";
 import { Setting } from "./Setting";
 import { SoundSettings } from "./SoundSettings";
 import { OnlineServicesPanel } from "../online/OnlineServices";
@@ -60,6 +60,33 @@ function StartWithComputer() {
             .catch((reason) => setError(errorText(reason)));
         }}
       />
+    </Setting>
+  );
+}
+
+/** The readers' night filter (D-069): how warm, and an optional schedule. */
+function NightFilterSetting() {
+  const { preferences, update } = usePreferences();
+  const filter = preferences.nightFilter;
+  const set = (patch: Partial<typeof filter>) => update({ nightFilter: { ...filter, ...patch } });
+  return (
+    <Setting
+      title="Night reading filter"
+      text="A warm tone over the pages of books and comics, easier on the eyes at night. Turn it on or off from the moon-and-sun button while reading, or let it come on by itself in these hours."
+    >
+      <div className="night-setting">
+        <label className="night-row">
+          <span>Warmth</span>
+          <input type="range" min={10} max={80} step={5} value={filter.strength} aria-label="Warmth" onChange={(event) => set({ strength: Number(event.target.value) })} />
+        </label>
+        <div className="night-row">
+          <Switch checked={filter.schedule} label="On by itself" onChange={(schedule) => set({ schedule })} />
+          <span>On by itself from</span>
+          <input className="input night-time" type="time" value={filter.from} disabled={!filter.schedule} aria-label="From" onChange={(event) => event.target.value && set({ from: event.target.value })} />
+          <span>to</span>
+          <input className="input night-time" type="time" value={filter.to} disabled={!filter.schedule} aria-label="To" onChange={(event) => event.target.value && set({ to: event.target.value })} />
+        </div>
+      </div>
     </Setting>
   );
 }
@@ -252,6 +279,16 @@ export function SettingsPage() {
             <ShelfLookPicker />
           </Setting>
           <StartWithComputer />
+          <Setting
+            title="Keep running in the tray when closed"
+            text="Closing the window leaves Digitify by the clock, where its icon shows what's playing and plays, pauses or skips; the music keeps going. Quit it from the icon's menu. Started with your computer, it then starts there."
+          >
+            <Switch checked={preferences.closeToTray} label="Keep running in the tray when closed" onChange={(closeToTray) => update({ closeToTray })} />
+          </Setting>
+          <Setting title="Offer to continue when opening" text="When Digitify opens, a small notice offers the book, comic, film, series or game you left halfway lately.">
+            <Switch checked={preferences.resumeOnOpen} label="Offer to continue when opening" onChange={(resumeOnOpen) => update({ resumeOnOpen })} />
+          </Setting>
+          <NightFilterSetting />
           <Setting title="Open maximized" text="Digitify fills the screen when it opens. Off, it opens at its regular size (it can still be maximized from the title bar).">
             <Switch checked={preferences.startMaximized} label="Open maximized" onChange={(startMaximized) => update({ startMaximized })} />
           </Setting>
@@ -295,6 +332,7 @@ export function SettingsPage() {
               <option value="copy">Copy into library folder</option>
             </select>
           </Setting>
+          <WatchedFolders />
           {error && <div className="dialog-error">{error}</div>}
         </section>
 

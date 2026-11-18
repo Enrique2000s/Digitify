@@ -73,6 +73,12 @@ pub fn import_start(app: AppHandle, state: State<'_, AppState>, request: ImportR
         return Err(AppError::msg("Nothing to import."));
     }
     let library = state.library()?;
+    start(app, library, request)
+}
+
+/// Starts an import job (the Import dialog, watched folders D-060); returns its id.
+pub fn start(app: AppHandle, library: Arc<Library>, request: ImportRequest) -> AppResult<u64> {
+    let state = app.state::<AppState>();
     let job_id = state.imports.next_id.fetch_add(1, Ordering::Relaxed) + 1;
     let cancel = Arc::new(AtomicBool::new(false));
     if let Ok(mut jobs) = state.imports.jobs.lock() {

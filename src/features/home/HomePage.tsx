@@ -49,6 +49,8 @@ export const SECTION_TITLES: Record<HomeSection, [string, string | null]> = {
   featured: ["Featured today", "Library"],
   featuredGame: ["Game of the day", "Arcade"],
   upNext: ["Up next", "Library & Arcade"],
+  later: ["Later", "Library"],
+  because: ["Because you liked…", "Library"],
   favorites: ["Favorites", "Library"],
   favoriteGames: ["Favorites", "Arcade"],
   continueWatching: ["Continue watching", "Library"],
@@ -303,6 +305,18 @@ export function HomePage() {
     continuePlaying: games.recent.length > 0 && <GameRow title={<SectionTitle section="continuePlaying" />} games={games.recent} running={games.running} starting={games.starting} />,
     favoriteGames: games.favorites.length > 0 && <GameRow title={<SectionTitle section="favoriteGames" />} games={games.favorites} running={games.running} starting={games.starting} />,
     featuredGame: games.featured && <FeaturedGame game={games.featured} running={games.running === games.featured.id} />,
+    later: data.later.length > 0 && <Row title={<SectionTitle section="later" />} items={data.later} more={{ scope: "later" }} />,
+    because: data.because && (
+      <Row
+        title={
+          <>
+            Because you liked <em className="because-seed">{data.because.seed.title}</em>
+            <span className="section-source"> (Library)</span>
+          </>
+        }
+        items={data.because.items}
+      />
+    ),
     upNext: <UpNext watching={data.continueWatching} reading={data.continueItems} next={data.nextVolumes} games={games.recent} running={games.running} />,
     featured: data.featured && (
       <section className="section" aria-label="Featured today">

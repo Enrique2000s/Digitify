@@ -101,6 +101,54 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-069 · Night reading filter
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose a button plus an optional schedule)
+- The readers (books, comics, manga, PDFs) have a moon-and-sun button that lays a warm tone over the pages, under the bars. Settings › Appearance › Night reading filter sets how warm (10–80%) and an optional schedule ("On by itself from 21:00 to 07:00", off by default; it can run past midnight). The button wins over the schedule until the app closes.
+
+### D-068 · Continue where you left off
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- When the app opens, a small notice offers the book, comic, film or series left halfway in the last week, or the game played last, whichever is newer: "Keep reading · 75%", "Keep watching", "Keep playing". It goes away after 15 seconds or when you open something else; once per launch. Settings › Appearance › Offer to continue when opening (on by default).
+
+### D-067 · Activity calendar
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- Statistics show the year as a calendar of days, darker the more time had reading, watching, listening or playing (levels from the year's own busiest days, one hue), with each day's time on hover and arrows to earlier years.
+
+### D-066 · Achievements
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose a small notice plus a list in Statistics)
+- Medals reached by themselves, in levels: Finisher, Bookworm, Cinephile, Audiophile, Player, Collector, Arcade regular, Critic and On a roll (days in a row). The library remembers when each was reached (`achievements` table, v22), so each is announced once, by a small notice at the bottom right (several at once say how many). Statistics list each family with its level, the next step and how far along it is. Nothing is sent anywhere.
+
+### D-065 · Your year in Digitify
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- "Your 2026" beside the calendar opens a big summary of the chosen year: time reading, watching, listening and playing, things finished and added, days active, the longest streak, the busiest month and day, and what took the most time (items, games, artists). From the library's own records only.
+
+### D-064 · Because you liked
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- A Home row (Library and Big Picture) from an item you rated 4 stars or more or marked favorite lately: others of yours in the same category that share its series, people, tags, genre or collection, unfinished, best match first. Nothing is looked up online. It can be moved or hidden in Customize Home.
+
+### D-063 · Video bookmarks
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- The video player's Bookmarks menu adds a bookmark at the current moment, jumps to one, renames or removes it; each episode has its own. Stored with the books' bookmarks (`{"time": seconds, "part": episode}`).
+
+### D-062 · Later
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- "Later" on an item's page keeps it in a list of things to watch, read or listen to soon (`later` table, v21): a Library section beside Favorites (newest added first), a Home row, and the command palette.
+
+### D-061 · Sleep timer
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- A moon button in the mini player and the video player stops music and video after 15–90 minutes, or at the end of the track or episode, fading out over the last 20 seconds and giving the volume back. The button shows the minutes left.
+
+### D-060 · Watched folders
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose a category per folder)
+- Settings › Library › Watched folders: folders Digitify looks in now and then (a little after start, then every 2 minutes, or "Look now"); new files are imported, kept where they are, into the category chosen for that folder. Files still being written (changed in the last minute) wait for the next look; files that can't be imported aren't tried again until the app restarts. Nothing is ever deleted or moved.
+
+### D-059 · Tray icon
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose: closing works as before, keeping it in the tray is a setting, off)
+- An icon by the clock (Windows' notification area; Linux's AppIndicator, where the desktop shows one) with Show Digitify, Play/Pause, Next and Quit; its tooltip says what's playing. Settings › Appearance › Keep running in the tray when closed (off by default): then closing hides the window and the music goes on; started with the computer, it starts there. Linux needs `libayatana-appindicator` (the .deb asks for it, the AppImage carries it, the Arch script installs it).
+
+### D-058 · Media keys and system media controls
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- The keyboard's play/pause, next, previous and stop keys, and the system's media controls (Windows' media overlay, Linux's MPRIS), control the video playing or else the music, and show its title and artist. Through `souvlaki` (MIT).
+
 ### D-057 · Library check
 - **Date:** 2026-11-09 · **Approved by:** project owner (asked for this set of features)
 - Settings › Backups and maintenance › Check the library opens one page with the files that aren't at their saved place (with Find moved files) and the same file content in more than one item (by quick hash and size), each linking to its item.

@@ -7,6 +7,7 @@ import { useMusic } from "../lib/music/MusicProvider";
 import { Cover } from "./common";
 import { Marquee } from "./Marquee";
 import { SeekBar } from "./SeekBar";
+import { SleepTimerButton } from "../lib/sleepTimer";
 
 function clock(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
@@ -64,6 +65,7 @@ function NowPlaying() {
         >
           {music.repeat === "one" ? <Repeat1 size={17} /> : <Repeat size={17} />}
         </button>
+        <SleepTimerButton />
       </div>
       <div className="now-volume">
         <button type="button" className="icon-btn" aria-label={music.muted ? "Unmute" : "Mute"} onClick={music.toggleMute}>

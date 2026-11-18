@@ -44,6 +44,9 @@ export function CategoryStrip({ tools }: { tools?: ReactNode }) {
         <Link to="/library/$scope" params={{ scope: "favorites" }} className="strip-pill" data-blip>
           Favorites
         </Link>
+        <Link to="/library/$scope" params={{ scope: "later" }} className="strip-pill" data-blip>
+          Later
+        </Link>
         <Link to="/tags" className="strip-pill" data-blip>
           Tags
         </Link>

@@ -1,5 +1,5 @@
 import { useParams, useSearch } from "@tanstack/react-router";
-import { FilePlus, FolderOpen, FolderPlus, LibraryBig, Search, Star } from "lucide-react";
+import { FilePlus, FolderOpen, FolderPlus, LibraryBig, Search, Star, Clock } from "lucide-react";
 import type { Category } from "../../lib/api";
 import { useImporter } from "../../lib/importer";
 import { useCategories, useCollections } from "../../lib/queries";
@@ -75,6 +75,19 @@ export function LibraryPage() {
         title="Everything"
         icon={<LibraryBig size={26} strokeWidth={2.2} aria-hidden />}
         empty={<EmptyLibrary text="Nothing here yet." />}
+      />
+    );
+  }
+  if (scope === "later") {
+    return (
+      <LibraryView
+        key="later"
+        viewKey="later"
+        base={{ later: true }}
+        title="Later"
+        description="To watch, read or listen to soon"
+        icon={<Clock size={26} strokeWidth={2.2} aria-hidden />}
+        empty={<div className="empty"><p>Add films, books, albums or anything else to Later from their page (the clock button), and they wait for you here.</p></div>}
       />
     );
   }

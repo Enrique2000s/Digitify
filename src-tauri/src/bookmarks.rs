@@ -1,6 +1,7 @@
 //! Bookmarks (Phase 2): places in a book worth coming back to. A page of a page-based book
 //! (`{"page": n}`) or a place in an ebook (`{"cfi": …, "fraction": f, "location": n}`), each with a
-//! label the reader can change.
+//! label the reader can change. Videos too (D-063): a moment of a film or an episode
+//! (`{"time": seconds, "part": episode}`).
 
 use rusqlite::params;
 use serde::Serialize;
@@ -26,6 +27,10 @@ fn clean_locator(locator: &Value) -> AppResult<Value> {
     if let Some(page) = locator.get("page").and_then(Value::as_u64) {
         return Ok(serde_json::json!({ "page": page }));
     }
+    if let Some(time) = locator.get("time").and_then(Value::as_f64).filter(|t| t.is_finite() && *t >= 0.0) {
+        let part = locator.get("part").and_then(Value::as_i64);
+        return Ok(serde_json::json!({ "time": (time * 10.0).round() / 10.0, "part": part }));
+    }
     let cfi = locator.get("cfi").and_then(Value::as_str).filter(|cfi| cfi.starts_with("epubcfi(") && cfi.len() <= 4096).ok_or_else(invalid)?;
     let fraction = locator.get("fraction").and_then(Value::as_f64).filter(|f| f.is_finite()).unwrap_or(0.0).clamp(0.0, 1.0);
     let location = locator.get("location").and_then(Value::as_u64);
@@ -37,6 +42,7 @@ fn place(locator: &Value) -> f64 {
     locator
         .get("page")
         .and_then(Value::as_f64)
+        .or_else(|| locator.get("time").and_then(Value::as_f64).map(|t| t + locator.get("part").and_then(Value::as_f64).unwrap_or(0.0) * 1e7))
         .or_else(|| locator.get("fraction").and_then(Value::as_f64))
         .unwrap_or(0.0)
 }
@@ -116,6 +122,7 @@ mod tests {
         assert_eq!(ebook["location"], 12);
         assert!(clean_locator(&serde_json::json!({ "cfi": "javascript:alert(1)" })).is_err());
         assert!(clean_locator(&serde_json::json!({ "page": -1 })).is_err());
+        assert_eq!(clean_locator(&serde_json::json!({ "time": 61.234, "part": 3, "x": 1 })).unwrap(), serde_json::json!({ "time": 61.2, "part": 3 }));
     }
 
     #[test]
