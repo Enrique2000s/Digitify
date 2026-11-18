@@ -124,10 +124,11 @@ function tileColumns(count: number): number {
 
 function Tiles({ categories, covers, total, games }: { categories: Category[]; covers: Record<string, TileCover[]>; total: number; games: { count: number; covers: TileCover[] } }) {
   const visible = categories.filter((category) => !category.isHidden);
-  const columns = tileColumns(visible.length + 3);
+  const { preferences } = usePreferences();
+  const columns = tileColumns(visible.length + (preferences.showEverything ? 3 : 2));
   return (
     <section className="tiles" aria-label="Library sections" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-      <SectionTile scope="all" label="Everything" screen={SCREENS.all} covers={covers.all ?? []} icon={<LibraryBig size={36} strokeWidth={2.2} aria-hidden />} count={total} />
+      {preferences.showEverything && <SectionTile scope="all" label="Everything" screen={SCREENS.all} covers={covers.all ?? []} icon={<LibraryBig size={36} strokeWidth={2.2} aria-hidden />} count={total} />}
       {visible.map((category, index) => (
         <SectionTile
           key={category.key}

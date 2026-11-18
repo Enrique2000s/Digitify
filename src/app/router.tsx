@@ -5,6 +5,7 @@ import { OnlinePlayerPage } from "../features/online/OnlinePlayer";
 import { PictureViewerPage } from "../features/pictures/PictureViewer";
 import { ArcadePage } from "../features/arcade/ArcadePage";
 import { LibraryPage, SearchPage } from "../features/library/LibraryPage";
+import { NowPlayingPage } from "../features/music/NowPlayingPage";
 import { TagPage, TagsPage } from "../features/organize/pages";
 import { SmartListPage, SmartListsPage } from "../features/organize/SmartLists";
 import { LibraryCheckPage } from "../features/settings/LibraryCheck";
@@ -98,6 +99,7 @@ const routeTree = rootRoute.addChildren([
   createRoute({ getParentRoute: () => rootRoute, path: "/disc/$letter/$title", component: DiscPlayPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/discs", component: DiscsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/settings", component: SettingsPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/now-playing", component: NowPlayingPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/lab", component: Lab }),
   createRoute({
     getParentRoute: () => rootRoute,

@@ -18,6 +18,10 @@ pub fn close_to_tray(app: &AppHandle) -> bool {
 
 pub fn show_main(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        // Coming back from the tray, the page plays again what it paused (D-076).
+        if !window.is_visible().unwrap_or(true) {
+            let _ = window.emit("app-shown", ());
+        }
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();

@@ -141,6 +141,10 @@ export interface Preferences {
   closeToTray: boolean;
   /** When the app opens, offer to continue the last thing left halfway (D-068). */
   resumeOnOpen: boolean;
+  /** Library's Everything view (D-074): off, every item is in its own category only. */
+  showEverything: boolean;
+  /** The Library section opened last (D-075), opened again by the Library button. */
+  libraryScope: string | null;
   /** The readers' night filter (D-069): an optional schedule, and how warm. */
   nightFilter: NightFilter;
   /** Monthly goals in Statistics (D-052): items finished, and hours of each activity; 0 is no goal. */
@@ -272,6 +276,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   startMaximized: true,
   closeToTray: false,
   resumeOnOpen: true,
+  showEverything: false,
+  libraryScope: null,
   nightFilter: { schedule: false, from: "21:00", to: "07:00", strength: 35 },
   goals: { finished: 0, read: 0, watch: 0, listen: 0, play: 0 },
   sectionColors: { enabled: false, colors: { ...SECTION_COLORS } },
@@ -527,6 +533,8 @@ function sanitize(raw: unknown): Preferences {
     startMaximized: pick("startMaximized", isBoolean),
     closeToTray: pick("closeToTray", isBoolean),
     resumeOnOpen: pick("resumeOnOpen", isBoolean),
+    showEverything: pick("showEverything", isBoolean),
+    libraryScope: pick("libraryScope", (v) => v === null || (typeof v === "string" && v.length > 0 && v.length < 64)),
     nightFilter: sanitizeNightFilter((raw as Raw<Preferences>)?.nightFilter),
     goals: sanitizeGoals((raw as Raw<Preferences>)?.goals),
     sectionColors: sanitizeSectionColors((raw as Raw<Preferences>)?.sectionColors),

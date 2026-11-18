@@ -1,3 +1,4 @@
+import { usePreferences } from "./preferences";
 import { useEffect, useMemo, useReducer, useState, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
@@ -118,4 +119,17 @@ export function usePagedItems(params: Omit<QueryParams, "offset" | "limit">) {
   }, [cache]);
 
   return { cache, total, error };
+}
+
+/**
+ * The Library section the Library buttons open (D-075): the one opened last, as Arcade does, or the
+ * first category when that one is gone (or is Everything with Everything turned off, D-074).
+ */
+export function useLibraryScope(): string {
+  const categories = useCategories();
+  const { preferences } = usePreferences();
+  const visible = categories.data?.filter((c) => !c.isHidden).map((c) => c.key) ?? [];
+  const last = preferences.libraryScope;
+  const valid = !!last && (visible.includes(last) || last === "favorites" || last === "later" || (last === "all" && preferences.showEverything));
+  return valid ? last! : (visible[0] ?? (preferences.showEverything ? "all" : "favorites"));
 }

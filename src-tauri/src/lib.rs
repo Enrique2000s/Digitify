@@ -46,7 +46,7 @@ mod year;
 
 use std::sync::{Arc, RwLock};
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 use crate::error::{AppError, AppResult};
 
@@ -106,7 +106,14 @@ pub fn run() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
     }
-    let app = tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    // One Digitify at a time (D-077): opening it again brings back the one already running (from
+    // the tray too). A copy with its own config folder (DIGITIFY_CONFIG_DIR, for trying things out)
+    // runs on its own, unless DIGITIFY_SINGLE_INSTANCE asks for the rule (tests).
+    if std::env::var_os("DIGITIFY_CONFIG_DIR").is_none() || std::env::var_os("DIGITIFY_SINGLE_INSTANCE").is_some() {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app)));
+    }
+    let app = builder
         .plugin(tauri_plugin_log::Builder::new().level(log::LevelFilter::Info).build())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -154,6 +161,8 @@ pub fn run() {
                 if window.label() == "main" && tray::close_to_tray(window.app_handle()) && window.app_handle().tray_by_id("main").is_some() {
                     api.prevent_close();
                     let _ = window.hide();
+                    // The page pauses what's playing until the window comes back (D-076).
+                    let _ = window.emit("app-hidden", ());
                 }
             }
         })

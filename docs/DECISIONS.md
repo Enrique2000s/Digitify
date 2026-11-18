@@ -101,6 +101,26 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-078 · Now playing page
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose a full page)
+- The music player gets a page of its own (`/now-playing`), like Big Picture's Now playing in the app's own look: the cover big over its blurred colors, title, artist and album, the favorite heart, the timeline, big controls, the volume and the sleep timer, and the queue: jump to a track, move it up or down, remove it, or stop and clear. The mini player's cover and title open it (it replaces the small Now playing panel); Back returns to where you were.
+
+### D-077 · One Digitify at a time
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- Opening Digitify while it's already running brings back the window that's open (from the tray too) instead of starting a second copy, through `tauri-plugin-single-instance` (MIT or Apache-2.0; a named mutex on Windows, D-Bus on Linux). A copy started with its own config folder (`DIGITIFY_CONFIG_DIR`, for trying things out) still runs on its own unless `DIGITIFY_SINGLE_INSTANCE` is set.
+
+### D-076 · Quiet in the tray (changes D-059)
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- With "Keep running in the tray when closed" on, closing the window now pauses the music and any video and holds the menu music, so nothing plays while the window is away; opening Digitify again (the icon, its menu or opening it again) plays the music on from where it stopped. The icon's Play / Pause still works for whoever wants music with the window away. Started hidden with the computer, it stays quiet until opened.
+
+### D-075 · Library remembers its section
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- As Arcade does, Library opens on the section used last (a category, Favorites or Later), from the title bar's Library button and in Big Picture; the first category when that one is gone. Kept with the preferences, so it holds after a restart.
+
+### D-074 · Everything off by default
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose everywhere)
+- Library's Everything view no longer shows by default: every item is in its own category. Settings › Library › Show Everything brings it back in Library's sections, on Home's tiles, in Big Picture's Library and in the command palette. Links that showed the whole library (Home's "Recently added › More") still open it.
+
 ### D-073 · Photos at one height
 - **Date:** 2026-11-18 · **Approved by:** project owner (chose justified rows)
 - Every photo card carries its own proportions (width / height, upright, kept between 0.4 and 2.6), from the core (`aspect` on the card, `library_query_aspects` for a whole view). In Grid a view of photos is laid out in justified rows: each full row fills the width and its photos share one height, none cropped; the last row keeps the usual height. On shelves photos stand at the same height as the collections beside them and each shelf holds as many as fit; Detailed, Carousel, Home's rows and Big Picture's tiles draw each photo whole at their one height.

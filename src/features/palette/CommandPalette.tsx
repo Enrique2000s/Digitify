@@ -84,7 +84,7 @@ export function CommandPalette() {
   const fixed = useMemo<Entry[]>(() => {
     const list: Entry[] = [
       { id: "home", group: "Go to", label: "Home", icon: <Home size={17} />, run: go(() => void navigate({ to: "/" })) },
-      { id: "all", group: "Go to", label: "Everything", hint: "Library", icon: <LibraryBig size={17} />, words: "library all", run: go(() => void navigate({ to: "/library/$scope", params: { scope: "all" } })) },
+      ...(preferences.showEverything ? [{ id: "all", group: "Go to" as const, label: "Everything", hint: "Library", icon: <LibraryBig size={17} />, words: "library all", run: go(() => void navigate({ to: "/library/$scope", params: { scope: "all" } })) }] : []),
       ...(categories.data ?? [])
         .filter((c) => !c.isHidden)
         .map<Entry>((c) => ({

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useParams, useSearch } from "@tanstack/react-router";
 import { FilePlus, FolderOpen, FolderPlus, LibraryBig, Search, Star, Clock } from "lucide-react";
 import type { Category } from "../../lib/api";
@@ -64,7 +65,12 @@ export function LibraryPage() {
   const { scope } = useParams({ from: "/library/$scope" });
   const { collection, tab } = useSearch({ from: "/library/$scope" });
   const categories = useCategories();
-  const { preferences } = usePreferences();
+  const { preferences, update } = usePreferences();
+  // The section opened last is where the Library button goes next time (D-075).
+  useEffect(() => {
+    const remembered = scope === "favorites" || scope === "later" || (scope === "all" && preferences.showEverything) || !!categories.data?.some((c) => c.key === scope);
+    if (remembered && preferences.libraryScope !== scope) update({ libraryScope: scope });
+  }, [scope, categories.data, preferences.showEverything, preferences.libraryScope, update]);
 
   if (scope === "all") {
     return (

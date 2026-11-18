@@ -27,7 +27,7 @@ interface AmbientContext {
   skip: () => void;
   playlist: PlaylistInfo;
   /** Pauses the music until the returned release is called (e.g. while a video plays). */
-  hold: (reason: "video" | "media" | "reading" | "game") => () => void;
+  hold: (reason: "video" | "media" | "reading" | "game" | "hidden") => () => void;
   /** A game from Arcade is running (D-041). */
   inGame: boolean;
   /** The menu music is silent for the game; it can be switched back on while the game runs. */
@@ -257,7 +257,7 @@ export function useAmbient(): AmbientContext {
 }
 
 /** Pauses ambient music while the calling component is mounted and `active`. */
-export function useAmbientHold(reason: "video" | "media" | "reading" | "game", active = true) {
+export function useAmbientHold(reason: "video" | "media" | "reading" | "game" | "hidden", active = true) {
   const { hold } = useAmbient();
   useEffect(() => (active ? hold(reason) : undefined), [hold, reason, active]);
 }

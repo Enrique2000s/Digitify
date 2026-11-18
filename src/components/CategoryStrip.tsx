@@ -3,12 +3,14 @@ import { Link } from "@tanstack/react-router";
 import { LibraryBig } from "lucide-react";
 import { useCategories, useDashboard } from "../lib/queries";
 import { useArrival } from "../lib/arrival";
+import { usePreferences } from "../lib/preferences";
 
 /** Library's header and its sections as buttons, like Arcade's (D-042); Home's tiles do the same on Home. */
 export function CategoryStrip({ tools }: { tools?: ReactNode }) {
   const categories = useCategories();
   const dashboard = useDashboard();
   const total = dashboard.data?.totals.items;
+  const { preferences } = usePreferences();
   // Fades in like Arcade's page when Library is opened, and holds still when only the view changes.
   const arriving = useArrival("library-chrome");
   return (
@@ -29,10 +31,13 @@ export function CategoryStrip({ tools }: { tools?: ReactNode }) {
           them, as in Arcade's toolbar (D-043). */}
       <div className={`arcade-toolbar library-toolbar${arriving ? " arriving" : ""}`}>
       <nav className="segmented category-strip" aria-label="Library sections">
-        <Link to="/library/$scope" params={{ scope: "all" }} className="strip-pill" data-blip>
-          Everything
-          {total != null && <span className="count">{total.toLocaleString()}</span>}
-        </Link>
+        {/* Everything only when turned on in Settings (D-074). */}
+        {preferences.showEverything && (
+          <Link to="/library/$scope" params={{ scope: "all" }} className="strip-pill" data-blip>
+            Everything
+            {total != null && <span className="count">{total.toLocaleString()}</span>}
+          </Link>
+        )}
         {categories.data
           ?.filter((category) => !category.isHidden)
           .map((category) => (

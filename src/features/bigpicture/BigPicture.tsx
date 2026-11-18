@@ -19,7 +19,7 @@ import { useCoverShape, usePreferences, type HomeSection } from "../../lib/prefe
 import { StatsPanel } from "../home/Stats";
 import { SectionTitle } from "../home/HomePage";
 import { SourceTag, sourceProps } from "../../components/SourceTag";
-import { libraryChanged, useCategories, useDashboard } from "../../lib/queries";
+import { libraryChanged, useCategories, useDashboard, useLibraryScope } from "../../lib/queries";
 import { CategoryIcon, Cover } from "../../components/common";
 
 export type BigPictureScreen = "home" | "library" | "item" | "search" | "online" | "arcade" | "music";
@@ -249,12 +249,14 @@ function HomeScreen() {
       <section className="bp-row">
         <h2>Library</h2>
         <Scroller>
-          {/* The same order as everywhere: Everything, the categories, then Favorites. */}
-          <button type="button" className="bp-category" data-bp-focus data-bp-autofocus onClick={() => void navigate({ to: "/bp", search: { screen: "library", scope: "all" } })}>
-            <LibraryBig size={46} />
-            <strong>Everything</strong>
-            <span>{data.totals.items.toLocaleString()}</span>
-          </button>
+          {/* The same order as everywhere: Everything (when turned on, D-074), the categories, then Favorites. */}
+          {preferences.showEverything && (
+            <button type="button" className="bp-category" data-bp-focus data-bp-autofocus onClick={() => void navigate({ to: "/bp", search: { screen: "library", scope: "all" } })}>
+              <LibraryBig size={46} />
+              <strong>Everything</strong>
+              <span>{data.totals.items.toLocaleString()}</span>
+            </button>
+          )}
           {categories.data
             ?.filter((c) => !c.isHidden)
             .map((category) => (
@@ -333,8 +335,13 @@ function LibraryScreen({ scope }: { scope: string }) {
     queryKey: ["bp-items", scope, sort, limit],
     queryFn: () => api.query({ ...base, sort, custom: sort === "custom" ? scope : null, offset: 0, limit }),
   });
+  // Library remembers its section here too (D-075).
+  const { update } = usePreferences();
+  useEffect(() => {
+    if (scope !== preferences.libraryScope && (scope !== "all" || preferences.showEverything)) update({ libraryScope: scope });
+  }, [scope, preferences.libraryScope, preferences.showEverything, update]);
   const tabs = [
-    { key: "all", name: "Everything" },
+    ...(preferences.showEverything ? [{ key: "all", name: "Everything" }] : []),
     ...(categories.data?.filter((c) => !c.isHidden).map((c) => ({ key: c.key, name: c.name })) ?? []),
     { key: "favorites", name: "Favorites" },
   ];
@@ -642,6 +649,7 @@ export function BigPicturePage() {
   const shell = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState(false);
   const cursor = preferences.bigPicture.navigation === "cursor";
+  const libraryScope = useLibraryScope();
   // The startup animation, when Big Picture was just entered (D-070), then Home arriving.
   const [intro, setIntro] = useState(() => takeIntro() && preferences.bigPicture.intro);
   const [arrived, setArrived] = useState(false);
@@ -798,7 +806,7 @@ export function BigPicturePage() {
         </span>
         <nav className="bp-navs">
           {nav({ screen: "home" }, "Home", <House size={24} />, screen === "home")}
-          {nav({ screen: "library", scope: search.scope ?? "all" }, "Library", <LibraryBig size={24} />, screen === "library")}
+          {nav({ screen: "library", scope: screen === "library" ? search.scope ?? libraryScope : libraryScope }, "Library", <LibraryBig size={24} />, screen === "library")}
           {nav({ screen: "arcade" }, "Arcade", <Joystick size={24} />, screen === "arcade")}
           {nav({ screen: "search" }, "Search", <Search size={24} />, screen === "search")}
         </nav>
@@ -817,7 +825,7 @@ export function BigPicturePage() {
       <main ref={main} className="bp-main" key={key}>
         {title && <h1 className="bp-title">{title}</h1>}
         {screen === "home" && <HomeScreen />}
-        {screen === "library" && <LibraryScreen scope={search.scope ?? "all"} />}
+        {screen === "library" && <LibraryScreen scope={search.scope ?? libraryScope} />}
         {screen === "item" && search.id != null && <ItemScreen id={search.id} />}
         {screen === "search" && <SearchScreen />}
         {screen === "online" && search.id != null && <OnlineScreen id={search.id} />}

@@ -1,3 +1,4 @@
+import { useLibraryScope } from "../lib/queries";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -56,6 +57,8 @@ export function WindowButtons() {
 
 /** The header capsule: brand (home), history, library search, ambient music, settings and window controls. */
 export function TitleBar({ searchEnabled }: { searchEnabled: boolean }) {
+  // Library opens where it was left (D-075).
+  const libraryScope = useLibraryScope();
   const navigate = useNavigate();
   const music = useMusic();
   const { preferences } = usePreferences();
@@ -114,7 +117,7 @@ export function TitleBar({ searchEnabled }: { searchEnabled: boolean }) {
             </Link>
             <Link
               to="/library/$scope"
-              params={{ scope: "all" }}
+              params={{ scope: libraryScope }}
               className="appbar-nav-item"
               aria-current={/^\/(library|tags|tag|item|online)\b/.test(location.pathname) ? "page" : undefined}
             >

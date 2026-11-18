@@ -281,7 +281,7 @@ export function SettingsPage() {
           <StartWithComputer />
           <Setting
             title="Keep running in the tray when closed"
-            text="Closing the window leaves Digitify by the clock, where its icon shows what's playing and plays, pauses or skips; the music keeps going. Quit it from the icon's menu. Started with your computer, it then starts there."
+            text="Closing the window leaves Digitify by the clock, quiet: the music and videos pause until you open it again, and then the music goes on. Its icon can still play, pause or skip, and quits Digitify from its menu. Started with your computer, it then starts there."
           >
             <Switch checked={preferences.closeToTray} label="Keep running in the tray when closed" onChange={(closeToTray) => update({ closeToTray })} />
           </Setting>
@@ -325,6 +325,9 @@ export function SettingsPage() {
               library; consider moving the folder outside {status.data.cloudSync}.
             </div>
           )}
+          <Setting title="Show Everything" text="A view of the whole library at once in Library, on Home, in Big Picture and in the command palette. Off, everything stays in its own category.">
+            <Switch checked={preferences.showEverything} label="Show Everything" onChange={(showEverything) => update({ showEverything })} />
+          </Setting>
           <Setting title="When importing" text="Keep files where they are, or copy them into the library folder.">
             <select className="select" style={{ width: 230 }} value={preferences.importMode} onChange={(event) => update({ importMode: event.target.value as typeof preferences.importMode })}>
               <option value="ask">Ask every time</option>

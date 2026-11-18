@@ -51,6 +51,8 @@ export interface MusicContext extends Playback {
   toggleShuffle: () => void;
   jump: (index: number) => void;
   remove: (index: number) => void;
+  /** Moves a queued track to another place in the queue (D-078). */
+  move: (from: number, to: number) => void;
   stop: () => void;
   /** Keeps a track's details (favorite, title) current after an edit. */
   updateTrack: (track: Track) => void;
@@ -196,6 +198,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       },
       jump: (index) => command(["playlist-play-index", index]),
       remove: (index) => command(["playlist-remove", index]),
+      // mpv puts the entry before the one at the second index, so moving down needs one more.
+      move: (from, to) => from !== to && command(["playlist-move", from, to > from ? to + 1 : to]),
       stop: () => {
         void api.musicStop().catch(() => {});
         setPlayback(IDLE);
