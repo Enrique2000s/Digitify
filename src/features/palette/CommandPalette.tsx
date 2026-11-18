@@ -95,6 +95,7 @@ export function CommandPalette() {
           icon: <CategoryIcon icon={c.icon} size={17} />,
           run: go(() => void navigate({ to: "/library/$scope", params: { scope: c.key } })),
         })),
+      { id: "arcade", group: "Go to", label: "Arcade", hint: "Games", icon: <Joystick size={17} />, words: "games play", run: go(() => void navigate({ to: "/arcade" })) },
       { id: "favorites", group: "Go to", label: "Favorites", hint: "Library", icon: <Star size={17} />, run: go(() => void navigate({ to: "/library/$scope", params: { scope: "favorites" } })) },
       { id: "later", group: "Go to", label: "Later", hint: "Library", icon: <Clock size={17} />, words: "watch read listen soon queue", run: go(() => void navigate({ to: "/library/$scope", params: { scope: "later" } })) },
       { id: "tags", group: "Go to", label: "Tags", hint: "Library", icon: <Tag size={17} />, run: go(() => void navigate({ to: "/tags" })) },
@@ -107,7 +108,6 @@ export function CommandPalette() {
         icon: <ListFilter size={17} />,
         run: go(() => void navigate({ to: "/smart/$id", params: { id: String(l.id) } })),
       })),
-      { id: "arcade", group: "Go to", label: "Arcade", hint: "Games", icon: <Joystick size={17} />, words: "games play", run: go(() => void navigate({ to: "/arcade" })) },
       { id: "discs", group: "Go to", label: "Discs", hint: "CDs, DVDs and Blu-rays", icon: <Disc3 size={17} />, run: go(() => void navigate({ to: "/discs" })) },
       { id: "settings", group: "Go to", label: "Settings", icon: <Settings size={17} />, words: "preferences options", run: go(() => void navigate({ to: "/settings" })) },
       { id: "bp", group: "Go to", label: "Big Picture", hint: "TV and controller", icon: <Monitor size={17} />, words: "tv controller fullscreen", run: go(() => void enterBigPicture(() => void navigate({ to: "/bp" }))) },
@@ -130,7 +130,9 @@ export function CommandPalette() {
 
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const entries: Entry[] = [
-    ...(words.length ? fixed.filter((e) => matches(e, words)) : fixed.filter((e) => e.group === "Go to").slice(0, 6)),
+    // With nothing typed, every place to go (D-088): Home, each category, Arcade and the rest; each
+    // smart list shows when its name is typed.
+    ...(words.length ? fixed.filter((e) => matches(e, words)) : fixed.filter((e) => e.group === "Go to" && !e.id.startsWith("smart-"))),
     ...(words.length
       ? (items.data?.items ?? []).map<Entry>((item: ItemCard) => ({
           id: `item-${item.id}`,

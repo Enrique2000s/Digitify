@@ -34,6 +34,9 @@ use stores::Store;
 #[derive(Default)]
 pub struct ArcadeState {
     running: Mutex<Option<Running>>,
+    /// A store game Digitify asked its launcher to start and is waiting to see (D-037), so the
+    /// watch for games started elsewhere (D-083) leaves it to that launch.
+    starting: Mutex<Option<i64>>,
 }
 
 #[derive(Clone, Copy)]
@@ -968,6 +971,14 @@ fn launch_store_game(app: AppHandle, library: std::sync::Arc<Library>, id: i64, 
     }
     let _ = app.emit("arcade-session", serde_json::json!({ "starting": id, "store": store.name() }));
     let Some(dir) = install_dir.filter(|d| d.is_dir()) else { return Ok(()) };
+    let set_starting = |app: &AppHandle, value: Option<i64>| {
+        if let Some(state) = app.try_state::<ArcadeState>() {
+            if let Ok(mut starting) = state.starting.lock() {
+                *starting = value;
+            }
+        }
+    };
+    set_starting(&app, Some(id));
     std::thread::spawn(move || {
         let mut system = sysinfo::System::new();
         let deadline = Instant::now() + std::time::Duration::from_secs(STORE_START_WAIT);
@@ -978,6 +989,7 @@ fn launch_store_game(app: AppHandle, library: std::sync::Arc<Library>, id: i64, 
             }
             if Instant::now() > deadline {
                 log::info!("arcade: game {id} wasn't seen running; Digitify stays as it is");
+                set_starting(&app, None);
                 let _ = app.emit("arcade-session", serde_json::json!({ "running": null, "notSeen": id }));
                 return;
             }
@@ -989,6 +1001,7 @@ fn launch_store_game(app: AppHandle, library: std::sync::Arc<Library>, id: i64, 
                 *running = Some(Running { game: id });
             }
         }
+        set_starting(&app, None);
         let _ = app.emit("arcade-session", serde_json::json!({ "running": id }));
         if mode == WhilePlaying::Hide {
             if let Some(window) = app.get_webview_window("main") {
@@ -1028,6 +1041,91 @@ fn game_running(system: &mut sysinfo::System, dir: &Path) -> bool {
             || process.cwd().is_some_and(|p| normalize(&p.display().to_string()).starts_with(&wanted))
             || process.cmd().iter().any(|arg| normalize(&arg.to_string_lossy()).contains(&wanted))
     })
+}
+
+/// The PC game (if any) of `games` whose program runs now: one refresh of the process list, the
+/// programs and (on Linux, for Proton) their command lines. Cheap enough to run every few seconds.
+fn running_among(system: &mut sysinfo::System, games: &[(i64, String)]) -> Option<i64> {
+    let what = if cfg!(windows) {
+        sysinfo::ProcessRefreshKind::nothing().with_exe(sysinfo::UpdateKind::OnlyIfNotSet)
+    } else {
+        sysinfo::ProcessRefreshKind::nothing().with_exe(sysinfo::UpdateKind::OnlyIfNotSet).with_cmd(sysinfo::UpdateKind::OnlyIfNotSet)
+    };
+    system.refresh_processes_specifics(sysinfo::ProcessesToUpdate::All, true, what);
+    let paths: Vec<(String, Vec<String>)> = system
+        .processes()
+        .values()
+        // Crash reporters and anti-cheat helpers can outlive the game itself: they don't count.
+        .filter(|p| !p.exe().and_then(|e| e.file_stem()).is_some_and(|n| helper_program(&n.to_string_lossy())))
+        .map(|p| (p.exe().map(|e| normalize(&e.display().to_string())).unwrap_or_default(), p.cmd().iter().map(|a| normalize(&a.to_string_lossy())).collect()))
+        .collect();
+    games.iter().find_map(|(id, dir)| {
+        let wanted = format!("{}/", normalize(dir));
+        (wanted.len() > 4 && paths.iter().any(|(exe, cmd)| exe.starts_with(&wanted) || cmd.iter().any(|a| a.contains(&wanted)))).then_some(*id)
+    })
+}
+
+/// Programs beside a game that aren't the game: crash reporters, anti-cheat services, redistributable
+/// installers (D-083).
+fn helper_program(stem: &str) -> bool {
+    let s = stem.to_lowercase();
+    ["crashreportclient", "unitycrashhandler", "crashpad_handler", "crashhandler", "easyanticheat", "battleye", "beservice", "vc_redist", "dxsetup", "dotnetfx"]
+        .iter()
+        .any(|h| s.starts_with(h))
+}
+
+/// Games started some other way (D-083): from their own launcher, a desktop shortcut, or before
+/// Digitify opened. Every few seconds, when no game is being played, Digitify looks for a program
+/// running from one of Arcade's PC games' folders; it then shows that game as playing and counts
+/// its time until no program from its folder is left, as if it had been started from Arcade.
+pub fn watch_outside(app: AppHandle) {
+    std::thread::Builder::new()
+        .name("arcade-outside".into())
+        .spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(6));
+            let mut system = sysinfo::System::new();
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(8));
+                let Some(state) = app.try_state::<ArcadeState>() else { continue };
+                let busy = state.running.lock().map(|r| r.is_some()).unwrap_or(true) || state.starting.lock().map(|s| s.is_some()).unwrap_or(true);
+                if busy {
+                    continue;
+                }
+                let Some(library) = app.try_state::<AppState>().and_then(|s| s.library().ok()) else { continue };
+                let games: Vec<(i64, String)> = library
+                    .db
+                    .with(|conn| {
+                        Ok(conn
+                            .prepare("SELECT id, install_dir FROM arcade_games WHERE platform = 'pc' AND hidden = 0 AND missing = 0 AND install_dir IS NOT NULL AND length(install_dir) > 3")?
+                            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+                            .collect::<Result<_, _>>()?)
+                    })
+                    .unwrap_or_default();
+                if games.is_empty() {
+                    continue;
+                }
+                let Some(id) = running_among(&mut system, &games) else { continue };
+                // Claimed now, unless a launch from Arcade got there first.
+                {
+                    let Ok(mut running) = state.running.lock() else { continue };
+                    if running.is_some() || state.starting.lock().map(|s| s.is_some()).unwrap_or(true) {
+                        continue;
+                    }
+                    *running = Some(Running { game: id });
+                }
+                log::info!("arcade: game {id} is running, started outside Digitify");
+                let _ = app.emit("arcade-session", serde_json::json!({ "running": id, "outside": true }));
+                let dir = games.iter().find(|(g, _)| *g == id).map(|(_, d)| d.clone()).unwrap_or_default();
+                let started = Instant::now();
+                let mut absent = 0;
+                while absent < 2 {
+                    std::thread::sleep(std::time::Duration::from_secs(4));
+                    absent = if running_among(&mut system, &[(id, dir.clone())]).is_some() { 0 } else { absent + 1 };
+                }
+                finish_session(&app, &library, id, started.elapsed().as_secs() as i64, false);
+            }
+        })
+        .ok();
 }
 
 /// Paths compared loosely: forward slashes, lower case, no Wine drive letter, no trailing slash.
@@ -1082,4 +1180,19 @@ fn launch_command(found: &Found, game: &Path) -> std::process::Command {
         Emulator::Rmg => command.arg("--quit-after-emulation").arg(game),
     };
     command
+}
+
+#[cfg(test)]
+mod outside_tests {
+    use super::*;
+
+    #[test]
+    fn folders_and_helpers_for_games_started_elsewhere() {
+        // A folder matches whole names: "Fort" isn't "Fortnite".
+        let program = format!("{}/", normalize(r"D:\Games\Fortnite\bin\game.exe"));
+        assert!(!program.starts_with(&format!("{}/", normalize(r"D:\Games\Fort"))));
+        assert!(program.starts_with(&format!("{}/", normalize(r"D:\Games\Fortnite"))));
+        assert_eq!(normalize(r"Z:\home\me\Games\X\\"), "/home/me/games/x");
+        assert!(helper_program("CrashReportClient") && helper_program("EasyAntiCheat_EOS") && !helper_program("FortniteClient-Win64-Shipping"));
+    }
 }

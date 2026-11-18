@@ -12,6 +12,19 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.3.0",
+    date: "2026-11-18",
+    added: [
+      { icon: "gamepad", title: "Games you start anywhere", text: "Open a game from its own launcher or a shortcut, before or after Digitify, and Arcade shows it playing and counts its time." },
+      { icon: "monitor", title: "Stays by the clock", text: "Closing the window now keeps Digitify running quietly in the tray. Hold the X for a moment to quit it outright; a ring fills while you hold." },
+      { icon: "search", title: "Every place in Ctrl+K", text: "With nothing typed, it lists every category, Arcade and the rest of the app." },
+    ],
+    fixed: [
+      "Big Picture's cursor shows above its menus and pop-ups.",
+      "Home's category tiles stay centered when Everything is off.",
+    ],
+  },
+  {
     version: "0.2.0",
     date: "2026-11-18",
     added: [

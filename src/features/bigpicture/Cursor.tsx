@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { claimSticksForCursor, usePad, useSticks } from "../../lib/gamepad";
 
 const CLICKABLE = "button, a, input, select, label, [data-bp-focus], [role=button], [role=tab], [role=slider], [role=checkbox]";
@@ -147,5 +148,10 @@ export function Cursor({ speed, autoHide = false, mouseOnly = false }: { speed: 
     return true;
   });
 
-  return <div ref={ref} className={`bp-cursor${mouseOnly ? " hidden" : ""}`} aria-hidden style={{ transform: `translate(${position.current.x}px, ${position.current.y}px)` }} />;
+  // Drawn on top of everything, pop-ups included (menus, dialogs and panels open in their own
+  // layer above the page, D-087).
+  return createPortal(
+    <div ref={ref} className={`bp-cursor${mouseOnly ? " hidden" : ""}`} aria-hidden style={{ transform: `translate(${position.current.x}px, ${position.current.y}px)` }} />,
+    document.body,
+  );
 }

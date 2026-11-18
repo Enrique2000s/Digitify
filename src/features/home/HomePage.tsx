@@ -127,7 +127,8 @@ function Tiles({ categories, covers, total, games }: { categories: Category[]; c
   const { preferences } = usePreferences();
   const columns = tileColumns(visible.length + (preferences.showEverything ? 3 : 2));
   return (
-    <section className="tiles" aria-label="Library sections" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+    // Rows that come out shorter than the others stay centered under them (D-086).
+    <section className="tiles" aria-label="Library sections" style={{ "--cols": columns } as React.CSSProperties}>
       {preferences.showEverything && <SectionTile scope="all" label="Everything" screen={SCREENS.all} covers={covers.all ?? []} icon={<LibraryBig size={36} strokeWidth={2.2} aria-hidden />} count={total} />}
       {visible.map((category, index) => (
         <SectionTile

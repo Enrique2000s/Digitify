@@ -1981,6 +1981,7 @@ body:has(.import-panel) .online-queue {
 
 /* Library sections: low cards, more to a row. */
 .tiles {
+  --tile-gap: 14px;
   gap: 14px;
   margin-top: 20px;
 }
@@ -3712,4 +3713,48 @@ a.mini-player-open {
 }
 .settings-group {
   margin: 0;
+}
+
+/* Hold the X to quit (D-085): a ring fills around it while it's held. */
+.round-btn.close {
+  position: relative;
+}
+.hold-ring {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  overflow: visible;
+  pointer-events: none;
+  transform: rotate(-90deg);
+}
+.hold-ring circle {
+  fill: none;
+  stroke: #e5484d;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  opacity: 0;
+}
+.round-btn.close.holding .hold-ring circle {
+  opacity: 1;
+  animation: hold-fill var(--hold, 1100ms) linear forwards;
+}
+@keyframes hold-fill {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Home's tiles (D-086): rows of equal tiles; a shorter last row sits centered under the others. */
+.tiles {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--tile-gap, 20px);
+}
+.tiles > .tile {
+  flex: 0 0 calc((100% - (var(--cols, 6) - 1) * var(--tile-gap, 20px)) / var(--cols, 6));
+  min-width: 0;
 }

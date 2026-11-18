@@ -10,6 +10,7 @@ import { MusicPill } from "./MusicPill";
 import { useMusic } from "../lib/music/MusicProvider";
 import { useDiscs } from "../lib/discs";
 import { usePreferences } from "../lib/preferences";
+import { api } from "../lib/api";
 import { comboLabel, keysFor } from "../lib/shortcuts";
 
 const appWindow = getCurrentWindow();
@@ -46,12 +47,64 @@ export function WindowButtons() {
           {maximized ? <path d="M9 4h11v11M4 9h11v11H4z" /> : <path d="M6 6h12v12H6z" />}
         </svg>
       </button>
-      <button type="button" className="round-btn close" aria-label="Close" title="Close" onClick={() => void appWindow.close()}>
-        <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round">
-          <path d="M7 7l10 10M17 7 7 17" />
-        </svg>
-      </button>
+      <CloseButton />
     </div>
+  );
+}
+
+/** How long the X is held to quit outright (D-085). */
+const HOLD_MS = 1100;
+
+/**
+ * The window's X. A click closes the window (to the tray when it's kept running there, D-059). With
+ * the tray on, holding it quits Digitify outright (D-085): a ring fills around it while it's held,
+ * and letting go early is just a click. Settings › Window and startup can turn the hold off.
+ */
+function CloseButton() {
+  const { preferences } = usePreferences();
+  const hold = preferences.closeToTray && preferences.holdToQuit;
+  const [holding, setHolding] = useState(false);
+  const timer = useRef(0);
+  const quitting = useRef(false);
+  const stop = () => {
+    window.clearTimeout(timer.current);
+    setHolding(false);
+  };
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  return (
+    <button
+      type="button"
+      className={`round-btn close${holding ? " holding" : ""}`}
+      aria-label={hold ? "Close (hold to quit)" : "Close"}
+      title={hold ? "Close · hold to quit Digitify" : "Close"}
+      style={{ "--hold": `${HOLD_MS}ms` } as React.CSSProperties}
+      onPointerDown={(event) => {
+        if (!hold || event.button !== 0) return;
+        quitting.current = false;
+        setHolding(true);
+        timer.current = window.setTimeout(() => {
+          quitting.current = true;
+          setHolding(false);
+          void api.appQuit();
+        }, HOLD_MS);
+      }}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      onPointerCancel={stop}
+      onClick={() => {
+        if (quitting.current) return;
+        void appWindow.close();
+      }}
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round">
+        <path d="M7 7l10 10M17 7 7 17" />
+      </svg>
+      {hold && (
+        <svg className="hold-ring" viewBox="0 0 44 44" aria-hidden>
+          <circle cx="22" cy="22" r="20" pathLength={100} />
+        </svg>
+      )}
+    </button>
   );
 }
 

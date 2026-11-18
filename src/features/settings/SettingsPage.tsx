@@ -332,6 +332,12 @@ export function SettingsPage() {
             <Switch checked={preferences.closeToTray} label="Keep running in the tray when closed" onChange={(closeToTray) => update({ closeToTray })} />
           </Setting>
           <Setting
+            title="Hold the X to quit"
+            text={preferences.closeToTray ? "With Digitify kept in the tray, holding the window's X for a moment quits it outright; a ring fills around the X while you hold it. A click still only hides the window." : "Only with “Keep running in the tray when closed” on: then holding the window's X quits Digitify outright."}
+          >
+            <Switch checked={preferences.holdToQuit} label="Hold the X to quit" onChange={(holdToQuit) => update({ holdToQuit })} />
+          </Setting>
+          <Setting
             title="Ask before closing"
             text={preferences.closeToTray ? "Not needed while Digitify keeps running in the tray: closing the window only hides it." : "Closing the window quits Digitify, so it asks first, in case the X was clicked by mistake."}
           >

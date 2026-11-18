@@ -101,6 +101,30 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-088 · Every place in Ctrl+K
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- With nothing typed, the command palette lists every place to go (it showed only the first six): Home, each category, Arcade, Favorites, Later, Tags, Smart lists, Discs, Settings and Big Picture; each smart list shows when its name is typed.
+
+### D-087 · Big Picture's cursor above its pop-ups
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- The round cursor is drawn in the window's top layer (outside Big Picture's page), so menus, dialogs and panels that open in their own layer no longer cover it.
+
+### D-086 · Home's tiles centered
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- Home's section tiles keep equal widths in balanced rows, and a shorter last row sits centered under the others (with Everything off there's one tile fewer).
+
+### D-085 · Hold the X to quit
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- With Digitify kept in the tray, holding the window's X for about a second quits it outright; a red ring fills around the X while it's held, and letting go early is a plain click (to the tray). Settings › Window and startup › Hold the X to quit (on by default).
+
+### D-084 · The tray on by default (changes D-059)
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- "Keep running in the tray when closed" is now on by default, so closing the window keeps Digitify quietly by the clock (D-076). A setting already saved as off stays off.
+
+### D-083 · Games started outside Digitify
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- Every 8 seconds, when no game is being played, the core looks for a program running from one of Arcade's PC games' folders (its program path; on Linux also its command line, for Proton), leaving out crash reporters and anti-cheat helpers. A game started from its own launcher, a shortcut or before Digitify opened is then shown playing and its time counted until no program from its folder is left, as if started from Arcade (time before Digitify noticed it isn't counted). A launch from Arcade that's still waiting for its game keeps the watch out of the way. Emulator games started outside aren't seen.
+
 ### D-082 · Settings in order
 - **Date:** 2026-11-18 · **Approved by:** project owner (chose one page, well grouped)
 - One page, each panel with what belongs together: Appearance (style, palette, theme, accent, colors per section, animations, light mode); Library (the folder, its categories, then Views: Everything, same view everywhere, cover size and shapes, shelves; then Importing: when importing, watched folders); Window and startup (start with the computer, open maximized, keep in the tray, ask before closing, offer to continue, what's new after updates); Reading (night filter); Sound; Arcade; Online services; Keyboard; Backups and maintenance; About (version, What's new, notices). New icons replace the sparkle one everywhere (Smart lists: a filtered list; Big Picture's startup switch: a clapperboard; Your year: a calendar).

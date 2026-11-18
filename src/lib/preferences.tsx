@@ -143,6 +143,8 @@ export interface Preferences {
   resumeOnOpen: boolean;
   /** Closing the window (tray off) asks first (D-080). */
   confirmClose: boolean;
+  /** With the tray on, holding the window's X quits Digitify outright (D-085). */
+  holdToQuit: boolean;
   /** What's new after an update (D-081): shown unless turned off; `seen` is the last version shown. */
   whatsNew: { show: boolean; seen: string | null };
   /** Library's Everything view (D-074): off, every item is in its own category only. */
@@ -278,10 +280,11 @@ export const DEFAULT_PREFERENCES: Preferences = {
   motion: "system",
   lightMode: false,
   startMaximized: true,
-  closeToTray: false,
+  closeToTray: true,
   resumeOnOpen: true,
   showEverything: false,
   confirmClose: true,
+  holdToQuit: true,
   whatsNew: { show: true, seen: null },
   libraryScope: null,
   nightFilter: { schedule: false, from: "21:00", to: "07:00", strength: 35 },
@@ -541,6 +544,7 @@ function sanitize(raw: unknown): Preferences {
     resumeOnOpen: pick("resumeOnOpen", isBoolean),
     showEverything: pick("showEverything", isBoolean),
     confirmClose: pick("confirmClose", isBoolean),
+    holdToQuit: pick("holdToQuit", isBoolean),
     whatsNew: (() => {
       const w = ((raw as Raw<Preferences>)?.whatsNew ?? {}) as { show?: unknown; seen?: unknown };
       return { show: typeof w.show === "boolean" ? w.show : true, seen: typeof w.seen === "string" ? w.seen : null };

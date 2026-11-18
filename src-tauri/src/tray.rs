@@ -1,6 +1,6 @@
 //! The tray icon (D-059): beside the clock, with what's playing in its tooltip, and a menu to show
 //! Digitify, play or pause, skip, and quit. Closing the window can keep Digitify running there
-//! (Settings › "Keep running in the tray when closed", off by default); started with the computer
+//! (Settings › "Keep running in the tray when closed", on by default since D-084); started with the computer
 //! with that on, it starts hidden there.
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -13,7 +13,8 @@ use crate::AppState;
 pub fn close_to_tray(app: &AppHandle) -> bool {
     app.try_state::<AppState>()
         .and_then(|state| state.config.get().preferences.get("closeToTray").and_then(|v| v.as_bool()))
-        .unwrap_or(false)
+        // On unless turned off (D-084).
+        .unwrap_or(true)
 }
 
 /// Whether closing the window (with the tray off) asks first (D-080), on unless turned off.

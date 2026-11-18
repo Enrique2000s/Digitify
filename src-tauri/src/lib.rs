@@ -142,6 +142,8 @@ pub fn run() {
             app.manage(online::OnlineState::default());
             app.manage(arcade::ArcadeState::default());
             arcade::watch_stores(app.handle().clone());
+            // Games started outside Digitify (D-083).
+            arcade::watch_outside(app.handle().clone());
             app.manage(optical::OpticalState::default());
             optical::watch(app.handle().clone());
             app.manage(ambient::AmbientState::default());
