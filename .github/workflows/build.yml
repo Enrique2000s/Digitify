@@ -1,12 +1,15 @@
 # Builds Digitify's installers (D-031): the Windows installer (NSIS) and, for Linux, a .deb package,
-# an AppImage and the Arch Linux install script. Runs when run by hand (Actions › Build installers › Run workflow) and on pushes
-# to main; the installers are attached to each run as downloadable artifacts.
+# an AppImage and the Arch Linux install script, and runs the core's tests. Every push to main
+# builds and tests; the installers are kept as downloadable artifacts only when the workflow is run
+# by hand (Actions › Build installers › Run workflow) or for a version tag (v0.3.0…), and only for a
+# week, so the account's artifact storage never fills up (D-089).
 name: Build installers
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
+    tags: ["v*"]
 
 jobs:
   linux:
@@ -42,12 +45,18 @@ jobs:
       - name: Build
         run: npx tauri build
 
+      - name: Tests
+        working-directory: src-tauri
+        run: cargo test --release --lib
+
       - name: Arch Linux install script
         run: cp scripts/install-arch.sh src-tauri/target/release/bundle/install-arch.sh
 
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         with:
           name: digitify-linux
+          retention-days: 7
           path: |
             src-tauri/target/release/bundle/deb/*.deb
             src-tauri/target/release/bundle/appimage/*.AppImage
@@ -71,6 +80,14 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # The helper engines' downloads, kept between runs: a removed download can't break a build
+      # that already has it (D-089).
+      - uses: actions/cache@v4
+        with:
+          path: .cache/deps
+          key: helper-engines-${{ hashFiles('scripts/fetch-deps.ps1') }}
+          restore-keys: helper-engines-
+
       - name: Helper engines (mpv, FFmpeg, PDFium)
         shell: pwsh
         run: ./scripts/fetch-deps.ps1
@@ -86,7 +103,9 @@ jobs:
         run: cargo test --release
 
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         with:
           name: digitify-windows
+          retention-days: 7
           path: src-tauri/target/release/bundle/nsis/*-setup.exe
           if-no-files-found: error

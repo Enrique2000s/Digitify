@@ -53,9 +53,9 @@ Send the file itself (a USB stick, Google Drive, WeTransfer, a chat app): the Wi
 | Platform | How | Where it ends up |
 |---|---|---|
 | Windows | `npm run installer` on this PC | `installer\Digitify_0.3.0_x64-setup.exe` |
-| Linux | GitHub builds it on every push to `main` (or Actions › **Build installers** › **Run workflow**); then `npm run installer:linux` downloads the latest one (needs the [GitHub CLI](https://cli.github.com), signed in with `gh auth login`) | `installer\linux\*.deb`, `*.AppImage` and `install-arch.sh` |
+| Linux | GitHub builds and tests every push to `main`, and keeps the packages for a week when you run Actions › **Build installers** › **Run workflow** (or push a version tag such as `v0.3.0`); then `npm run installer:linux` downloads them (needs the [GitHub CLI](https://cli.github.com), signed in with `gh auth login`) | `installer\linux\*.deb`, `*.AppImage` and `install-arch.sh` |
 
-Without the GitHub CLI: open the repository's **Actions** tab, the latest **Build installers** run, and download **digitify-linux** (and **digitify-windows**) under **Artifacts**. The `installer` folder isn't committed.
+Without the GitHub CLI: open the repository's **Actions** tab, the latest **Build installers** run started by hand, and download **digitify-linux** (and **digitify-windows**) under **Artifacts**. The `installer` folder isn't committed.
 
 ## Building from source
 

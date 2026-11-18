@@ -10,8 +10,10 @@
     FFmpeg 9.0.2 (LGPL build)    -> tools\ffmpeg\         development tools (test media, probing)
     PDFium chromium/7881         -> src-tauri\binaries\  bundled with the app; renders PDF pages (D-013)
 
-  BtbN removes old FFmpeg autobuilds after a while. If that URL stops working, pick a newer
-  "autobuild-*" release of the same branch and update both its URL and hash below.
+  BtbN removes old FFmpeg autobuilds after a while. When the pinned build is gone, the script
+  falls back to the newest build of the same release branch (BtbN's permanent "latest" link for
+  it), checked against the SHA-256 list BtbN publishes with it, so a build never fails for that.
+  To pin again, pick a newer "autobuild-*" release and update both its URL and hash below.
 
 .PARAMETER Force
   Download and install again even when the files are already present.
@@ -41,6 +43,9 @@ $deps = @(
         Name       = 'FFmpeg 9.0.2 (BtbN LGPL shared build)'
         Url        = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-30-13-01/ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-shared-9.0.zip'
         Sha256     = '8aeb11be252902a772ff04ac89b705f7a7b24815f0a21da2ab100b192a5c16e4'
+        # When the pinned build is gone: the newest 9.0 build, checked against BtbN's own list.
+        FallbackUrl       = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-lgpl-shared-9.0.zip'
+        FallbackChecksums = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/checksums.sha256'
         Marker     = 'tools\ffmpeg\ffmpeg.exe'
         LicenseDir = 'tools\ffmpeg'
         Files      = [ordered]@{
@@ -91,14 +96,32 @@ foreach ($dep in $deps) {
     }
 
     $archive = Join-Path $cache (Split-Path $dep.Url -Leaf)
-    if (-not (Test-Path $archive) -or (Get-FileHash $archive -Algorithm SHA256).Hash -ne $dep.Sha256) {
+    $expected = $dep.Sha256
+    if (-not (Test-Path $archive) -or (Get-FileHash $archive -Algorithm SHA256).Hash -ne $expected) {
         Write-Host "... downloading $($dep.Name)"
-        Invoke-WebRequest -Uri $dep.Url -OutFile $archive -UseBasicParsing
+        try {
+            Invoke-WebRequest -Uri $dep.Url -OutFile $archive -UseBasicParsing
+        } catch {
+            if (-not $dep.FallbackUrl) { throw }
+            # The pinned build was removed: the newest build of the same branch, with the hash its
+            # publisher lists for it.
+            Write-Host "    the pinned build is no longer there ($($_.Exception.Message)); using the newest build of the same branch"
+            $archive = Join-Path $cache (Split-Path $dep.FallbackUrl -Leaf)
+            $list = (Invoke-WebRequest -Uri $dep.FallbackChecksums -UseBasicParsing).Content
+            if ($list -is [byte[]]) { $list = [Text.Encoding]::UTF8.GetString($list) }
+            $name = Split-Path $dep.FallbackUrl -Leaf
+            $line = ($list -split "`n") | Where-Object { $_ -match ("\s\*?" + [regex]::Escape($name) + "\s*$") } | Select-Object -First 1
+            if (-not $line) { throw "BtbN's checksum list doesn't name $name" }
+            $expected = ($line -split '\s+')[0].ToLowerInvariant()
+            if (-not (Test-Path $archive) -or (Get-FileHash $archive -Algorithm SHA256).Hash -ne $expected) {
+                Invoke-WebRequest -Uri $dep.FallbackUrl -OutFile $archive -UseBasicParsing
+            }
+        }
     }
     $actual = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($actual -ne $dep.Sha256) {
+    if ($actual -ne $expected) {
         Remove-Item -LiteralPath $archive
-        throw "SHA-256 mismatch for $($dep.Name): expected $($dep.Sha256), got $actual"
+        throw "SHA-256 mismatch for $($dep.Name): expected $expected, got $actual"
     }
 
     $staging = Join-Path $cache ('extract-' + [IO.Path]::GetFileNameWithoutExtension($archive))

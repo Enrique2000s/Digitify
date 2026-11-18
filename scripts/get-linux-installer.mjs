@@ -1,4 +1,5 @@
-// Puts the Linux packages that GitHub Actions built (the latest "Build installers" run) in the
+// Puts the Linux packages that GitHub Actions built (the latest "Build installers" run started by
+// hand or for a version tag: plain pushes don't keep them, D-089) in the
 // project's `installer\linux` folder, next to the Windows installer, ready to hand to someone, with
 // the Arch Linux install script (scripts/install-arch.sh).
 // Needs the GitHub CLI, signed in once: `winget install GitHub.cli`, then `gh auth login`.
@@ -27,7 +28,7 @@ try {
   // The newest run that uploaded the artifact.
   execFileSync("gh", ["run", "download", "--name", "digitify-linux", "--dir", out], { cwd: root, stdio: "inherit" });
 } catch {
-  console.error("Couldn't download the Linux packages. Check that the latest \"Build installers\" run on GitHub finished successfully.");
+  console.error("Couldn't download the Linux packages. Run \"Build installers\" by hand on GitHub (Actions › Build installers › Run workflow), wait for it to finish, then run this again.");
   process.exit(1);
 }
 

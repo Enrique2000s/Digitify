@@ -101,6 +101,12 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-089 · Builds on GitHub that keep passing
+- **Date:** 2026-11-18 · **Approved by:** project owner (asked for the failing builds to be fixed for good)
+- **What failed:** the Linux build couldn't keep its packages (the account's artifact storage was full: every push kept about 120 MB for 90 days), and the Windows build couldn't download FFmpeg (BtbN had removed the pinned autobuild).
+- **Artifacts:** every push to main builds and runs the core's tests (Linux and Windows); the installers are kept as artifacts only when the workflow is run by hand or for a version tag (`v0.3.0`…), and only for 7 days. `npm run installer:linux` downloads from such a run.
+- **Helper engines:** `fetch-deps.ps1` tries the pinned FFmpeg build (exact SHA-256) first; when it's gone it takes the newest build of the same 9.0 branch from BtbN's permanent "latest" link, checked against the SHA-256 list BtbN publishes beside it. The Windows job also keeps the downloads in the Actions cache, so a download that disappears can't break a build that already has it.
+
 ### D-088 · Every place in Ctrl+K
 - **Date:** 2026-11-18 · **Approved by:** project owner
 - With nothing typed, the command palette lists every place to go (it showed only the first six): Home, each category, Arcade, Favorites, Later, Tags, Smart lists, Discs, Settings and Big Picture; each smart list shows when its name is typed.
