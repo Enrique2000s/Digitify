@@ -36,6 +36,12 @@ export function ArcadeSession() {
     return () => void off.then((stop) => stop());
   }, [queryClient]);
 
+  // Games added, found or given a cover, wherever Digitify is: the search (D-105) and Home see them.
+  useEffect(() => {
+    const off = listen("arcade-changed", () => void queryClient.invalidateQueries({ queryKey: ["arcade-games"] }));
+    return () => void off.then((stop) => stop());
+  }, [queryClient]);
+
   useEffect(() => {
     const off = listen<{ running?: number | null }>("arcade-session", (event) => {
       // Only a game that runs (or ended) matters here, not one still being started by its store.

@@ -1,15 +1,106 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
-import { api, artworkUrl, errorText, onLinux, type ArcadeGame, type ArcadePlatform, type ArcadeStore } from "../../lib/api";
+import { api, ARCADE_CONSOLES, artworkUrl, errorText, onLinux, type ArcadeConsole, type ArcadeGame, type ArcadePlatform, type ArcadeStore } from "../../lib/api";
 import { usePreferences, type ArcadeFilter, type ArcadePreferences } from "../../lib/preferences";
 
-export const PLATFORM_NAMES: Record<ArcadePlatform, string> = { gamecube: "GameCube", wii: "Wii", n64: "Nintendo 64", pc: "PC" };
-export const PLATFORM_SHORT: Record<ArcadePlatform, string> = { gamecube: "GC", wii: "Wii", n64: "N64", pc: "PC" };
-export const STORE_NAMES: Record<ArcadeStore, string> = { steam: "Steam", epic: "Epic Games", xbox: "Xbox", heroic: "Heroic" };
+export const PLATFORM_NAMES: Record<ArcadePlatform, string> = {
+  gamecube: "GameCube",
+  wii: "Wii",
+  n64: "Nintendo 64",
+  ps1: "PlayStation",
+  ps2: "PlayStation 2",
+  ps3: "PlayStation 3",
+  ds: "Nintendo DS",
+  nes: "NES",
+  snes: "Super Nintendo",
+  gb: "Game Boy",
+  gbc: "Game Boy Color",
+  gba: "Game Boy Advance",
+  "3ds": "Nintendo 3DS",
+  sms: "Master System",
+  genesis: "Mega Drive / Genesis",
+  segacd: "Sega CD",
+  gamegear: "Game Gear",
+  saturn: "Saturn",
+  dreamcast: "Dreamcast",
+  psp: "PSP",
+  pce: "PC Engine",
+  arcade: "Arcade",
+  atari2600: "Atari 2600",
+  other: "Other consoles",
+  pc: "PC",
+};
+export const PLATFORM_SHORT: Record<ArcadePlatform, string> = {
+  gamecube: "GC",
+  wii: "Wii",
+  n64: "N64",
+  ps1: "PS1",
+  ps2: "PS2",
+  ps3: "PS3",
+  ds: "DS",
+  nes: "NES",
+  snes: "SNES",
+  gb: "GB",
+  gbc: "GBC",
+  gba: "GBA",
+  "3ds": "3DS",
+  sms: "SMS",
+  genesis: "MD",
+  segacd: "SCD",
+  gamegear: "GG",
+  saturn: "Saturn",
+  dreamcast: "DC",
+  psp: "PSP",
+  pce: "PCE",
+  arcade: "Arcade",
+  atari2600: "2600",
+  other: "Retro",
+  pc: "PC",
+};
+export const STORE_NAMES: Record<ArcadeStore, string> = {
+  steam: "Steam",
+  epic: "Epic Games",
+  xbox: "Xbox",
+  gog: "GOG",
+  ubisoft: "Ubisoft Connect",
+  ea: "EA app",
+  battlenet: "Battle.net",
+  amazon: "Amazon Games",
+  itch: "itch.io",
+  heroic: "Heroic",
+  lutris: "Lutris",
+};
 
-/** Box art proportions: GameCube and Wii cases are tall; Nintendo 64 boxes are wide; PC capsules 2:3. */
-export const PLATFORM_ASPECT: Record<ArcadePlatform, number> = { gamecube: 0.71, wii: 0.71, n64: 1.38, pc: 0.667 };
+/** Box art proportions: disc cases are tall, Nintendo 64 and Super Nintendo boxes wide, PlayStation's
+ *  jewel cases and handheld boxes about square, PC capsules 2:3. */
+export const PLATFORM_ASPECT: Record<ArcadePlatform, number> = {
+  gamecube: 0.71,
+  wii: 0.71,
+  n64: 1.38,
+  ps1: 1,
+  ps2: 0.7,
+  ps3: 0.86,
+  ds: 0.9,
+  nes: 0.72,
+  snes: 1.38,
+  gb: 1,
+  gbc: 1,
+  gba: 1,
+  "3ds": 0.88,
+  sms: 0.72,
+  genesis: 0.7,
+  segacd: 1,
+  gamegear: 0.72,
+  saturn: 0.62,
+  dreamcast: 1,
+  psp: 0.58,
+  pce: 1,
+  arcade: 0.75,
+  atari2600: 0.72,
+  other: 0.75,
+  pc: 0.667,
+};
 
 /** A game's console, or for a PC game its store ("Steam"). */
 export function consoleOf(game: ArcadeGame): string {
@@ -18,7 +109,8 @@ export function consoleOf(game: ArcadeGame): string {
 
 /** The short badge on a game's box. */
 export function badgeOf(game: ArcadeGame): string {
-  return game.platform === "pc" && game.store ? (game.store === "epic" ? "Epic" : STORE_NAMES[game.store]) : PLATFORM_SHORT[game.platform];
+  const short: Partial<Record<ArcadeStore, string>> = { epic: "Epic", ubisoft: "Ubisoft", ea: "EA", amazon: "Amazon" };
+  return game.platform === "pc" && game.store ? (short[game.store] ?? STORE_NAMES[game.store]) : PLATFORM_SHORT[game.platform];
 }
 
 /** Arcade's views (D-038), with what each one holds. */
@@ -29,10 +121,17 @@ export const FILTER_LABELS: Record<ArcadeFilter, string> = {
   steam: "Steam",
   epic: "Epic Games",
   xbox: "Xbox",
+  gog: "GOG",
+  ubisoft: "Ubisoft Connect",
+  ea: "EA app",
+  battlenet: "Battle.net",
+  amazon: "Amazon Games",
+  itch: "itch.io",
   heroic: "Heroic",
-  wii: "Wii",
-  gamecube: "GameCube",
-  n64: "Nintendo 64",
+  lutris: "Lutris",
+  // PC games added by their program (D-115).
+  others: "Others",
+  ...(Object.fromEntries(ARCADE_CONSOLES.map((key) => [key, PLATFORM_NAMES[key]])) as Record<ArcadeConsole, string>),
   favorites: "Favorites",
 };
 
@@ -44,10 +143,19 @@ export function inFilter(game: ArcadeGame, filter: ArcadeFilter): boolean {
       return game.platform === "pc";
     case "all-roms":
       return game.platform !== "pc";
+    case "others":
+      return game.platform === "pc" && !game.store;
     case "steam":
     case "epic":
     case "xbox":
+    case "gog":
+    case "ubisoft":
+    case "ea":
+    case "battlenet":
+    case "amazon":
+    case "itch":
     case "heroic":
+    case "lutris":
       return game.store === filter;
     case "favorites":
       return game.isFavorite;
@@ -58,16 +166,32 @@ export function inFilter(game: ArcadeGame, filter: ArcadeFilter): boolean {
 
 /** Whether a view exists on this system (Epic and Xbox are Windows-only; Heroic is for Linux). */
 export function filterAvailable(filter: ArcadeFilter): boolean {
-  if (filter === "epic" || filter === "xbox") return !onLinux;
-  if (filter === "heroic") return onLinux;
+  if (["epic", "xbox", "gog", "ubisoft", "ea", "battlenet", "amazon"].includes(filter)) return !onLinux;
+  if (filter === "heroic" || filter === "lutris") return onLinux;
   return true;
 }
 
-/** The views in their order: on this system, hidden ones left out, PC and ROM combined if asked. */
-export function arcadeFilters(arcade: ArcadePreferences, withHidden = false): ArcadeFilter[] {
+/** Views that are always there; a store's or console's view shows only once it has a game (D-101). */
+const ALWAYS: ArcadeFilter[] = ["all", "all-pc", "all-roms", "favorites"];
+
+/** The store and console views that have at least one game; `null` while games are loading. */
+export function filledFilters(games: ArcadeGame[] | undefined): Set<ArcadeFilter> | null {
+  if (!games) return null;
+  const filled = new Set<ArcadeFilter>();
+  for (const game of games) {
+    if (game.missing) continue;
+    filled.add(game.platform === "pc" ? (game.store ?? "others") : game.platform);
+  }
+  return filled;
+}
+
+/** The views in their order: on this system, hidden ones left out, PC and ROM combined if asked,
+ *  and (given `filled`) only the store and console views with games. */
+export function arcadeFilters(arcade: ArcadePreferences, withHidden = false, filled: Set<ArcadeFilter> | null = null): ArcadeFilter[] {
   const out: ArcadeFilter[] = [];
   for (const filter of arcade.filterOrder) {
     if (!filterAvailable(filter)) continue;
+    if (filled && !ALWAYS.includes(filter) && !filled.has(filter)) continue;
     if (arcade.combineAll && (filter === "all-pc" || filter === "all-roms")) {
       if (!out.includes("all") && (withHidden || !arcade.hiddenFilters.includes("all"))) out.push("all");
       continue;
@@ -81,7 +205,8 @@ export function arcadeFilters(arcade: ArcadePreferences, withHidden = false): Ar
 /** The views shown and the one in use (the saved one, or the first shown when it isn't). */
 export function useArcadeFilters() {
   const { preferences, update } = usePreferences();
-  const filters = arcadeFilters(preferences.arcade);
+  const games = useQuery({ queryKey: ["arcade-games"], queryFn: api.arcadeGames });
+  const filters = arcadeFilters(preferences.arcade, false, filledFilters(games.data));
   const current: ArcadeFilter = filters.includes(preferences.arcade.platform) ? preferences.arcade.platform : (filters[0] ?? "all");
   const choose = (filter: ArcadeFilter) => update((c) => ({ arcade: { ...c.arcade, platform: filter } }));
   return { filters, current, choose };
@@ -156,6 +281,19 @@ export function useShownGames(games: ArcadeGame[] | undefined, search: string) {
   }, [games, platform, sort, search]);
 }
 
+/** Arcade's games that match a search (D-105): every word in the title, the console, the store or the game's ID. */
+export function matchingGames(games: ArcadeGame[] | undefined, q: string): ArcadeGame[] {
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  return (games ?? [])
+    .filter((game) => !game.missing)
+    .filter((game) => {
+      const text = `${game.title} ${consoleOf(game)} ${game.store ? STORE_NAMES[game.store] : ""} ${game.gameId ?? ""}`.toLowerCase();
+      return words.every((word) => text.includes(word));
+    })
+    .sort((a, b) => Number(!a.title.toLowerCase().includes(words[0])) - Number(!b.title.toLowerCase().includes(words[0])) || a.title.localeCompare(b.title, undefined, { sensitivity: "base", numeric: true }));
+}
+
 /** Starting a game, with its error (a missing emulator, a moved file) kept to show. */
 export function useLaunch() {
   const { preferences } = usePreferences();
@@ -164,7 +302,7 @@ export function useLaunch() {
   const launch = async (game: ArcadeGame) => {
     setError(null);
     try {
-      await api.arcadeLaunch(game.id, preferences.arcade.n64, preferences.arcade.whilePlaying);
+      await api.arcadeLaunch(game.id, preferences.arcade.whilePlaying, preferences.arcade.playsIn);
       void queryClient.invalidateQueries({ queryKey: ["arcade-status"] });
     } catch (reason) {
       setError(errorText(reason));

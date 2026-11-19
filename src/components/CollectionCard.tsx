@@ -69,7 +69,7 @@ export function CollectionCard({ item, width, index }: { item: ItemCard; width?:
   const { selecting, checked, props } = useSelectable(item.id, index);
   return (
     <Link {...to(item)} className="card collection-card" style={width ? { width } : undefined} data-blip {...props}>
-      <div className="card-art" data-shape="landscape" style={{ aspectRatio: 16 / 9, position: "relative" }}>
+      <div className="card-art" data-shape="landscape" data-vt={`c${item.collection!.id}`} style={{ aspectRatio: 16 / 9, position: "relative" }}>
         <Art item={item} />
         <Tick selecting={selecting} checked={checked} />
       </div>
@@ -84,7 +84,7 @@ export function CollectionRowItem({ item, top, index }: { item: ItemCard; top: n
   const { selecting, checked, props } = useSelectable(item.id, index);
   return (
     <Link {...to(item)} className="list-row collection-list-row" style={{ top, height: 54 }} {...props}>
-      <span className="thumb" data-shape="landscape" style={{ position: "relative" }}>
+      <span className="thumb" data-shape="landscape" data-vt={`c${item.collection!.id}`} style={{ position: "relative" }}>
         <Art item={item} />
         <Tick selecting={selecting} checked={checked} />
       </span>
@@ -102,7 +102,7 @@ export function CollectionShelfItem({ item, height, index }: { item: ItemCard; h
   const { selecting, checked, props } = useSelectable(item.id, index);
   return (
     <Link {...to(item)} className="shelf-item" title={item.title} data-blip {...props}>
-      <div className="shelf-cover collection-shelf" data-shape="landscape" style={{ width: height * (16 / 9), aspectRatio: 16 / 9, position: "relative" }}>
+      <div className="shelf-cover collection-shelf" data-shape="landscape" data-vt={`c${item.collection!.id}`} style={{ width: height * (16 / 9), aspectRatio: 16 / 9, position: "relative" }}>
         <Art item={item} />
         <Tick selecting={selecting} checked={checked} />
       </div>
@@ -115,7 +115,7 @@ export function CollectionDetailRow({ item, top, height, index }: { item: ItemCa
   const { selecting, checked, props } = useSelectable(item.id, index);
   return (
     <Link {...to(item)} className="detail-row" style={{ top, height }} data-blip {...props}>
-      <div className="detail-cover" data-shape="landscape" style={{ height: height - 26, aspectRatio: 16 / 9, position: "relative" }}>
+      <div className="detail-cover" data-shape="landscape" data-vt={`c${item.collection!.id}`} style={{ height: height - 26, aspectRatio: 16 / 9, position: "relative" }}>
         <Art item={item} />
         <Tick selecting={selecting} checked={checked} />
       </div>
@@ -138,6 +138,7 @@ export function CollectionCarouselItem({ item, front, style, onPick }: { item: I
     <Link
       {...to(item)}
       className={`carousel-item collection-carousel${front ? " front" : ""}`}
+      data-vt={`c${item.collection!.id}`}
       data-shape="landscape"
       style={style}
       title={item.title}

@@ -257,6 +257,7 @@ pub fn run() {
             arcade::arcade_forget,
             arcade::arcade_reveal,
             arcade::arcade_launch,
+            arcade::arcade_add_program,
             arcade::arcade_emulator_folders,
             arcade::arcade_set_favorite_many,
             arcade::arcade_forget_many,

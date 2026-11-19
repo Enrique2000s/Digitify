@@ -4,6 +4,7 @@ import { Gamepad2, Heart, Info, Play } from "lucide-react";
 import type { ArcadeGame, TileCover } from "../../lib/api";
 import { artworkUrl } from "../../lib/api";
 import { badgeOf, consoleOf, GameCover, lastPlayed, PLATFORM_ASPECT, playTime, useArcade, useLaunch } from "../arcade/shared";
+import { PlatformLogo } from "../arcade/logos";
 
 /** Arcade's games for Home (D-041): recently played, favorites, one featured a day, and the tile's covers. */
 export function useHomeGames() {
@@ -39,7 +40,10 @@ export function GameCard({ game, running, onPlay }: { game: ArcadeGame; running:
     <div className={`arcade-tile home-game${running ? " running" : ""}`} style={{ width: Math.round(GAME_ART_HEIGHT * aspect) }}>
       <Link to="/arcade" search={{ game: game.id }} className="arcade-tile-art" style={{ aspectRatio: aspect }} aria-label={`${game.title}, ${consoleOf(game)}`} data-blip>
         <GameCover game={game} />
-        <span className="arcade-badge" data-platform={game.platform} data-store={game.store ?? undefined}>{badgeOf(game)}</span>
+        <span className="arcade-badge" data-platform={game.platform} data-store={game.store ?? undefined}>
+          <PlatformLogo game={game} />
+          {badgeOf(game)}
+        </span>
         {game.isFavorite && <Heart className="arcade-fav" size={16} fill="currentColor" aria-label="Favorite" />}
       </Link>
       <button type="button" className="arcade-play" aria-label={`Play ${game.title}`} title="Play" onClick={onPlay}>

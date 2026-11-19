@@ -797,7 +797,11 @@ export const api = {
   arcadeReveal: (id: number) => invoke<void>("arcade_reveal", { id }),
   /** Starts the game in its emulator; `n64` picks Project64 or RMG for Nintendo 64 games. */
   /** `mode`: what Digitify does while the game runs (D-041). */
-  arcadeLaunch: (id: number, n64: ArcadeEmulator | null, mode: "stay" | "hide" | "quit") => invoke<void>("arcade_launch", { id, n64, mode }),
+  /** `choices`: the emulator chosen for each console (D-111), by the console's key. */
+  arcadeLaunch: (id: number, mode: "stay" | "hide" | "quit", choices: Partial<Record<ArcadeConsole, ArcadeEmulator>> = {}) =>
+    invoke<void>("arcade_launch", { id, n64: null, ds: null, mode, choices }),
+  /** Adds a PC game by its program (D-107); returns its id. */
+  arcadeAddProgram: (path: string, downloadCovers: boolean) => invoke<number>("arcade_add_program", { path, downloadCovers }),
   /** An emulator's game folders set in Arcade (D-035); null goes back to its own. */
   arcadeEmulatorFolders: (emulator: ArcadeEmulator, folders: { path: string; recursive: boolean }[] | null) => invoke<void>("arcade_emulator_folders", { emulator, folders }),
   arcadeSetFavoriteMany: (ids: number[], favorite: boolean) => invoke<void>("arcade_set_favorite_many", { ids, favorite }),
@@ -899,11 +903,36 @@ export function driveName(letter: string): string {
   return /^\d$/.test(letter) ? `sr${letter}` : `${letter}:`;
 }
 
-/** Arcade (D-034): a console a game is for. */
-export type ArcadePlatform = "gamecube" | "wii" | "n64" | "pc";
+/** Arcade's consoles (D-034, D-101), in their default order: the emulators' own, then the ones
+ *  RetroArch plays; "other" gathers RetroArch's consoles without a view of their own. */
+export const ARCADE_CONSOLES = [
+  "wii", "gamecube", "n64", "ps1", "ps2", "ps3", "ds",
+  "nes", "snes", "gb", "gbc", "gba", "3ds", "sms", "genesis", "segacd", "gamegear", "saturn", "dreamcast", "psp", "pce", "arcade", "atari2600", "other",
+] as const;
+export type ArcadeConsole = (typeof ARCADE_CONSOLES)[number];
+/** Arcade (D-034): a console a game is for, or "pc". */
+export type ArcadePlatform = ArcadeConsole | "pc";
 /** The store a PC game came from (D-037). */
-export type ArcadeStore = "steam" | "epic" | "xbox" | "heroic";
-export type ArcadeEmulator = "dolphin" | "project64" | "rmg";
+export type ArcadeStore = "steam" | "epic" | "xbox" | "gog" | "ubisoft" | "ea" | "battlenet" | "amazon" | "itch" | "heroic" | "lutris";
+export type ArcadeEmulator =
+  | "dolphin"
+  | "project64"
+  | "rmg"
+  | "duckstation"
+  | "pcsx2"
+  | "rpcs3"
+  | "melonds"
+  | "desmume"
+  | "mesen"
+  | "fceux"
+  | "nestopia"
+  | "snes9x"
+  | "zsnes"
+  | "mgba"
+  | "fusion"
+  | "nulldc"
+  | "ares"
+  | "retroarch";
 
 export interface ArcadeFolder {
   /** For folders added in Digitify; null for an emulator's own. */
@@ -937,6 +966,8 @@ export interface ArcadeStatus {
   stores: { key: ArcadeStore; name: string; found: string | null; games: number }[];
   /** Store games taken off the list (still installed). */
   hidden: number;
+  /** Each console and the emulators that play it, in Arcade's order (D-111). */
+  consoles: { key: ArcadeConsole; players: ArcadeEmulator[] }[];
 }
 
 export interface ArcadeGame {
@@ -962,8 +993,10 @@ export interface ArcadeGame {
   missing: boolean;
   /** Place in the custom order (D-035). */
   position: number | null;
-  /** For PC games, the store it came from (D-037). */
+  /** For PC games, the store it came from (D-037); none for a program added by hand (D-107). */
   store: ArcadeStore | null;
+  /** From RetroArch's playlists: RetroArch starts it with its core (D-101). */
+  retroarch: boolean;
 }
 
 export interface ArcadeScanReport {

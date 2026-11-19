@@ -370,7 +370,7 @@ export function SettingsPage() {
           <h2>About</h2>
           <Setting
             title={`Digitify ${status.data?.version ?? ""}`}
-            text="Works fully offline. No accounts, no telemetry, and nothing is uploaded. Helper engines: mpv (GPL) and FFmpeg (LGPL), run as separate programs. The ambient theme “Digitify Main Menu Music” is original to Digitify."
+            text="A home for all your media (Library) and a universal launcher for your games (Arcade). Works fully offline. No accounts, no telemetry, and nothing is uploaded. Helper engines: mpv (GPL) and FFmpeg (LGPL), run as separate programs. The ambient theme “Digitify Main Menu Music” is original to Digitify."
           >
             <span />
           </Setting>

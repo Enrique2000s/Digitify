@@ -11,7 +11,7 @@ import { controllerKind, onControllerChange, usePad, useSticks, type PadAction }
 import { Cursor } from "./Cursor";
 import { OnlineScreen } from "./OnlineScreen";
 import { ArcadeScreen, ArcadeTile } from "../arcade/ArcadeScreen";
-import { consoleOf, GameCover, PLATFORM_ASPECT, playTime, useLaunch } from "../arcade/shared";
+import { consoleOf, GameCover, matchingGames, PLATFORM_ASPECT, playTime, useLaunch } from "../arcade/shared";
 import { useHomeGames } from "../home/GameSections";
 import { useAmbient } from "../../lib/ambient/AmbientProvider";
 import { useMusic } from "../../lib/music/MusicProvider";
@@ -503,6 +503,10 @@ function SearchScreen() {
     return () => window.clearTimeout(timer);
   }, [text]);
   const results = useQuery({ queryKey: ["bp-search", query], queryFn: () => api.query({ search: query, offset: 0, limit: 60 }), enabled: !!query });
+  // Arcade's games are found too (D-105), after the media.
+  const games = useQuery({ queryKey: ["arcade-games"], queryFn: api.arcadeGames });
+  const found = useMemo(() => matchingGames(games.data, query), [games.data, query]);
+  const { launch } = useLaunch();
   return (
     <div className="bp-search">
       <div className="bp-search-box">
@@ -511,9 +515,13 @@ function SearchScreen() {
       </div>
       <OnScreenKeyboard onChange={setText} />
       <div className="bp-grid">
+        {/* The library's media, then Arcade's games, as the search screen shows them (D-114). */}
         {results.data?.items.map((item) => <Tile key={item.id} item={item} height={270} />)}
+        {found.map((game) => (
+          <ArcadeTile key={`game:${game.id}`} game={game} autofocus={false} onPlay={() => void launch(game)} />
+        ))}
       </div>
-      {query && results.data?.total === 0 && <p className="bp-empty">No matches for “{query}”.</p>}
+      {query && results.data?.total === 0 && found.length === 0 && <p className="bp-empty">No matches for “{query}”.</p>}
     </div>
   );
 }

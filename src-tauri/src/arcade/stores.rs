@@ -1,5 +1,5 @@
 //! PC games installed through their stores (D-037): Steam (Windows and Linux), Epic Games and the
-//! Xbox app (Windows), and Heroic Games Launcher (Linux: its Epic and GOG games). Only installed
+//! Xbox app and GOG Galaxy (Windows, D-101), and Heroic Games Launcher (Linux: its Epic and GOG games). Only installed
 //! games are listed, read from each store's own files on this computer; nothing is asked online.
 //! A game starts through its store, the way its own launcher would start it.
 
@@ -12,18 +12,32 @@ pub enum Store {
     Steam,
     Epic,
     Xbox,
+    Gog,
     Heroic,
+    Itch,
+    Ubisoft,
+    Ea,
+    BattleNet,
+    Amazon,
+    Lutris,
 }
 
 impl Store {
-    pub const ALL: [Store; 4] = [Store::Steam, Store::Epic, Store::Xbox, Store::Heroic];
+    pub const ALL: [Store; 11] = [Store::Steam, Store::Epic, Store::Xbox, Store::Gog, Store::Ubisoft, Store::Ea, Store::BattleNet, Store::Amazon, Store::Itch, Store::Heroic, Store::Lutris];
 
     pub fn key(self) -> &'static str {
         match self {
             Store::Steam => "steam",
             Store::Epic => "epic",
             Store::Xbox => "xbox",
+            Store::Gog => "gog",
             Store::Heroic => "heroic",
+            Store::Itch => "itch",
+            Store::Ubisoft => "ubisoft",
+            Store::Ea => "ea",
+            Store::BattleNet => "battlenet",
+            Store::Amazon => "amazon",
+            Store::Lutris => "lutris",
         }
     }
 
@@ -36,16 +50,23 @@ impl Store {
             Store::Steam => "Steam",
             Store::Epic => "Epic Games",
             Store::Xbox => "Xbox",
+            Store::Gog => "GOG Galaxy",
             Store::Heroic => "Heroic",
+            Store::Itch => "itch.io",
+            Store::Ubisoft => "Ubisoft Connect",
+            Store::Ea => "EA app",
+            Store::BattleNet => "Battle.net",
+            Store::Amazon => "Amazon Games",
+            Store::Lutris => "Lutris",
         }
     }
 
     /// Whether it exists for this system.
     pub fn available_here(self) -> bool {
         match self {
-            Store::Steam => true,
-            Store::Epic | Store::Xbox => cfg!(windows),
-            Store::Heroic => cfg!(not(windows)),
+            Store::Steam | Store::Itch => true,
+            Store::Epic | Store::Xbox | Store::Gog | Store::Ubisoft | Store::Ea | Store::BattleNet | Store::Amazon => cfg!(windows),
+            Store::Heroic | Store::Lutris => cfg!(not(windows)),
         }
     }
 }
@@ -77,15 +98,32 @@ pub struct StoreScan {
 }
 
 pub fn scan_all() -> Vec<StoreScan> {
+    // Programs' uninstall entries, read once for the launchers that use them (D-112).
+    #[cfg(windows)]
+    let uninstall = super::launchers::uninstall_entries();
     Store::ALL
         .into_iter()
         .filter(|s| s.available_here())
         .map(|store| {
             let (found, games) = match store {
+                #[cfg(windows)]
+                Store::Ubisoft => super::launchers::ubisoft(&uninstall),
+                #[cfg(windows)]
+                Store::Ea => super::launchers::ea(&uninstall),
+                #[cfg(windows)]
+                Store::BattleNet => super::launchers::battle_net(&uninstall),
+                #[cfg(windows)]
+                Store::Amazon => super::launchers::amazon(),
+                #[cfg(not(windows))]
+                Store::Lutris => super::launchers::lutris(),
+                #[allow(unreachable_patterns)]
+                Store::Ubisoft | Store::Ea | Store::BattleNet | Store::Amazon | Store::Lutris => (None, Vec::new()),
                 Store::Steam => steam(),
                 Store::Epic => epic(),
                 Store::Xbox => xbox(),
+                Store::Gog => gog(),
                 Store::Heroic => heroic(),
+                Store::Itch => itch(),
             };
             StoreScan { store, found, games }
         })
@@ -113,6 +151,12 @@ pub fn fingerprint() -> u64 {
     hasher.finish()
 }
 
+/// Every Steam library folder on this computer (RetroArch from Steam is found there, D-101).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn steam_library_dirs() -> Vec<PathBuf> {
+    steam_roots().iter().flat_map(|root| steam_libraries(root)).collect()
+}
+
 fn watched_dirs() -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = steam_roots().iter().flat_map(|root| steam_libraries(root)).map(|lib| lib.join("steamapps")).collect();
     #[cfg(windows)]
@@ -122,6 +166,8 @@ fn watched_dirs() -> Vec<PathBuf> {
     }
     #[cfg(not(windows))]
     dirs.extend(heroic_dirs());
+    dirs.extend(itch_db().and_then(|db| db.parent().map(Path::to_path_buf)));
+    dirs.extend(super::launchers::watched_dirs());
     dirs
 }
 
@@ -379,6 +425,197 @@ fn registry_value(key: &str, name: &str) -> Option<String> {
         let _kind = parts.next()?;
         (found.eq_ignore_ascii_case(name)).then(|| parts.next().map(|v| v.trim().to_string())).flatten()
     })
+}
+
+// ---------------------------------------------------------------------------------------------
+// GOG (Windows, D-101)
+
+/// Where GOG's installers and GOG Galaxy record each installed game.
+#[cfg(windows)]
+const GOG_GAMES: &str = "HKLM\\SOFTWARE\\WOW6432Node\\GOG.com\\Games";
+
+/// GOG Galaxy's program, if it's installed.
+#[cfg(windows)]
+fn gog_galaxy() -> Option<PathBuf> {
+    let dir = registry_value("HKLM\\SOFTWARE\\WOW6432Node\\GOG.com\\GalaxyClient\\paths", "client")?;
+    Some(PathBuf::from(dir).join("GalaxyClient.exe")).filter(|p| p.is_file())
+}
+
+/// GOG's installed games, from their records in the registry (written by GOG Galaxy and by GOG's
+/// own installers alike); downloadable content, which names the game it belongs to, is left out.
+#[cfg(windows)]
+fn gog() -> (Option<String>, Vec<StoreGame>) {
+    let output = crate::tools::command(Path::new("reg")).args(["query", GOG_GAMES, "/s"]).output();
+    let text = output.map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
+    let games = gog_games(&text);
+    let found = gog_galaxy().map(|p| p.display().to_string()).or_else(|| (!games.is_empty()).then(|| "GOG games installed".to_string()));
+    (found, games)
+}
+
+#[cfg(not(windows))]
+fn gog() -> (Option<String>, Vec<StoreGame>) {
+    (None, Vec::new())
+}
+
+/// The games in `reg query … /s` output: one block of values per game's key.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn gog_games(text: &str) -> Vec<StoreGame> {
+    let mut games = Vec::new();
+    let mut values: HashMap<String, String> = HashMap::new();
+    let mut finish = |values: &mut HashMap<String, String>| {
+        let get = |k: &str| values.get(&k.to_lowercase()).map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+        if let (Some(id), Some(title), Some(path), None) = (get("gameID"), get("gameName"), get("path"), get("dependsOn")) {
+            let install_dir = PathBuf::from(&path);
+            if install_dir.is_dir() || cfg!(test) {
+                games.push(StoreGame {
+                    store: Store::Gog,
+                    key: id.clone(),
+                    title,
+                    install_dir,
+                    launch: format!("gog:{id}"),
+                    cover: None,
+                    cover_url: None,
+                });
+            }
+        }
+        values.clear();
+    };
+    for line in text.lines() {
+        if line.starts_with("HKEY_") {
+            finish(&mut values);
+            continue;
+        }
+        let mut parts = line.trim().splitn(3, "    ");
+        if let (Some(name), Some(kind), Some(value)) = (parts.next(), parts.next(), parts.next()) {
+            if kind.starts_with("REG_") {
+                values.insert(name.trim().to_lowercase(), value.to_string());
+            }
+        }
+    }
+    finish(&mut values);
+    games.sort_by(|a, b| a.key.cmp(&b.key));
+    games.dedup_by(|a, b| a.key == b.key);
+    games
+}
+
+/// How to start a GOG game: through GOG Galaxy when it's installed (as its own shortcuts do), else
+/// its own program, in the folder its record names, with its arguments.
+#[cfg(windows)]
+pub fn gog_command(id: &str) -> Option<std::process::Command> {
+    let key = format!("{GOG_GAMES}\\{id}");
+    let path = registry_value(&key, "path")?;
+    if let Some(galaxy) = gog_galaxy() {
+        let mut command = crate::tools::command(&galaxy);
+        command.arg("/command=runGame").arg(format!("/gameId={id}")).arg(format!("/path={path}"));
+        return Some(command);
+    }
+    let exe = registry_value(&key, "exe")?;
+    let mut command = crate::tools::command(Path::new(&exe));
+    let dir = registry_value(&key, "workingDir").filter(|d| Path::new(d).is_dir()).unwrap_or(path);
+    command.current_dir(dir);
+    if let Some(args) = registry_value(&key, "launchParam").filter(|a| !a.trim().is_empty()) {
+        command.args(args.split_whitespace());
+    }
+    Some(command)
+}
+
+#[cfg(not(windows))]
+pub fn gog_command(_id: &str) -> Option<std::process::Command> {
+    None
+}
+
+/// The box art GOG shows for a game, asked of GOG's public catalogue by the game's ID (D-101).
+pub fn gog_cover_url(id: &str) -> Option<String> {
+    if !id.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let request = crate::online::http::get(&format!("https://api.gog.com/v2/games/{id}")).ok()?;
+    let json = crate::online::http::json("GOG", request).ok()?;
+    json.pointer("/_links/boxArtImage/href").and_then(|v| v.as_str()).map(str::to_string)
+}
+
+/// A game's Steam app id by its name in Steam's store (D-108), for the box art of a game from
+/// elsewhere: only a game whose name matches exactly (letters and digits, any case).
+pub fn steam_search(title: &str) -> Option<String> {
+    let simple = |s: &str| s.chars().filter(|c| c.is_alphanumeric()).collect::<String>().to_lowercase();
+    let wanted = simple(title);
+    if wanted.len() < 2 {
+        return None;
+    }
+    let request = crate::online::http::get("https://store.steampowered.com/api/storesearch/").ok()?.query("term", title).query("l", "english").query("cc", "US");
+    let json = crate::online::http::json("Steam", request).ok()?;
+    json.get("items")?.as_array()?.iter().find_map(|item| {
+        let name = item.get("name")?.as_str()?;
+        (simple(name) == wanted).then(|| item.get("id")?.as_i64().map(|id| id.to_string()))?
+    })
+}
+
+// ---------------------------------------------------------------------------------------------
+// itch.io (D-107): the itch app's own database of installed games ("caves")
+
+/// The itch app's database: `butler.db` in its settings folder.
+fn itch_db() -> Option<PathBuf> {
+    #[cfg(windows)]
+    let base = std::env::var_os("APPDATA").map(|p| PathBuf::from(p).join("itch"));
+    #[cfg(not(windows))]
+    let base = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config"))).map(|p| p.join("itch"));
+    base.map(|b| b.join("db").join("butler.db")).filter(|p| p.is_file())
+}
+
+fn itch() -> (Option<String>, Vec<StoreGame>) {
+    let Some(db) = itch_db() else { return (None, Vec::new()) };
+    let games = itch_games(&db).unwrap_or_else(|e| {
+        log::warn!("arcade: couldn't read itch.io's games: {e}");
+        Vec::new()
+    });
+    (Some(db.parent().and_then(Path::parent).unwrap_or(&db).display().to_string()), games)
+}
+
+/// The installed games in itch's database, read-only: each cave's folder and the program itch's
+/// own check picked in it for this system (its "verdict"); web games and tools left out.
+pub(crate) fn itch_games(db: &Path) -> rusqlite::Result<Vec<StoreGame>> {
+    use rusqlite::{Connection, OpenFlags};
+    let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    let uri = format!("file:{}?mode=ro", db.display().to_string().replace('\\', "/").replace('?', "%3f").replace('#', "%23"));
+    let conn = Connection::open_with_flags(&uri, flags)?;
+    let mut stmt = conn.prepare(
+        "SELECT c.id, g.title, c.verdict, g.cover_url, g.still_cover_url, coalesce(g.classification, 'game') \
+         FROM caves c JOIN games g ON g.id = c.game_id",
+    )?;
+    type Row = (String, String, Option<String>, Option<String>, Option<String>, String);
+    let rows: Vec<Row> = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)))?.collect::<Result<_, _>>()?;
+    let mut games = Vec::new();
+    for (cave, title, verdict, cover, still, classification) in rows {
+        if classification != "game" {
+            continue;
+        }
+        let Some((dir, program)) = verdict.as_deref().and_then(itch_program) else { continue };
+        if !(program.is_file() || cfg!(test)) {
+            continue;
+        }
+        games.push(StoreGame {
+            store: Store::Itch,
+            key: cave,
+            title,
+            install_dir: dir,
+            launch: format!("exe:{}", program.display()),
+            cover: None,
+            // A still picture rather than an animated one.
+            cover_url: still.filter(|u| !u.is_empty()).or(cover).filter(|u| !u.is_empty()),
+        });
+    }
+    Ok(games)
+}
+
+/// The folder and program from a cave's verdict: `basePath` and the first candidate this system
+/// runs (a Windows program on Windows; a Linux program or script on Linux).
+pub(crate) fn itch_program(verdict: &str) -> Option<(PathBuf, PathBuf)> {
+    let json: serde_json::Value = serde_json::from_str(verdict).ok()?;
+    let base = PathBuf::from(json.get("basePath")?.as_str()?);
+    let runs_here = |flavor: &str| if cfg!(windows) { flavor == "windows" } else { flavor == "linux" || flavor == "script" };
+    let candidate = json.get("candidates")?.as_array()?.iter().find(|c| c.get("flavor").and_then(|f| f.as_str()).is_some_and(runs_here))?;
+    let program = base.join(candidate.get("path")?.as_str()?);
+    Some((base, program))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -806,6 +1043,40 @@ pub fn steam_cover_urls(id: &str) -> Vec<String> {
 }
 
 #[cfg(test)]
+mod itch_tests {
+    use super::*;
+
+    #[test]
+    fn itch_games_from_its_database() {
+        let dir = std::env::temp_dir().join(format!("digitify-itch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("butler.db");
+        let flavor = if cfg!(windows) { "windows" } else { "linux" };
+        let program = if cfg!(windows) { "Celeste.exe" } else { "Celeste.x86_64" };
+        {
+            let conn = rusqlite::Connection::open(&db).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE games (id INTEGER PRIMARY KEY, title TEXT, cover_url TEXT, still_cover_url TEXT, classification TEXT);
+                 CREATE TABLE caves (id TEXT PRIMARY KEY, game_id INTEGER, verdict TEXT);",
+            )
+            .unwrap();
+            conn.execute("INSERT INTO games VALUES (1, 'Celeste', 'https://img/anim.gif', 'https://img/still.png', 'game'), (2, 'Pixel Pack', NULL, NULL, 'assets'), (3, 'Web Toy', NULL, NULL, 'game')", []).unwrap();
+            let verdict = serde_json::json!({ "basePath": dir.join("Celeste").display().to_string(), "candidates": [{ "path": "readme.txt", "flavor": "text" }, { "path": program, "flavor": flavor }] }).to_string();
+            let web = serde_json::json!({ "basePath": "/x", "candidates": [{ "path": "index.html", "flavor": "html" }] }).to_string();
+            conn.execute("INSERT INTO caves VALUES ('cave-1', 1, ?1), ('cave-2', 2, ?1), ('cave-3', 3, ?2)", rusqlite::params![verdict, web]).unwrap();
+        }
+        let games = itch_games(&db).unwrap();
+        assert_eq!(games.len(), 1, "assets and web games aren't games to start");
+        assert_eq!(games[0].title, "Celeste");
+        assert_eq!(games[0].key, "cave-1");
+        assert_eq!(games[0].launch, format!("exe:{}", dir.join("Celeste").join(program).display()));
+        assert_eq!(games[0].cover_url.as_deref(), Some("https://img/still.png"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
 mod tests {
 
     #[test]
@@ -910,6 +1181,14 @@ mod tests {
     fn package_family_publisher_id() {
         // Microsoft's own publisher id, as seen in package family names (…_8wekyb3d8bbwe).
         assert_eq!(publisher_id("CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"), "8wekyb3d8bbwe");
+    }
+
+    #[test]
+    fn gog_games_from_the_registry() {
+        let text = "\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\GOG.com\\Games\\1207658924\r\n    gameID    REG_SZ    1207658924\r\n    gameName    REG_SZ    The Witcher\r\n    path    REG_SZ    D:\\GOG Games\\The Witcher\r\n    dependsOn    REG_SZ    \r\n\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\GOG.com\\Games\\1440163901\r\n    gameID    REG_SZ    1440163901\r\n    gameName    REG_SZ    The Witcher - Bonus\r\n    path    REG_SZ    D:\\GOG Games\\The Witcher\r\n    dependsOn    REG_SZ    1207658924\r\n";
+        let games = gog_games(text);
+        assert_eq!(games.len(), 1, "the bonus content belongs to the game");
+        assert_eq!((games[0].title.as_str(), games[0].launch.as_str()), ("The Witcher", "gog:1207658924"));
     }
 
     #[test]

@@ -23,6 +23,37 @@ pub fn after(conn: &Connection, version: i64) -> AppResult<()> {
     if version == 24 {
         d095(conn)?;
     }
+    if version == 25 {
+        // D-101: RetroArch's consoles, any of them.
+        widen_check(conn, "arcade_games", "CHECK (platform IN ('gamecube', 'wii', 'n64', 'pc'))", "CHECK (length(platform) BETWEEN 1 AND 24)")?;
+        // And the emulators that play them.
+        let emulators = "CHECK (kind IN ('dolphin', 'project64', 'rmg', 'duckstation', 'pcsx2', 'rpcs3', 'melonds', 'desmume', 'retroarch'))";
+        widen_check(conn, "arcade_emulators", "CHECK (kind IN ('dolphin', 'project64', 'rmg'))", emulators)?;
+        widen_check(
+            conn,
+            "arcade_emulator_folders",
+            "CHECK (emulator IN ('dolphin', 'project64', 'rmg'))",
+            "CHECK (emulator IN ('dolphin', 'project64', 'rmg', 'duckstation', 'pcsx2', 'rpcs3', 'melonds', 'desmume', 'retroarch'))",
+        )?;
+    }
+    if version == 26 {
+        // D-106: Mesen, FCEUX and mGBA.
+        let old = "'melonds', 'desmume', 'retroarch')";
+        let new = "'melonds', 'desmume', 'retroarch', 'mesen', 'fceux', 'mgba')";
+        widen_check(conn, "arcade_emulators", &format!("CHECK (kind IN ('dolphin', 'project64', 'rmg', 'duckstation', 'pcsx2', 'rpcs3', {old}"), &format!("CHECK (kind IN ('dolphin', 'project64', 'rmg', 'duckstation', 'pcsx2', 'rpcs3', {new}"))?;
+        widen_check(
+            conn,
+            "arcade_emulator_folders",
+            &format!("CHECK (emulator IN ('dolphin', 'project64', 'rmg', 'duckstation', 'pcsx2', 'rpcs3', {old}"),
+            &format!("CHECK (emulator IN ('dolphin', 'project64', 'rmg', 'duckstation', 'pcsx2', 'rpcs3', {new}"),
+        )?;
+    }
+    if version == 27 {
+        // D-111: any emulator's name.
+        let list = "'dolphin', 'project64', 'rmg', 'duckstation', 'pcsx2', 'rpcs3', 'melonds', 'desmume', 'retroarch', 'mesen', 'fceux', 'mgba')";
+        widen_check(conn, "arcade_emulators", &format!("CHECK (kind IN ({list})"), "CHECK (length(kind) BETWEEN 1 AND 24)")?;
+        widen_check(conn, "arcade_emulator_folders", &format!("CHECK (emulator IN ({list})"), "CHECK (length(emulator) BETWEEN 1 AND 24)")?;
+    }
     if version == 15 {
         // D-039: category names back and custom field values out of search.
         let items: Vec<i64> = conn.prepare("SELECT id FROM items")?.query_map([], |row| row.get(0))?.collect::<Result<_, _>>()?;

@@ -20,6 +20,7 @@ import { SelectionProvider, useSelectable, useSelection, useSelectionState } fro
 import { AddMenu } from "../../components/AddMenu";
 import { CategoryStrip } from "../../components/CategoryStrip";
 import { useArrival } from "../../lib/arrival";
+import { useGlide } from "../../lib/glide";
 import { CardSizeSlider, Cover } from "../../components/common";
 import { CardSkeleton, caseBand, MediaCard } from "../../components/MediaCard";
 import { CollectionCard, collectionCard, CollectionCarouselItem, CollectionDetailRow, CollectionRowItem, CollectionShelfItem } from "../../components/CollectionCard";
@@ -930,6 +931,9 @@ export function LibraryView({
   const { preferences, update } = usePreferences();
   // The title slides in when it changes, not when the same title is redrawn (Music's tabs, D-045).
   const titleArriving = useArrival(`title:${title}`);
+  // The filter and the layout buttons slide to their place in a new category instead of jumping (D-096).
+  const ownershipRef = useGlide<HTMLDivElement>("library-ownership");
+  const layoutRef = useGlide<HTMLDivElement>("library-layout");
   // "Find in this view" (D-041, like Arcade's search): narrows the view by words; the search page
   // has its own.
   const [find, setFind] = useState("");
@@ -946,7 +950,9 @@ export function LibraryView({
   // "Online" is offered where links are imported to: Music and Videos.
   const withOnline = handler === "audio" || base.category === "videos";
   // Photos are all on this computer, and collections have no copies: no filter there (D-094).
-  const filters = handler === "image" || mode === "collections" ? [] : OWNERSHIP.filter((option) => option.value !== "online" || withOnline);
+  // The filter is for where links are imported to (Music and Videos): elsewhere everything is on this
+  // computer, so there's nothing to tell apart (D-098).
+  const filters = !withOnline || mode === "collections" ? [] : OWNERSHIP;
   // Inside a collection the filter starts at "All" every time and isn't remembered (D-043).
   const inCollection = base.collection != null;
   const [collectionFilter, setCollectionFilter] = useState<Filter>("");
@@ -1005,13 +1011,15 @@ export function LibraryView({
   const lead = leadCards.length;
   const selection = useSelectionState(source);
   // Entrance animations play for a moment after the view, filter or sort changes, not while scrolling.
+  // A layout change has its own transition (each cover flies to its new place), so the covers don't
+  // also pop in then (D-096).
   const stageKey = `${viewKey}:${filter}:${sort}:${finding}`;
   const [entering, setEntering] = useState(true);
   useEffect(() => {
     setEntering(true);
     const timer = window.setTimeout(() => setEntering(false), 1100);
     return () => window.clearTimeout(timer);
-  }, [stageKey, layout]);
+  }, [stageKey]);
   const shape = coverShapeOf({ handler: handler ?? "book", category: base.category }, preferences.coverShapes);
   const arrangeable = !!orderKey && sort === "custom" && !finding;
   // In a custom order, covers can be dragged straight to a new place (not in the carousel, which
@@ -1121,7 +1129,7 @@ export function LibraryView({
           <div className="toolbar arcade-toolbar">
             {tabs}
             {filters.length > 0 && (
-            <div className="segmented" role="group" aria-label="Ownership">
+            <div ref={ownershipRef} className="segmented" role="group" aria-label="Ownership">
               {filters.map((option) => (
                 <button key={option.value} type="button" aria-pressed={filter === option.value} onClick={() => setOwnership(option.value)}>
                   {option.label}
@@ -1129,7 +1137,7 @@ export function LibraryView({
               ))}
             </div>
             )}
-            <div className="segmented layout-switch" role="group" aria-label="Layout">
+            <div ref={layoutRef} className="segmented layout-switch" role="group" aria-label="Layout">
               {(
                 [
                   ["grid", "Grid", LayoutGrid],

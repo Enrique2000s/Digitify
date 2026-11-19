@@ -1,15 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSearch } from "@tanstack/react-router";
 import { ReviewPanel } from "../../components/Review";
 import { createPortal } from "react-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { Check, CheckCircle2, CircleAlert, Clock, FolderOpen, FolderPlus, Heart, ImageDown, ImagePlus, Joystick, ListChecks, LoaderCircle, Pencil, Play, RefreshCw, RotateCcw, Search, Settings2, Trash, X } from "lucide-react";
-import { api, errorText, onLinux, type ArcadeEmulatorStatus, type ArcadeFolder, type ArcadeGame, type ArcadeStatus } from "../../lib/api";
-import { usePreferences } from "../../lib/preferences";
+import { AppWindow, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock, FolderOpen, FolderPlus, Heart, ImageDown, ImagePlus, Joystick, ListChecks, LoaderCircle, Pencil, Play, RefreshCw, RotateCcw, Search, Settings2, Trash, X } from "lucide-react";
+import { api, errorText, onLinux, type ArcadeConsole, type ArcadeEmulator, type ArcadeEmulatorStatus, type ArcadeFolder, type ArcadeGame, type ArcadeStatus } from "../../lib/api";
+import type { ArcadeFilter } from "../../lib/preferences";
+import { usePreferences, type ArcadePreferences } from "../../lib/preferences";
 import { GridDragProvider, useGridDragProps } from "../../lib/gridDrag";
 import { CardSizeSlider, Dialog, Switch } from "../../components/common";
-import { badgeOf, consoleOf, FILTER_LABELS, GameCover, lastPlayed, PLATFORM_ASPECT, PLATFORM_NAMES, playTime, reorderWithin, SORTS, useArcade, useArcadeFilters, useLaunch, useShownGames } from "./shared";
+import { badgeOf, consoleOf, FILTER_LABELS, inFilter, GameCover, lastPlayed, PLATFORM_ASPECT, PLATFORM_NAMES, playTime, reorderWithin, SORTS, useArcade, useArcadeFilters, useLaunch, useShownGames } from "./shared";
+import { PlatformLogo } from "./logos";
 
 /** `/arcade` (D-034, D-035, D-037): the games of the emulators and stores on this computer, started the way they start. */
 export function ArcadePage() {
@@ -65,6 +67,19 @@ export function ArcadePage() {
       setNotice(errorText(reason));
     } finally {
       setScanning(false);
+    }
+  };
+
+  // A PC game no store Arcade reads installed, by its program (D-107): added, then its panel opens.
+  const addProgram = async () => {
+    const path = await openDialog({ multiple: false, title: "Choose the game's program", filters: onLinux ? undefined : [{ name: "Programs", extensions: ["exe"] }] });
+    if (typeof path !== "string") return;
+    try {
+      const id = await api.arcadeAddProgram(path, arcade.downloadCovers);
+      refresh();
+      setSelected(id);
+    } catch (reason) {
+      setNotice(errorText(reason));
     }
   };
 
@@ -128,6 +143,9 @@ export function ArcadePage() {
           <button type="button" className="btn" disabled={scanning || (!anyEmulator && !status.data?.folders.length)} onClick={() => void scan()}>
             {scanning ? <LoaderCircle size={16} className="spin" /> : <RefreshCw size={16} />} Look for games
           </button>
+          <button type="button" className="btn" title="Adds a PC game by its program, for games no store here installed" onClick={() => void addProgram()}>
+            <AppWindow size={16} /> Add a game…
+          </button>
           <button type="button" className="btn glow-when-on" aria-pressed={showSetup} onClick={() => setSetup(!showSetup)}>
             <Settings2 size={16} /> Emulators & folders
           </button>
@@ -179,16 +197,10 @@ export function ArcadePage() {
         </div>
       )}
 
-      {showSetup && status.data && <Setup status={status.data} onChanged={refresh} />}
+      {showSetup && status.data && <Setup status={status.data} onChanged={refresh} onAddProgram={() => void addProgram()} />}
 
       <div className="arcade-toolbar">
-        <div className="segmented" role="group" aria-label="Console">
-          {view.filters.map((filter) => (
-            <button key={filter} type="button" aria-pressed={view.current === filter} onClick={() => view.choose(filter)}>
-              {FILTER_LABELS[filter]}
-            </button>
-          ))}
-        </div>
+        <ViewStrip filters={view.filters} current={view.current} onChoose={view.choose} games={games.data} />
         {/* Find, Size, Select and Sort: the same tools, in the same order, as the Library's (D-044). */}
         <div className="view-tools">
         <label className="arcade-search">
@@ -222,7 +234,7 @@ export function ArcadePage() {
             {games.data.length === 0
               ? anyEmulator
                 ? "Arcade looks in the game folders set up in your emulators, and in folders you add here. Check them in Emulators & folders, then look for games."
-                : `Install Dolphin (GameCube and Wii), Project64 or RMG (Nintendo 64), or games from a store (Steam${onLinux ? " or Heroic" : ", Epic Games or Xbox"}), or point Arcade to your emulators in Emulators & folders.`
+                : `Install an emulator Arcade knows (Emulators & folders lists them) or games from a store (Steam, itch.io${onLinux ? ", Heroic or Lutris" : ", Epic Games, Xbox, GOG, Ubisoft Connect, the EA app, Battle.net or Amazon Games"}), point Arcade to your emulators in Emulators & folders, or add a game by its program.`
               : "Nothing matches this console or search."}
           </p>
         </div>
@@ -261,7 +273,67 @@ export function ArcadePage() {
   );
 }
 
-function GameTile({ game, index, running, selecting, checked, onOpen, onPlay }: { game: ArcadeGame; index: number; running: boolean; selecting: boolean; checked: boolean; onOpen: () => void; onPlay: () => void }) {
+/**
+ * Arcade's views in one row (D-109): with many consoles it scrolls sideways (the wheel, a drag of
+ * the trackpad, or the arrows at its ends) instead of growing, so it never pushes the tools beside
+ * it off the page; the view chosen is always scrolled into sight.
+ */
+function ViewStrip({ filters, current, onChoose, games }: { filters: ArcadeFilter[]; current: ArcadeFilter; onChoose: (filter: ArcadeFilter) => void; games: ArcadeGame[] | undefined }) {
+  const strip = useRef<HTMLDivElement>(null);
+  const [ends, setEnds] = useState({ left: false, right: false });
+  const measure = () => {
+    const el = strip.current;
+    if (!el) return;
+    setEnds({ left: el.scrollLeft > 2, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 2 });
+  };
+  useLayoutEffect(() => {
+    const el = strip.current;
+    if (!el) return;
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    // The wheel scrolls the row sideways.
+    const onWheel = (event: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+      event.preventDefault();
+      el.scrollBy({ left: event.deltaY });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      observer.disconnect();
+      el.removeEventListener("wheel", onWheel);
+    };
+  }, [filters.length]);
+  useEffect(() => {
+    strip.current?.querySelector<HTMLElement>('[aria-pressed="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+  }, [current]);
+  const page = (direction: 1 | -1) => strip.current?.scrollBy({ left: direction * strip.current.clientWidth * 0.7, behavior: "smooth" });
+  return (
+    <div className={`arcade-views${ends.left ? " more-left" : ""}${ends.right ? " more-right" : ""}`}>
+      {ends.left && (
+        <button type="button" className="round-btn arcade-views-arrow left" aria-label="Earlier views" onClick={() => page(-1)}>
+          <ChevronLeft size={16} strokeWidth={2.6} />
+        </button>
+      )}
+      <div ref={strip} className="segmented" role="group" aria-label="Console" onScroll={measure}>
+        {filters.map((filter) => (
+          <button key={filter} type="button" aria-pressed={current === filter} onClick={() => onChoose(filter)}>
+            {FILTER_LABELS[filter]}
+            {/* How many games each view holds, as Library's sections show (D-099). */}
+            {games && <span className="count">{games.filter((g) => !g.missing && inFilter(g, filter)).length.toLocaleString()}</span>}
+          </button>
+        ))}
+      </div>
+      {ends.right && (
+        <button type="button" className="round-btn arcade-views-arrow right" aria-label="More views" onClick={() => page(1)}>
+          <ChevronRight size={16} strokeWidth={2.6} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function GameTile({ game, index, running, selecting, checked, onOpen, onPlay }: { game: ArcadeGame; index: number; running: boolean; selecting: boolean; checked: boolean; onOpen: () => void; onPlay: () => void }) {
   const drag = useGridDragProps(game.id);
   return (
     <div className={`arcade-tile${running ? " running" : ""}${checked ? " checked" : ""}`} data-platform={game.platform} style={{ ["--i" as string]: index, ["--aspect" as string]: PLATFORM_ASPECT[game.platform] }} {...drag}>
@@ -275,7 +347,10 @@ function GameTile({ game, index, running, selecting, checked, onOpen, onPlay }: 
         data-blip
       >
         <GameCover game={game} />
-        <span className="arcade-badge" data-platform={game.platform} data-store={game.store ?? undefined}>{badgeOf(game)}</span>
+        <span className="arcade-badge" data-platform={game.platform} data-store={game.store ?? undefined}>
+          <PlatformLogo game={game} />
+          {badgeOf(game)}
+        </span>
         {game.isFavorite && <Heart className="arcade-fav" size={16} fill="currentColor" aria-label="Favorite" />}
         {selecting && <span className={`card-check${checked ? " on" : ""}`} aria-hidden>{checked && <Check size={15} strokeWidth={3.2} />}</span>}
       </button>
@@ -488,7 +563,8 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
     setNaming(null);
   };
   const pc = game.platform === "pc";
-  const emulator = pc ? consoleOf(game) : game.platform === "n64" ? (onLinux ? "RMG" : preferences.arcade.n64 === "rmg" ? "RMG" : "Project64") : "Dolphin";
+  const status = useQuery({ queryKey: ["arcade-status"], queryFn: api.arcadeStatus });
+  const emulator = pc ? consoleOf(game) : playsIn(game, preferences.arcade, status.data);
   const played = lastPlayed(game.lastPlayedAt);
   // On the page's own layer, so it stays put however the page scrolls.
   return createPortal(
@@ -520,7 +596,7 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
             <button type="button" className="btn btn-sm" onClick={() => setNaming(null)}>Cancel</button>
           </form>
         )}
-        <p className="arcade-panel-sub">{pc ? `PC · starts through ${emulator}` : `${PLATFORM_NAMES[game.platform]}${game.gameId ? ` · ${game.gameId}` : ""} · plays in ${emulator}`}</p>
+        <p className="arcade-panel-sub">{pc ? (game.store ? `PC · starts through ${emulator}` : "PC · added by you · starts by itself") : `${PLATFORM_NAMES[game.platform]}${game.gameId ? ` · ${game.gameId}` : ""} · plays in ${emulator}`}</p>
         <button type="button" className="btn btn-primary arcade-panel-play" disabled={running != null} onClick={onPlay}>
           <Play size={17} fill="currentColor" /> {running === game.id ? "Playing…" : "Play"}
         </button>
@@ -548,9 +624,9 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
               <dd>{played}</dd>
             </div>
           )}
-          {!pc && (
+          {(!pc || !game.store) && (
             <div>
-              <dt>File</dt>
+              <dt>{pc ? "Program" : "File"}</dt>
               <dd title={game.path}>
                 {game.path.split(/[\\/]/).pop()}
                 {game.size ? ` · ${fileSize(game.size)}` : ""}
@@ -597,8 +673,23 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
   );
 }
 
-function Setup({ status, onChanged }: { status: ArcadeStatus; onChanged: () => void }) {
-  const { preferences, update } = usePreferences();
+type SetupTab = "launchers" | "emulators" | "consoles" | "folders";
+
+/** Emulators & folders' groups of emulators, by the maker of the consoles they play (D-113). */
+const EMULATOR_GROUPS: { name: string; keys: ArcadeEmulator[] }[] = [
+  { name: "Nintendo", keys: ["dolphin", "project64", "rmg", "melonds", "desmume", "mgba", "nestopia", "fceux", "snes9x", "zsnes"] },
+  { name: "Sony", keys: ["duckstation", "pcsx2", "rpcs3"] },
+  { name: "Sega", keys: ["fusion", "nulldc"] },
+  { name: "Many consoles", keys: ["mesen", "ares", "retroarch"] },
+];
+
+/**
+ * Emulators & folders (D-113): everything Arcade finds games with, in four tabs. Launchers (the
+ * stores and programs added by hand), Emulators (grouped by maker, one row each, its folders
+ * opening beneath it), Consoles (which emulator plays each console) and Folders & covers.
+ */
+function Setup({ status, onChanged, onAddProgram }: { status: ArcadeStatus; onChanged: () => void; onAddProgram: () => void }) {
+  const [tab, setTab] = useState<SetupTab>("launchers");
   const [error, setError] = useState<string | null>(null);
   const run = async (action: () => Promise<unknown>) => {
     setError(null);
@@ -609,97 +700,254 @@ function Setup({ status, onChanged }: { status: ArcadeStatus; onChanged: () => v
       setError(errorText(reason));
     }
   };
-  const addFolder = async () => {
-    const path = await openDialog({ directory: true, multiple: false, title: "Choose a game folder" });
-    if (typeof path === "string") await run(() => api.arcadeFolderAdd(path));
-  };
-  const n64Choices = status.emulators.filter((e) => e.platforms.includes("n64") && e.found);
+  const games = useQuery({ queryKey: ["arcade-games"], queryFn: api.arcadeGames });
+  const storesFound = status.stores.filter((s) => s.found).length;
+  const available = status.emulators.filter((e) => e.available);
+  const emulatorsFound = available.filter((e) => e.found).length;
+  const tabs: [SetupTab, string, string | null][] = [
+    ["launchers", "Launchers", `${storesFound}`],
+    ["emulators", "Emulators", `${emulatorsFound} of ${available.length}`],
+    ["consoles", "Consoles", null],
+    ["folders", "Folders & covers", null],
+  ];
   return (
     <section className="arcade-setup" aria-label="Emulators and folders">
-      <div className="arcade-emulators">
-        {status.emulators.map((emulator) => (
-          <EmulatorCard key={emulator.key} emulator={emulator} onRun={run} />
+      <div className="segmented arcade-setup-tabs" role="tablist" aria-label="Emulators and folders">
+        {tabs.map(([key, label, count]) => (
+          <button key={key} type="button" role="tab" aria-selected={tab === key} aria-pressed={tab === key} onClick={() => setTab(key)}>
+            {label}
+            {count != null && <span className="count">{count}</span>}
+          </button>
         ))}
       </div>
-      <div className="arcade-stores">
-        <h3>PC games from your stores</h3>
-        <p className="muted">Only installed games are listed, and the list follows what you install or remove. Each starts through its store.</p>
-        <ul>
-          {status.stores.map((store) => (
-            <li key={store.key} className={store.found ? "found" : ""}>
-              {store.found ? <CheckCircle2 size={16} className="ok" /> : <CircleAlert size={16} className="warn" />}
-              <strong>{store.name}</strong>
-              <span className="muted">{store.found ? `${store.games} installed ${store.games === 1 ? "game" : "games"}` : "not found on this computer"}</span>
-            </li>
-          ))}
-        </ul>
-        {status.hidden > 0 && (
-          <p className="arcade-hidden">
-            {status.hidden} store {status.hidden === 1 ? "game is" : "games are"} off the list.
-            <button type="button" className="btn btn-sm" onClick={() => void run(() => api.arcadeUnhide())}>
-              Show {status.hidden === 1 ? "it" : "them"} again
-            </button>
-          </p>
-        )}
-      </div>
-      <div className="arcade-setup-row">
-        <div className="arcade-setup-block">
-          <h3>More game folders</h3>
-          <p className="muted">Searched for every kind of game, besides each emulator's folders.</p>
-          {status.folders.length > 0 && (
-            <ul className="arcade-folders">
-              {status.folders.map((folder) => (
-                <li key={folder.id ?? folder.path} className={folder.exists ? "" : "missing"}>
-                  <span title={folder.path}>{folder.path}</span>
-                  {!folder.exists && <em>not found</em>}
-                  <button type="button" className="icon-btn" aria-label={`Remove ${folder.path}`} onClick={() => void run(() => api.arcadeFolderRemove(folder.id!))}>
-                    <X size={15} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <button type="button" className="btn btn-sm" onClick={() => void addFolder()}>
-            <FolderPlus size={15} /> Add a folder…
-          </button>
-        </div>
-        <div className="arcade-setup-block">
-          <h3>Covers</h3>
-          <label className="arcade-switch-row">
-            <Switch checked={preferences.arcade.downloadCovers} onChange={(on) => update((c) => ({ arcade: { ...c.arcade, downloadCovers: on } }))} label="Download covers" />
-            <span>
-              Download covers
-              <small>GameCube and Wii from GameTDB by each disc's ID; consoles from libretro-thumbnails by the game's name; Steam games from Steam by their ID. Covers already on this computer (Dolphin's, Steam's, the Xbox app's) are used first.</small>
-            </span>
-          </label>
-          {n64Choices.length > 1 && (
-            <>
-              <h3>Nintendo 64 games play in</h3>
-              <div className="segmented" role="group" aria-label="Nintendo 64 emulator">
-                {n64Choices.map((e) => (
-                  <button key={e.key} type="button" aria-pressed={preferences.arcade.n64 === e.key} onClick={() => update((c) => ({ arcade: { ...c.arcade, n64: e.key as "project64" | "rmg" } }))}>
-                    {e.name}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+      {tab === "launchers" && <LaunchersTab status={status} games={games.data} onRun={run} onAddProgram={onAddProgram} />}
+      {tab === "emulators" && <EmulatorsTab status={status} onRun={run} />}
+      {tab === "consoles" && <ConsolesTab status={status} games={games.data} />}
+      {tab === "folders" && <FoldersTab status={status} games={games.data} onRun={run} />}
       {error && <p className="notice danger">{error}</p>}
     </section>
   );
 }
 
-function EmulatorCard({ emulator, onRun }: { emulator: ArcadeEmulatorStatus; onRun: (action: () => Promise<unknown>) => Promise<void> }) {
-  const locate = async () => {
-    const path = await openDialog({
-      multiple: false,
-      title: `Where is ${emulator.name}?`,
-      filters: onLinux ? undefined : [{ name: emulator.name, extensions: ["exe"] }],
-    });
-    if (typeof path === "string") await onRun(() => api.arcadeSetEmulator(emulator.key, path));
+function LaunchersTab({ status, games, onRun, onAddProgram }: { status: ArcadeStatus; games: ArcadeGame[] | undefined; onRun: Run; onAddProgram: () => void }) {
+  const byHand = (games ?? []).filter((g) => g.platform === "pc" && !g.store && !g.missing).length;
+  return (
+    <div className="arcade-setup-pane">
+      <p className="muted">Each store's installed games, following what you install or remove; each starts through its store.</p>
+      <ul className="arcade-rows">
+        {status.stores.map((store) => (
+          <li key={store.key} className={store.found ? "found" : "absent"}>
+            {store.found ? <CheckCircle2 size={16} className="ok" /> : <CircleAlert size={16} className="warn" />}
+            <strong>{store.name}</strong>
+            <span className="muted">{store.found ? `${store.games} installed ${store.games === 1 ? "game" : "games"}` : "not found on this computer"}</span>
+          </li>
+        ))}
+        <li className="found">
+          <AppWindow size={16} className="ok" />
+          <strong>Added by you</strong>
+          <span className="muted">{byHand === 1 ? "1 program" : `${byHand} programs`}</span>
+          <button type="button" className="btn btn-sm" onClick={onAddProgram}>
+            Add a game…
+          </button>
+        </li>
+      </ul>
+      {status.hidden > 0 && (
+        <p className="arcade-hidden">
+          {status.hidden} store {status.hidden === 1 ? "game is" : "games are"} off the list.
+          <button type="button" className="btn btn-sm" onClick={() => void onRun(() => api.arcadeUnhide())}>
+            Show {status.hidden === 1 ? "it" : "them"} again
+          </button>
+        </p>
+      )}
+    </div>
+  );
+}
+
+function EmulatorsTab({ status, onRun }: { status: ArcadeStatus; onRun: Run }) {
+  const [open, setOpen] = useState<ArcadeEmulator | null>(null);
+  return (
+    <div className="arcade-setup-pane">
+      <p className="muted">Found where they're usually installed, or pointed to by hand (a portable copy). Their game folders come from their own settings unless you set them here.</p>
+      {EMULATOR_GROUPS.map((group) => {
+        const emulators = status.emulators.filter((e) => group.keys.includes(e.key)).sort((a, b) => Number(!!b.found) - Number(!!a.found));
+        if (!emulators.length) return null;
+        return (
+          <div key={group.name} className="arcade-emulator-group">
+            <h3>{group.name}</h3>
+            <ul className="arcade-rows emulator-rows">
+              {emulators.map((emulator) => (
+                <EmulatorRow key={emulator.key} emulator={emulator} open={open === emulator.key} onToggle={() => setOpen(open === emulator.key ? null : emulator.key)} onRun={onRun} />
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ConsolesTab({ status, games }: { status: ArcadeStatus; games: ArcadeGame[] | undefined }) {
+  const { preferences, update } = usePreferences();
+  const count = (key: string) => (games ?? []).filter((g) => !g.missing && g.platform === key && !g.retroarch).length;
+  const name = (key: ArcadeEmulator) => status.emulators.find((e) => e.key === key)?.name ?? key;
+  const isFound = (key: ArcadeEmulator) => !!status.emulators.find((e) => e.key === key)?.found;
+  // Consoles with games first, then those with an emulator found, then the rest.
+  const rows = status.consoles
+    .filter((c) => c.players.length > 0)
+    .map((c) => ({ ...c, games: count(c.key), found: c.players.filter(isFound) }))
+    .sort((a, b) => Number(b.games > 0) - Number(a.games > 0) || Number(b.found.length > 0) - Number(a.found.length > 0));
+  return (
+    <div className="arcade-setup-pane">
+      <p className="muted">Which emulator each console's games open in. Games from RetroArch's playlists always open in RetroArch, with their core.</p>
+      <table className="arcade-consoles">
+        <thead>
+          <tr>
+            <th>Console</th>
+            <th>Games</th>
+            <th>Plays in</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const chosen = preferences.arcade.playsIn[row.key];
+            const current = chosen && row.found.includes(chosen) ? chosen : row.found[0];
+            return (
+              <tr key={row.key} className={row.games > 0 ? "" : "quiet"}>
+                <td>{PLATFORM_NAMES[row.key]}</td>
+                <td>{row.games.toLocaleString()}</td>
+                <td>
+                  {row.found.length > 1 ? (
+                    <select
+                      value={current}
+                      aria-label={`${PLATFORM_NAMES[row.key]} games play in`}
+                      onChange={(event) => update((c) => ({ arcade: { ...c.arcade, playsIn: { ...c.arcade.playsIn, [row.key]: event.target.value as ArcadeEmulator } } }))}
+                    >
+                      {row.found.map((key) => (
+                        <option key={key} value={key}>
+                          {name(key)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : row.found.length === 1 ? (
+                    <strong>{name(row.found[0])}</strong>
+                  ) : (
+                    <span className="muted">Needs {listOf(row.players.map(name), "or")}</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function FoldersTab({ status, games, onRun }: { status: ArcadeStatus; games: ArcadeGame[] | undefined; onRun: Run }) {
+  const { preferences, update } = usePreferences();
+  const addFolder = async () => {
+    const path = await openDialog({ directory: true, multiple: false, title: "Choose a game folder" });
+    if (typeof path === "string") await onRun(() => api.arcadeFolderAdd(path));
   };
+  // Covers for every game that has none (D-108): from the emulators and launchers here, and online.
+  const bare = (games ?? []).filter((g) => !g.missing && !g.coverKey);
+  const [coverNote, setCoverNote] = useState<string | null>(null);
+  const findMissing = () =>
+    onRun(async () => {
+      const queued = await api.arcadeFindCovers(bare.map((g) => g.id), true);
+      setCoverNote(queued > 0 ? `Looking for ${queued} ${queued === 1 ? "cover" : "covers"}; they appear as they're found.` : "No cover found for them anywhere Arcade looks.");
+    });
+  return (
+    <div className="arcade-setup-row">
+      <div className="arcade-setup-block">
+        <h3>More game folders</h3>
+        <p className="muted">Searched for every kind of game, besides each emulator's folders.</p>
+        {status.folders.length > 0 && (
+          <ul className="arcade-folders">
+            {status.folders.map((folder) => (
+              <li key={folder.id ?? folder.path} className={folder.exists ? "" : "missing"}>
+                <span title={folder.path}>{folder.path}</span>
+                {!folder.exists && <em>not found</em>}
+                <button type="button" className="icon-btn" aria-label={`Remove ${folder.path}`} onClick={() => void onRun(() => api.arcadeFolderRemove(folder.id!))}>
+                  <X size={15} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <button type="button" className="btn btn-sm" onClick={() => void addFolder()}>
+          <FolderPlus size={15} /> Add a folder…
+        </button>
+      </div>
+      <div className="arcade-setup-block">
+        <h3>Covers</h3>
+        <label className="arcade-switch-row">
+          <Switch checked={preferences.arcade.downloadCovers} onChange={(on) => update((c) => ({ arcade: { ...c.arcade, downloadCovers: on } }))} label="Download covers" />
+          <span>
+            Download covers
+            <small>
+              For each game found: GameCube and Wii from GameTDB by each disc's ID; other consoles (Nintendo 64, PlayStation, NES, Mega Drive, Dreamcast…) from libretro-thumbnails by the game's name; Steam and GOG games from their stores by their ID, other PC games from Steam's store by their name, itch.io's by its own. Covers already on this computer (Dolphin's, RetroArch's, the launchers') are used first.
+            </small>
+          </span>
+        </label>
+        <div className="arcade-missing-covers">
+          <button type="button" className="btn btn-sm" disabled={bare.length === 0} onClick={() => void findMissing()}>
+            <ImageDown size={15} /> Find missing covers
+          </button>
+          <span className="muted">{coverNote ?? (bare.length === 0 ? "Every game has a cover." : `${bare.length} ${bare.length === 1 ? "game has" : "games have"} no cover yet. This looks online even when downloads are off.`)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type Run = (action: () => Promise<unknown>) => Promise<void>;
+
+/** "A, B or C" / "A, B and C". */
+function listOf(names: string[], joiner: "and" | "or"): string {
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} ${joiner} ${names.at(-1)}` : (names[0] ?? "");
+}
+
+/** The emulator a game starts in (D-111): RetroArch for its playlists' games, else the one chosen
+ *  for its console if it's found, else the first found in Arcade's order. */
+function playsIn(game: ArcadeGame, arcade: ArcadePreferences, status: ArcadeStatus | undefined): string {
+  if (game.retroarch) return "RetroArch";
+  const players = status?.consoles.find((c) => c.key === game.platform)?.players ?? [];
+  const found = players.filter((key) => status?.emulators.find((e) => e.key === key)?.found);
+  const chosen = arcade.playsIn[game.platform as ArcadeConsole];
+  const key = chosen && found.includes(chosen) ? chosen : (found[0] ?? players[0]);
+  return status?.emulators.find((e) => e.key === key)?.name ?? "its emulator";
+}
+
+/** "GameCube and Wii"; RetroArch plays its playlists' consoles. */
+function consolesOf(emulator: ArcadeEmulatorStatus): string {
+  if (emulator.key === "retroarch") return "Many consoles";
+  return listOf(emulator.platforms.map((p) => PLATFORM_NAMES[p]), "and");
+}
+
+async function locateEmulator(emulator: ArcadeEmulatorStatus, onRun: Run) {
+  const path = await openDialog({
+    multiple: false,
+    title: `Where is ${emulator.name}?`,
+    filters: onLinux ? undefined : [{ name: emulator.name, extensions: ["exe"] }],
+  });
+  if (typeof path === "string") await onRun(() => api.arcadeSetEmulator(emulator.key, path));
+}
+
+function LocateButton({ emulator, onRun }: { emulator: ArcadeEmulatorStatus; onRun: Run }) {
+  return (
+    <button type="button" className="btn btn-sm" onClick={() => void locateEmulator(emulator, onRun)}>
+      Locate…
+    </button>
+  );
+}
+
+/** One emulator in the Emulators tab (D-113): found, with its program and folders opening beneath
+ *  it; or not found, with Locate… (or "Windows only"). */
+function EmulatorRow({ emulator, open, onToggle, onRun }: { emulator: ArcadeEmulatorStatus; open: boolean; onToggle: () => void; onRun: Run }) {
+  const locate = () => locateEmulator(emulator, onRun);
+  // RetroArch's games come from its playlists, not from folders (D-101).
+  const playlists = emulator.key === "retroarch";
   // Folders set in Arcade replace the emulator's own (D-035): any change keeps the whole list here.
   const saveFolders = (folders: ArcadeFolder[]) => onRun(() => api.arcadeEmulatorFolders(emulator.key, folders.map((f) => ({ path: f.path, recursive: f.recursive }))));
   const pickFolder = async (title: string) => {
@@ -714,18 +962,26 @@ function EmulatorCard({ emulator, onRun }: { emulator: ArcadeEmulatorStatus; onR
     const path = await pickFolder(`Add a folder of ${emulator.name} games`);
     if (path) await saveFolders([...emulator.folders, { id: null, path, recursive: true, exists: true }]);
   };
-  const consoles = emulator.platforms.map((p) => PLATFORM_NAMES[p]).join(" and ");
+  const folders = emulator.folders.length;
+  const summary = playlists ? (folders ? "its playlists" : "no playlists") : folders === 1 ? "1 folder" : `${folders} folders`;
   return (
-    <div className={`arcade-emulator${emulator.found ? " found" : ""}${emulator.available ? "" : " unavailable"}`}>
-      <div className="arcade-emulator-head">
-        {emulator.found ? <CheckCircle2 size={18} className="ok" /> : <CircleAlert size={18} className="warn" />}
+    <li className={`arcade-emulator-row${emulator.found ? " found" : " absent"}${open ? " open" : ""}${emulator.available ? "" : " unavailable"}`}>
+      <div className="arcade-emulator-line">
+        {emulator.found ? <CheckCircle2 size={16} className="ok" /> : <CircleAlert size={16} className="warn" />}
         <strong>{emulator.name}</strong>
-        <span className="muted">{consoles}</span>
+        <span className="muted arcade-emulator-consoles">{consolesOf(emulator)}</span>
+        {emulator.found ? (
+          <button type="button" className="btn btn-sm" aria-expanded={open} onClick={onToggle}>
+            {summary} <ChevronDown size={14} className="arcade-chevron" />
+          </button>
+        ) : emulator.available ? (
+          <LocateButton emulator={emulator} onRun={onRun} />
+        ) : (
+          <span className="muted">Windows only</span>
+        )}
       </div>
-      {!emulator.available ? (
-        <p className="muted">Windows only. On Linux, Nintendo 64 games play in RMG.</p>
-      ) : emulator.found ? (
-        <>
+      {emulator.found && open && (
+        <div className="arcade-emulator-details">
           <div className="arcade-emulator-program">
             <span className="arcade-emulator-path" title={emulator.found}>{emulator.found}</span>
             <button type="button" className="btn btn-sm" onClick={() => void locate()}>Change…</button>
@@ -735,48 +991,60 @@ function EmulatorCard({ emulator, onRun }: { emulator: ArcadeEmulatorStatus; onR
               </button>
             )}
           </div>
-          <p className="arcade-emulator-label">
-            Game folders
-            <span className="muted">{emulator.customFolders ? " · set here" : ` · from ${emulator.name}'s settings`}</span>
-          </p>
-          {emulator.folders.length > 0 ? (
-            <ul className="arcade-folders small">
-              {emulator.folders.map((folder, index) => (
-                <li key={folder.path} className={folder.exists ? "" : "missing"}>
-                  <span title={folder.path}>{folder.path}</span>
-                  {!folder.exists && <em>not found</em>}
-                  <button type="button" className="icon-btn" aria-label={`Change ${folder.path}`} title="Change…" onClick={() => void changeFolder(index)}>
-                    <Pencil size={14} />
-                  </button>
-                  <button type="button" className="icon-btn" aria-label={`Remove ${folder.path}`} title="Remove" onClick={() => void saveFolders(emulator.folders.filter((_, i) => i !== index))}>
-                    <X size={14} />
-                  </button>
-                </li>
-              ))}
-            </ul>
+          {playlists ? (
+            <>
+              <p className="arcade-emulator-label">
+                Playlists
+                <span className="muted"> · each game starts with the core its playlist names</span>
+              </p>
+              <ul className="arcade-folders small">
+                {emulator.folders.map((folder) => (
+                  <li key={folder.path} className={folder.exists ? "" : "missing"}>
+                    <span title={folder.path}>{folder.path}</span>
+                    {!folder.exists && <em>not found</em>}
+                  </li>
+                ))}
+              </ul>
+            </>
           ) : (
-            <p className="muted">No game folder yet.</p>
+            <>
+              <p className="arcade-emulator-label">
+                Game folders
+                <span className="muted">{emulator.customFolders ? " · set here" : ` · from ${emulator.name}'s settings`}</span>
+              </p>
+              {emulator.folders.length > 0 ? (
+                <ul className="arcade-folders small">
+                  {emulator.folders.map((folder, index) => (
+                    <li key={folder.path} className={folder.exists ? "" : "missing"}>
+                      <span title={folder.path}>{folder.path}</span>
+                      {!folder.exists && <em>not found</em>}
+                      <button type="button" className="icon-btn" aria-label={`Change ${folder.path}`} title="Change…" onClick={() => void changeFolder(index)}>
+                        <Pencil size={14} />
+                      </button>
+                      <button type="button" className="icon-btn" aria-label={`Remove ${folder.path}`} title="Remove" onClick={() => void saveFolders(emulator.folders.filter((_, i) => i !== index))}>
+                        <X size={14} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted">No game folder yet.</p>
+              )}
+              <div className="arcade-emulator-actions">
+                <button type="button" className="btn btn-sm" onClick={() => void addFolder()}>
+                  <FolderPlus size={14} /> Add folder…
+                </button>
+                {emulator.customFolders && (
+                  <button type="button" className="btn btn-sm" onClick={() => void onRun(() => api.arcadeEmulatorFolders(emulator.key, null))}>
+                    Use {emulator.name}'s folders
+                  </button>
+                )}
+              </div>
+            </>
           )}
-          <div className="arcade-emulator-actions">
-            <button type="button" className="btn btn-sm" onClick={() => void addFolder()}>
-              <FolderPlus size={14} /> Add folder…
-            </button>
-            {emulator.customFolders && (
-              <button type="button" className="btn btn-sm" onClick={() => void onRun(() => api.arcadeEmulatorFolders(emulator.key, null))}>
-                Use {emulator.name}'s folders
-              </button>
-            )}
-          </div>
-        </>
-      ) : (
-        <>
-          <p className="muted">Not found on this computer.</p>
-          <div className="arcade-emulator-actions">
-            <button type="button" className="btn btn-sm" onClick={() => void locate()}>Locate…</button>
-          </div>
-        </>
+        </div>
       )}
-    </div>
+    </li>
   );
 }
 

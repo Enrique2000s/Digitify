@@ -12,6 +12,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.6.0",
+    date: "2026-11-18",
+    added: [
+      { icon: "search", title: "One search for everything", text: "Search your collection opens its own screen: your media, then Arcade's games, each in a grid you scroll down, with a filter to see one or both." },
+      { icon: "gamepad", title: "More emulators", text: "Arcade plays NES, Super Nintendo, Game Boy, Mega Drive, Sega CD, PC Engine and Dreamcast games (zipped too) in Mesen, FCEUX, Nestopia, Snes9x, ZSNES, mGBA, Kega Fusion, nullDC or ares." },
+      { icon: "gamepad", title: "More launchers", text: "Arcade finds the games of Ubisoft Connect, the EA app, Battle.net, Amazon Games, itch.io and, on Linux, Lutris." },
+      { icon: "monitor", title: "Emulators & folders in tabs", text: "Launchers, Emulators by maker, Consoles (which emulator plays each console) and Folders & covers." },
+      { icon: "gamepad", title: "Add any game", text: "Add a game… in Arcade adds a PC game by its program, for games no store here installed; they have their own Others view." },
+      { icon: "image", title: "Find missing covers", text: "Emulators & folders looks for a cover for every game without one, in one go." },
+      { icon: "gamepad", title: "PlayStation, Nintendo DS, RetroArch and GOG in Arcade", text: "Arcade finds PlayStation games for DuckStation, PlayStation 2 for PCSX2, PlayStation 3 for RPCS3 and Nintendo DS for melonDS or DeSmuME, the games in RetroArch's playlists (each console in its own view, started with its core), and GOG's installed games." },
+      { icon: "gamepad", title: "Logos and counts in Arcade", text: "Each game's badge shows its store's or console's symbol beside its name, every view says how many games it holds, and a store or console shows only once it has a game." },
+      { icon: "monitor", title: "Every emulator in Emulators & folders", text: "The emulators found show their folders; the others Arcade knows are listed with what they play, to install or point to." },
+      { icon: "chart", title: "Achievements on Home", text: "An Achievements button sits beside Customize Home." },
+      { icon: "library", title: "Tidier tabs", text: "Music's tabs go Tracks, Playlists, Artists, Recently played and Favorites, with the same star as everywhere; the All / Digital / Online filter shows only where there's online media, in Music and Videos." },
+    ],
+    fixed: [
+      "Library's tabs, filter and layout buttons sit on one line, at one height.",
+      "A category opens on its Media (Music on Tracks) every time you come back to it.",
+      "With many consoles, Arcade's views scroll in one row instead of running off the page.",
+      "Changing category no longer makes the buttons jump: they slide to their places.",
+      "Switching between Grid, Shelf, List, Detailed and Carousel is smooth: covers fly to their new places without flicker.",
+    ],
+  },
+  {
     version: "0.5.0",
     date: "2026-11-18",
     added: [

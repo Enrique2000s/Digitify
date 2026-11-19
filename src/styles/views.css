@@ -3931,3 +3931,154 @@ a.mini-player-open {
 .achievement-levels li > span:last-child {
   font-size: 12px;
 }
+
+/* ---------------------------------------------------------------- D-096: a calm Library header */
+
+/* Every group in the toolbar row sits on one line, at one height: tabs, filter, layouts. */
+.toolbar.arcade-toolbar .music-tabs {
+  margin: 0;
+}
+.library-view .toolbar.arcade-toolbar,
+.music-page .toolbar.arcade-toolbar {
+  min-height: 40px;
+  align-items: center;
+}
+/* The title band keeps its height while a category's title arrives, so nothing below it moves. */
+.library-view .page-header {
+  min-height: 56px;
+}
+
+/* Changing layout (Grid, Shelf, List, Detailed, Carousel): the header, the strip and the toolbar
+   stay as they are (no cross-fade of two toolbars), covers fly to their new places, a cover with no
+   place in the new layout goes quickly, and a new one comes in after them. */
+.library-head {
+  view-transition-name: library-head;
+}
+.library-toolbar {
+  view-transition-name: library-strip;
+}
+.library-view .page-header {
+  view-transition-name: library-header;
+}
+.library-view .toolbar.arcade-toolbar {
+  view-transition-name: library-tools;
+}
+::view-transition-old(library-head),
+::view-transition-old(library-strip),
+::view-transition-old(library-header),
+::view-transition-old(library-tools) {
+  display: none !important;
+}
+::view-transition-new(library-head),
+::view-transition-new(library-strip),
+::view-transition-new(library-header),
+::view-transition-new(library-tools),
+::view-transition-group(library-head),
+::view-transition-group(library-strip),
+::view-transition-group(library-header),
+::view-transition-group(library-tools) {
+  animation: none !important;
+}
+::view-transition-old(*):only-child {
+  animation: vt-leave 160ms ease-out both;
+}
+::view-transition-new(*):only-child {
+  animation: vt-arrive 300ms 120ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes vt-leave {
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+@keyframes vt-arrive {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 240ms;
+}
+
+/* Arcade's badges carry their store's or console's symbol (D-097). */
+.arcade-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.platform-logo {
+  flex: none;
+  width: 1.25em;
+  height: 1.25em;
+  fill: currentColor;
+}
+
+/* Arcade's views show how many games each holds (D-099), like Library's sections. */
+.arcade-toolbar .segmented .count {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+}
+.arcade-toolbar .segmented [aria-pressed="true"] .count {
+  color: inherit;
+}
+
+/* The universal search (D-114): its own screen, Library's media then Arcade's games, each a grid
+   that goes on downward; a filter shows both or one. */
+.search-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.search-head .count {
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.search-shown {
+  margin-bottom: 6px;
+}
+.search-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+.search-note.error {
+  color: var(--danger, #d64545);
+}
+.search-section {
+  display: grid;
+  gap: 16px;
+  margin-top: 28px;
+}
+.search-section h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 22px;
+  font-weight: 900;
+}
+.search-section > .muted {
+  font-size: 14px;
+}
+.search-media {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 26px 20px;
+  align-items: flex-end;
+}
+.search-more {
+  display: flex;
+  justify-content: center;
+  padding: 18px 0;
+  color: var(--muted);
+}

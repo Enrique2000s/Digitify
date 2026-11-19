@@ -2,7 +2,9 @@ import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
 import { arrayMove, useReorder } from "../../lib/reorder";
 import { usePreferences, type ArcadeFilter } from "../../lib/preferences";
 import { Switch } from "../../components/common";
-import { arcadeFilters, FILTER_LABELS } from "../arcade/shared";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../../lib/api";
+import { arcadeFilters, FILTER_LABELS, filledFilters } from "../arcade/shared";
 import { Setting } from "./Setting";
 
 /** Settings › Arcade (D-038): the views' order, which ones show, and one "All games" or two. */
@@ -10,7 +12,9 @@ export function ArcadeSettings() {
   const { preferences, update } = usePreferences();
   const arcade = preferences.arcade;
   // The rows in their order, hidden ones included; "all" stands for the two All views when combined.
-  const rows = arcadeFilters(arcade, true);
+  // A store or console without games has no view to arrange (D-101).
+  const games = useQuery({ queryKey: ["arcade-games"], queryFn: api.arcadeGames });
+  const rows = arcadeFilters(arcade, true, filledFilters(games.data));
 
   const arrange = (next: ArcadeFilter[]) =>
     update((c) => {
@@ -62,7 +66,7 @@ export function ArcadeSettings() {
         <Switch checked={arcade.combineAll} label="Combine All PC games and All ROM games" onChange={(combineAll) => update((c) => ({ arcade: { ...c.arcade, combineAll } }))} />
       </Setting>
       <p className="hint" style={{ margin: "14px 0 10px" }}>
-        Drag the views (or use the arrows) to set the order of Arcade's buttons; switch off the ones you don't use.
+        Drag the views (or use the arrows) to set the order of Arcade's buttons; switch off the ones you don't use. A store or console shows here once Arcade has one of its games.
       </p>
       <ul ref={order.listRef} className="category-list">
         {rows.map((filter, index) => {

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { api, type CoverShape, type ImportMode, type MusicSource, type Ownership, type SortKey } from "./api";
+import { api, ARCADE_CONSOLES, type ArcadeConsole, type ArcadeEmulator, type ArcadeStore, type CoverShape, type ImportMode, type MusicSource, type Ownership, type SortKey } from "./api";
 import { accentVariables } from "./color";
 import { sanitizeShortcuts, setCustomShortcuts, type ShortcutMap } from "./shortcuts";
 
@@ -171,10 +171,6 @@ export interface Preferences {
   /** How albums and videos are shown unless an item has its own shape. */
   /** Default cover shapes: music square or CD; Videos horizontal or vertical (Movies & Series are always vertical, D-027). */
   coverShapes: { audio: "square" | "disc"; videos: "poster" | "landscape" };
-  /** The music category's tab, opened again next time. */
-  musicTab: string;
-  /** The tab each category was left on (D-094): media, collections or favorites. */
-  categoryTabs: Record<string, CategoryTab>;
   /** Big Picture (D-025): moving with the selection or with a cursor, and the cursor's speed. */
   /** Big Picture: how to move around, the cursor's speed, and its startup animation (D-070). */
   bigPicture: { navigation: "focus" | "cursor"; cursorSpeed: number; intro: boolean };
@@ -201,14 +197,17 @@ export interface Preferences {
 }
 
 /** Arcade's views (D-038): everything, PC or ROM games, one store, one console, favorites. */
-export type ArcadeFilter = "all" | "all-pc" | "all-roms" | "steam" | "epic" | "xbox" | "heroic" | "wii" | "gamecube" | "n64" | "favorites";
+/** "others": PC games added by hand (D-115), from no store. */
+export type ArcadeFilter = "all" | "all-pc" | "all-roms" | ArcadeStore | "others" | ArcadeConsole | "favorites";
 
 /** Their default order; "all" stands in for "all-pc" and "all-roms" when they're combined. */
-export const ARCADE_FILTER_ORDER: ArcadeFilter[] = ["all-pc", "all-roms", "steam", "epic", "xbox", "heroic", "wii", "gamecube", "n64", "favorites"];
+export const ARCADE_FILTER_ORDER: ArcadeFilter[] = ["all-pc", "all-roms", "steam", "epic", "xbox", "gog", "ubisoft", "ea", "battlenet", "amazon", "itch", "heroic", "lutris", "others", ...ARCADE_CONSOLES, "favorites"];
 
 export interface ArcadePreferences {
   downloadCovers: boolean;
-  n64: "project64" | "rmg";
+  /** The emulator chosen for each console (Emulators & folders › Consoles, D-111); a console not
+   *  here plays in the first emulator found in Arcade's order. */
+  playsIn: Partial<Record<ArcadeConsole, ArcadeEmulator>>;
   /** The view shown. */
   platform: ArcadeFilter;
   /** The views' order and the hidden ones (Settings › Arcade). */
@@ -298,8 +297,6 @@ export const DEFAULT_PREFERENCES: Preferences = {
   ownership: {},
   sorts: {},
   coverShapes: { audio: "square", videos: "landscape" },
-  musicTab: "tracks",
-  categoryTabs: {},
   bigPicture: { navigation: "focus", cursorSpeed: 1000, intro: true },
   shelfStyle: "covers",
   shelfLook: "breeze",
@@ -315,7 +312,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   slideshowSeconds: 5,
   arcade: {
     downloadCovers: true,
-    n64: "project64",
+    playsIn: {},
     platform: "all-pc",
     filterOrder: [...ARCADE_FILTER_ORDER],
     hiddenFilters: [],
@@ -459,6 +456,24 @@ function sanitizeGoals(raw: unknown): Goals {
 
 const isArcadeFilter = (v: unknown): v is ArcadeFilter => v === "all" || ARCADE_FILTER_ORDER.includes(v as ArcadeFilter);
 
+/** The emulator chosen per console (D-111); the older single choices (Nintendo 64, Nintendo DS,
+ *  NES, Game Boy) carry over. */
+function sanitizePlaysIn(value: Record<string, unknown>): Partial<Record<ArcadeConsole, ArcadeEmulator>> {
+  const out: Partial<Record<ArcadeConsole, ArcadeEmulator>> = {};
+  const saved = value.playsIn && typeof value.playsIn === "object" ? (value.playsIn as Record<string, unknown>) : null;
+  if (saved) {
+    for (const [console, emulator] of Object.entries(saved)) {
+      if (ARCADE_CONSOLES.includes(console as ArcadeConsole) && typeof emulator === "string" && /^[a-z0-9]{2,24}$/.test(emulator)) out[console as ArcadeConsole] = emulator as ArcadeEmulator;
+    }
+    return out;
+  }
+  if (value.n64 === "rmg") out.n64 = "rmg";
+  if (value.ds === "desmume") out.ds = "desmume";
+  if (value.nes === "fceux") out.nes = "fceux";
+  if (value.gb === "mesen") out.gb = out.gbc = out.gba = "mesen";
+  return out;
+}
+
 function sanitizeArcade(raw: unknown): ArcadePreferences {
   const pick = picker(raw, DEFAULT_PREFERENCES.arcade);
   const value = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -470,7 +485,7 @@ function sanitizeArcade(raw: unknown): ArcadePreferences {
   order = order.filter((f) => ARCADE_FILTER_ORDER.includes(f));
   return {
     downloadCovers: pick("downloadCovers", isBoolean),
-    n64: pick("n64", (v) => v === "project64" || v === "rmg"),
+    playsIn: sanitizePlaysIn(value),
     platform: isArcadeFilter(saved) ? saved : DEFAULT_PREFERENCES.arcade.platform,
     filterOrder: order,
     hiddenFilters: Array.isArray(value.hiddenFilters) ? [...new Set(value.hiddenFilters.filter(isArcadeFilter))] : [],
@@ -569,14 +584,6 @@ function sanitize(raw: unknown): Preferences {
     ) as Record<string, Ownership | "" | "collections">,
     sorts: pick("sorts", (v) => !!v && typeof v === "object"),
     coverShapes: sanitizeShapes((raw as Raw<Preferences>)?.coverShapes),
-    // "albums" (D-024) became the Tracks view (D-027).
-    musicTab: (raw as Raw<Preferences>)?.musicTab === "albums" ? "tracks" : pick("musicTab", (v) => typeof v === "string" && v.length < 20),
-    categoryTabs: (() => {
-      const value = ((raw as Raw<Preferences>)?.categoryTabs ?? {}) as Record<string, unknown>;
-      const out: Record<string, CategoryTab> = {};
-      for (const [key, tab] of Object.entries(value)) if (key.length < 40 && CATEGORY_TABS.includes(tab as CategoryTab)) out[key] = tab as CategoryTab;
-      return out;
-    })(),
     bigPicture: sanitizeBigPicture((raw as Raw<Preferences>)?.bigPicture),
     shelfStyle: pick("shelfStyle", (v) => v === "covers" || v === "spines"),
     shelfLook: pick("shelfLook", (v) => ["breeze", "wood", "glass", "metal"].includes(v as string)),

@@ -1,8 +1,8 @@
 {
   "name": "digitify",
   "private": true,
-  "version": "0.5.0",
-  "description": "Digitify: your physical collection, digitally preserved and beautifully organized.",
+  "version": "0.6.0",
+  "description": "Digitify: a home for all your media (Library) and a universal launcher for your games (Arcade).",
   "type": "module",
   "scripts": {
     "dev": "vite",

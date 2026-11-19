@@ -2,17 +2,16 @@ import { useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { DropdownMenu } from "radix-ui";
-import { ArrowLeft, Clock, Heart, ListMusic, ListPlus, Mic2, MoreHorizontal, Music2, Pencil, Play, Plus, Trash } from "lucide-react";
+import { ArrowLeft, Clock, ListMusic, ListPlus, Mic2, MoreHorizontal, Music2, Pencil, Play, Plus, Trash, Star } from "lucide-react";
 import { api, errorText, type Category, type Playlist } from "../../lib/api";
 import { useMusic } from "../../lib/music/MusicProvider";
-import { usePreferences } from "../../lib/preferences";
 import { AddMusicDialog } from "./AddMusic";
 import { CategoryIcon } from "../../components/common";
 import { CategoryStrip } from "../../components/CategoryStrip";
 import { useArrival } from "../../lib/arrival";
 import { duration, NewPlaylistDialog, TrackList, usePlaylists } from "./Tracks";
 
-export const MUSIC_TABS = ["tracks", "artists", "playlists", "recent", "favorites"] as const;
+export const MUSIC_TABS = ["tracks", "playlists", "artists", "recent", "favorites"] as const;
 export type MusicTab = (typeof MUSIC_TABS)[number];
 
 const LABELS: Record<MusicTab, [string, ReactNode]> = {
@@ -20,13 +19,13 @@ const LABELS: Record<MusicTab, [string, ReactNode]> = {
   artists: ["Artists", <Mic2 size={15} aria-hidden />],
   playlists: ["Playlists", <ListMusic size={15} aria-hidden />],
   recent: ["Recently played", <Clock size={15} aria-hidden />],
-  favorites: ["Favorites", <Heart size={15} aria-hidden />],
+  // The same star as every category's Favorites tab (D-098).
+  favorites: ["Favorites", <Star size={15} aria-hidden />],
 };
 
 /** The tabs over a music category: tracks (the library view, each track an item, D-027) and the music player's own lists. */
 export function MusicTabs({ category, tab }: { category: Category; tab: MusicTab }) {
   const navigate = useNavigate();
-  const { update } = usePreferences();
   return (
     <div className="segmented music-tabs" role="tablist" aria-label="Music">
       {MUSIC_TABS.map((key) => (
@@ -37,7 +36,6 @@ export function MusicTabs({ category, tab }: { category: Category; tab: MusicTab
           aria-selected={tab === key}
           aria-pressed={tab === key}
           onClick={() => {
-            update({ musicTab: key });
             void navigate({ to: "/library/$scope", params: { scope: category.key }, search: { tab: key }, replace: true });
           }}
         >

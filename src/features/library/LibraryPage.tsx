@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
-import { FilePlus, FolderPlus, LibraryBig, Search, Star, LayoutGrid, Folder } from "lucide-react";
+import { FilePlus, FolderPlus, LibraryBig, Star, LayoutGrid, Folder } from "lucide-react";
 import type { Category } from "../../lib/api";
 import { useImporter } from "../../lib/importer";
 import { useCategories } from "../../lib/queries";
@@ -37,7 +37,6 @@ const TAB_LABELS: Record<CategoryTab, [string, ReactNode]> = {
 /** A category's tabs (D-094), beside the view's filter: its media, its collections, its favorites. */
 function CategoryTabs({ category, tab }: { category: Category; tab: CategoryTab }) {
   const navigate = useNavigate();
-  const { update } = usePreferences();
   return (
     <div className="segmented music-tabs category-tabs" role="tablist" aria-label={category.name}>
       {CATEGORY_TABS.map((key) => (
@@ -48,7 +47,6 @@ function CategoryTabs({ category, tab }: { category: Category; tab: CategoryTab 
           aria-selected={tab === key}
           aria-pressed={tab === key}
           onClick={() => {
-            update((c) => ({ categoryTabs: { ...c.categoryTabs, [category.key]: key } }));
             void navigate({ to: "/library/$scope", params: { scope: category.key }, search: { tab: key }, replace: true });
           }}
         >
@@ -140,24 +138,9 @@ export function LibraryPage() {
   }
   const category = categories.data?.find((c) => c.key === scope);
   if (!category) return null;
-  // A music category opens on the tab used last time.
-  const musicTab = MUSIC_TABS.find((key) => key === (tab ?? (collection == null ? preferences.musicTab : undefined))) as MusicTab | undefined;
+  // A category opens on its media (Tracks for music) unless a tab is asked for (D-104).
+  const musicTab = MUSIC_TABS.find((key) => key === tab) as MusicTab | undefined;
   if (category.handler === "audio" && musicTab && musicTab !== "tracks") return <MusicPage category={category} tab={musicTab} />;
-  const categoryTab: CategoryTab = CATEGORY_TABS.find((key) => key === tab) ?? (collection != null ? "collections" : (preferences.categoryTabs[category.key] ?? "media"));
+  const categoryTab: CategoryTab = CATEGORY_TABS.find((key) => key === tab) ?? (collection != null ? "collections" : "media");
   return <CategoryView key={scope} category={category} collection={collection ?? null} tab={categoryTab} />;
-}
-
-export function SearchPage() {
-  const { q } = useSearch({ from: "/search" });
-  return (
-    <LibraryView
-      key={`search:${q}`}
-      viewKey="search"
-      base={{ search: q }}
-      eyebrow="Search"
-      title={`“${q}”`}
-      icon={<Search size={26} strokeWidth={2.4} aria-hidden />}
-      empty={<div className="empty"><p>No matches for “{q}”. Search looks at titles, people, series, albums, genres and collections.</p></div>}
-    />
-  );
 }

@@ -5051,3 +5051,266 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
   font-size: 13px;
   font-weight: 700;
 }
+
+/* D-101: the emulators Arcade knows but didn't find, one line each. */
+.arcade-known li .btn {
+  margin-left: auto;
+}
+
+/* D-101: the new consoles' and GOG's badges and blank boxes. */
+.arcade-badge[data-platform="ps1"],
+.arcade-badge[data-platform="ps2"],
+.arcade-badge[data-platform="ps3"] {
+  background: rgba(0, 67, 156, 0.9);
+}
+.arcade-badge[data-platform="ds"] {
+  background: rgba(90, 96, 108, 0.9);
+}
+.arcade-badge[data-store="gog"] {
+  background: rgba(134, 50, 160, 0.92);
+}
+.arcade-known li .btn {
+  margin-left: auto;
+}
+.arcade-cover-blank[data-platform="ps1"],
+.arcade-cover-blank[data-platform="ps2"],
+.arcade-cover-blank[data-platform="ps3"] {
+  background: linear-gradient(160deg, #0b3a82 0%, #071a3a 100%);
+}
+.arcade-cover-blank[data-platform="ds"] {
+  background: linear-gradient(160deg, #3a3f48 0%, #16191e 100%);
+}
+/* Many consoles (D-109): Arcade's views stay one row that scrolls sideways, with arrows at its
+   ends and its edges fading, so they never grow past the page or push the tools away. */
+.arcade-views {
+  position: relative;
+  display: flex;
+  /* It takes the room the tools don't need, up to its own width. */
+  flex: 1000 1 360px;
+  min-width: 0;
+  max-width: max-content;
+}
+.arcade-views > .segmented {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  /* The view scrolled into sight stays clear of the arrows. */
+  scroll-padding-inline: 40px;
+}
+.arcade-views > .segmented::-webkit-scrollbar {
+  display: none;
+}
+.arcade-views.more-left > .segmented {
+  mask-image: linear-gradient(90deg, transparent 0, #000 56px);
+}
+.arcade-views.more-right > .segmented {
+  mask-image: linear-gradient(90deg, #000 calc(100% - 56px), transparent 100%);
+}
+.arcade-views.more-left.more-right > .segmented {
+  mask-image: linear-gradient(90deg, transparent 0, #000 56px, #000 calc(100% - 56px), transparent 100%);
+}
+/* Find, Size, Select and Sort keep the room they need on the views' line, or go under it. */
+.arcade-views + .view-tools {
+  flex: 1 1 800px;
+}
+.arcade-views-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  width: 30px;
+  height: 30px;
+  transform: translateY(-50%);
+}
+.arcade-views-arrow.left {
+  left: 2px;
+}
+.arcade-views-arrow.right {
+  right: 2px;
+}
+/* D-108: covers for every game without one. */
+.arcade-missing-covers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 4px;
+  font-size: 13px;
+}
+/* D-106, D-107: the cartridge consoles' and itch.io's badges. */
+.arcade-badge[data-store="itch"] {
+  background: rgba(250, 92, 92, 0.92);
+}
+.arcade-badge[data-platform="nes"],
+.arcade-badge[data-platform="snes"] {
+  background: rgba(120, 120, 128, 0.92);
+}
+.arcade-badge[data-platform="gb"],
+.arcade-badge[data-platform="gbc"],
+.arcade-badge[data-platform="gba"] {
+  background: rgba(76, 64, 160, 0.92);
+}
+
+/* Emulators & folders in tabs (D-113): Launchers, Emulators (by maker), Consoles, Folders & covers. */
+.arcade-setup-tabs {
+  justify-self: start;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.arcade-setup-pane {
+  display: grid;
+  gap: 12px;
+}
+.arcade-setup-pane > .muted {
+  font-size: 13px;
+}
+.arcade-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.arcade-rows > li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  font-size: 13px;
+}
+.arcade-rows > li > .btn {
+  margin-left: auto;
+}
+.arcade-rows > li.absent {
+  opacity: 0.72;
+}
+.arcade-rows .ok {
+  flex: none;
+  color: #30a46c;
+}
+.arcade-rows .warn {
+  flex: none;
+  color: #e5a00d;
+}
+.arcade-emulator-group {
+  display: grid;
+  gap: 8px;
+}
+.arcade-emulator-group h3 {
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.emulator-rows > li {
+  display: block;
+  padding: 0;
+}
+.emulator-rows > li.open {
+  grid-column: 1 / -1;
+}
+.arcade-emulator-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 8px 12px;
+}
+.arcade-emulator-line > .btn,
+.arcade-emulator-line > :last-child {
+  margin-left: auto;
+  flex: none;
+}
+.arcade-emulator-consoles {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.arcade-chevron {
+  transition: transform 160ms var(--ease);
+}
+.arcade-emulator-row.open .arcade-chevron {
+  transform: rotate(180deg);
+}
+.arcade-emulator-details {
+  display: grid;
+  gap: 8px;
+  padding: 4px 14px 14px 38px;
+  font-size: 13px;
+}
+.arcade-emulator-details .arcade-emulator-program {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.arcade-consoles {
+  width: 100%;
+  max-width: 760px;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.arcade-consoles th {
+  padding: 6px 10px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.arcade-consoles td {
+  height: 48px;
+  padding: 0 10px;
+  border-top: 1px solid var(--line);
+  vertical-align: middle;
+}
+.arcade-consoles td:nth-child(2) {
+  width: 90px;
+  font-variant-numeric: tabular-nums;
+}
+.arcade-consoles tr.quiet td:first-child,
+.arcade-consoles tr.quiet td:nth-child(2) {
+  color: var(--muted);
+}
+.arcade-consoles select {
+  min-width: 180px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+}
+/* D-112: the new launchers' badges. */
+.arcade-badge[data-store="ubisoft"] {
+  background: rgba(0, 112, 255, 0.92);
+}
+.arcade-badge[data-store="ea"] {
+  background: rgba(255, 71, 71, 0.92);
+}
+.arcade-badge[data-store="battlenet"] {
+  background: rgba(20, 140, 230, 0.92);
+}
+.arcade-badge[data-store="amazon"] {
+  background: rgba(255, 153, 0, 0.92);
+  color: #1a1206;
+}
+.arcade-badge[data-store="lutris"] {
+  background: rgba(240, 120, 30, 0.92);
+}
+.arcade-badge[data-platform="genesis"],
+.arcade-badge[data-platform="segacd"],
+.arcade-badge[data-platform="dreamcast"] {
+  background: rgba(20, 70, 160, 0.92);
+}

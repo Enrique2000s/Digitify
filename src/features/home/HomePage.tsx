@@ -22,6 +22,7 @@ import {
   Volume2,
   VolumeOff,
   Joystick,
+  Award,
 } from "lucide-react";
 import { type Category, type ArcadeGame, type ItemCard, type TileCover, pictureUrl } from "../../lib/api";
 import { plural } from "../../lib/format";
@@ -385,6 +386,10 @@ export function HomePage() {
               Remove background
             </button>
           )}
+          {/* Achievements first (D-100), then Customize Home. */}
+          <Link to="/achievements" className="btn">
+            <Award size={17} strokeWidth={2.4} aria-hidden /> Achievements
+          </Link>
           {hasItems && (
             <button type="button" className="btn glow-when-on" aria-pressed={editing} onClick={() => setEditing(!editing)}>
               <LayoutDashboard size={17} strokeWidth={2.4} aria-hidden /> Customize Home

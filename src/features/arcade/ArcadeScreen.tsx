@@ -2,6 +2,7 @@ import { CircleAlert, Heart, Joystick } from "lucide-react";
 import type { ArcadeGame } from "../../lib/api";
 import { usePad } from "../../lib/gamepad";
 import { badgeOf, consoleOf, FILTER_LABELS, GameCover, PLATFORM_ASPECT, playTime, useArcade, useArcadeFilters, useLaunch, useShownGames } from "./shared";
+import { PlatformLogo } from "./logos";
 
 /**
  * Arcade in Big Picture (D-034): the games as big tiles a controller reaches. A plays, LB and RB
@@ -63,7 +64,10 @@ export function ArcadeTile({ game, autofocus, onPlay, height = 270 }: { game: Ar
     <button type="button" className="bp-tile" style={{ width }} data-bp-focus data-bp-autofocus={autofocus || undefined} data-game={game.id} data-favorite={game.isFavorite || undefined} onClick={onPlay}>
       <span className="bp-tile-art arcade-bp-art" style={{ width, height }}>
         <GameCover game={game} size="cover" />
-        <span className="arcade-badge" data-platform={game.platform} data-store={game.store ?? undefined}>{badgeOf(game)}</span>
+        <span className="arcade-badge" data-platform={game.platform} data-store={game.store ?? undefined}>
+          <PlatformLogo game={game} />
+          {badgeOf(game)}
+        </span>
         {game.isFavorite && <Heart className="arcade-fav" size={22} fill="currentColor" />}
       </span>
       <span className="bp-tile-title">{game.title}</span>

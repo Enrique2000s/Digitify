@@ -183,6 +183,7 @@ SOFTWARE.
 | sysinfo (recognizing a running game, D-037) | MIT |
 | tiny_http (Linux: YouTube's host page, D-032) | MIT or Apache-2.0 |
 | souvlaki (media keys and system media controls, D-058) | MIT |
+| Simple Icons (the Steam, Epic Games, Xbox, GameCube, GOG and PlayStation symbols on Arcade's badges, D-097, D-101); the marks belong to their owners | CC0-1.0 |
 | tauri-plugin-single-instance (one Digitify at a time, D-077) | MIT or Apache-2.0 |
 | Linux only: libc, x11-dl, gtk, gdkx11, keyring | MIT or Apache-2.0 |
 | Linux only, loaded at run time (the system's, or the AppImage's copy): libayatana-appindicator, libayatana-indicator, libdbusmenu (the tray icon, D-059) | LGPL-2.1 or LGPL-3.0 |

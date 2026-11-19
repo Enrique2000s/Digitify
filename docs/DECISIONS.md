@@ -101,6 +101,96 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-115 · Others: the games added by hand
+- **Date:** 2026-11-19 · **Approved by:** project owner
+- The PC games added by their program (D-107) have their own view, **Others**, after the stores' views, so they don't have to be looked for in All PC games. Like a store's view it shows once it has a game (and goes when the last one is removed), and can be reordered or hidden in Settings › Arcade.
+
+### D-114 · Search, a screen of its own
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose Library first, with a filter to reach Arcade)
+- Replaces D-105's layout: the title bar's search opens its own screen, not a Library view: no categories, Size, Select, Sort, Add or layouts. It shows "N media in Library", then "N games in Arcade", each in a grid that goes on downward (more media load as you scroll), never sideways, and nothing behind See all. A filter above them shows All, only Library or only Arcade, each with its count, so the games are one click away however much media matched. Big Picture's search lists the media first too.
+
+### D-113 · Emulators & folders in tabs
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose tabs by kind)
+- With 18 emulators and 11 launchers, the panel has four tabs. **Launchers**: each store this system has, with its games or "not found", programs added by hand (and Add a game…), store games taken off the list. **Emulators**: grouped by maker (Nintendo, Sony, Sega, many consoles), one row each with its consoles; a found emulator's program and folders open beneath its row; the others have Locate… (or "Windows only"). **Consoles**: each console with its games and which emulator plays it, a choice wherever more than one is found (replacing the separate Nintendo 64, Nintendo DS, NES and Game Boy choices, which carry over). **Folders & covers**: more game folders, Download covers and Find missing covers.
+
+### D-112 · Ubisoft Connect, the EA app, Battle.net, Amazon Games and Lutris
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose Battle.net, Amazon Games and Lutris beside Ubisoft and EA)
+- Read only, from what each launcher keeps of its installed games; each its own view once it has a game. **Ubisoft Connect** (Windows): its `Installs` registry key, named by the games' uninstall entries, started with `uplay://launch/<id>/0`. **EA app** (Windows): the games whose folder has EA's `__Installer\installerdata.xml` (found through the uninstall entries and EA's usual game folders), named by it and started by the program it names, which brings up the EA app as it needs. **Battle.net** (Windows): the uninstall entries Battle.net writes (`--uid`), started with `Battle.net.exe --exec="launch <code>"` for the games Arcade knows the code of (World of Warcraft, Diablo, Overwatch, StarCraft, Hearthstone, Call of Duty…). **Amazon Games** (Windows): its `GameInstallInfo.sqlite`, started with `amazon-games://play/<id>`. **Lutris** (Linux): its `pga.db` (Steam's games left to Steam), started with `lutris:rungameid/<id>`, with Lutris's cover art. Covers otherwise from Steam's store by name (D-108).
+
+### D-111 · Kega Fusion, ZSNES, Snes9x, Nestopia, nullDC and ares
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- **Emulators:** Kega Fusion (Mega Drive, Sega CD, Master System, Game Gear), ZSNES and Snes9x (Super Nintendo), Nestopia (NES), nullDC (Dreamcast, Windows) and ares (NES, Super Nintendo, Nintendo 64, Game Boy, Game Boy Advance, Master System, Game Gear, Mega Drive, Sega CD, PC Engine). Found installed or as portable copies (Flatpak and the PATH on Linux) or pointed at; their game folders read from their settings (`Fusion.ini`, `zsnesw.cfg`, `snes9x.conf`, `nestopia.xml`, `nullDC.cfg`, ares's `settings.bml`): recent games' folders and their ROM folders. nullDC starts the disc at once (`-config ImageReader:DefaultImage=…`); Fusion and ares are told when a disc is a Sega CD's.
+- **Games:** Mega Drive / Genesis and 32X cartridges by their header ("SEGA" at 0x100, also as `.bin` and zipped), Sega CD discs by their signature (ISO, BIN/CUE, CHD in Fusion's folders), Dreamcast GD-ROMs (`.gdi`, its tracks not games of their own; named by their folder when the file is "disc.gdi") and DiscJuggler images, SuperGrafx with PC Engine. Each console its own view; covers from libretro-thumbnails.
+- **One list** says which emulators play each console, in Arcade's order: it decides what each emulator's folders are searched for, the consoles it shows, the choices in Consoles (D-113) and which emulator a game starts in (the chosen one if found, else the first found). Migration 27 lets the emulator tables take any emulator's name, so later emulators need no migration.
+
+### D-110 · Two purposes: Library and Arcade
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- Digitify is described as a home for all your media (Library) and a universal launcher for your games (Arcade): in the README, the installer's description, the welcome screen and Settings › About.
+
+### D-109 · Arcade's views in one row that scrolls
+- **Date:** 2026-11-18 · **Approved by:** project owner (asked that many consoles never run off the screen or push anything away)
+- Replaces D-102's second line: the views stay one row that shrinks to the room beside Find, Size, Select and Sort and scrolls sideways (the mouse wheel, the trackpad, or round arrows at its ends, which show only when there's more that way; its edges fade). The view chosen is scrolled into sight. In a narrow window the tools go under the row instead of off the page.
+
+### D-108 · Covers for every game, from one button
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- Emulators & folders › Covers has **Find missing covers**: every game without a cover is looked for again at once, this time online even when downloads are off (the click is the go-ahead): what's on this computer first (Dolphin's, RetroArch's, the launchers'), then GameTDB (GameCube, Wii), libretro-thumbnails (every other console, by the game's name), the stores (Steam and GOG by ID, itch.io's own picture). PC games from elsewhere (added by hand, itch.io, Epic, Xbox, Heroic) without art also try Steam's public store search by their name, taking only an exact name match. Looking for games still finds covers by itself for new games, as before.
+
+### D-107 · itch.io and games added by their program
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- **itch.io (Windows and Linux):** the games installed by the itch app, read from its own database (`butler.db`, opened read-only): each install's folder and the program itch's check picked for this system; web games, tools and assets left out. They start by their own program from their folder (as itch does), are watched like a store's game, and use itch's cover. Its own view shows once it has a game.
+- **Add a game…** (Arcade's header): any PC game no store here installed, by its program (a `.exe` on Windows; any program on Linux). It's named after the program, or its folder when the program has a generic name ("Game.exe"); it can be renamed, given a cover, removed (the file stays). It starts by itself from its folder, its play time counted while a program from that folder runs. It shows in All PC games, and stays as long as its file is there.
+
+### D-106 · Mesen, FCEUX and mGBA
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- **Emulators:** Mesen (NES, Super Nintendo, Game Boy, Game Boy Color, Game Boy Advance, PC Engine, Master System, Game Gear), FCEUX (NES) and mGBA (Game Boy, Game Boy Color, Game Boy Advance), found where they're installed or kept as portable copies (or Flatpak / the PATH on Linux), or pointed at by hand. Their game folders come from their settings (Mesen's `settings.json`, FCEUX's `fceux.cfg`, mGBA's `config.ini`): the folders of the games opened recently and the folder last opened from. Each starts on the game with its own settings. NES games play in Mesen or FCEUX, Game Boy games in mGBA or Mesen, as chosen beside the covers (Mesen and mGBA first).
+- **Recognizing games:** only headers are read: iNES/UNIF/FDS for NES, Nintendo's logo (and the colour flag) for Game Boy, the fixed byte, title and code for Game Boy Advance; Super Nintendo, PC Engine, Master System and Game Gear by their kind of file. A ZIP holding one of these is that game, named after the ZIP. Each console has its own view, shown once it has a game; covers from libretro-thumbnails by name. Migration 26 lets the emulator tables take the three.
+
+### D-105 · One search for media and games
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- The title bar's "Search your collection" (and Big Picture's search) also finds Arcade's games: by their title, console, store or game ID, in a row of game tiles above the matching media ("3 games in Arcade", with See all). A cover opens the game in Arcade; ▶ plays it. When only games match, the media part says so instead of "No matches".
+
+### D-104 · A category opens on its media
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- Going back to a category always shows its Media (Tracks for Music), not the tab used last; Library still opens the category used last (D-075). The tabs are still in the address while you move around, so Back returns to the tab you were on.
+
+### D-103 · Every emulator and store in Emulators & folders
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- The emulators found get their card (program, game folders, or RetroArch's playlists); every other emulator Arcade knows is listed below them in one line each, with the consoles it plays and Locate… (or "Windows only"), so it's clear what Arcade can use. The stores list every store for this system with its games or "not found". Two emulators for one console (Nintendo 64, Nintendo DS) get a "plays in" choice beside the covers setting.
+
+### D-102 · A view only with games
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- A store's or console's view shows in Arcade (and in Settings › Arcade) only once it has at least one game; All PC games, All ROM games, the combined All games and Favorites are always there. With many consoles the views wrap onto a second line instead of running off the page.
+
+### D-101 · PlayStation, Nintendo DS, RetroArch and GOG in Arcade
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose one view per console, and one preferred emulator per console where two can play it)
+- **Emulators:** DuckStation (PlayStation) and PCSX2 (PlayStation 2), their game folders from `[GameList]` in their settings; RPCS3 (PlayStation 3), its installed games, its `games` folder and the folders of the discs in `games.yml`; melonDS (its last ROM folder) and DeSmuME (its recent games' folders) for Nintendo DS, with a preference between them (melonDS first). Found where they're usually installed or kept as portable copies (Program Files, the user's folders, Scoop, Flatpak and the PATH on Linux), or pointed at by hand. Each starts with its own settings: DuckStation and PCSX2 in batch mode (closing with the game), RPCS3 without its game list on the disc's EBOOT.BIN, melonDS and DeSmuME on the ROM.
+- **Recognizing games:** only headers are read. A disc image's `SYSTEM.CNF` says PlayStation or PlayStation 2 and gives its ID (ISO, BIN/CUE; a CUE's tracks and an M3U's discs aren't games of their own); compressed discs (CHD, CSO) go by CD or DVD and the emulator's folder; a PSP EBOOT holding a PlayStation game counts; a PlayStation 3 game is its folder, named by its PARAM.SFO (updates and game data left out), with its ICON0 as the cover when nothing better is downloaded; DS ROMs by their header.
+- **RetroArch:** the games in its playlists (`playlists/*.lpl`; its history and favorites lists left out), each in its console's view (Super Nintendo, Game Boy Advance, Mega Drive…; consoles without a view of their own share "Other consoles"), started in RetroArch with the core its playlist names. Its downloaded box art is used first. A game that an emulator of its own also finds opens in that emulator.
+- **GOG (Windows):** installed games from GOG's records in the registry (written by GOG Galaxy and by GOG's installers; extra content left out), started through GOG Galaxy when it's there, else by their own program; box art from GOG's public catalogue by the game's ID, when downloads are on. On Linux, GOG games keep coming through Heroic.
+- Digitify still ships, downloads or changes no games, BIOS files or emulators, nor their settings.
+
+### D-100 · Achievements on Home
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- Home's buttons start with Achievements (the medal and its name), beside Customize Home, opening the achievements screen (D-093).
+
+### D-099 · Game counts on Arcade's views
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- Each of Arcade's views (All PC games, Steam, Wii…) shows how many games it holds, like Library's sections.
+
+### D-098 · The filter only for online media; Music's tabs in order
+- **Date:** 2026-11-18 · **Approved by:** project owner
+- All / Digital / Online shows only in Music and Videos, where links are imported to; Pictures, Movies & Series, Books, Comics and Manga are all on this computer and show just their tabs. Music's tabs go Tracks, Playlists, Artists, Recently played, Favorites, and its Favorites tab has the same star as every category's.
+
+### D-097 · Logos on Arcade's badges
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose small one-colour logos)
+- A game's badge shows its store's or console's symbol before its name, in the badge's own colour and the size of its text, in Arcade, on Home and in Big Picture. Steam, Epic Games and GameCube come from Simple Icons 13.21 and Xbox from Simple Icons 9.21 (CC0 drawings of their owners' marks, used only to say where a game is from). Nintendo 64 shows its block "N" and Wii a Wii Remote (so the badge doesn't read "Wii Wii"), both drawn simply by Digitify, as no free versions exist; Heroic shows its name only (owner's request, same day).
+
+### D-096 · A calm Library header (keeps the layout of D-094)
+- **Date:** 2026-11-18 · **Approved by:** project owner (chose to keep the three bands, aligned, with nothing jumping)
+- **Aligned:** the tabs, the filter and the layout buttons share one line and one height (the tabs had kept a margin from beside the title); the title band keeps its height while a title arrives.
+- **Category changes:** the filter and the layout buttons slide from where they were in the category before (a FLIP slide, `lib/glide.ts`) instead of jumping when the tabs are wider or the filter isn't there; a filter that appears fades in once they've moved.
+- **Layout changes:** the header, the strip and the toolbar are left out of the view transition (no two toolbars cross-fading), covers and collections fly to their new places, a cover with no place in the new layout leaves quickly and a new one comes in after, and covers no longer also replay their pop-in.
+
 ### D-095 · Music has no collections
 - **Date:** 2026-11-18 · **Approved by:** project owner (chose to turn them into playlists)
 - Music groups songs with playlists only. The upgrade (v24, `reshape::d095`) turns each music collection into a playlist of the same name with its songs in order, then removes the collection (the songs stay in Music); the core refuses new music collections.

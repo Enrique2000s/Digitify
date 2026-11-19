@@ -1,5 +1,8 @@
 //! Arcade (D-034): a launcher for the games of the emulators installed on this computer — Dolphin
-//! for GameCube and Wii, Project64 (Windows) and RMG for Nintendo 64.
+//! for GameCube and Wii, Project64 (Windows) and RMG for Nintendo 64, DuckStation for PlayStation,
+//! PCSX2 for PlayStation 2, RPCS3 for PlayStation 3, melonDS and DeSmuME for Nintendo DS, Mesen,
+//! FCEUX and mGBA for Nintendo's cartridges (D-106), and the games in RetroArch's playlists, each
+//! with its core (D-101); PC games from their stores (itch.io's too) and programs added by hand.
 //!
 //! Digitify never ships, downloads or changes games, BIOS files or emulators, nor any emulator's
 //! settings: it finds the games in the folders the emulators (or the user) point to, and starts
@@ -9,6 +12,8 @@
 
 mod detect;
 mod games;
+mod launchers;
+mod retroarch;
 mod stores;
 
 use std::collections::{HashMap, HashSet};
@@ -89,6 +94,16 @@ pub struct ArcadeStatus {
     pub stores: Vec<StoreStatus>,
     /// Store games taken off the list (still installed).
     pub hidden: i64,
+    /// Each console and the emulators that play it, in Arcade's order (D-111).
+    pub consoles: Vec<ConsoleStatus>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConsoleStatus {
+    pub key: &'static str,
+    /// Emulators for this system, in Arcade's order.
+    pub players: Vec<&'static str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -148,10 +163,58 @@ fn found_emulators(library: &Library) -> AppResult<Vec<(Emulator, Option<Found>,
 }
 
 fn platforms_of(emulator: Emulator) -> Vec<&'static str> {
-    match emulator {
-        Emulator::Dolphin => vec!["gamecube", "wii"],
-        Emulator::Project64 | Emulator::Rmg => vec!["n64"],
+    looking_for(emulator).map(|l| l.platforms.iter().map(|p| p.key()).collect()).unwrap_or_default()
+}
+
+/// Which emulators play each console, in the order Arcade prefers them unless the user chose one
+/// (D-111). It is the one list behind everything about emulators and consoles: what each
+/// emulator's folders are searched for, the consoles it shows, the choice of emulator per console,
+/// and which one a game starts in. RetroArch plays the games of its own playlists (D-101).
+const PLAYS: &[(Platform, &[Emulator])] = {
+    use Emulator::*;
+    &[
+        (Platform::GameCube, &[Dolphin]),
+        (Platform::Wii, &[Dolphin]),
+        (Platform::N64, &[Project64, Rmg, Ares]),
+        (Platform::Ps1, &[DuckStation]),
+        (Platform::Ps2, &[Pcsx2]),
+        (Platform::Ps3, &[Rpcs3]),
+        (Platform::Ds, &[MelonDs, Desmume]),
+        (Platform::Nes, &[Mesen, Nestopia, Fceux, Ares]),
+        (Platform::Snes, &[Mesen, Snes9x, Zsnes, Ares]),
+        (Platform::Gb, &[Mgba, Mesen, Ares]),
+        (Platform::Gbc, &[Mgba, Mesen, Ares]),
+        (Platform::Gba, &[Mgba, Mesen, Ares]),
+        (Platform::Pce, &[Mesen, Ares]),
+        (Platform::Sms, &[Mesen, Fusion, Ares]),
+        (Platform::GameGear, &[Mesen, Fusion, Ares]),
+        (Platform::Genesis, &[Fusion, Ares]),
+        (Platform::SegaCd, &[Fusion, Ares]),
+        (Platform::Dreamcast, &[NullDc]),
+    ]
+};
+
+/// The emulators that play a console, in Arcade's order.
+fn players(platform: Platform) -> &'static [Emulator] {
+    PLAYS.iter().find(|(p, _)| *p == platform).map(|(_, e)| *e).unwrap_or(&[])
+}
+
+/// What an emulator's folders are searched for; RetroArch's games come from its playlists instead.
+fn looking_for(emulator: Emulator) -> Option<Looking> {
+    let platforms: Vec<Platform> = PLAYS.iter().filter(|(_, e)| e.contains(&emulator)).map(|(p, _)| *p).collect();
+    if platforms.is_empty() {
+        return None;
     }
+    // The console a disc that can't say which it is belongs to, in this emulator's folders.
+    let hint = match emulator {
+        Emulator::DuckStation => Some(Platform::Ps1),
+        Emulator::Pcsx2 => Some(Platform::Ps2),
+        Emulator::Fceux | Emulator::Nestopia => Some(Platform::Nes),
+        Emulator::Fusion => Some(Platform::SegaCd),
+        Emulator::NullDc => Some(Platform::Dreamcast),
+        _ => None,
+    };
+    Some(Looking { platforms, hint })
 }
 
 fn user_folders(library: &Library) -> AppResult<Vec<(i64, PathBuf, bool)>> {
@@ -193,7 +256,11 @@ pub async fn arcade_status(state: State<'_, AppState>, arcade: State<'_, ArcadeS
             .into_iter()
             .map(|s| StoreStatus { key: s.store.key(), name: s.store.name(), found: s.found, games: s.games.len() })
             .collect();
-        Ok(ArcadeStatus { emulators, folders, running, games, stores, hidden })
+        let consoles = PLAYS
+            .iter()
+            .map(|(platform, emulators)| ConsoleStatus { key: platform.key(), players: emulators.iter().filter(|e| e.available_here()).map(|e| e.key()).collect() })
+            .collect();
+        Ok(ArcadeStatus { emulators, folders, running, games, stores, hidden, consoles })
     })
     .await
 }
@@ -208,13 +275,9 @@ pub async fn arcade_set_emulator(state: State<'_, AppState>, emulator: String, p
     if let Some(path) = &path {
         let file = Path::new(path);
         let name = file.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
-        let expected: &[&str] = match emulator {
-            Emulator::Dolphin => &["dolphin.exe", "dolphin-emu", "dolphin"],
-            Emulator::Project64 => &["project64.exe"],
-            Emulator::Rmg => &["rmg.exe", "rmg"],
-        };
-        if !file.is_file() || !expected.iter().any(|e| name == *e || name.starts_with(e.trim_end_matches(".exe"))) {
-            return Err(AppError::msg(format!("That doesn't look like {}'s program ({}).", emulator.name(), expected[0])));
+        let expected = emulator.program_names();
+        if !file.is_file() || !expected.iter().any(|e| name.starts_with(e)) {
+            return Err(AppError::msg(format!("That doesn't look like {}'s program.", emulator.name())));
         }
     }
     with_library(&state, move |library| {
@@ -310,24 +373,46 @@ pub struct ScanReport {
     pub covers_queued: usize,
 }
 
-/// Which kinds of file a folder is searched for.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Looking {
-    Dolphin,
-    N64,
-    Both,
+/// Which consoles' games a folder is searched for, and the console of the emulator it belongs to
+/// (for discs that can't say which they are).
+#[derive(Clone, PartialEq, Eq)]
+struct Looking {
+    platforms: Vec<Platform>,
+    hint: Option<Platform>,
 }
 
 impl Looking {
-    fn wants(self, ext: &str) -> bool {
-        let dolphin = games::DOLPHIN_EXTENSIONS.contains(&ext);
-        let n64 = games::N64_EXTENSIONS.contains(&ext);
-        match self {
-            Looking::Dolphin => dolphin,
-            Looking::N64 => n64,
-            Looking::Both => dolphin || n64,
+    /// Folders added in Arcade: every kind of game.
+    fn everything() -> Self {
+        Looking { platforms: Platform::ALL.to_vec(), hint: None }
+    }
+
+    fn wants(&self, ext: &str) -> bool {
+        self.platforms.iter().any(|p| p.extensions().contains(&ext))
+    }
+
+    /// How deep to look: PlayStation 3 games are folders whose PARAM.SFO is two levels down.
+    fn depth(&self, recursive: bool) -> usize {
+        if self.platforms == [Platform::Ps3] {
+            3
+        } else if recursive {
+            12
+        } else {
+            1
         }
     }
+}
+
+/// Box art the emulators keep on this computer: Dolphin's covers, RetroArch's thumbnails.
+#[derive(Default)]
+struct LocalArt {
+    dolphin: Option<PathBuf>,
+    retroarch: Option<PathBuf>,
+}
+
+fn local_art(emulators: &[(Emulator, Option<Found>, bool, bool)]) -> LocalArt {
+    let covers = |wanted: Emulator| emulators.iter().find(|(e, ..)| *e == wanted).and_then(|(_, f, ..)| f.as_ref()).and_then(|f| f.covers.clone());
+    LocalArt { dolphin: covers(Emulator::Dolphin), retroarch: covers(Emulator::RetroArch) }
 }
 
 /// Looks through every game folder, adds what's new, and marks what's gone as missing (kept, with
@@ -343,55 +428,67 @@ pub async fn arcade_scan(app: AppHandle, state: State<'_, AppState>, download_co
 fn scan(app: &AppHandle, library: &std::sync::Arc<Library>, download_covers: bool) -> AppResult<ScanReport> {
     let emulators = found_emulators(library)?;
     let mut folders: Vec<(PathBuf, bool, Looking)> = Vec::new();
-    let mut dolphin_covers: Option<PathBuf> = None;
+    let mut playlists: Option<PathBuf> = None;
     for (emulator, found, _, _) in &emulators {
         let Some(found) = found else { continue };
-        if *emulator == Emulator::Dolphin {
-            dolphin_covers = found.covers.clone();
+        match looking_for(*emulator) {
+            Some(looking) => folders.extend(found.folders.iter().map(|(path, recursive)| (path.clone(), *recursive, looking.clone()))),
+            None => playlists = found.folders.first().map(|(path, _)| path.clone()),
         }
-        let looking = if *emulator == Emulator::Dolphin { Looking::Dolphin } else { Looking::N64 };
-        folders.extend(found.folders.iter().map(|(path, recursive)| (path.clone(), *recursive, looking)));
     }
-    folders.extend(user_folders(library)?.into_iter().map(|(_, path, recursive)| (path, recursive, Looking::Both)));
+    folders.extend(user_folders(library)?.into_iter().map(|(_, path, recursive)| (path, recursive, Looking::everything())));
 
     let mut seen: HashSet<PathBuf> = HashSet::new();
-    let mut files: Vec<PathBuf> = Vec::new();
+    let mut files: Vec<(PathBuf, Option<Platform>)> = Vec::new();
     for (folder, recursive, looking) in folders {
         if !folder.is_dir() {
             continue;
         }
-        let walker = WalkDir::new(&folder).follow_links(false).max_depth(if recursive { 12 } else { 1 });
+        let walker = WalkDir::new(&folder).follow_links(false).max_depth(looking.depth(recursive));
         for entry in walker.into_iter().filter_map(Result::ok) {
             if entry.file_type().is_file() && looking.wants(&games::extension(entry.path())) && seen.insert(entry.path().to_path_buf()) {
-                files.push(entry.into_path());
+                files.push((entry.into_path(), looking.hint));
             }
         }
     }
+    // A disc's tracks (in its CUE sheet) and a game's discs (in its M3U list) are part of it, not
+    // games of their own (D-101).
+    let parts: HashSet<PathBuf> = files.iter().flat_map(|(file, _)| games::parts_of(file)).collect();
+    files.retain(|(file, _)| !parts.contains(file));
 
-    let known: HashMap<String, (i64, Option<i64>)> = library.db.with(|conn| {
+    // Each game's path, id and size, and whether it came from RetroArch's playlists.
+    let known: HashMap<String, (i64, Option<i64>, bool)> = library.db.with(|conn| {
         let rows = conn
-            .prepare("SELECT path, id, size FROM arcade_games")?
-            .query_map([], |row| Ok((row.get::<_, String>(0)?, (row.get(1)?, row.get(2)?))))?
+            .prepare("SELECT path, id, size, system IS NOT NULL FROM arcade_games")?
+            .query_map([], |row| Ok((row.get::<_, String>(0)?, (row.get(1)?, row.get(2)?, row.get(3)?))))?
             .collect::<Result<_, _>>()?;
         Ok(rows)
     })?;
     let mut added = 0;
     let mut present: HashSet<i64> = HashSet::new();
-    for file in &files {
+    // Games an emulator of their own plays: RetroArch's playlists don't take them over.
+    let mut own: HashSet<String> = HashSet::new();
+    for (file, hint) in &files {
         let key = file.display().to_string();
         let size = std::fs::metadata(file).ok().map(|m| m.len() as i64);
-        if let Some((id, known_size)) = known.get(&key) {
-            if *known_size == size {
+        if let Some((id, known_size, retro)) = known.get(&key) {
+            if *known_size == size && !retro {
                 present.insert(*id);
+                own.insert(key);
                 continue;
             }
         }
-        let Some(info) = games::identify(file) else { continue };
+        let Some(info) = games::identify(file, *hint) else { continue };
+        // A PlayStation 3 game is its folder.
+        let (key, size) = match &info.folder {
+            Some(folder) => (folder.display().to_string(), None),
+            None => (key, size),
+        };
         let id = library.db.with(|conn| {
             conn.execute(
                 "INSERT INTO arcade_games (path, platform, title, sort_title, game_id, size) VALUES (?1, ?2, ?3, ?4, ?5, ?6) \
                  ON CONFLICT(path) DO UPDATE SET platform = excluded.platform, title = excluded.title, sort_title = excluded.sort_title, \
-                   game_id = excluded.game_id, size = excluded.size, missing = 0",
+                   game_id = excluded.game_id, size = excluded.size, core = NULL, system = NULL, missing = 0",
                 params![key, info.platform.key(), info.title, sort_key(&info.title), info.game_id, size],
             )?;
             Ok(conn.query_row("SELECT id FROM arcade_games WHERE path = ?1", [&key], |row| row.get::<_, i64>(0))?)
@@ -399,6 +496,30 @@ fn scan(app: &AppHandle, library: &std::sync::Arc<Library>, download_covers: boo
         if !known.contains_key(&key) {
             added += 1;
         }
+        present.insert(id);
+        own.insert(key);
+    }
+    // RetroArch's playlists (D-101): each game in its console's view, with the core that plays it.
+    // A renamed game keeps its name.
+    let mut retro_games = 0;
+    for game in playlists.as_deref().map(retroarch::games).unwrap_or_default() {
+        if own.contains(&game.path) || !retroarch::file_of(&game.path).is_file() {
+            continue;
+        }
+        retro_games += 1;
+        let size = std::fs::metadata(retroarch::file_of(&game.path)).ok().map(|m| m.len() as i64);
+        let id = library.db.with(|conn| {
+            conn.execute(
+                "INSERT INTO arcade_games (path, platform, title, sort_title, size, core, system) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) \
+                 ON CONFLICT(path) DO UPDATE SET platform = excluded.platform, size = excluded.size, core = excluded.core, system = excluded.system, missing = 0",
+                params![game.path, retroarch::platform_of(&game.system), game.title, sort_key(&game.title), size, game.core, game.system],
+            )?;
+            Ok(conn.query_row("SELECT id FROM arcade_games WHERE path = ?1", [&game.path], |row| row.get::<_, i64>(0))?)
+        })?;
+        if !known.contains_key(&game.path) {
+            added += 1;
+        }
+        own.insert(game.path);
         present.insert(id);
     }
     // PC games installed through their stores (D-037): known ones keep their names (a rename stays).
@@ -423,6 +544,12 @@ fn scan(app: &AppHandle, library: &std::sync::Arc<Library>, download_covers: boo
         }
     }
 
+    // Programs added by hand (D-107): there as long as their file is.
+    let added_by_hand: Vec<(i64, String)> = library.db.with(|conn| {
+        let rows = conn.prepare("SELECT id, path FROM arcade_games WHERE platform = 'pc' AND store IS NULL")?.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?.collect::<Result<_, _>>()?;
+        Ok(rows)
+    })?;
+    present.extend(added_by_hand.into_iter().filter(|(_, path)| Path::new(path).is_file()).map(|(id, _)| id));
     // Not in any game folder now (its file gone, its drive unplugged, its folder removed or changed;
     // a store game uninstalled): missing, and hidden, with its play time kept; found again: back.
     let missing = library.db.with(|conn| {
@@ -445,9 +572,9 @@ fn scan(app: &AppHandle, library: &std::sync::Arc<Library>, download_covers: boo
         let rows = conn.prepare("SELECT id FROM arcade_games WHERE cover_key IS NULL AND missing = 0")?.query_map([], |row| row.get(0))?.collect::<Result<_, _>>()?;
         Ok(rows)
     })?;
-    let covers_queued = find_covers(app, library, &bare, dolphin_covers.as_deref(), download_covers, Some(store_art))?;
+    let covers_queued = find_covers(app, library, &bare, &local_art(&emulators), download_covers, Some(store_art))?;
     let _ = app.emit("arcade-changed", ());
-    let found = files.len() + store_games;
+    let found = files.len() + retro_games + store_games;
     log::info!("arcade scan: {found} games found ({store_games} from stores), {added} new, {missing} missing, {covers_queued} covers to fetch");
     Ok(ScanReport { found, added, missing, covers_queued })
 }
@@ -466,13 +593,13 @@ fn store_art_now() -> StoreArt {
         .collect()
 }
 
-fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], dolphin_covers: Option<&Path>, download: bool, store_art: Option<StoreArt>) -> AppResult<usize> {
-    type Row = (i64, Option<String>, String, String, String, Option<String>, Option<String>);
+fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], local: &LocalArt, download: bool, store_art: Option<StoreArt>) -> AppResult<usize> {
+    type Row = (i64, Option<String>, String, String, String, Option<String>, Option<String>, Option<String>);
     let games: Vec<Row> = library.db.with(|conn| {
-        let mut stmt = conn.prepare("SELECT id, game_id, platform, path, title, store, store_key FROM arcade_games WHERE id = ?1")?;
+        let mut stmt = conn.prepare("SELECT id, game_id, platform, path, title, store, store_key, system FROM arcade_games WHERE id = ?1")?;
         let mut out = Vec::new();
         for id in ids {
-            if let Some(row) = stmt.query_row([id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?))).optional()? {
+            if let Some(row) = stmt.query_row([id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?))).optional()? {
                 out.push(row);
             }
         }
@@ -480,7 +607,7 @@ fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], 
     })?;
     let mut queue = Vec::new();
     let mut store_art = store_art;
-    for (id, game_id, platform, path, title, store, store_key) in games {
+    for (id, game_id, platform, path, title, store, store_key, system) in games {
         // PC games (D-037, D-039): their launcher's art on this computer (Steam's cache, the Xbox app's
         // logos); else, with downloads, the art their launcher shows (Epic's and Heroic's records name
         // it; Steam's by app id).
@@ -493,8 +620,15 @@ fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], 
             }
             if download {
                 let mut urls: Vec<String> = art.1.into_iter().collect();
-                if let (Some("steam"), Some(app)) = (store.as_deref(), store_key.as_deref()) {
-                    urls.extend(stores::steam_cover_urls(app));
+                match (store.as_deref(), store_key.as_deref()) {
+                    (Some("steam"), Some(app)) => urls.extend(stores::steam_cover_urls(app)),
+                    // GOG's catalogue names its box art by the game's ID (D-101).
+                    (Some("gog"), Some(game)) => urls.push(format!("gog:{game}")),
+                    _ => {}
+                }
+                // Not from Steam: Steam's store may know the game by its name (D-108).
+                if store.as_deref() != Some("steam") {
+                    urls.push(format!("steam-search:{title}"));
                 }
                 if !urls.is_empty() {
                     queue.push((id, urls));
@@ -502,23 +636,41 @@ fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], 
             }
             continue;
         }
-        let cached = game_id.as_ref().and_then(|g| dolphin_covers.map(|dir| dir.join(format!("{g}.png")))).filter(|p| p.is_file());
+        let cached = game_id.as_ref().and_then(|g| local.dolphin.as_ref().map(|dir| dir.join(format!("{g}.png")))).filter(|p| p.is_file());
         if let Some(bytes) = cached.and_then(|p| std::fs::read(p).ok()) {
             if set_cover(library, id, &bytes, "dolphin").is_ok() {
                 continue;
             }
         }
+        let stem = games::title_from_name(Path::new(path.rsplit('#').next().unwrap_or(&path)));
+        let names = games::libretro_names(&stem, &title);
+        // RetroArch's own box art for the games in its playlists (D-101).
+        if let (Some(system), Some(thumbnails)) = (system.as_deref(), local.retroarch.as_deref()) {
+            let mut wanted = vec![title.clone()];
+            wanted.extend(names.iter().cloned());
+            if let Some(bytes) = retroarch::thumbnail(thumbnails, system, &wanted).and_then(|p| std::fs::read(p).ok()) {
+                if set_cover(library, id, &bytes, "retroarch").is_ok() {
+                    continue;
+                }
+            }
+        }
+        // A PlayStation 3 game's own picture: wide, so a downloaded box comes first when allowed.
+        let icon = (platform == Platform::Ps3.key()).then(|| games::ps3_icon(Path::new(&path))).flatten();
         if !download {
+            if let Some(bytes) = icon.and_then(|p| std::fs::read(p).ok()) {
+                let _ = set_cover(library, id, &bytes, "rpcs3");
+            }
             continue;
         }
         let mut urls = Vec::new();
-        if let Some(game_id) = game_id.filter(|_| platform != Platform::N64.key()) {
+        if let Some(game_id) = game_id.filter(|_| platform == Platform::GameCube.key() || platform == Platform::Wii.key()) {
             urls.extend(games::cover_regions(&game_id).into_iter().map(|region| format!("https://art.gametdb.com/wii/cover/{region}/{game_id}.png")));
         }
-        if let Some(system) = games::libretro_system(&platform) {
-            let stem = games::title_from_name(Path::new(&path));
-            urls.extend(games::libretro_names(&stem, &title).iter().map(|name| games::libretro_url(system, name)));
+        let libretro = system.as_deref().map(retroarch::libretro_system).or_else(|| games::libretro_system(&platform).map(str::to_string));
+        if let Some(collection) = libretro {
+            urls.extend(names.iter().map(|name| games::libretro_url(&collection, name)));
         }
+        urls.extend(icon.map(|p| format!("file:{}", p.display())));
         if !urls.is_empty() {
             queue.push((id, urls));
         }
@@ -530,12 +682,38 @@ fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], 
         std::thread::spawn(move || {
             for (id, urls) in queue {
                 for url in urls {
+                    // A picture on this computer, tried after the downloads (a PlayStation 3 game's icon).
+                    if let Some(file) = url.strip_prefix("file:") {
+                        if std::fs::read(file).ok().is_some_and(|bytes| set_cover(&library, id, &bytes, "rpcs3").is_ok()) {
+                            let _ = app.emit("arcade-changed", ());
+                            break;
+                        }
+                        continue;
+                    }
+                    // GOG's catalogue says where the box art is; Steam's store finds a game by its name.
+                    let url = if let Some(game) = url.strip_prefix("gog:") {
+                        match stores::gog_cover_url(game) {
+                            Some(found) => found,
+                            None => continue,
+                        }
+                    } else if let Some(title) = url.strip_prefix("steam-search:") {
+                        let urls = stores::steam_search(title).map(|game| stores::steam_cover_urls(&game)).unwrap_or_default();
+                        if urls.iter().any(|u| crate::online::http::image(u).is_some_and(|bytes| set_cover(&library, id, &bytes, "steam").is_ok())) {
+                            let _ = app.emit("arcade-changed", ());
+                            break;
+                        }
+                        continue;
+                    } else {
+                        url
+                    };
                     let source = if url.contains("gametdb") {
                         "gametdb"
                     } else if url.contains("libretro") {
                         "libretro"
                     } else if url.contains("steamstatic") {
                         "steam"
+                    } else if url.contains("gog") {
+                        "gog"
                     } else {
                         "store"
                     };
@@ -591,8 +769,10 @@ pub struct GameCard {
     pub missing: bool,
     /// Place in the custom order, if the game was put there (D-035).
     pub position: Option<f64>,
-    /// For PC games, the store it came from (`steam`, `epic`, `xbox`, `heroic`; D-037).
+    /// For PC games, the store it came from (`steam`, `epic`, `xbox`, `gog`, `heroic`; D-037).
     pub store: Option<String>,
+    /// From RetroArch's playlists: RetroArch starts it, with its core (D-101).
+    pub retroarch: bool,
 }
 
 #[tauri::command]
@@ -602,7 +782,7 @@ pub async fn arcade_games(state: State<'_, AppState>) -> AppResult<Vec<GameCard>
             let rows = conn
                 .prepare(
                     "SELECT id, title, platform, game_id, path, size, cover_key, cover_color, is_favorite, play_seconds + extra_seconds, play_count, \
-                     last_played_at, added_at, missing, position, store, extra_seconds, rating, note FROM arcade_games WHERE hidden = 0 ORDER BY sort_title, id",
+                     last_played_at, added_at, missing, position, store, extra_seconds, rating, note, system IS NOT NULL FROM arcade_games WHERE hidden = 0 ORDER BY sort_title, id",
                 )?
                 .query_map([], |row| {
                     Ok(GameCard {
@@ -625,6 +805,7 @@ pub async fn arcade_games(state: State<'_, AppState>) -> AppResult<Vec<GameCard>
                         extra_seconds: row.get(16)?,
                         rating: row.get(17)?,
                         note: row.get(18)?,
+                        retroarch: row.get(19)?,
                     })
                 })?
                 .collect::<Result<_, _>>()?;
@@ -653,6 +834,58 @@ pub async fn arcade_set_cover(state: State<'_, AppState>, id: i64, path: String)
         set_cover(library, id, &bytes, "user")
     })
     .await
+}
+
+/// Adds a PC game by its program (D-107): one that no store Arcade reads installed. It's named after
+/// its program (renaming it in Arcade works as for any game), and starts by itself from its folder.
+#[tauri::command]
+pub async fn arcade_add_program(app: AppHandle, state: State<'_, AppState>, path: String, download_covers: bool) -> AppResult<i64> {
+    let program = PathBuf::from(&path);
+    if !program.is_file() {
+        return Err(AppError::msg("That program isn't there."));
+    }
+    #[cfg(windows)]
+    if !games::extension(&program).eq_ignore_ascii_case("exe") {
+        return Err(AppError::msg("Choose the game's program (a .exe file)."));
+    }
+    let library = state.library()?;
+    crate::library::blocking(move || {
+        let title = program_title(&program);
+        let key = program.display().to_string();
+        let dir = program.parent().map(|d| d.display().to_string());
+        let id = library.db.with(|conn| {
+            if conn.query_row("SELECT EXISTS (SELECT 1 FROM arcade_games WHERE path = ?1 AND missing = 0)", [&key], |row| row.get::<_, bool>(0))? {
+                return Err(AppError::msg("That game is already in Arcade."));
+            }
+            conn.execute(
+                "INSERT INTO arcade_games (path, platform, title, sort_title, launch, install_dir) VALUES (?1, 'pc', ?2, ?3, ?4, ?5) \
+                 ON CONFLICT(path) DO UPDATE SET missing = 0, hidden = 0, launch = excluded.launch, install_dir = excluded.install_dir",
+                params![key, title, sort_key(&title), format!("exe:{key}"), dir],
+            )?;
+            Ok(conn.query_row("SELECT id FROM arcade_games WHERE path = ?1", [&key], |row| row.get::<_, i64>(0))?)
+        })?;
+        find_covers(&app, &library, &[id], &LocalArt::default(), download_covers, Some(StoreArt::new()))?;
+        let _ = app.emit("arcade-changed", ());
+        Ok(id)
+    })
+    .await
+}
+
+/// A program's name as a game's: its file's description where Windows keeps one is not read; the
+/// file's name, or its folder's when the file is a generic one ("Game.exe", "Launcher.exe").
+fn program_title(program: &Path) -> String {
+    let stem = program.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let generic = ["game", "launcher", "start", "play", "run", "main", "app", "client"];
+    let lower = stem.to_lowercase();
+    let lower = lower.trim_end_matches("-win64-shipping").trim_end_matches("-win64").trim_end_matches("64").trim_end_matches("32").trim_end_matches(['-', '_', ' ']);
+    let name = if generic.contains(&lower) || lower.len() < 2 {
+        program.parent().and_then(|d| d.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or(stem)
+    } else {
+        stem
+    };
+    let name = name.replace(['_', '.'], " ");
+    let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
+    if name.is_empty() { "Game".to_string() } else { name }
 }
 
 /// Takes a game off Arcade's list (its file stays where it is). A later scan finds it again if it
@@ -721,7 +954,7 @@ pub async fn arcade_find_covers(app: AppHandle, state: State<'_, AppState>, ids:
             tx.commit()?;
             Ok(())
         })?;
-        let dolphin = found_emulators(&library)?.into_iter().find_map(|(e, f, _, _)| (e == Emulator::Dolphin).then_some(f).flatten()).and_then(|f| f.covers);
+        let local = local_art(&found_emulators(&library)?);
         let ids: Vec<i64> = library.db.with(|conn| {
             let mut stmt = conn.prepare("SELECT id FROM arcade_games WHERE id = ?1 AND cover_key IS NULL")?;
             let mut out = Vec::new();
@@ -732,7 +965,7 @@ pub async fn arcade_find_covers(app: AppHandle, state: State<'_, AppState>, ids:
             }
             Ok(out)
         })?;
-        let queued = find_covers(&app, &library, &ids, dolphin.as_deref(), download, None)?;
+        let queued = find_covers(&app, &library, &ids, &local, download, None)?;
         let _ = app.emit("arcade-changed", ());
         Ok(queued)
     })
@@ -855,48 +1088,87 @@ fn quit_for_game(app: &AppHandle, id: i64) {
 }
 
 /// Starts the emulator on a game, with the emulator's own settings. Nintendo 64 games use `n64`
-/// (`project64` or `rmg`) when both are found. Play time is counted until the emulator closes.
-/// `mode` says what Digitify does meanwhile: `stay` (default), `hide` or `quit` (D-041).
+/// (`project64` or `rmg`) and Nintendo DS games `ds` (`melonds` or `desmume`) when both are found;
+/// games from RetroArch's playlists start in RetroArch with their core. Play time is counted until
+/// the emulator closes. `mode` says what Digitify does meanwhile: `stay` (default), `hide` or
+/// `quit` (D-041).
 #[tauri::command]
-pub async fn arcade_launch(app: AppHandle, state: State<'_, AppState>, arcade: State<'_, ArcadeState>, id: i64, n64: Option<String>, mode: Option<String>) -> AppResult<()> {
+#[allow(clippy::too_many_arguments)]
+pub async fn arcade_launch(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    arcade: State<'_, ArcadeState>,
+    id: i64,
+    n64: Option<String>,
+    ds: Option<String>,
+    mode: Option<String>,
+    choices: Option<HashMap<String, String>>,
+) -> AppResult<()> {
     let mode = WhilePlaying::parse(mode.as_deref());
     if arcade.running.lock().map(|r| r.is_some()).unwrap_or(false) {
         return Err(AppError::msg("A game is already running. Close it first."));
     }
     let library = state.library()?;
-    let (path, platform, store, launch, install_dir): (String, String, Option<String>, Option<String>, Option<String>) = library
+    type Row = (String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>);
+    let (path, platform, store, launch, install_dir, core, system): Row = library
         .db
         .with(|conn| {
             Ok(conn
-                .query_row("SELECT path, platform, store, launch, install_dir FROM arcade_games WHERE id = ?1", [id], |row| {
-                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+                .query_row("SELECT path, platform, store, launch, install_dir, core, system FROM arcade_games WHERE id = ?1", [id], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?))
                 })
                 .optional()?)
         })?
         .ok_or_else(|| AppError::msg("That game is no longer in Arcade."))?;
     if platform == "pc" {
-        let store = store.as_deref().and_then(Store::parse).ok_or_else(|| AppError::msg("That game's store isn't known."))?;
         let launch = launch.ok_or_else(|| AppError::msg("Arcade doesn't know how to start that game."))?;
-        return launch_store_game(app, library, id, store, &launch, install_dir.map(PathBuf::from), mode);
+        // A program added by hand (D-107) starts by itself; a store's game through its store.
+        let name = match store.as_deref() {
+            None => "the game",
+            Some(key) => Store::parse(key).ok_or_else(|| AppError::msg("That game's store isn't known."))?.name(),
+        };
+        return launch_store_game(app, library, id, name, &launch, install_dir.map(PathBuf::from), mode);
     }
-    if !Path::new(&path).is_file() {
+    let file = retroarch::file_of(&path);
+    let there = if platform == Platform::Ps3.key() { file.is_dir() } else { file.is_file() };
+    if !there {
         return Err(AppError::msg("The game's file isn't there anymore (was its drive unplugged?)."));
     }
     let emulators = found_emulators(&library)?;
     let found = |e: Emulator| emulators.iter().find(|(k, f, _, _)| *k == e && f.is_some()).and_then(|(_, f, _, _)| f.clone());
-    let chosen = if platform == Platform::N64.key() {
-        let preferred = n64.as_deref().and_then(Emulator::parse).filter(|e| *e != Emulator::Dolphin);
-        let order: Vec<Emulator> = match preferred {
-            Some(Emulator::Rmg) => vec![Emulator::Rmg, Emulator::Project64],
-            _ => vec![Emulator::Project64, Emulator::Rmg],
-        };
-        order.into_iter().find_map(found).ok_or_else(|| {
-            AppError::msg(if cfg!(windows) { "Nintendo 64 games need Project64 or RMG. Install one, or point Arcade to it." } else { "Nintendo 64 games need RMG. Install it, or point Arcade to it." })
-        })?
+    let need = |text: &str| AppError::msg(format!("{text} Install it, or point Arcade to it in Emulators & folders."));
+    let chosen = if system.is_some() {
+        // From RetroArch's playlists (D-101): RetroArch, with the core the playlist names.
+        let found = found(Emulator::RetroArch).ok_or_else(|| need("This game is from RetroArch's playlists, and RetroArch isn't found anymore."))?;
+        if core.is_none() {
+            return Err(AppError::msg("RetroArch's playlist doesn't say which core plays this game. Choose one for its playlist in RetroArch, then look for games again."));
+        }
+        found
     } else {
-        found(Emulator::Dolphin).ok_or_else(|| AppError::msg("GameCube and Wii games need Dolphin. Install it, or point Arcade to it."))?
+        let console = Platform::parse(&platform).ok_or_else(|| AppError::msg("Arcade doesn't know which emulator plays this game."))?;
+        // The emulator chosen for this console (Emulators & folders › Consoles), else Arcade's order.
+        let chosen = choices
+            .as_ref()
+            .and_then(|c| c.get(&platform))
+            .cloned()
+            .or(match console {
+                Platform::N64 => n64,
+                Platform::Ds => ds,
+                _ => None,
+            })
+            .and_then(|key| Emulator::parse(&key));
+        let candidates: Vec<Emulator> = chosen.into_iter().chain(players(console).iter().copied()).filter(|e| e.available_here()).collect();
+        match candidates.iter().find_map(|e| found(*e)) {
+            Some(found) => found,
+            None => {
+                let mut names: Vec<&str> = players(console).iter().filter(|e| e.available_here()).map(|e| e.name()).collect();
+                let last = names.pop().unwrap_or("an emulator");
+                let which = if names.is_empty() { last.to_string() } else { format!("{} or {last}", names.join(", ")) };
+                return Err(need(&format!("{} games need {which}.", console.name())));
+            }
+        }
     };
-    let mut command = launch_command(&chosen, Path::new(&path));
+    let mut command = launch_command(&chosen, Path::new(&path), core.as_deref(), &platform);
     let mut child = command.spawn().map_err(|e| AppError::msg(format!("Couldn't start {}: {e}", chosen.emulator.name())))?;
     log::info!("arcade: {} started for game {id} (pid {})", chosen.emulator.name(), child.id());
     if mode == WhilePlaying::Quit {
@@ -962,14 +1234,41 @@ const STORE_START_WAIT: u64 = 90;
 /// Digitify watches for the game's own program — one running from its install folder — and only
 /// then hides and goes quiet; when no program from that folder is left, the session ends. A game
 /// never seen leaves Digitify as it was.
-fn launch_store_game(app: AppHandle, library: std::sync::Arc<Library>, id: i64, store: Store, launch: &str, install_dir: Option<PathBuf>, mode: WhilePlaying) -> AppResult<()> {
-    crate::tools::open_link(launch).map_err(|e| AppError::msg(format!("Couldn't ask {} to start the game: {e}", store.name())))?;
-    log::info!("arcade: asked {} to start game {id}", store.name());
+fn launch_store_game(app: AppHandle, library: std::sync::Arc<Library>, id: i64, name: &str, launch: &str, install_dir: Option<PathBuf>, mode: WhilePlaying) -> AppResult<()> {
+    if let Some(game) = launch.strip_prefix("gog:") {
+        // GOG's games start through GOG Galaxy, or by themselves without it (D-101).
+        let mut command = stores::gog_command(game).ok_or_else(|| AppError::msg("GOG's record of that game isn't there anymore. Is it still installed?"))?;
+        command.spawn().map_err(|e| AppError::msg(format!("Couldn't start the game: {e}")))?;
+    } else if let Some(code) = launch.strip_prefix("bnet:") {
+        // Battle.net starts its games itself, as its shortcuts ask it to (D-112).
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            let client = launchers::battle_net_client(None).ok_or_else(|| AppError::msg("Battle.net isn't found anymore. Is it still installed?"))?;
+            crate::tools::command(&client).raw_arg(format!("--exec=\"launch {code}\"")).spawn().map_err(|e| AppError::msg(format!("Couldn't ask Battle.net to start the game: {e}")))?;
+        }
+        #[cfg(not(windows))]
+        return Err(AppError::msg(format!("Battle.net ({code}) is only on Windows.")));
+    } else if let Some(program) = launch.strip_prefix("exe:") {
+        // A program of its own (added by hand, D-107, or installed by itch.io): from its folder.
+        let program = Path::new(program);
+        if !program.is_file() {
+            return Err(AppError::msg("The game's program isn't there anymore (was it moved or uninstalled?)."));
+        }
+        let mut command = crate::tools::host_command(program);
+        if let Some(dir) = program.parent() {
+            command.current_dir(dir);
+        }
+        command.spawn().map_err(|e| AppError::msg(format!("Couldn't start the game: {e}")))?;
+    } else {
+        crate::tools::open_link(launch).map_err(|e| AppError::msg(format!("Couldn't ask {name} to start the game: {e}")))?;
+    }
+    log::info!("arcade: started game {id} ({name})");
     if mode == WhilePlaying::Quit {
         quit_for_game(&app, id);
         return Ok(());
     }
-    let _ = app.emit("arcade-session", serde_json::json!({ "starting": id, "store": store.name() }));
+    let _ = app.emit("arcade-session", serde_json::json!({ "starting": id, "store": name }));
     let Some(dir) = install_dir.filter(|d| d.is_dir()) else { return Ok(()) };
     let set_starting = |app: &AppHandle, value: Option<i64>| {
         if let Some(state) = app.try_state::<ArcadeState>() {
@@ -1157,7 +1456,7 @@ pub fn watch_stores(app: AppHandle) {
         .ok();
 }
 
-fn launch_command(found: &Found, game: &Path) -> std::process::Command {
+fn launch_command(found: &Found, game: &Path, core: Option<&str>, platform: &str) -> std::process::Command {
     let mut command = match &found.program {
         Program::Native(path) => {
             let mut c = crate::tools::host_command(path);
@@ -1178,6 +1477,33 @@ fn launch_command(found: &Found, game: &Path) -> std::process::Command {
         Emulator::Project64 => command.arg(game),
         // Quit after emulation: RMG closes with the game too.
         Emulator::Rmg => command.arg("--quit-after-emulation").arg(game),
+        // Batch mode: DuckStation and PCSX2 close with the game.
+        Emulator::DuckStation | Emulator::Pcsx2 => command.args(["-batch", "--"]).arg(game),
+        // No game list; RPCS3 boots the game's EBOOT.BIN.
+        Emulator::Rpcs3 => {
+            let eboot = [game.join("PS3_GAME").join("USRDIR").join("EBOOT.BIN"), game.join("USRDIR").join("EBOOT.BIN")].into_iter().find(|p| p.is_file());
+            command.arg("--no-gui").arg(eboot.as_deref().unwrap_or(game))
+        }
+        Emulator::MelonDs | Emulator::Desmume | Emulator::Mesen | Emulator::Fceux | Emulator::Mgba | Emulator::Zsnes | Emulator::Snes9x | Emulator::Nestopia => command.arg(game),
+        // Kega Fusion is told when it's a Sega CD disc.
+        Emulator::Fusion if platform == Platform::SegaCd.key() => command.arg("-scd").arg(game),
+        Emulator::Fusion => command.arg(game),
+        // nullDC starts the disc at once instead of showing its menu.
+        Emulator::NullDc => {
+            let mut image = std::ffi::OsString::from("ImageReader:DefaultImage=");
+            image.push(game);
+            command.args(["-config", "nullDC:Emulator.Autostart=1", "-config", "ImageReader:LoadDefaultImage=1", "-config"]).arg(image)
+        }
+        // ares tells most consoles by the file; a Sega CD disc and a Mega Drive .bin are named.
+        Emulator::Ares if platform == Platform::SegaCd.key() => command.args(["--system", "Mega CD"]).arg(game),
+        Emulator::Ares if platform == Platform::Genesis.key() && games::extension(game) == "bin" => command.args(["--system", "Mega Drive"]).arg(game),
+        Emulator::Ares => command.arg(game),
+        Emulator::RetroArch => {
+            if let Some(core) = core {
+                command.arg("-L").arg(core);
+            }
+            command.arg(game)
+        }
     };
     command
 }
@@ -1194,5 +1520,107 @@ mod outside_tests {
         assert!(program.starts_with(&format!("{}/", normalize(r"D:\Games\Fortnite"))));
         assert_eq!(normalize(r"Z:\home\me\Games\X\\"), "/home/me/games/x");
         assert!(helper_program("CrashReportClient") && helper_program("EasyAntiCheat_EOS") && !helper_program("FortniteClient-Win64-Shipping"));
+    }
+}
+
+#[cfg(test)]
+mod schema_tests {
+    use crate::db::Database;
+
+    #[test]
+    fn new_consoles_and_emulators_fit_the_tables() {
+        let dir = std::env::temp_dir().join(format!("digitify-d101-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = Database::open(&dir.join("library.db"), &dir.join("backups")).unwrap();
+        db.with(|conn| {
+            conn.execute("INSERT INTO arcade_emulators (kind, path) VALUES ('duckstation', 'x'), ('retroarch', 'y')", [])?;
+            conn.execute("INSERT INTO arcade_emulator_folders (emulator, path) VALUES ('melonds', 'z')", [])?;
+            // D-106: Mesen, FCEUX and mGBA.
+            conn.execute("INSERT INTO arcade_emulators (kind, path) VALUES ('mesen', 'm'), ('fceux', 'f'), ('mgba', 'g')", [])?;
+            conn.execute("INSERT INTO arcade_emulator_folders (emulator, path) VALUES ('mgba', 'w')", [])?;
+            // D-111: any emulator's name, none empty.
+            conn.execute("INSERT INTO arcade_emulators (kind, path) VALUES ('ares', 'a'), ('nulldc', 'n'), ('snes9x', 's')", [])?;
+            assert!(conn.execute("INSERT INTO arcade_emulators (kind, path) VALUES ('', 'e')", []).is_err(), "an emulator needs a name");
+            conn.execute("INSERT INTO arcade_games (path, platform, title, sort_title, core, system) VALUES ('a.sfc', 'snes', 'A', 'a', 'c', 'Nintendo - Super Nintendo Entertainment System')", [])?;
+            assert!(conn.execute("INSERT INTO arcade_games (path, platform, title, sort_title) VALUES ('b', '', 'B', 'b')", []).is_err(), "a console needs a name");
+            Ok(())
+        })
+        .unwrap();
+        drop(db);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod program_tests {
+    use super::program_title;
+    use std::path::Path;
+
+    #[test]
+    fn a_program_is_named_after_itself_or_its_folder() {
+        assert_eq!(program_title(Path::new("/g/Celeste/Celeste.exe")), "Celeste");
+        assert_eq!(program_title(Path::new("/g/Hollow Knight/Game.exe")), "Hollow Knight");
+        assert_eq!(program_title(Path::new("/g/Some_Game/Launcher64.exe")), "Some Game");
+        assert_eq!(program_title(Path::new("/g/x/Super_Meat_Boy.exe")), "Super Meat Boy");
+    }
+}
+
+#[cfg(test)]
+mod launch_tests {
+    use super::*;
+
+    fn args(emulator: Emulator, game: &Path, core: Option<&str>) -> Vec<String> {
+        args_for(emulator, game, core, "")
+    }
+
+    fn args_for(emulator: Emulator, game: &Path, core: Option<&str>, platform: &str) -> Vec<String> {
+        let found = Found { emulator, program: Program::Native(PathBuf::from("/emu/program")), folders: Vec::new(), covers: None };
+        launch_command(&found, game, core, platform).get_args().map(|a| a.to_string_lossy().into_owned()).collect()
+    }
+
+    #[test]
+    fn the_newer_emulators_start_their_games() {
+        assert_eq!(args(Emulator::Snes9x, Path::new("/g/a.sfc"), None), ["/g/a.sfc"]);
+        assert_eq!(args_for(Emulator::Fusion, Path::new("/g/s.cue"), None, "segacd"), ["-scd", "/g/s.cue"]);
+        assert_eq!(args_for(Emulator::Fusion, Path::new("/g/s.md"), None, "genesis"), ["/g/s.md"]);
+        assert_eq!(
+            args_for(Emulator::NullDc, Path::new("/g/Shenmue/disc.gdi"), None, "dreamcast"),
+            ["-config", "nullDC:Emulator.Autostart=1", "-config", "ImageReader:LoadDefaultImage=1", "-config", "ImageReader:DefaultImage=/g/Shenmue/disc.gdi"]
+        );
+        assert_eq!(args_for(Emulator::Ares, Path::new("/g/x.cue"), None, "segacd"), ["--system", "Mega CD", "/g/x.cue"]);
+        assert_eq!(args_for(Emulator::Ares, Path::new("/g/x.pce"), None, "pce"), ["/g/x.pce"]);
+    }
+
+    #[test]
+    fn every_console_has_its_emulators_and_every_emulator_its_consoles() {
+        for platform in Platform::ALL {
+            assert!(!players(platform).is_empty(), "{} has no emulator", platform.key());
+        }
+        for emulator in Emulator::ALL {
+            assert_eq!(looking_for(emulator).is_none(), emulator == Emulator::RetroArch, "{}", emulator.key());
+        }
+        let ares = looking_for(Emulator::Ares).unwrap().platforms;
+        assert!(ares.contains(&Platform::Pce) && ares.contains(&Platform::Genesis) && !ares.contains(&Platform::Ps2));
+    }
+
+    #[test]
+    fn each_emulator_starts_the_game_its_own_way() {
+        let game = Path::new("/games/Ico.iso");
+        assert_eq!(args(Emulator::DuckStation, game, None), ["-batch", "--", "/games/Ico.iso"]);
+        assert_eq!(args(Emulator::Pcsx2, game, None), ["-batch", "--", "/games/Ico.iso"]);
+        assert_eq!(args(Emulator::MelonDs, Path::new("/games/p.nds"), None), ["/games/p.nds"]);
+        assert_eq!(args(Emulator::Mesen, Path::new("/games/z.sfc"), None), ["/games/z.sfc"]);
+        assert_eq!(args(Emulator::Fceux, Path::new("/games/m.nes"), None), ["/games/m.nes"]);
+        assert_eq!(args(Emulator::Mgba, Path::new("/games/p.gba"), None), ["/games/p.gba"]);
+        assert_eq!(args(Emulator::RetroArch, Path::new("/r/a.zip#b.sfc"), Some("/cores/snes9x.so")), ["-L", "/cores/snes9x.so", "/r/a.zip#b.sfc"]);
+        // RPCS3 boots the disc's EBOOT.BIN when it's there, else the game's folder.
+        let dir = std::env::temp_dir().join(format!("digitify-rpcs3-launch-{}", std::process::id()));
+        let eboot = dir.join("PS3_GAME").join("USRDIR").join("EBOOT.BIN");
+        std::fs::create_dir_all(eboot.parent().unwrap()).unwrap();
+        assert_eq!(args(Emulator::Rpcs3, &dir, None), ["--no-gui".to_string(), dir.display().to_string()]);
+        std::fs::write(&eboot, b"x").unwrap();
+        assert_eq!(args(Emulator::Rpcs3, &dir, None), ["--no-gui".to_string(), eboot.display().to_string()]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
