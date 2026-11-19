@@ -129,6 +129,7 @@ Every product or architecture decision is recorded here with its reason. Anythin
 
 ### D-109 · Arcade's views in one row that scrolls
 - **Date:** 2026-11-18 · **Approved by:** project owner (asked that many consoles never run off the screen or push anything away)
+- **Fixed (0.6.1):** the arrows are placed without a transform (a pressed round button's own nudge used to replace it, jumping the arrow from under the pointer, so the click was lost), stay in the page when there's nothing more that way (hidden, not removed mid-click), and each click moves on from where the row is heading, so quick clicks all count.
 - Replaces D-102's second line: the views stay one row that shrinks to the room beside Find, Size, Select and Sort and scrolls sideways (the mouse wheel, the trackpad, or round arrows at its ends, which show only when there's more that way; its edges fade). The view chosen is scrolled into sight. In a narrow window the tools go under the row instead of off the page.
 
 ### D-108 · Covers for every game, from one button

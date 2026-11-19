@@ -141,6 +141,7 @@ export function WhatsNew() {
                     Version {note.version} · {longDate(note.date)}
                   </h3>
                 )}
+                {note.added.length > 0 && (
                 <ul className="whats-new-list">
                   {note.added.map((item) => {
                     const Icon = ICONS[item.icon] ?? Check;
@@ -157,6 +158,7 @@ export function WhatsNew() {
                     );
                   })}
                 </ul>
+                )}
                 {note.fixed.length > 0 && (
                   <div className="whats-new-fixed">
                     <h4>

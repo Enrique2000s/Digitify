@@ -12,6 +12,12 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.6.1",
+    date: "2026-11-19",
+    added: [],
+    fixed: ["Arcade's arrows beside the views stay in place when pressed, and every click moves the views, quick ones too."],
+  },
+  {
     version: "0.6.0",
     date: "2026-11-18",
     added: [

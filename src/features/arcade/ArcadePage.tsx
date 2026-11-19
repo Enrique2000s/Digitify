@@ -281,6 +281,7 @@ export function ArcadePage() {
 function ViewStrip({ filters, current, onChoose, games }: { filters: ArcadeFilter[]; current: ArcadeFilter; onChoose: (filter: ArcadeFilter) => void; games: ArcadeGame[] | undefined }) {
   const strip = useRef<HTMLDivElement>(null);
   const [ends, setEnds] = useState({ left: false, right: false });
+  const target = useRef<number | null>(null);
   const measure = () => {
     const el = strip.current;
     if (!el) return;
@@ -305,17 +306,30 @@ function ViewStrip({ filters, current, onChoose, games }: { filters: ArcadeFilte
     };
   }, [filters.length]);
   useEffect(() => {
+    target.current = null;
     strip.current?.querySelector<HTMLElement>('[aria-pressed="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
   }, [current]);
-  const page = (direction: 1 | -1) => strip.current?.scrollBy({ left: direction * strip.current.clientWidth * 0.7, behavior: "smooth" });
+  // Each click moves on from where the row is heading, so quick clicks during the glide all count.
+  const page = (direction: 1 | -1) => {
+    const el = strip.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    const from = target.current ?? el.scrollLeft;
+    const to = Math.max(0, Math.min(max, from + direction * el.clientWidth * 0.7));
+    target.current = to;
+    el.scrollTo({ left: to, behavior: "smooth" });
+  };
+  const settle = () => {
+    // The glide is over once the row stops where it was heading.
+    if (target.current != null && Math.abs((strip.current?.scrollLeft ?? 0) - target.current) < 2) target.current = null;
+    measure();
+  };
   return (
     <div className={`arcade-views${ends.left ? " more-left" : ""}${ends.right ? " more-right" : ""}`}>
-      {ends.left && (
-        <button type="button" className="round-btn arcade-views-arrow left" aria-label="Earlier views" onClick={() => page(-1)}>
-          <ChevronLeft size={16} strokeWidth={2.6} />
-        </button>
-      )}
-      <div ref={strip} className="segmented" role="group" aria-label="Console" onScroll={measure}>
+      <button type="button" className={`round-btn arcade-views-arrow left${ends.left ? "" : " hidden"}`} aria-label="Earlier views" tabIndex={ends.left ? 0 : -1} aria-hidden={!ends.left} onClick={() => page(-1)}>
+        <ChevronLeft size={16} strokeWidth={2.6} />
+      </button>
+      <div ref={strip} className="segmented" role="group" aria-label="Console" onScroll={settle} onWheel={() => (target.current = null)}>
         {filters.map((filter) => (
           <button key={filter} type="button" aria-pressed={current === filter} onClick={() => onChoose(filter)}>
             {FILTER_LABELS[filter]}
@@ -324,11 +338,9 @@ function ViewStrip({ filters, current, onChoose, games }: { filters: ArcadeFilte
           </button>
         ))}
       </div>
-      {ends.right && (
-        <button type="button" className="round-btn arcade-views-arrow right" aria-label="More views" onClick={() => page(1)}>
-          <ChevronRight size={16} strokeWidth={2.6} />
-        </button>
-      )}
+      <button type="button" className={`round-btn arcade-views-arrow right${ends.right ? "" : " hidden"}`} aria-label="More views" tabIndex={ends.right ? 0 : -1} aria-hidden={!ends.right} onClick={() => page(1)}>
+        <ChevronRight size={16} strokeWidth={2.6} />
+      </button>
     </div>
   );
 }
