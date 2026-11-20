@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import { useQueryClient } from "@tanstack/react-query";
 import { Popover } from "radix-ui";
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Columns2, Expand, Link2, List, LoaderCircle, Minus, Plus, RectangleVertical, Rows3, Shrink, Type, X } from "lucide-react";
+import { Marquee } from "../../components/Marquee";
 import { api, bookUrl, type BookmarkLocator, type Ebook, type SeriesEntry } from "../../lib/api";
 import { useAmbient, useAmbientHold } from "../../lib/ambient/AmbientProvider";
 import { accentVariables } from "../../lib/color";
@@ -417,8 +418,8 @@ export function EbookReader({ book, onClose, next: nextVolume, onNext }: {
           <ArrowLeft size={18} strokeWidth={2.6} />
         </button>
         <div className="reader-title" data-tauri-drag-region>
-          <strong>{book.title}</strong>
-          <span>{ready ? [chapter, `${percent}%`].filter(Boolean).join(" · ") : "Opening…"}</span>
+          <Marquee className="reader-name" text={book.title} />
+          <Marquee className="reader-sub" text={ready ? [chapter, `${percent}%`].filter(Boolean).join(" · ") : "Opening…"} />
         </div>
         <Popover.Root open={panel === "toc"} onOpenChange={(open) => setPanel(open ? "toc" : null)}>
           <Popover.Trigger asChild>

@@ -2,16 +2,18 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSearch } from "@tanstack/react-router";
 import { ReviewPanel } from "../../components/Review";
 import { createPortal } from "react-dom";
+import { DropdownMenu } from "radix-ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { AppWindow, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock, FolderOpen, FolderPlus, Heart, ImageDown, ImagePlus, Joystick, ListChecks, LoaderCircle, Pencil, Play, RefreshCw, RotateCcw, Search, Settings2, Trash, X } from "lucide-react";
+import { AppWindow, Check, CheckCircle2, ChevronDown, CircleSlash, ChevronLeft, ChevronRight, CircleAlert, Clock, FolderOpen, FolderPlus, Heart, ImageDown, ImagePlus, Joystick, ListChecks, LoaderCircle, Pencil, Play, RefreshCw, RotateCcw, Search, Settings2, Trash, X } from "lucide-react";
 import { api, errorText, onLinux, type ArcadeConsole, type ArcadeEmulator, type ArcadeEmulatorStatus, type ArcadeFolder, type ArcadeGame, type ArcadeStatus } from "../../lib/api";
 import type { ArcadeFilter } from "../../lib/preferences";
 import { usePreferences, type ArcadePreferences } from "../../lib/preferences";
 import { GridDragProvider, useGridDragProps } from "../../lib/gridDrag";
 import { CardSizeSlider, Dialog, Switch } from "../../components/common";
-import { badgeOf, consoleOf, FILTER_LABELS, inFilter, GameCover, lastPlayed, PLATFORM_ASPECT, PLATFORM_NAMES, playTime, reorderWithin, SORTS, useArcade, useArcadeFilters, useLaunch, useShownGames } from "./shared";
-import { PlatformLogo } from "./logos";
+import { badgeOf, consoleOf, FILTER_LABELS, inFilter, GameCover, lastPlayed, PLATFORM_ASPECT, PLATFORM_NAMES, playTime, reorderWithin, SORTS, useArcade, useArcadeFilters, useLaunch, useShownGames, addProgramGame } from "./shared";
+import { EmulatorMark, LogoMark, PlatformLogo } from "./logos";
+import { CoverPicker } from "./CoverPicker";
 
 /** `/arcade` (D-034, D-035, D-037): the games of the emulators and stores on this computer, started the way they start. */
 export function ArcadePage() {
@@ -29,6 +31,7 @@ export function ArcadePage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<ReadonlySet<number>>(new Set());
+  const [covering, setCovering] = useState<ArcadeGame[] | null>(null);
   const { launch, error, clearError } = useLaunch();
   const shown = useShownGames(games.data, search);
   const view = useArcadeFilters();
@@ -72,10 +75,9 @@ export function ArcadePage() {
 
   // A PC game no store Arcade reads installed, by its program (D-107): added, then its panel opens.
   const addProgram = async () => {
-    const path = await openDialog({ multiple: false, title: "Choose the game's program", filters: onLinux ? undefined : [{ name: "Programs", extensions: ["exe"] }] });
-    if (typeof path !== "string") return;
     try {
-      const id = await api.arcadeAddProgram(path, arcade.downloadCovers);
+      const id = await addProgramGame(arcade.downloadCovers);
+      if (id == null) return;
       refresh();
       setSelected(id);
     } catch (reason) {
@@ -142,9 +144,6 @@ export function ArcadePage() {
         <div className="arcade-head-actions">
           <button type="button" className="btn" disabled={scanning || (!anyEmulator && !status.data?.folders.length)} onClick={() => void scan()}>
             {scanning ? <LoaderCircle size={16} className="spin" /> : <RefreshCw size={16} />} Look for games
-          </button>
-          <button type="button" className="btn" title="Adds a PC game by its program, for games no store here installed" onClick={() => void addProgram()}>
-            <AppWindow size={16} /> Add a game…
           </button>
           <button type="button" className="btn glow-when-on" aria-pressed={showSetup} onClick={() => setSetup(!showSetup)}>
             <Settings2 size={16} /> Emulators & folders
@@ -266,10 +265,70 @@ export function ArcadePage() {
           onDone={stopSelecting}
           onNotice={setNotice}
           onChanged={refresh}
+          onFindCovers={() => setCovering((games.data ?? []).filter((g) => picked.has(g.id)))}
+        />
+      )}
+      {covering && (
+        <CoverPicker
+          games={covering}
+          onClose={(summary) => {
+            setCovering(null);
+            if (summary) setNotice(summary);
+          }}
         />
       )}
       {game && !selecting && <GamePanel game={game} running={status.data?.running ?? null} onClose={() => setSelected(null)} onPlay={() => void launch(game)} />}
     </div>
+  );
+}
+
+/** The makers whose consoles share one view menu (D-121). */
+const CONSOLE_MAKERS: [string, readonly string[]][] = [
+  ["Nintendo", ["wii", "wiiu", "gamecube", "n64", "switch", "ds", "3ds", "nes", "snes", "gb", "gbc", "gba"]],
+  ["PlayStation", ["ps1", "ps2", "ps3", "psp"]],
+  ["Sega", ["sms", "genesis", "segacd", "gamegear", "saturn", "dreamcast"]],
+  ["Xbox consoles", ["ogxbox", "x360"]],
+  ["More consoles", ["pce", "arcade", "atari2600", "other"]],
+];
+
+/** The views in their order, a maker's consoles together in one menu where it has two or more. */
+function viewItems(filters: ArcadeFilter[]): (ArcadeFilter | { maker: string; filters: ArcadeFilter[] })[] {
+  const out: (ArcadeFilter | { maker: string; filters: ArcadeFilter[] })[] = [];
+  for (const filter of filters) {
+    const maker = CONSOLE_MAKERS.find(([, keys]) => keys.includes(filter));
+    const together = maker ? filters.filter((f) => maker[1].includes(f)) : [];
+    if (!maker || together.length < 2) out.push(filter);
+    else if (together[0] === filter) out.push({ maker: maker[0], filters: together });
+  }
+  return out;
+}
+
+/** A maker's consoles in one view button (D-121): it opens their list; the one chosen shows on it. */
+function MakerMenu({ maker, filters, current, onChoose, count }: { maker: string; filters: ArcadeFilter[]; current: ArcadeFilter; onChoose: (filter: ArcadeFilter) => void; count: ((filter: ArcadeFilter) => number) | null }) {
+  const chosen = filters.includes(current) ? current : null;
+  const total = count ? filters.reduce((n, f) => n + count(f), 0) : null;
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button type="button" aria-pressed={!!chosen} className="maker-view">
+          {chosen ? `${maker} · ${FILTER_LABELS[chosen]}` : maker}
+          {count && <span className="count">{(chosen ? count(chosen) : total!).toLocaleString()}</span>}
+          <ChevronDown size={13} aria-hidden />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content className="menu maker-menu" align="start" sideOffset={8}>
+          {filters.map((filter) => (
+            <DropdownMenu.Item key={filter} className="menu-item" onSelect={() => onChoose(filter)}>
+              <LogoMark name={filter} className="setup-logo" />
+              <span className="maker-menu-name">{FILTER_LABELS[filter]}</span>
+              {count && <span className="muted">{count(filter).toLocaleString()}</span>}
+              {filter === current && <Check size={15} aria-label="Shown" />}
+            </DropdownMenu.Item>
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }
 
@@ -309,6 +368,7 @@ function ViewStrip({ filters, current, onChoose, games }: { filters: ArcadeFilte
     target.current = null;
     strip.current?.querySelector<HTMLElement>('[aria-pressed="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
   }, [current]);
+  const count = (filter: ArcadeFilter) => (games ?? []).filter((g) => !g.missing && inFilter(g, filter)).length;
   // Each click moves on from where the row is heading, so quick clicks during the glide all count.
   const page = (direction: 1 | -1) => {
     const el = strip.current;
@@ -330,13 +390,17 @@ function ViewStrip({ filters, current, onChoose, games }: { filters: ArcadeFilte
         <ChevronLeft size={16} strokeWidth={2.6} />
       </button>
       <div ref={strip} className="segmented" role="group" aria-label="Console" onScroll={settle} onWheel={() => (target.current = null)}>
-        {filters.map((filter) => (
-          <button key={filter} type="button" aria-pressed={current === filter} onClick={() => onChoose(filter)}>
-            {FILTER_LABELS[filter]}
-            {/* How many games each view holds, as Library's sections show (D-099). */}
-            {games && <span className="count">{games.filter((g) => !g.missing && inFilter(g, filter)).length.toLocaleString()}</span>}
-          </button>
-        ))}
+        {viewItems(filters).map((item) =>
+          typeof item === "string" ? (
+            <button key={item} type="button" aria-pressed={current === item} onClick={() => onChoose(item)}>
+              {FILTER_LABELS[item]}
+              {/* How many games each view holds, as Library's sections show (D-099). */}
+              {games && <span className="count">{count(item).toLocaleString()}</span>}
+            </button>
+          ) : (
+            <MakerMenu key={item.maker} maker={item.maker} filters={item.filters} current={current} onChoose={onChoose} count={games ? count : null} />
+          ),
+        )}
       </div>
       <button type="button" className={`round-btn arcade-views-arrow right${ends.right ? "" : " hidden"}`} aria-label="More views" tabIndex={ends.right ? 0 : -1} aria-hidden={!ends.right} onClick={() => page(1)}>
         <ChevronRight size={16} strokeWidth={2.6} />
@@ -435,9 +499,11 @@ function BulkBar({
   onDone,
   onNotice,
   onChanged,
+  onFindCovers,
 }: {
   ids: number[];
   total: number;
+  onFindCovers: () => void;
   onSelectAll: () => void;
   onClear: () => void;
   onDone: () => void;
@@ -480,29 +546,23 @@ function BulkBar({
         <button type="button" className="btn btn-sm" disabled={none || busy} onClick={() => void run(() => api.arcadeSetFavoriteMany(ids, false))}>
           <Heart size={15} /> Not favorite
         </button>
-        <button
-          type="button"
-          className="btn btn-sm"
-          disabled={none || busy}
-          title="Looks for their covers again (pictures you chose stay)"
-          onClick={() =>
-            void run(
-              () => api.arcadeFindCovers(ids, preferences.arcade.downloadCovers),
-              preferences.arcade.downloadCovers ? "Looking for covers…" : "Covers updated from Dolphin's cache",
-            )
-          }
-        >
-          <ImageDown size={15} /> Find covers
-        </button>
-        <button
-          type="button"
-          className="btn btn-sm"
-          disabled={none || busy}
-          title="Puts back each game's own cover: its launcher's for PC games, the emulator's or the download's for the others (pictures you chose give way)"
-          onClick={() => void run(() => api.arcadeFindCovers(ids, preferences.arcade.downloadCovers, true), "Default covers back")}
-        >
-          <RotateCcw size={15} /> Default covers
-        </button>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button type="button" className="btn btn-sm" disabled={none || busy}>
+              <ImageDown size={15} /> Covers <ChevronDown size={13} />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content className="menu" side="top" align="center" sideOffset={10}>
+              <DropdownMenu.Item className="menu-item" onSelect={onFindCovers}>
+                <ImageDown size={17} /> Find covers…
+              </DropdownMenu.Item>
+              <DropdownMenu.Item className="menu-item" onSelect={() => void run(() => api.arcadeFindCovers(ids, preferences.arcade.downloadCovers, true), "Default covers back")}>
+                <RotateCcw size={17} /> Default covers
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
         <button type="button" className="btn btn-sm btn-danger" disabled={none || busy} onClick={() => setConfirming(true)}>
           <Trash size={15} /> Remove from Digitify
         </button>
@@ -550,6 +610,7 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
   const { preferences } = usePreferences();
   const [error, setError] = useState<string | null>(null);
   const [naming, setNaming] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["arcade-games"] });
   const run = async (action: () => Promise<unknown>) => {
     setError(null);
@@ -650,17 +711,27 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
           <button type="button" className="btn" aria-pressed={game.isFavorite} onClick={() => void run(() => api.arcadeSetFavorite(game.id, !game.isFavorite))}>
             <Heart size={16} fill={game.isFavorite ? "currentColor" : "none"} /> {game.isFavorite ? "Favorite" : "Add to favorites"}
           </button>
-          <button type="button" className="btn" onClick={() => void changeCover()}>
-            <ImagePlus size={16} /> Change cover
-          </button>
-          <button
-            type="button"
-            className="btn"
-            title={pc ? "Puts back the cover its launcher shows" : "Puts back the cover from the emulator or the download"}
-            onClick={() => void run(() => api.arcadeFindCovers([game.id], preferences.arcade.downloadCovers, true))}
-          >
-            <RotateCcw size={16} /> Default cover
-          </button>
+          {/* One menu for its cover (D-121): covers found to choose from, a picture of yours, or its own back. */}
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button type="button" className="btn">
+                <ImagePlus size={16} /> Cover <ChevronDown size={14} />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content className="menu" align="start" sideOffset={8}>
+                <DropdownMenu.Item className="menu-item" onSelect={() => setPicking(true)}>
+                  <ImageDown size={17} /> Find covers…
+                </DropdownMenu.Item>
+                <DropdownMenu.Item className="menu-item" onSelect={() => void changeCover()}>
+                  <ImagePlus size={17} /> Choose a picture…
+                </DropdownMenu.Item>
+                <DropdownMenu.Item className="menu-item" onSelect={() => void run(() => api.arcadeFindCovers([game.id], preferences.arcade.downloadCovers, true))}>
+                  <RotateCcw size={17} /> {pc ? "Its launcher's cover" : "Default cover"}
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
           <button type="button" className="btn" onClick={() => void run(() => api.arcadeReveal(game.id))}>
             <FolderOpen size={16} /> {pc ? "Show folder" : "Show file"}
           </button>
@@ -679,6 +750,7 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
           </button>
         </div>
         {error && <p className="notice danger">{error}</p>}
+        {picking && <CoverPicker games={[game]} onClose={() => setPicking(false)} />}
       </aside>
     </div>,
     document.body,
@@ -689,9 +761,10 @@ type SetupTab = "launchers" | "emulators" | "consoles" | "folders";
 
 /** Emulators & folders' groups of emulators, by the maker of the consoles they play (D-113). */
 const EMULATOR_GROUPS: { name: string; keys: ArcadeEmulator[] }[] = [
-  { name: "Nintendo", keys: ["dolphin", "project64", "rmg", "melonds", "desmume", "mgba", "nestopia", "fceux", "snes9x", "zsnes"] },
-  { name: "Sony", keys: ["duckstation", "pcsx2", "rpcs3"] },
-  { name: "Sega", keys: ["fusion", "nulldc"] },
+  { name: "Nintendo", keys: ["dolphin", "cemu", "ryujinx", "project64", "rmg", "melonds", "desmume", "azahar", "mgba", "nestopia", "fceux", "snes9x", "zsnes"] },
+  { name: "Sony", keys: ["duckstation", "pcsx2", "rpcs3", "ppsspp"] },
+  { name: "Sega", keys: ["fusion", "flycast", "nulldc"] },
+  { name: "Microsoft", keys: ["xemu", "xenia"] },
   { name: "Many consoles", keys: ["mesen", "ares", "retroarch"] },
 ];
 
@@ -700,7 +773,7 @@ const EMULATOR_GROUPS: { name: string; keys: ArcadeEmulator[] }[] = [
  * stores and programs added by hand), Emulators (grouped by maker, one row each, its folders
  * opening beneath it), Consoles (which emulator plays each console) and Folders & covers.
  */
-function Setup({ status, onChanged, onAddProgram }: { status: ArcadeStatus; onChanged: () => void; onAddProgram: () => void }) {
+export function Setup({ status, onChanged, onAddProgram }: { status: ArcadeStatus; onChanged: () => void; onAddProgram: () => void }) {
   const [tab, setTab] = useState<SetupTab>("launchers");
   const [error, setError] = useState<string | null>(null);
   const run = async (action: () => Promise<unknown>) => {
@@ -750,6 +823,7 @@ function LaunchersTab({ status, games, onRun, onAddProgram }: { status: ArcadeSt
         {status.stores.map((store) => (
           <li key={store.key} className={store.found ? "found" : "absent"}>
             {store.found ? <CheckCircle2 size={16} className="ok" /> : <CircleAlert size={16} className="warn" />}
+            <LogoMark name={store.key} className="setup-logo" />
             <strong>{store.name}</strong>
             <span className="muted">{store.found ? `${store.games} installed ${store.games === 1 ? "game" : "games"}` : "not found on this computer"}</span>
           </li>
@@ -781,7 +855,8 @@ function EmulatorsTab({ status, onRun }: { status: ArcadeStatus; onRun: Run }) {
     <div className="arcade-setup-pane">
       <p className="muted">Found where they're usually installed, or pointed to by hand (a portable copy). Their game folders come from their own settings unless you set them here.</p>
       {EMULATOR_GROUPS.map((group) => {
-        const emulators = status.emulators.filter((e) => group.keys.includes(e.key)).sort((a, b) => Number(!!b.found) - Number(!!a.found));
+        const rank = (e: ArcadeEmulatorStatus) => (e.found ? 0 : e.ignored ? 2 : 1);
+        const emulators = status.emulators.filter((e) => group.keys.includes(e.key)).sort((a, b) => rank(a) - rank(b));
         if (!emulators.length) return null;
         return (
           <div key={group.name} className="arcade-emulator-group">
@@ -825,7 +900,12 @@ function ConsolesTab({ status, games }: { status: ArcadeStatus; games: ArcadeGam
             const current = chosen && row.found.includes(chosen) ? chosen : row.found[0];
             return (
               <tr key={row.key} className={row.games > 0 ? "" : "quiet"}>
-                <td>{PLATFORM_NAMES[row.key]}</td>
+                <td>
+                  <span className="arcade-console-name">
+                    <LogoMark name={row.key} className="setup-logo" />
+                    {PLATFORM_NAMES[row.key]}
+                  </span>
+                </td>
                 <td>{row.games.toLocaleString()}</td>
                 <td>
                   {row.found.length > 1 ? (
@@ -898,7 +978,7 @@ function FoldersTab({ status, games, onRun }: { status: ArcadeStatus; games: Arc
           <span>
             Download covers
             <small>
-              For each game found: GameCube and Wii from GameTDB by each disc's ID; other consoles (Nintendo 64, PlayStation, NES, Mega Drive, Dreamcast…) from libretro-thumbnails by the game's name; Steam and GOG games from their stores by their ID, other PC games from Steam's store by their name, itch.io's by its own. Covers already on this computer (Dolphin's, RetroArch's, the launchers') are used first.
+              For each game found: GameCube, Wii, 3DS and Wii U from GameTDB by the game's ID; every console from libretro-thumbnails by the game's name; Steam and GOG games from their stores; other PC games from Steam's store and the Microsoft Store by their name. With LaunchBox's database or a SteamGridDB key (Settings › Arcade), from them too. A launcher's own cover, and the ones on this computer (Dolphin's, RetroArch's), come first.
             </small>
           </span>
         </label>
@@ -977,14 +1057,20 @@ function EmulatorRow({ emulator, open, onToggle, onRun }: { emulator: ArcadeEmul
   const folders = emulator.folders.length;
   const summary = playlists ? (folders ? "its playlists" : "no playlists") : folders === 1 ? "1 folder" : `${folders} folders`;
   return (
-    <li className={`arcade-emulator-row${emulator.found ? " found" : " absent"}${open ? " open" : ""}${emulator.available ? "" : " unavailable"}`}>
+    <li className={`arcade-emulator-row${emulator.found ? " found" : " absent"}${open && emulator.found ? " open" : ""}${emulator.available ? "" : " unavailable"}${emulator.ignored ? " ignored" : ""}`}>
       <div className="arcade-emulator-line">
-        {emulator.found ? <CheckCircle2 size={16} className="ok" /> : <CircleAlert size={16} className="warn" />}
+        {emulator.found ? <CheckCircle2 size={16} className="ok" /> : emulator.ignored ? <CircleSlash size={16} className="muted" /> : <CircleAlert size={16} className="warn" />}
+        <EmulatorMark emulator={emulator.key} name={emulator.name} icon={emulator.icon} />
         <strong>{emulator.name}</strong>
-        <span className="muted arcade-emulator-consoles">{consolesOf(emulator)}</span>
+        <span className="muted arcade-emulator-consoles">{emulator.ignored ? "Not used" : consolesOf(emulator)}</span>
         {emulator.found ? (
           <button type="button" className="btn btn-sm" aria-expanded={open} onClick={onToggle}>
             {summary} <ChevronDown size={14} className="arcade-chevron" />
+          </button>
+        ) : emulator.ignored ? (
+          // Set aside (D-117): Arcade looks for it again.
+          <button type="button" className="btn btn-sm" onClick={() => void onRun(() => api.arcadeIgnoreEmulator(emulator.key, false))}>
+            Use again
           </button>
         ) : emulator.available ? (
           <LocateButton emulator={emulator} onRun={onRun} />
@@ -1002,6 +1088,15 @@ function EmulatorRow({ emulator, open, onToggle, onRun }: { emulator: ArcadeEmul
                 <RotateCcw size={15} />
               </button>
             )}
+            {/* D-117: one found that isn't wanted is set aside; its games stay, opening in another emulator if there is one. */}
+            <button
+              type="button"
+              className="btn btn-sm"
+              title={`Arcade stops using ${emulator.name}: it isn't looked for, its folders aren't searched, and no game opens in it. "Use again" brings it back.`}
+              onClick={() => void onRun(() => api.arcadeIgnoreEmulator(emulator.key, true))}
+            >
+              <CircleSlash size={14} /> Don't use
+            </button>
           </div>
           {playlists ? (
             <>

@@ -339,6 +339,116 @@ pub(crate) fn battle_net(uninstall: &[RegBlock]) -> (Option<String>, Vec<StoreGa
 }
 
 // ---------------------------------------------------------------------------------------------
+// Rockstar Games Launcher (D-116)
+
+/// Rockstar's games: the uninstall entry each one has, the key Arcade knows it by and its program
+/// (started with `-launchTitleInFolder <folder>`, which hands it to the launcher).
+const ROCKSTAR: &[(&str, &str, &str)] = &[
+    ("{5EFC6C07-6B87-43FC-9524-F9E967241741}", "gta5", "PlayGTAV.exe"),
+    ("Red Dead Redemption 2", "rdr2", "RDR2.exe"),
+    ("Red Dead Redemption", "rdr", "RDR.exe"),
+    ("Grand Theft Auto IV", "gta4", "GTAIV.exe"),
+    ("{D417C96A-FCC7-4590-A1BB-FAF73F5BC98E}", "gtasa", "gta_sa.exe"),
+    ("{92B94569-6683-4617-8C54-EB27A1B51B30}", "gta3", "gta3.exe"),
+    ("{4B35F00C-E63D-40DC-9839-DF15A33EAC46}", "gtavc", "gta-vc.exe"),
+    ("GTA III - Definitive Edition", "gta3unreal", "Gameface\\Binaries\\Win64\\LibertyCity.exe"),
+    ("GTA Vice City - Definitive Edition", "gtavcunreal", "Gameface\\Binaries\\Win64\\ViceCity.exe"),
+    ("GTA San Andreas - Definitive Edition", "gtasaunreal", "Gameface\\Binaries\\Win64\\SanAndreas.exe"),
+    ("{915726DF-7891-444A-AA03-0DF1D64F561A}", "lanoire", "LANoire.exe"),
+    ("{1AA94747-3BF6-4237-9E1A-7B3067738FE1}", "mp3", "MaxPayne3.exe"),
+    ("{A724605D-B399-4304-B8C7-33B3EF7D4677}", "bully", "Bully.exe"),
+];
+
+/// The program that starts one of Rockstar's games, in its folder.
+pub(crate) fn rockstar_program(key: &str, dir: &Path) -> Option<PathBuf> {
+    ROCKSTAR.iter().find(|(_, k, _)| *k == key).map(|(_, _, exe)| dir.join(exe))
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn rockstar_games(uninstall: &[RegBlock]) -> Vec<StoreGame> {
+    let mut games = Vec::new();
+    for (entry, key, exe) in ROCKSTAR {
+        let Some(block) = uninstall.iter().find(|u| u.leaf().eq_ignore_ascii_case(entry)) else { continue };
+        let (Some(title), Some(dir)) = (block.get("DisplayName"), block.get("InstallLocation")) else { continue };
+        let install_dir = PathBuf::from(dir.trim_matches('"').trim_end_matches(['\\', '/']));
+        if !exists(&install_dir.join(exe)) {
+            continue;
+        }
+        games.push(StoreGame { store: Store::Rockstar, key: key.to_string(), title: title.to_string(), install_dir, launch: format!("rockstar:{key}"), cover: None, cover_url: None });
+    }
+    games
+}
+
+#[cfg(windows)]
+pub(crate) fn rockstar(uninstall: &[RegBlock]) -> (Option<String>, Vec<StoreGame>) {
+    let games = rockstar_games(uninstall);
+    let launcher = uninstall.iter().find(|u| u.leaf().eq_ignore_ascii_case("Rockstar Games Launcher")).and_then(|u| u.get("InstallLocation")).map(|p| p.trim_matches('"').to_string());
+    (launcher.or_else(|| (!games.is_empty()).then(|| "Rockstar's games".to_string())), games)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Riot Client (D-116)
+
+/// Riot's games by their product name.
+fn riot_title(product: &str) -> String {
+    match product {
+        "league_of_legends" => "League of Legends".to_string(),
+        "valorant" => "VALORANT".to_string(),
+        "bacon" => "Legends of Runeterra".to_string(),
+        "lion" => "2XKO".to_string(),
+        other => other.split('_').map(|w| w.chars().next().map(|c| c.to_uppercase().collect::<String>() + &w[c.len_utf8()..]).unwrap_or_default()).collect::<Vec<_>>().join(" "),
+    }
+}
+
+/// Riot's installed games: each product's `<product>.<patchline>.product_settings.yaml` (in
+/// `Metadata`) names its folder; started with the Riot Client's `--launch-product` and
+/// `--launch-patchline`.
+pub(crate) fn riot_games(metadata: &Path) -> Vec<StoreGame> {
+    let mut games = Vec::new();
+    let Ok(entries) = std::fs::read_dir(metadata) else { return games };
+    for entry in entries.filter_map(Result::ok) {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Some((product, patchline)) = name.split_once('.') else { continue };
+        if product == "riot_client" {
+            continue;
+        }
+        let settings = entry.path().join(format!("{name}.product_settings.yaml"));
+        let Ok(text) = std::fs::read_to_string(&settings) else { continue };
+        let Some(dir) = text.lines().find_map(|l| l.trim().strip_prefix("product_install_full_path:")).map(|v| v.trim().trim_matches('"').trim_matches('\'').to_string()) else { continue };
+        let install_dir = PathBuf::from(dir.trim_end_matches(['\\', '/']));
+        if !exists(&install_dir) {
+            continue;
+        }
+        games.push(StoreGame {
+            store: Store::Riot,
+            key: name.clone(),
+            title: riot_title(product),
+            install_dir,
+            launch: format!("riot:{product}:{patchline}"),
+            cover: None,
+            cover_url: None,
+        });
+    }
+    games.sort_by(|a, b| a.key.cmp(&b.key));
+    games
+}
+
+/// The Riot Client's program, from `RiotClientInstalls.json`.
+#[cfg(windows)]
+pub(crate) fn riot_client() -> Option<PathBuf> {
+    let base = std::env::var_os("ProgramData").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("C:\\ProgramData")).join("Riot Games");
+    let json: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(base.join("RiotClientInstalls.json")).ok()?).ok()?;
+    ["rc_default", "rc_live"].iter().filter_map(|k| json.get(*k)?.as_str()).map(PathBuf::from).find(|p| p.is_file())
+}
+
+#[cfg(windows)]
+pub(crate) fn riot() -> (Option<String>, Vec<StoreGame>) {
+    let base = std::env::var_os("ProgramData").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("C:\\ProgramData")).join("Riot Games");
+    let games = riot_games(&base.join("Metadata"));
+    (riot_client().map(|p| p.display().to_string()).or_else(|| (!games.is_empty()).then(|| base.display().to_string())), games)
+}
+
+// ---------------------------------------------------------------------------------------------
 // Amazon Games and Lutris: their own SQLite databases, opened read-only.
 
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -505,6 +615,27 @@ HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\U
         assert_eq!(games.len(), 1, "Steam's games stay Steam's, and only installed ones count");
         assert_eq!((games[0].title.as_str(), games[0].launch.as_str()), ("Overwatch 2", "lutris:rungameid/3"));
         assert_eq!(games[0].cover.as_deref(), Some(dir.join("coverart").join("overwatch-2.jpg").as_path()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rockstar_and_riot_games() {
+        let uninstall = reg_blocks(
+            "\nHKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{5EFC6C07-6B87-43FC-9524-F9E967241741}\n    DisplayName    REG_SZ    Grand Theft Auto V\n    InstallLocation    REG_SZ    \"D:\\Rockstar\\GTAV\"\n\nHKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Red Dead Redemption 2\n    DisplayName    REG_SZ    Red Dead Redemption 2\n    InstallLocation    REG_SZ    D:\\Rockstar\\RDR2\\\n",
+        );
+        let games = rockstar_games(&uninstall);
+        assert_eq!(games.iter().map(|g| (g.title.as_str(), g.launch.as_str())).collect::<Vec<_>>(), [("Grand Theft Auto V", "rockstar:gta5"), ("Red Dead Redemption 2", "rockstar:rdr2")]);
+        assert_eq!(rockstar_program("rdr2", &games[1].install_dir), Some(PathBuf::from("D:\\Rockstar\\RDR2").join("RDR2.exe")));
+        // Riot: each product's settings name its folder; the client itself isn't a game.
+        let dir = std::env::temp_dir().join(format!("digitify-riot-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        for (name, path) in [("valorant.live", "C:/Riot Games/VALORANT/live"), ("league_of_legends.live", "C:/Riot Games/League of Legends"), ("riot_client.live", "C:/Riot Games/Riot Client")] {
+            std::fs::create_dir_all(dir.join(name)).unwrap();
+            std::fs::write(dir.join(name).join(format!("{name}.product_settings.yaml")), format!("product_install_full_path: \"{path}\"\nproduct_install_root: \"C:/Riot Games\"\n")).unwrap();
+        }
+        let riot = riot_games(&dir);
+        assert_eq!(riot.iter().map(|g| (g.title.as_str(), g.launch.as_str())).collect::<Vec<_>>(), [("League of Legends", "riot:league_of_legends:live"), ("VALORANT", "riot:valorant:live")]);
+        assert_eq!(riot_title("new_game"), "New Game");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { ArrowLeft, Cloud, ExternalLink } from "lucide-react";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { Cloud, ExternalLink } from "lucide-react";
 import { api, errorText, onLinux, type ItemDetail, type OnlineSource } from "../../lib/api";
 import { useItem } from "../../lib/queries";
+import { BackButton } from "../../components/BackButton";
 import { useAmbientHold } from "../../lib/ambient/AmbientProvider";
 import { useMusic } from "../../lib/music/MusicProvider";
 
@@ -97,9 +98,9 @@ export function OnlinePlayerPage() {
   return (
     <div className="page online-page">
       <div className="online-head">
-        <Link to="/item/$id" params={{ id }} className="round-btn" aria-label="Back to the item">
-          <ArrowLeft size={18} strokeWidth={2.6} />
-        </Link>
+        {/* The same Back as every page (D-143): to where it was opened from, so the item's page
+            doesn't send you back here. */}
+        <BackButton fallback={() => void navigate({ to: "/item/$id", params: { id } })} />
         <div>
           <h1 className="display">{data?.title ?? " "}</h1>
           {source && (

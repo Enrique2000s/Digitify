@@ -4,10 +4,11 @@ import { useNavigate } from "@tanstack/react-router";
 import { DropdownMenu } from "radix-ui";
 import { ArrowLeft, Clock, ListMusic, ListPlus, Mic2, MoreHorizontal, Music2, Pencil, Play, Plus, Trash, Star } from "lucide-react";
 import { api, errorText, type Category, type Playlist } from "../../lib/api";
-import { useMusic } from "../../lib/music/MusicProvider";
+import { usePlayAndShow } from "./playAndShow";
 import { AddMusicDialog } from "./AddMusic";
 import { CategoryIcon } from "../../components/common";
 import { CategoryStrip } from "../../components/CategoryStrip";
+import { AddMenu } from "../../components/AddMenu";
 import { useArrival } from "../../lib/arrival";
 import { duration, NewPlaylistDialog, TrackList, usePlaylists } from "./Tracks";
 
@@ -46,7 +47,7 @@ export function MusicTabs({ category, tab }: { category: Category; tab: MusicTab
   );
 }
 
-function Header({ category, tab }: { category: Category; tab: MusicTab }) {
+function Header({ category, tab, onNewPlaylist }: { category: Category; tab: MusicTab; onNewPlaylist: () => void }) {
   const titleArriving = useArrival(`title:${category.name}`);
   return (
     <>
@@ -62,6 +63,19 @@ function Header({ category, tab }: { category: Category; tab: MusicTab }) {
             </div>
             <div className="count">{LABELS[tab][0]}</div>
           </div>
+        </div>
+        {/* Add where the Tracks tab has it; on Playlists, New playlist beside it (D-145). */}
+        <div className="header-actions">
+          {tab === "playlists" && (
+            <button type="button" className="btn" onClick={onNewPlaylist}>
+              <Plus size={17} /> New playlist
+            </button>
+          )}
+          <AddMenu align="end" category={category.key}>
+            <button type="button" className="btn btn-primary">
+              <Plus size={17} strokeWidth={2.6} /> Add
+            </button>
+          </AddMenu>
         </div>
       </div>
       {/* The tabs sit where every category has its tabs (D-094). */}
@@ -165,14 +179,14 @@ function PlaylistView({ playlist, onBack, startAdding }: { playlist: Playlist; o
 /** A playlist's card on the Playlists tab, with its own menu. */
 function PlaylistCard({ playlist, onOpen, onAdd }: { playlist: Playlist; onOpen: () => void; onAdd: () => void }) {
   const queryClient = useQueryClient();
-  const music = useMusic();
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(playlist.name);
   const [deleting, setDeleting] = useState(false);
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["playlists"] });
+  const playAndShow = usePlayAndShow();
   const play = async () => {
     const tracks = await api.musicTracks({ playlist: playlist.id });
-    if (tracks.length) await music.play(tracks.map((t) => t.id), 0);
+    if (tracks.length) await playAndShow(tracks.map((t) => t.id), 0);
   };
   return (
     <div className="artist-card playlist-card">
@@ -241,19 +255,13 @@ function PlaylistCard({ playlist, onOpen, onAdd }: { playlist: Playlist; onOpen:
   );
 }
 
-function Playlists() {
+function Playlists({ creating, setCreating }: { creating: boolean; setCreating: (open: boolean) => void }) {
   const playlists = usePlaylists();
   const [open, setOpen] = useState<{ id: number; adding: boolean } | null>(null);
-  const [creating, setCreating] = useState(false);
   const current = playlists.data?.find((p) => p.id === open?.id);
   if (current && open) return <PlaylistView key={current.id} playlist={current} startAdding={open.adding} onBack={() => setOpen(null)} />;
   return (
     <>
-      <div className="track-actions">
-        <button type="button" className="btn btn-sm" onClick={() => setCreating(true)}>
-          <Plus size={15} /> New playlist
-        </button>
-      </div>
       {playlists.data?.length ? (
         <div className="artist-grid">
           {playlists.data.map((playlist) => (
@@ -275,13 +283,14 @@ function Playlists() {
 
 /** A music category's lists beyond its tracks: artists, playlists, recently played, favorites. */
 export function MusicPage({ category, tab }: { category: Category; tab: Exclude<MusicTab, "tracks"> }) {
+  const [creating, setCreating] = useState(false);
   return (
     <div className="library-view">
       <div className="music-page">
-      <Header category={category} tab={tab} />
+      <Header category={category} tab={tab} onNewPlaylist={() => setCreating(true)} />
       <div className="view-stage music-stage" key={tab}>
         {tab === "artists" && <Artists />}
-        {tab === "playlists" && <Playlists />}
+        {tab === "playlists" && <Playlists creating={creating} setCreating={setCreating} />}
         {tab === "recent" && <TrackList filter={{ recent: true }} empty="Nothing played yet." />}
         {tab === "favorites" && <TrackList filter={{ favorites: true }} empty="No favorite tracks yet. Use the heart next to a track." />}
       </div>

@@ -54,7 +54,7 @@ export const SHORTCUTS = [
   { id: "video.subtitles", scope: "video", label: "Next subtitles", keys: ["C"] },
   { id: "video.nextEpisode", scope: "video", label: "Next episode", keys: ["Shift+N"] },
   { id: "video.fullscreen", scope: "video", label: "Full screen", keys: ["F", "F11"] },
-  { id: "video.close", scope: "video", label: "Close a menu, full screen, then the player", keys: ["Escape"] },
+  { id: "video.close", scope: "video", label: "Close a menu, full screen, then go back", keys: ["Escape"] },
 ] as const satisfies readonly { id: string; scope: ShortcutScope; label: string; keys: readonly string[] }[];
 
 export type ShortcutId = (typeof SHORTCUTS)[number]["id"];

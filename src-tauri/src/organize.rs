@@ -24,7 +24,7 @@ fn named(row: &Row<'_>) -> rusqlite::Result<NamedRef> {
 }
 
 fn cover(row: &Row<'_>) -> rusqlite::Result<TileCover> {
-    Ok(TileCover { key: row.get(0)?, color: row.get(1)?, handler: row.get(2)? })
+    Ok(TileCover { key: row.get(0)?, color: row.get(1)?, handler: row.get(2)?, category: None, cover_shape: None, aspect: None })
 }
 
 /// A name as typed: trimmed, inner whitespace collapsed, at most `max` characters.
@@ -443,18 +443,22 @@ pub struct BulkActions {
     pub series: bool,
     /// Comics and manga: the reading direction.
     pub direction: bool,
+    /// How many are online items that can be downloaded (D-133): not Spotify's (DRM), not a whole
+    /// playlist saved as one link.
+    pub download: i64,
 }
 
 pub fn bulk_actions(conn: &Connection, ids: &[i64]) -> AppResult<BulkActions> {
     let list = serde_json::to_string(ids).map_err(|e| AppError::msg(e.to_string()))?;
-    let (total, tracks, videos, music, books, comics): (i64, i64, i64, i64, i64, i64) = conn.query_row(
+    let (total, tracks, videos, music, books, comics, download): (i64, i64, i64, i64, i64, i64, i64) = conn.query_row(
         "SELECT count(*), \
            coalesce(sum(c.handler = 'audio' AND EXISTS (SELECT 1 FROM parts p WHERE p.item_id = i.id AND p.kind = 'track')), 0), \
            coalesce(sum(c.handler = 'video' AND c.key <> 'video'), 0), coalesce(sum(c.handler = 'audio'), 0), \
-           coalesce(sum(c.handler IN ('book', 'comic')), 0), coalesce(sum(c.handler = 'comic'), 0) \
+           coalesce(sum(c.handler IN ('book', 'comic')), 0), coalesce(sum(c.handler = 'comic'), 0), \
+           coalesce(sum(EXISTS (SELECT 1 FROM online_sources o WHERE o.item_id = i.id AND o.downloaded = 0 AND o.provider <> 'spotify' AND o.kind NOT IN ('playlist', 'album'))), 0) \
          FROM items i JOIN categories c ON c.id = i.category_id WHERE i.id IN (SELECT value FROM json_each(?1))",
         [list],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
     )?;
     if total == 0 {
         return Ok(BulkActions::default());
@@ -470,6 +474,7 @@ pub fn bulk_actions(conn: &Connection, ids: &[i64]) -> AppResult<BulkActions> {
         },
         series: books == total,
         direction: comics == total,
+        download,
     })
 }
 
@@ -526,6 +531,13 @@ pub fn apply_bulk(conn: &mut Connection, ids: &[i64], ops: &[BulkOp]) -> AppResu
                 if let Some(collection) = collection {
                     if collection_category(&tx, *collection)? != category {
                         return Err(AppError::msg("That collection belongs to another category."));
+                    }
+                }
+                // Items stay in their category (D-126): a move is into one of its collections.
+                for id in ids {
+                    let own: i64 = tx.query_row("SELECT category_id FROM items WHERE id = ?1", [id], |row| row.get(0))?;
+                    if own != category {
+                        return Err(AppError::msg("Items stay in their category; they can move into one of its collections."));
                     }
                 }
                 for id in ids {
@@ -665,9 +677,10 @@ mod tests {
         let found = level.children.iter().find(|c| c.id == piece).unwrap();
         assert_eq!((found.item_count, found.child_count), (1, 0));
 
-        // No moving into another category's collection.
+        // No moving into another category's collection, nor into another category (D-126).
         let books = create_collection(&conn, "books", None, "Classics").unwrap();
         assert!(apply_bulk(&mut conn, &[volume], &[BulkOp::Move { category: "manga".into(), collection: Some(books) }]).is_err());
+        assert!(apply_bulk(&mut conn, &[volume], &[BulkOp::Move { category: "books".into(), collection: None }]).is_err());
 
         // Deleting a collection leaves its items in the category.
         delete_collection(&mut conn, piece).unwrap();

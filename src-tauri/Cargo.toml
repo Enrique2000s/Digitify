@@ -1,6 +1,6 @@
 [package]
 name = "digitify"
-version = "0.6.1"
+version = "0.7.0"
 description = "Digitify: a home for all your media (Library) and a universal launcher for your games (Arcade)"
 authors = ["Digitify contributors"]
 edition = "2021"
@@ -28,6 +28,8 @@ tokio = { version = "1", features = ["net", "io-util", "sync", "time"] }
 walkdir = "2"
 lofty = "0.25"
 zip = "9"
+# D-116: a PSP's compressed discs (CSO) are read to tell them from PlayStation 2's.
+flate2 = "1"
 roxmltree = "0.21"
 blake3 = "1"
 rayon = "1"

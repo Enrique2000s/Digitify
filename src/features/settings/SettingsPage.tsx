@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { BackButton } from "../../components/BackButton";
 import { open } from "@tauri-apps/plugin-dialog";
 import { FolderOpen, Monitor, Moon, ScrollText, Settings, Sun } from "lucide-react";
 import { openWhatsNew } from "../app/AppDialogs";
@@ -92,7 +93,21 @@ function NightFilterSetting() {
   );
 }
 
+/** Settings' tabs (D-121). */
+export const SETTINGS_TABS = [
+  ["general", "General"],
+  ["library", "Library"],
+  ["arcade", "Arcade"],
+  ["sound", "Sound"],
+  ["keyboard", "Keyboard"],
+  ["about", "About"],
+] as const;
+export type SettingsTab = (typeof SETTINGS_TABS)[number][0];
+
 export function SettingsPage() {
+  const search = useSearch({ from: "/settings" });
+  const navigate = useNavigate();
+  const tab: SettingsTab = SETTINGS_TABS.some(([key]) => key === search.tab) ? (search.tab as SettingsTab) : "general";
   const { preferences, update } = usePreferences();
   const status = useAppStatus();
   const queryClient = useQueryClient();
@@ -119,6 +134,7 @@ export function SettingsPage() {
 
   return (
     <div className="page settings-page">
+      <BackButton />
       <div className="page-header">
         <div className="title-row">
           <span className="title-badge">
@@ -127,270 +143,317 @@ export function SettingsPage() {
           <h1 className="display">Settings</h1>
         </div>
       </div>
+      {/* Settings in tabs (D-121), one subject each; the address says which, so links can open one. */}
+      <div className="segmented settings-tabs" role="tablist" aria-label="Settings">
+        {SETTINGS_TABS.map(([key, label]) => (
+          <button key={key} type="button" role="tab" aria-selected={tab === key} aria-pressed={tab === key} onClick={() => void navigate({ to: "/settings", search: { tab: key }, replace: true })}>
+            {label}
+          </button>
+        ))}
+      </div>
       <div className="settings">
-        <section className="panel">
-          <h2>Appearance</h2>
-          <Setting title="Style" text="Breeze is Digitify's own bright, rounded style. Cinematic is darker and film-like, with glassy panels and amber highlights.">
-            <div className="look-picker" role="group" aria-label="Style">
-              {LOOKS.map((look) => (
-                <button key={look.value} type="button" className="look-card" aria-pressed={preferences.look === look.value} onClick={() => chooseLook(look.value)}>
-                  <LookPreview variant={look.value} />
-                  {look.name}
-                </button>
-              ))}
-            </div>
-          </Setting>
-          {preferences.look === "breeze" && (
-            <Setting title="Palette" text="Breeze's colors. Midnight is always dark, with pure black that suits OLED screens; High contrast makes every edge and word stand out.">
-              <div className="look-picker" role="group" aria-label="Palette">
-                {PALETTES.map((palette) => (
-                  <button key={palette.value} type="button" className="look-card" aria-pressed={preferences.palette === palette.value} onClick={() => choosePalette(palette.value)}>
-                    <LookPreview variant={palette.value === "breeze" ? "sky" : palette.value} />
-                    {palette.name}
-                  </button>
-                ))}
-              </div>
-            </Setting>
-          )}
-          {/* Midnight is only dark, so there's no theme to pick. */}
-          {!midnight && (
-          <Setting title="Theme" text="Light by default; night keeps the same layout in darker colors.">
-            <div className="segmented" role="group" aria-label="Theme">
-              {(
-                [
-                  ["light", "Light", Sun],
-                  ["dark", "Night", Moon],
-                  ["system", "System", Monitor],
-                ] as const
-              ).map(([value, label, Icon]) => (
-                <button key={value} type="button" aria-pressed={preferences.theme === value} onClick={() => update({ theme: value as ThemeChoice })}>
-                  <Icon size={14} aria-hidden /> {label}
-                </button>
-              ))}
-            </div>
-          </Setting>
-          )}
-          <Setting title="Accent color" text="Used for highlights, glows, buttons and progress. Text stays readable in both themes.">
-            <div className="swatches" role="group" aria-label="Accent color">
-              {ACCENT_PRESETS.map((preset) => (
-                <button
-                  key={preset.value}
-                  type="button"
-                  className="swatch"
-                  style={{ background: preset.value }}
-                  aria-label={preset.name}
-                  title={preset.name}
-                  aria-pressed={preferences.accent === preset.value}
-                  onClick={() => update({ accent: preset.value })}
-                />
-              ))}
-              <label
-                className="swatch swatch-custom"
-                aria-pressed={custom}
-                title="Custom color"
-                style={{ background: custom ? preferences.accent : "conic-gradient(red, yellow, lime, aqua, blue, magenta, red)" }}
-              >
-                <span className="sr-only">Custom color</span>
-                <input type="color" value={preferences.accent} onChange={(event) => update({ accent: event.target.value })} />
-              </label>
-            </div>
-          </Setting>
-          {preferences.look === "breeze" && (
-            <Setting title="Colors per section" text="Each section gets a color of its own, used for its highlights while you're in it: Arcade purple, Music green… Off, everything uses your accent color.">
-              <Switch
-                checked={preferences.sectionColors.enabled}
-                label="Colors per section"
-                onChange={(enabled) => update((c) => ({ sectionColors: { ...c.sectionColors, enabled } }))}
-              />
-            </Setting>
-          )}
-          {preferences.look === "breeze" && preferences.sectionColors.enabled && (
-            <div className="section-colors">
-              {Object.keys(SECTION_COLORS).map((key) => (
-                <label key={key} className="section-color">
-                  <input
-                    type="color"
-                    value={preferences.sectionColors.colors[key]}
-                    aria-label={`${SECTION_COLOR_NAMES[key]} color`}
-                    onChange={(event) => {
-                      const color = event.target.value;
-                      update((c) => ({ sectionColors: { ...c.sectionColors, colors: { ...c.sectionColors.colors, [key]: color } } }));
-                    }}
+        {tab === "general" && (
+          <>
+            <section className="panel">
+              <h2>Appearance</h2>
+              <Setting title="Style" text="Breeze is Digitify's own bright, rounded style. Cinematic is darker and film-like, with glassy panels and amber highlights.">
+                <div className="look-picker" role="group" aria-label="Style">
+                  {LOOKS.map((look) => (
+                    <button key={look.value} type="button" className="look-card" aria-pressed={preferences.look === look.value} onClick={() => chooseLook(look.value)}>
+                      <LookPreview variant={look.value} />
+                      {look.name}
+                    </button>
+                  ))}
+                </div>
+              </Setting>
+              {preferences.look === "breeze" && (
+                <Setting title="Palette" text="Breeze's colors. Midnight is always dark, with pure black that suits OLED screens; High contrast makes every edge and word stand out.">
+                  <div className="look-picker" role="group" aria-label="Palette">
+                    {PALETTES.map((palette) => (
+                      <button key={palette.value} type="button" className="look-card" aria-pressed={preferences.palette === palette.value} onClick={() => choosePalette(palette.value)}>
+                        <LookPreview variant={palette.value === "breeze" ? "sky" : palette.value} />
+                        {palette.name}
+                      </button>
+                    ))}
+                  </div>
+                </Setting>
+              )}
+              {/* Midnight is only dark, so there's no theme to pick. */}
+              {!midnight && (
+              <Setting title="Theme" text="Light by default; night keeps the same layout in darker colors.">
+                <div className="segmented" role="group" aria-label="Theme">
+                  {(
+                    [
+                      ["light", "Light", Sun],
+                      ["dark", "Night", Moon],
+                      ["system", "System", Monitor],
+                    ] as const
+                  ).map(([value, label, Icon]) => (
+                    <button key={value} type="button" aria-pressed={preferences.theme === value} onClick={() => update({ theme: value as ThemeChoice })}>
+                      <Icon size={14} aria-hidden /> {label}
+                    </button>
+                  ))}
+                </div>
+              </Setting>
+              )}
+              <Setting title="Accent color" text="Used for highlights, glows, buttons and progress. Text stays readable in both themes.">
+                <div className="swatches" role="group" aria-label="Accent color">
+                  {ACCENT_PRESETS.map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      className="swatch"
+                      style={{ background: preset.value }}
+                      aria-label={preset.name}
+                      title={preset.name}
+                      aria-pressed={preferences.accent === preset.value}
+                      onClick={() => update({ accent: preset.value })}
+                    />
+                  ))}
+                  <label
+                    className="swatch swatch-custom"
+                    aria-pressed={custom}
+                    title="Custom color"
+                    style={{ background: custom ? preferences.accent : "conic-gradient(red, yellow, lime, aqua, blue, magenta, red)" }}
+                  >
+                    <span className="sr-only">Custom color</span>
+                    <input type="color" value={preferences.accent} onChange={(event) => update({ accent: event.target.value })} />
+                  </label>
+                </div>
+              </Setting>
+              {preferences.look === "breeze" && (
+                <Setting title="Colors per section" text="Each section gets a color of its own, used for its highlights while you're in it: Arcade purple, Music green… Off, everything uses your accent color.">
+                  <Switch
+                    checked={preferences.sectionColors.enabled}
+                    label="Colors per section"
+                    onChange={(enabled) => update((c) => ({ sectionColors: { ...c.sectionColors, enabled } }))}
                   />
-                  <span>{SECTION_COLOR_NAMES[key]}</span>
-                </label>
-              ))}
-              <button type="button" className="btn btn-sm" onClick={() => update((c) => ({ sectionColors: { ...c.sectionColors, colors: { ...SECTION_COLORS } } }))}>
-                Default colors
-              </button>
-            </div>
-          )}
-          <Setting
-            title="Animations"
-            text={`Transitions when you change category, view, filter or sort, covers popping into place, sections fading in. ${onLinux ? "“Follow the system” uses your desktop's reduce-animations setting" : "“Follow Windows” uses its “Animation effects” setting"}; “Reduced” keeps only gentle fades.`}
-          >
-            <select className="select" style={{ width: 230 }} value={preferences.motion} onChange={(event) => update({ motion: event.target.value as MotionChoice })}>
-              <option value="system">{onLinux ? "On (follow the system)" : "On (follow Windows)"}</option>
-              <option value="full">On</option>
-              <option value="reduced">Reduced</option>
-              <option value="off">Off</option>
-            </select>
-          </Setting>
-          <Setting
-            title="Light mode for slower computers"
-            text="Turns off blurred backgrounds, reflections, heavy shadows, glows and animations, and draws fewer covers ahead, so Digitify stays smooth on older or low-power PCs."
-          >
-            <Switch checked={preferences.lightMode} label="Light mode for slower computers" onChange={(lightMode) => update({ lightMode })} />
-          </Setting>
-        </section>
+                </Setting>
+              )}
+              {preferences.look === "breeze" && preferences.sectionColors.enabled && (
+                <div className="section-colors">
+                  {Object.keys(SECTION_COLORS).map((key) => (
+                    <label key={key} className="section-color">
+                      <input
+                        type="color"
+                        value={preferences.sectionColors.colors[key]}
+                        aria-label={`${SECTION_COLOR_NAMES[key]} color`}
+                        onChange={(event) => {
+                          const color = event.target.value;
+                          update((c) => ({ sectionColors: { ...c.sectionColors, colors: { ...c.sectionColors.colors, [key]: color } } }));
+                        }}
+                      />
+                      <span>{SECTION_COLOR_NAMES[key]}</span>
+                    </label>
+                  ))}
+                  <button type="button" className="btn btn-sm" onClick={() => update((c) => ({ sectionColors: { ...c.sectionColors, colors: { ...SECTION_COLORS } } }))}>
+                    Default colors
+                  </button>
+                </div>
+              )}
+              <Setting
+                title="Animations"
+                text={`Transitions when you change category, view, filter or sort, covers popping into place, sections fading in. ${onLinux ? "“Follow the system” uses your desktop's reduce-animations setting" : "“Follow Windows” uses its “Animation effects” setting"}; “Reduced” keeps only gentle fades.`}
+              >
+                <select className="select" style={{ width: 230 }} value={preferences.motion} onChange={(event) => update({ motion: event.target.value as MotionChoice })}>
+                  <option value="system">{onLinux ? "On (follow the system)" : "On (follow Windows)"}</option>
+                  <option value="full">On</option>
+                  <option value="reduced">Reduced</option>
+                  <option value="off">Off</option>
+                </select>
+              </Setting>
+              <Setting
+                title="Light mode for slower computers"
+                text="Turns off blurred backgrounds, reflections, heavy shadows, glows and animations, and draws fewer covers ahead, so Digitify stays smooth on older or low-power PCs."
+              >
+                <Switch checked={preferences.lightMode} label="Light mode for slower computers" onChange={(lightMode) => update(lightMode ? { lightMode } : { lightMode, autoLightMode: false })} />
+              </Setting>
+              <Setting
+                title="Turn light mode on by itself"
+                text="When this computer struggles to keep up with Digitify's effects, light mode turns on by itself and a notice says so. Turning light mode off by hand stops this."
+              >
+                <Switch checked={preferences.autoLightMode} label="Turn light mode on by itself" onChange={(autoLightMode) => update({ autoLightMode })} />
+              </Setting>
+            </section>
 
-        <section className="panel">
-          <h2>Library</h2>
-          <Setting title="Library folder" text={status.data?.libraryPath ?? ""}>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button type="button" className="btn" onClick={() => api.libraryReveal().catch((e) => setError(errorText(e)))}>
-                <FolderOpen size={16} /> Open
-              </button>
-              <button type="button" className="btn" onClick={() => void switchLibrary()}>
-                Switch library…
-              </button>
-            </div>
-          </Setting>
-          {status.data?.cloudSync && (
-            <div className="notice warning">
-              This library is inside a {status.data.cloudSync} folder. Syncing a live database can corrupt it and uploads your
-              library; consider moving the folder outside {status.data.cloudSync}.
-            </div>
-          )}
-          <CategoriesPanel embedded />
-          <h3 className="settings-subhead">Views</h3>
-          <Setting title="Show Everything" text="A view of the whole library at once in Library, on Home, in Big Picture and in the command palette. Off, everything stays in its own category.">
-            <Switch checked={preferences.showEverything} label="Show Everything" onChange={(showEverything) => update({ showEverything })} />
-          </Setting>
-          <Setting
-            title="Same view in every category"
-            text="The layout (grid, shelf, list, detailed, carousel) and the All / Digital / Online filter stay as you left them everywhere. Turn off to keep a different one per category."
-          >
-            <Switch checked={preferences.syncViews} label="Same view in every category" onChange={(syncViews) => update({ syncViews })} />
-          </Setting>
-          <Setting title="Cover size" text="Width of covers in the grid, shelf and detailed views.">
-            <CardSizeSlider value={preferences.cardSize} onChange={(cardSize) => update({ cardSize })} style={{ width: 180 }} />
-          </Setting>
-          <Setting title="Music covers" text="Square covers, or round CDs. Each track can also be set on its own page.">
-            <div className="segmented" role="group" aria-label="Music covers">
-              {(
-                [
-                  ["square", "Square"],
-                  ["disc", "CD"],
-                ] as const
-              ).map(([value, label]) => (
-                <button key={value} type="button" aria-pressed={preferences.coverShapes.audio === value} onClick={() => update((c) => ({ coverShapes: { ...c.coverShapes, audio: value } }))}>
-                  {label}
+            <section className="panel">
+              <h2>Window and startup</h2>
+              <StartWithComputer />
+              <Setting title="Open maximized" text="Digitify fills the screen when it opens. Off, it opens at its regular size (it can still be maximized from the title bar).">
+                <Switch checked={preferences.startMaximized} label="Open maximized" onChange={(startMaximized) => update({ startMaximized })} />
+              </Setting>
+              <Setting
+                title="Keep running in the tray when closed"
+                text="Closing the window leaves Digitify by the clock, quiet: the music and videos pause until you open it again, and then the music goes on. Its icon can still play, pause or skip, and quits Digitify from its menu. Started with your computer, it then starts there."
+              >
+                <Switch checked={preferences.closeToTray} label="Keep running in the tray when closed" onChange={(closeToTray) => update({ closeToTray })} />
+              </Setting>
+              <Setting
+                title="Hold the X to quit"
+                text={preferences.closeToTray ? "With Digitify kept in the tray, holding the window's X for a moment quits it outright; a ring fills around the X while you hold it. A click still only hides the window." : "Only with “Keep running in the tray when closed” on: then holding the window's X quits Digitify outright."}
+              >
+                <Switch checked={preferences.holdToQuit} label="Hold the X to quit" onChange={(holdToQuit) => update({ holdToQuit })} />
+              </Setting>
+              <Setting
+                title="Ask before closing"
+                text={preferences.closeToTray ? "Not needed while Digitify keeps running in the tray: closing the window only hides it." : "Closing the window quits Digitify, so it asks first, in case the X was clicked by mistake."}
+              >
+                <Switch checked={preferences.confirmClose} label="Ask before closing" onChange={(confirmClose) => update({ confirmClose })} />
+              </Setting>
+              <Setting title="Offer to continue when opening" text="When Digitify opens, a small notice offers the book, comic, film, series or game you left halfway lately.">
+                <Switch checked={preferences.resumeOnOpen} label="Offer to continue when opening" onChange={(resumeOnOpen) => update({ resumeOnOpen })} />
+              </Setting>
+              <Setting title="Show what's new after updates" text="After Digitify is updated, a short note says what's new and what was fixed. It can always be seen in About.">
+                <Switch checked={preferences.whatsNew.show} label="Show what's new after updates" onChange={(show) => update((c) => ({ whatsNew: { ...c.whatsNew, show } }))} />
+              </Setting>
+            </section>
+          </>
+        )}
+        {tab === "library" && (
+          <>
+            <section className="panel">
+              <h2>Library</h2>
+              <Setting title="Library folder" text={status.data?.libraryPath ?? ""}>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button type="button" className="btn" onClick={() => api.libraryReveal().catch((e) => setError(errorText(e)))}>
+                    <FolderOpen size={16} /> Open
+                  </button>
+                  <button type="button" className="btn" onClick={() => void switchLibrary()}>
+                    Switch library…
+                  </button>
+                </div>
+              </Setting>
+              {status.data?.cloudSync && (
+                <div className="notice warning">
+                  This library is inside a {status.data.cloudSync} folder. Syncing a live database can corrupt it and uploads your
+                  library; consider moving the folder outside {status.data.cloudSync}.
+                </div>
+              )}
+              <CategoriesPanel embedded />
+              <h3 className="settings-subhead">Views</h3>
+              <Setting title="Show Everything" text="A view of the whole library at once in Library, on Home, in Big Picture and in the command palette. Off, everything stays in its own category.">
+                <Switch checked={preferences.showEverything} label="Show Everything" onChange={(showEverything) => update({ showEverything })} />
+              </Setting>
+              <Setting
+                title="Same view in every category"
+                text="The layout (grid, shelf, list, detailed, carousel) and the All / Digital / Online filter stay as you left them everywhere. Turn off to keep a different one per category."
+              >
+                <Switch checked={preferences.syncViews} label="Same view in every category" onChange={(syncViews) => update({ syncViews })} />
+              </Setting>
+              <Setting title="Cover size" text="Width of covers in the grid, shelf and detailed views.">
+                <CardSizeSlider value={preferences.cardSize} onChange={(cardSize) => update({ cardSize })} style={{ width: 180 }} />
+              </Setting>
+              <Setting title="Music covers" text="Square covers, or round CDs. Each track can also be set on its own page.">
+                <div className="segmented" role="group" aria-label="Music covers">
+                  {(
+                    [
+                      ["square", "Square"],
+                      ["disc", "CD"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button key={value} type="button" aria-pressed={preferences.coverShapes.audio === value} onClick={() => update((c) => ({ coverShapes: { ...c.coverShapes, audio: value } }))}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </Setting>
+              <Setting title="Video covers" text="For Videos: horizontal frames, or vertical posters. Each video can also be set on its own page. Movies & Series always use vertical posters.">
+                <div className="segmented" role="group" aria-label="Video covers">
+                  {(
+                    [
+                      ["landscape", "Horizontal"],
+                      ["poster", "Vertical"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button key={value} type="button" aria-pressed={preferences.coverShapes.videos === value} onClick={() => update((c) => ({ coverShapes: { ...c.coverShapes, videos: value } }))}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </Setting>
+              <Setting title="Shelf view" text="What the shelves in the shelf view are made of.">
+                <ShelfLookPicker />
+              </Setting>
+              <h3 className="settings-subhead">Importing</h3>
+              <Setting title="When importing" text="Keep files where they are, or copy them into the library folder.">
+                <select className="select" style={{ width: 230 }} value={preferences.importMode} onChange={(event) => update({ importMode: event.target.value as typeof preferences.importMode })}>
+                  <option value="ask">Ask every time</option>
+                  <option value="reference">Keep files where they are</option>
+                  <option value="copy">Copy into library folder</option>
+                </select>
+              </Setting>
+              <WatchedFolders />
+              {error && <div className="dialog-error">{error}</div>}
+            </section>
+
+            <section className="panel">
+              <h2>Watching</h2>
+              <Setting
+                title="Back keeps the video playing"
+                text={
+                  preferences.videoBackToCorner
+                    ? "The player's Back leaves the video playing small in a corner while you browse; close it from there."
+                    : "The player's Back closes the video; the button next to it keeps it playing in a corner while you browse."
+                }
+              >
+                <Switch checked={preferences.videoBackToCorner} label="Back keeps the video playing" onChange={(videoBackToCorner) => update({ videoBackToCorner })} />
+              </Setting>
+            </section>
+
+            <section className="panel">
+              <h2>Reading</h2>
+              <NightFilterSetting />
+            </section>
+
+            <OnlineServicesPanel />
+
+            <BackupsPanel />
+          </>
+        )}
+        {tab === "arcade" && (
+          <>
+            <ArcadeSettings />
+          </>
+        )}
+        {tab === "sound" && (
+          <>
+            <SoundSettings />
+          </>
+        )}
+        {tab === "keyboard" && (
+          <>
+            <KeyboardSettings />
+          </>
+        )}
+        {tab === "about" && (
+          <>
+            <section className="panel">
+              <h2>About</h2>
+              <Setting
+                title={`Digitify ${status.data?.version ?? ""}`}
+                text="A home for all your media (Library) and a universal launcher for your games (Arcade). Works fully offline. No accounts, no telemetry, and nothing is uploaded. Helper engines: mpv (GPL) and FFmpeg (LGPL), run as separate programs. The ambient theme “Digitify Main Menu Music” is original to Digitify."
+              >
+                <span />
+              </Setting>
+              <Setting title="What's new" text="What changed in this version and the ones before: new things and fixes.">
+                <button type="button" className="btn" onClick={openWhatsNew}>
+                  <ScrollText size={16} /> What's new
                 </button>
-              ))}
-            </div>
-          </Setting>
-          <Setting title="Video covers" text="For Videos: horizontal frames, or vertical posters. Each video can also be set on its own page. Movies & Series always use vertical posters.">
-            <div className="segmented" role="group" aria-label="Video covers">
-              {(
-                [
-                  ["landscape", "Horizontal"],
-                  ["poster", "Vertical"],
-                ] as const
-              ).map(([value, label]) => (
-                <button key={value} type="button" aria-pressed={preferences.coverShapes.videos === value} onClick={() => update((c) => ({ coverShapes: { ...c.coverShapes, videos: value } }))}>
-                  {label}
+              </Setting>
+              <Setting title="Third-party notices" text="Licenses for the bundled helper engines, fonts and libraries.">
+                <button type="button" className="btn" onClick={() => api.noticesReveal().catch((e) => setError(errorText(e)))}>
+                  Show file
                 </button>
-              ))}
-            </div>
-          </Setting>
-          <Setting title="Shelf view" text="What the shelves in the shelf view are made of.">
-            <ShelfLookPicker />
-          </Setting>
-          <h3 className="settings-subhead">Importing</h3>
-          <Setting title="When importing" text="Keep files where they are, or copy them into the library folder.">
-            <select className="select" style={{ width: 230 }} value={preferences.importMode} onChange={(event) => update({ importMode: event.target.value as typeof preferences.importMode })}>
-              <option value="ask">Ask every time</option>
-              <option value="reference">Keep files where they are</option>
-              <option value="copy">Copy into library folder</option>
-            </select>
-          </Setting>
-          <WatchedFolders />
-          {error && <div className="dialog-error">{error}</div>}
-        </section>
-
-        <section className="panel">
-          <h2>Window and startup</h2>
-          <StartWithComputer />
-          <Setting title="Open maximized" text="Digitify fills the screen when it opens. Off, it opens at its regular size (it can still be maximized from the title bar).">
-            <Switch checked={preferences.startMaximized} label="Open maximized" onChange={(startMaximized) => update({ startMaximized })} />
-          </Setting>
-          <Setting
-            title="Keep running in the tray when closed"
-            text="Closing the window leaves Digitify by the clock, quiet: the music and videos pause until you open it again, and then the music goes on. Its icon can still play, pause or skip, and quits Digitify from its menu. Started with your computer, it then starts there."
-          >
-            <Switch checked={preferences.closeToTray} label="Keep running in the tray when closed" onChange={(closeToTray) => update({ closeToTray })} />
-          </Setting>
-          <Setting
-            title="Hold the X to quit"
-            text={preferences.closeToTray ? "With Digitify kept in the tray, holding the window's X for a moment quits it outright; a ring fills around the X while you hold it. A click still only hides the window." : "Only with “Keep running in the tray when closed” on: then holding the window's X quits Digitify outright."}
-          >
-            <Switch checked={preferences.holdToQuit} label="Hold the X to quit" onChange={(holdToQuit) => update({ holdToQuit })} />
-          </Setting>
-          <Setting
-            title="Ask before closing"
-            text={preferences.closeToTray ? "Not needed while Digitify keeps running in the tray: closing the window only hides it." : "Closing the window quits Digitify, so it asks first, in case the X was clicked by mistake."}
-          >
-            <Switch checked={preferences.confirmClose} label="Ask before closing" onChange={(confirmClose) => update({ confirmClose })} />
-          </Setting>
-          <Setting title="Offer to continue when opening" text="When Digitify opens, a small notice offers the book, comic, film, series or game you left halfway lately.">
-            <Switch checked={preferences.resumeOnOpen} label="Offer to continue when opening" onChange={(resumeOnOpen) => update({ resumeOnOpen })} />
-          </Setting>
-          <Setting title="Show what's new after updates" text="After Digitify is updated, a short note says what's new and what was fixed. It can always be seen in About.">
-            <Switch checked={preferences.whatsNew.show} label="Show what's new after updates" onChange={(show) => update((c) => ({ whatsNew: { ...c.whatsNew, show } }))} />
-          </Setting>
-        </section>
-
-        <section className="panel">
-          <h2>Reading</h2>
-          <NightFilterSetting />
-        </section>
-
-        <SoundSettings />
-
-        <ArcadeSettings />
-
-        <OnlineServicesPanel />
-
-        <KeyboardSettings />
-
-        <BackupsPanel />
-
-        <section className="panel">
-          <h2>About</h2>
-          <Setting
-            title={`Digitify ${status.data?.version ?? ""}`}
-            text="A home for all your media (Library) and a universal launcher for your games (Arcade). Works fully offline. No accounts, no telemetry, and nothing is uploaded. Helper engines: mpv (GPL) and FFmpeg (LGPL), run as separate programs. The ambient theme “Digitify Main Menu Music” is original to Digitify."
-          >
-            <span />
-          </Setting>
-          <Setting title="What's new" text="What changed in this version and the ones before: new things and fixes.">
-            <button type="button" className="btn" onClick={openWhatsNew}>
-              <ScrollText size={16} /> What's new
-            </button>
-          </Setting>
-          <Setting title="Third-party notices" text="Licenses for the bundled helper engines, fonts and libraries.">
-            <button type="button" className="btn" onClick={() => api.noticesReveal().catch((e) => setError(errorText(e)))}>
-              Show file
-            </button>
-          </Setting>
-          <Setting title="Developer" text="Phase 0 video lab: mpv playback under the web interface.">
-            <Link to="/lab" className="btn">
-              Open lab
-            </Link>
-          </Setting>
-        </section>
-        <p className="settings-credit">Digitify is free and open source.</p>
+              </Setting>
+              <Setting title="Developer" text="Phase 0 video lab: mpv playback under the web interface.">
+                <Link to="/lab" className="btn">
+                  Open lab
+                </Link>
+              </Setting>
+            </section>
+            <p className="settings-credit">Digitify is free and open source.</p>
+          </>
+        )}
       </div>
     </div>
   );

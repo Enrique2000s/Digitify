@@ -16,14 +16,19 @@ const fileName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? 
 const folderName = (path: string) => path.split(/[\\/]/).filter(Boolean).slice(-2, -1)[0] ?? "";
 
 /** "Book from images…": photos or scans picked by hand, put in reading order, saved as one item. */
-export function BookBuilderDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function BookBuilderDialog({ category: chosen, onClose }: { category: string | null; onClose: () => void }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { preferences } = usePreferences();
   const categories = useCategories();
+  // One builder per category (D-145): what it makes goes into the category it was opened from.
+  const open = chosen != null;
+  const onOpenChange = (next: boolean) => !next && onClose();
+  const category = chosen ?? "books";
+  const target = categories.data?.find((c) => c.key === category);
+  const kind = category === "comics" ? "comic" : category === "manga" ? "manga" : "book";
   const [pages, setPages] = useState<ArrangedPage[]>([]);
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("books");
   const [mode, setMode] = useState<ImportMode>("reference");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +37,6 @@ export function BookBuilderDialog({ open, onOpenChange }: { open: boolean; onOpe
     if (!open) return;
     setPages([]);
     setTitle("");
-    setCategory("books");
     setMode(preferences.importMode === "copy" ? "copy" : "reference");
     setBusy(false);
     setError(null);
@@ -69,37 +73,28 @@ export function BookBuilderDialog({ open, onOpenChange }: { open: boolean; onOpe
     }
   };
 
-  const bookCategories = categories.data?.filter((c) => c.handler === "book" || c.handler === "comic" || c.handler === "generic") ?? [];
+  const name = kind === "comic" ? "Comic" : kind === "manga" ? "Manga" : "Book";
   return (
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
       wide
-      title="Book from images"
-      description="Choose photos or scans of a book's pages, put them in reading order, and they become one item."
+      title={`${name} from images`}
+      description={`Choose photos or scans of a ${kind === "manga" ? "manga" : kind}'s pages, put them in reading order, and they become one item in ${target?.name ?? "Books"}.`}
       footer={
         <>
           <button type="button" className="btn" onClick={() => onOpenChange(false)}>
             Cancel
           </button>
           <button type="button" className="btn btn-primary" disabled={busy || pages.length === 0 || !title.trim()} onClick={() => void create()}>
-            {busy ? "Creating…" : `Create book${pages.length ? ` · ${pages.length} pages` : ""}`}
+            {busy ? "Creating…" : `Create ${kind}${pages.length ? ` · ${pages.length} pages` : ""}`}
           </button>
         </>
       }
     >
-      <div className="field-row three">
+      <div className="field-row">
         <Field label="Title">
           <input className="input" value={title} onChange={(event) => setTitle(event.target.value)} />
-        </Field>
-        <Field label="Category">
-          <select className="select" value={category} onChange={(event) => setCategory(event.target.value)}>
-            {bookCategories.map((c) => (
-              <option key={c.key} value={c.key}>
-                {c.name}
-              </option>
-            ))}
-          </select>
         </Field>
         <Field label="Files">
           <select className="select" value={mode} onChange={(event) => setMode(event.target.value as ImportMode)}>

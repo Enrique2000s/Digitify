@@ -1,3 +1,4 @@
+import { useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { CircleCheck, Download, LoaderCircle, TriangleAlert, X } from "lucide-react";
 import type { ImportMode, ImportProgress } from "../../lib/api";
@@ -13,6 +14,9 @@ export function ImportReviewDialog() {
   const categories = useCategories();
   const [mode, setMode] = useState<ImportMode>("reference");
   const [category, setCategory] = useState("");
+  // Files dropped while a category is open go into it (D-125).
+  const location = useRouterState({ select: (state) => state.location.pathname });
+  const openCategory = location.startsWith("/library/") ? decodeURIComponent(location.slice("/library/".length).split("/")[0]) : null;
   const [remember, setRemember] = useState(false);
   const [busy, setBusy] = useState(false);
   const paths = importer.pending ?? [];
@@ -21,16 +25,18 @@ export function ImportReviewDialog() {
     if (importer.pending) {
       setMode(preferences.importMode === "copy" ? "copy" : "reference");
       setRemember(preferences.importMode !== "ask");
-      setCategory("");
+      setCategory(importer.pendingCategory?.key ?? (categories.data?.some((c) => c.key === openCategory) ? openCategory! : ""));
       setBusy(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importer.pending, preferences.importMode]);
 
   const names = paths.map((path) => path.split(/[\\/]/).filter(Boolean).pop() ?? path);
   const submit = async () => {
     setBusy(true);
     update({ importMode: remember ? mode : "ask" });
-    await importer.start(mode, category || null);
+    if (!category) return;
+    await importer.start(mode, category);
     setBusy(false);
   };
 
@@ -38,14 +44,14 @@ export function ImportReviewDialog() {
     <Dialog
       open={importer.pending !== null}
       onOpenChange={(open) => !open && importer.closeReview()}
-      title="Import into your library"
-      description={`${paths.length === 1 ? "1 item" : `${paths.length} items`} selected: ${names.slice(0, 3).join(", ")}${names.length > 3 ? ` and ${names.length - 3} more` : ""}. Folders are searched for books, comics, videos, music and page images.`}
+      title={importer.pendingCategory ? `Add to ${importer.pendingCategory.name}` : "Import into your library"}
+      description={`${paths.length === 1 ? "1 item" : `${paths.length} items`} selected: ${names.slice(0, 3).join(", ")}${names.length > 3 ? ` and ${names.length - 3} more` : ""}. Only what the category holds is added; anything else is left out.${importer.pendingCategory?.handler === "audio" || categories.data?.find((c) => c.key === category)?.handler === "audio" ? " Videos keep their sound, as MP3s in the library folder; the videos stay as they are." : ""}`}
       footer={
         <>
           <button type="button" className="btn" onClick={importer.closeReview}>
             Cancel
           </button>
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void submit()}>
+          <button type="button" className="btn btn-primary" disabled={busy || !category} onClick={() => void submit()}>
             <Download size={16} /> Import
           </button>
         </>
@@ -70,16 +76,27 @@ export function ImportReviewDialog() {
           </span>
         </label>
       </fieldset>
-      <Field label="Category" hint="Detection uses the file type (and ComicInfo for manga); videos with a year go to Movies & Series, other videos to Videos. A category you pick applies to the files it can hold. You can change it per item later.">
-        <select className="select" value={category} onChange={(event) => setCategory(event.target.value)}>
-          <option value="">Detect automatically</option>
-          {categories.data?.map((c) => (
-            <option key={c.key} value={c.key}>
-              {c.name}
+      {/* Each category takes its own kind of media (D-125): the one it was added from, or one picked here. */}
+      {importer.pendingCategory ? (
+        <p className="import-into">
+          Into <strong>{importer.pendingCategory.name}</strong>
+        </p>
+      ) : (
+        <Field label="Category" hint="What the files are added to. Only what it holds is added (pictures to Pictures, videos to Videos or Movies & Series…).">
+          <select className="select" value={category} onChange={(event) => setCategory(event.target.value)}>
+            <option value="" disabled>
+              Choose a category
             </option>
-          ))}
-        </select>
-      </Field>
+            {categories.data
+              ?.filter((c) => !c.isHidden)
+              .map((c) => (
+                <option key={c.key} value={c.key}>
+                  {c.name}
+                </option>
+              ))}
+          </select>
+        </Field>
+      )}
       <label className="checkbox">
         <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
         Use this choice by default next time
@@ -148,6 +165,7 @@ export function ImportPanel() {
       <div className="stats">
         <span className="chip accent">{job.imported.toLocaleString()} added</span>
         {job.duplicates > 0 && <span className="chip">{job.duplicates.toLocaleString()} already in library</span>}
+        {job.skipped > 0 && <span className="chip">{job.skipped.toLocaleString()} not for this category, left out</span>}
         {job.failed > 0 && <span className="chip warning">{job.failed.toLocaleString()} failed</span>}
       </div>
       {job.errors.length > 0 && (

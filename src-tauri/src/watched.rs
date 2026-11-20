@@ -167,7 +167,7 @@ pub fn look(app: &AppHandle) -> AppResult<usize> {
         }
         handed += fresh.len();
         log::info!("watched folder {folder}: {} new files for {category}", fresh.len());
-        crate::import::start(app.clone(), library.clone(), ImportRequest { paths: fresh, mode: ImportMode::Reference, category: Some(category) })?;
+        crate::import::start(app.clone(), library.clone(), ImportRequest { paths: fresh, mode: ImportMode::Reference, category: Some(category), watched: true })?;
     }
     Ok(handed)
 }

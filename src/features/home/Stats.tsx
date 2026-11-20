@@ -4,6 +4,7 @@ import { AchievementsSummary, ActivityCalendar, YearReview } from "./YearViews";
 import { usePreferences, type Goals } from "../../lib/preferences";
 import { Dialog, Field } from "../../components/common";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { api, type ActivityTime, type LibraryStats } from "../../lib/api";
 import { plural } from "../../lib/format";
 
@@ -107,7 +108,7 @@ const GOAL_ROWS: { key: keyof Goals; label: string; unit: "items" | "hours"; ser
 ];
 
 /** This month's goals (D-052): how far along each one is; set them in a small dialog. */
-function GoalsRow({ stats }: { stats: LibraryStats }) {
+function GoalsRow({ stats, editable = true }: { stats: LibraryStats; editable?: boolean }) {
   const { preferences, update } = usePreferences();
   const goals = preferences.goals;
   const [open, setOpen] = useState(false);
@@ -123,9 +124,12 @@ function GoalsRow({ stats }: { stats: LibraryStats }) {
         <span className="stat-label">
           <Target size={14} aria-hidden /> This month's goals
         </span>
-        <button type="button" className="btn btn-sm" onClick={() => setOpen(true)}>
-          {set.length ? "Change goals" : "Set goals"}
-        </button>
+        {/* Goals are typed in, so they're set outside Big Picture (D-120). */}
+        {editable && (
+          <button type="button" className="btn btn-sm" onClick={() => setOpen(true)}>
+            {set.length ? "Change goals" : "Set goals"}
+          </button>
+        )}
       </div>
       {set.length === 0 ? (
         <p className="stats-none">No goals yet: set how many things to finish, or how many hours to read, watch, listen or play this month.</p>
@@ -197,7 +201,9 @@ function GoalsRow({ stats }: { stats: LibraryStats }) {
 }
 
 /** Home's statistics widget (D-023). */
-export function StatsPanel() {
+/** Statistics; in Big Picture (D-120) its buttons go to Big Picture's own screens. */
+export function StatsPanel({ bigPicture = false }: { bigPicture?: boolean }) {
+  const navigate = useNavigate();
   const stats = useQuery({ queryKey: ["stats"], queryFn: api.stats, staleTime: 60_000 });
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [review, setReview] = useState(false);
@@ -232,12 +238,18 @@ export function StatsPanel() {
           </span>
         </div>
       </div>
-      <GoalsRow stats={s} />
+      <GoalsRow stats={s} editable={!bigPicture} />
       <div className="calendar-row">
         <ActivityCalendar year={year} onYear={setYear} />
-        <button type="button" className="btn year-button" onClick={() => setReview(true)}>
-          <CalendarHeart size={16} /> Your {year}
-        </button>
+        {bigPicture ? (
+          <button type="button" className="bp-button year-button" data-bp-focus onClick={() => void navigate({ to: "/bp", search: { screen: "year", id: year } })}>
+            <CalendarHeart size={22} /> Your {year}
+          </button>
+        ) : (
+          <button type="button" className="btn year-button" onClick={() => setReview(true)}>
+            <CalendarHeart size={16} /> Your {year}
+          </button>
+        )}
       </div>
       <YearReview year={year} open={review} onOpenChange={setReview} />
       <div className="stats-row">
@@ -271,7 +283,7 @@ export function StatsPanel() {
               </ol>
             </section>
           )}
-          <AchievementsSummary />
+          <AchievementsSummary bigPicture={bigPicture} />
           <section>
             <h3>Your library</h3>
             <ul className="stats-categories">

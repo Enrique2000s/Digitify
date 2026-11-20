@@ -5,14 +5,14 @@ import { flushSync } from "react-dom";
 import { motionAllowed } from "../reader/chrome";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Popover } from "radix-ui";
-import { Check, ChevronLeft, ChevronRight, GalleryHorizontalEnd, GripVertical, Heart, LayoutGrid, LayoutList, LibraryBig, List, ListChecks, Paintbrush, Play, Plus, Search, Shuffle } from "lucide-react";
+import { Check, ChevronLeft, Cloud, HardDrive, Layers, ChevronRight, GalleryHorizontalEnd, GripVertical, Heart, LayoutGrid, LayoutList, LibraryBig, List, ListChecks, Paintbrush, Play, Plus, Search, Shuffle } from "lucide-react";
 import { api, type Blurb, type ItemCard, type Ownership, type QueryParams, type SortKey } from "../../lib/api";
 import { itemPath, photoContext } from "../../lib/routes";
 import { GridDragProvider, moved } from "../../lib/gridDrag";
 import { spineColors } from "../../lib/color";
 import { formatLabel } from "../../lib/format";
 import { coverShapeOf, FILMS, SHAPE_ASPECT, useCoverShape, usePreferences, type Layout } from "../../lib/preferences";
-import { useMusic } from "../../lib/music/MusicProvider";
+import { usePlayAndShow } from "../music/playAndShow";
 import { shuffled } from "../music/Tracks";
 import { libraryChanged, useCollections, usePagedItems, type PageCache } from "../../lib/queries";
 import { actionFor, isTyping } from "../../lib/shortcuts";
@@ -824,14 +824,14 @@ const DURATION_SORTS: { value: SortKey; label: string }[] = [
 
 /** Play and Shuffle for a music view's tracks, in the view's order. */
 function PlayAll({ params }: { params: Omit<QueryParams, "offset" | "limit"> }) {
-  const music = useMusic();
+  const playAndShow = usePlayAndShow();
   const [error, setError] = useState<string | null>(null);
   const start = async (mix: boolean) => {
     setError(null);
     try {
       const items = await api.queryIds(params);
       const tracks = (await api.musicTracks({ items })).map((track) => track.id);
-      if (tracks.length) await music.play(mix ? shuffled(tracks) : tracks, 0);
+      if (tracks.length) await playAndShow(mix ? shuffled(tracks) : tracks, 0);
     } catch (reason) {
       setError(String(reason));
     }
@@ -851,10 +851,11 @@ function PlayAll({ params }: { params: Omit<QueryParams, "offset" | "limit"> }) 
 
 /** All, what has files in the library, and (in Music and Videos) what was added from a link and plays online (D-029). */
 type Filter = Ownership | "";
-const OWNERSHIP: { value: Filter; label: string }[] = [
-  { value: "", label: "All" },
-  { value: "digital", label: "Digital" },
-  { value: "online", label: "Online" },
+/** The filter's choices, each with its symbol (D-122): everything, what's on this computer, what plays online. */
+const OWNERSHIP: { value: Filter; label: string; icon: typeof Layers }[] = [
+  { value: "", label: "All", icon: Layers },
+  { value: "digital", label: "Digital", icon: HardDrive },
+  { value: "online", label: "Online", icon: Cloud },
 ];
 
 /** The "Select" toggle; Ctrl+A selects everything and Esc stops selecting. */
@@ -902,7 +903,10 @@ export function LibraryView({
   handler,
   collections,
   empty,
+  back,
 }: {
+  /** A Back above everything, for views opened from another (a smart list, D-138). */
+  back?: ReactNode;
   viewKey: string;
   base: Omit<QueryParams, "offset" | "limit">;
   title: string;
@@ -1068,6 +1072,7 @@ export function LibraryView({
       <GridDragProvider value={cardDrag}>
       <div className={`library-view${selection.active ? " selecting" : ""}${cardDrag ? " arranging-in-place" : ""}`}>
         <div style={{ padding: "16px 40px 0" }}>
+          {back}
           <CategoryStrip
             tools={
               <>
@@ -1118,8 +1123,8 @@ export function LibraryView({
             <div className="header-actions">
               {handler === "audio" && total != null && total > 0 && <PlayAll params={params} />}
               {actions}
-              <AddMenu align="end">
-                <button type="button" className={handler === "audio" ? "btn" : "btn btn-primary"}>
+              <AddMenu align="end" category={base.category ?? null}>
+                <button type="button" className="btn btn-primary">
                   <Plus size={17} strokeWidth={2.6} /> Add
                 </button>
               </AddMenu>
@@ -1132,7 +1137,7 @@ export function LibraryView({
             <div ref={ownershipRef} className="segmented" role="group" aria-label="Ownership">
               {filters.map((option) => (
                 <button key={option.value} type="button" aria-pressed={filter === option.value} onClick={() => setOwnership(option.value)}>
-                  {option.label}
+                  <option.icon size={15} aria-hidden /> {option.label}
                 </button>
               ))}
             </div>

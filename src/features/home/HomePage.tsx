@@ -1,5 +1,5 @@
 import { useState, type ComponentPropsWithoutRef, type CSSProperties, type ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowDown,
   ArrowUp,
@@ -32,6 +32,8 @@ import { HOME_SECTIONS, useCoverShape, usePreferences, type HomeSection } from "
 import { useAmbient } from "../../lib/ambient/AmbientProvider";
 import { useDashboard } from "../../lib/queries";
 import { AddMenu } from "../../components/AddMenu";
+import { photoContext } from "../../lib/routes";
+import { addProgramGame } from "../arcade/shared";
 import { Collage } from "../../components/Collage";
 import { CategoryIcon, Cover } from "../../components/common";
 import { MediaCard } from "../../components/MediaCard";
@@ -286,6 +288,7 @@ function EditBar({
 
 export function HomePage() {
   const dashboard = useDashboard();
+  const navigate = useNavigate();
   const importer = useImporter();
   const relink = useRelink();
   const { preferences, resolvedTheme, update } = usePreferences();
@@ -295,6 +298,8 @@ export function HomePage() {
   const autoBackup = useAutoBackupStatus();
   const reorder = useReorder((from, to) => update((current) => ({ home: { ...current.home, order: arrayMove(current.home.order, from, to) } })));
   const data = dashboard.data;
+  // Items opened from Home step through no list (D-138): only a library view sets one.
+  photoContext.params = null;
   if (!data) return <div className="page" />;
   const dark = resolvedTheme === "dark";
   const hasItems = data.totals.items > 0 || games.count > 0;
@@ -395,8 +400,17 @@ export function HomePage() {
               <LayoutDashboard size={17} strokeWidth={2.4} aria-hidden /> Customize Home
             </button>
           )}
-          <AddMenu align="end">
-            <button type="button" className="round-btn lg" aria-label="Add to library" title="Add to library">
+          {/* Home holds everything (D-125): each category's ways in, and a game for Arcade. */}
+          <AddMenu
+            align="end"
+            onAddGame={() =>
+              void addProgramGame(preferences.arcade.downloadCovers).then(
+                (id) => id != null && void navigate({ to: "/arcade", search: { game: id } }),
+                () => void navigate({ to: "/arcade" }),
+              )
+            }
+          >
+            <button type="button" className="round-btn lg" aria-label="Add" title="Add">
               <Plus size={20} strokeWidth={2.6} />
             </button>
           </AddMenu>
@@ -467,7 +481,7 @@ export function HomePage() {
           <span>
             The automatic backup couldn't be copied to {autoBackup.data.missingFolder}: connect its drive. The backup itself was kept in the library's backups folder.
           </span>
-          <Link to="/settings" className="btn btn-sm" style={{ marginLeft: "auto", flexShrink: 0 }}>
+          <Link to="/settings" search={{ tab: "library" }} className="btn btn-sm" style={{ marginLeft: "auto", flexShrink: 0 }}>
             Settings
           </Link>
         </div>

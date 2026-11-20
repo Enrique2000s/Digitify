@@ -20,10 +20,26 @@ pub enum Store {
     BattleNet,
     Amazon,
     Lutris,
+    Rockstar,
+    Riot,
 }
 
 impl Store {
-    pub const ALL: [Store; 11] = [Store::Steam, Store::Epic, Store::Xbox, Store::Gog, Store::Ubisoft, Store::Ea, Store::BattleNet, Store::Amazon, Store::Itch, Store::Heroic, Store::Lutris];
+    pub const ALL: [Store; 13] = [
+        Store::Steam,
+        Store::Epic,
+        Store::Xbox,
+        Store::Gog,
+        Store::Ubisoft,
+        Store::Ea,
+        Store::BattleNet,
+        Store::Rockstar,
+        Store::Riot,
+        Store::Amazon,
+        Store::Itch,
+        Store::Heroic,
+        Store::Lutris,
+    ];
 
     pub fn key(self) -> &'static str {
         match self {
@@ -38,6 +54,8 @@ impl Store {
             Store::BattleNet => "battlenet",
             Store::Amazon => "amazon",
             Store::Lutris => "lutris",
+            Store::Rockstar => "rockstar",
+            Store::Riot => "riot",
         }
     }
 
@@ -58,6 +76,8 @@ impl Store {
             Store::BattleNet => "Battle.net",
             Store::Amazon => "Amazon Games",
             Store::Lutris => "Lutris",
+            Store::Rockstar => "Rockstar Games Launcher",
+            Store::Riot => "Riot Client",
         }
     }
 
@@ -65,7 +85,7 @@ impl Store {
     pub fn available_here(self) -> bool {
         match self {
             Store::Steam | Store::Itch => true,
-            Store::Epic | Store::Xbox | Store::Gog | Store::Ubisoft | Store::Ea | Store::BattleNet | Store::Amazon => cfg!(windows),
+            Store::Epic | Store::Xbox | Store::Gog | Store::Ubisoft | Store::Ea | Store::BattleNet | Store::Amazon | Store::Rockstar | Store::Riot => cfg!(windows),
             Store::Heroic | Store::Lutris => cfg!(not(windows)),
         }
     }
@@ -114,10 +134,14 @@ pub fn scan_all() -> Vec<StoreScan> {
                 Store::BattleNet => super::launchers::battle_net(&uninstall),
                 #[cfg(windows)]
                 Store::Amazon => super::launchers::amazon(),
+                #[cfg(windows)]
+                Store::Rockstar => super::launchers::rockstar(&uninstall),
+                #[cfg(windows)]
+                Store::Riot => super::launchers::riot(),
                 #[cfg(not(windows))]
                 Store::Lutris => super::launchers::lutris(),
                 #[allow(unreachable_patterns)]
-                Store::Ubisoft | Store::Ea | Store::BattleNet | Store::Amazon | Store::Lutris => (None, Vec::new()),
+                Store::Ubisoft | Store::Ea | Store::BattleNet | Store::Amazon | Store::Lutris | Store::Rockstar | Store::Riot => (None, Vec::new()),
                 Store::Steam => steam(),
                 Store::Epic => epic(),
                 Store::Xbox => xbox(),
@@ -537,17 +561,29 @@ pub fn gog_cover_url(id: &str) -> Option<String> {
 /// A game's Steam app id by its name in Steam's store (D-108), for the box art of a game from
 /// elsewhere: only a game whose name matches exactly (letters and digits, any case).
 pub fn steam_search(title: &str) -> Option<String> {
-    let simple = |s: &str| s.chars().filter(|c| c.is_alphanumeric()).collect::<String>().to_lowercase();
-    let wanted = simple(title);
+    let wanted = simple_name(title);
+    steam_search_all(title).into_iter().find(|(name, _)| simple_name(name) == wanted).map(|(_, id)| id)
+}
+
+fn simple_name(s: &str) -> String {
+    s.chars().filter(|c| c.is_alphanumeric()).collect::<String>().to_lowercase()
+}
+
+/// What Steam's store finds for a name (D-118): each game's name and app id, an exact match first.
+pub fn steam_search_all(title: &str) -> Vec<(String, String)> {
+    let wanted = simple_name(title);
     if wanted.len() < 2 {
-        return None;
+        return Vec::new();
     }
-    let request = crate::online::http::get("https://store.steampowered.com/api/storesearch/").ok()?.query("term", title).query("l", "english").query("cc", "US");
-    let json = crate::online::http::json("Steam", request).ok()?;
-    json.get("items")?.as_array()?.iter().find_map(|item| {
-        let name = item.get("name")?.as_str()?;
-        (simple(name) == wanted).then(|| item.get("id")?.as_i64().map(|id| id.to_string()))?
-    })
+    let Ok(request) = crate::online::http::get("https://store.steampowered.com/api/storesearch/") else { return Vec::new() };
+    let Ok(json) = crate::online::http::json("Steam", request.query("term", title).query("l", "english").query("cc", "US")) else { return Vec::new() };
+    let mut found: Vec<(String, String)> = json
+        .get("items")
+        .and_then(|i| i.as_array())
+        .map(|items| items.iter().filter_map(|item| Some((item.get("name")?.as_str()?.to_string(), item.get("id")?.as_i64()?.to_string()))).collect())
+        .unwrap_or_default();
+    found.sort_by_key(|(name, _)| simple_name(name) != wanted);
+    found
 }
 
 // ---------------------------------------------------------------------------------------------

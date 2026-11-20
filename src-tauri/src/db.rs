@@ -38,6 +38,8 @@ pub const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0025_arcade_consoles.sql"),
     include_str!("../migrations/0026_arcade_cartridges.sql"),
     include_str!("../migrations/0027_arcade_any_emulator.sql"),
+    include_str!("../migrations/0028_arcade_ignored.sql"),
+    include_str!("../migrations/0029_import_history.sql"),
 ];
 
 pub struct Database {

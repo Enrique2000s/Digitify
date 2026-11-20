@@ -9,6 +9,8 @@
     mpv 0.41.0 (official build)  -> src-tauri\binaries\  bundled with the app as a helper program
     FFmpeg 9.0.2 (LGPL build)    -> tools\ffmpeg\         development tools (test media, probing)
     PDFium chromium/7881         -> src-tauri\binaries\  bundled with the app; renders PDF pages (D-013)
+    yt-dlp 2026.10.26            -> tools\yt-dlp\        bundled with the app; downloads from links (D-133)
+    Deno 2.9.8                   -> tools\yt-dlp\        bundled with the app; the JavaScript yt-dlp needs for YouTube
 
   BtbN removes old FFmpeg autobuilds after a while. When the pinned build is gone, the script
   falls back to the newest build of the same release branch (BtbN's permanent "latest" link for
@@ -64,6 +66,31 @@ $deps = @(
         Files      = [ordered]@{
             'bin\pdfium.dll' = 'src-tauri\binaries\pdfium.dll'
             'licenses\*'     = 'src-tauri\binaries\licenses\pdfium\'
+        }
+    },
+    @{
+        # The official build, which carries the JavaScript yt-dlp runs for YouTube (EJS). Settings
+        # can update it later into the config folder (D-133); this is the version the app ships.
+        Name       = 'yt-dlp 2026.10.26 (official Windows build)'
+        Url        = 'https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp.exe'
+        Sha256     = 'f5389d3698ecde4ef06f4e6b1ce0294fe9ac1396228c8990b8d3416d6d177a7d'
+        Raw        = $true
+        Version    = @{ 'tools\yt-dlp\yt-dlp.version' = '2026.10.26' }
+        Marker     = 'tools\yt-dlp\yt-dlp.exe'
+        Files      = [ordered]@{ 'yt-dlp.exe' = 'tools\yt-dlp\yt-dlp.exe' }
+        Licenses   = [ordered]@{
+            'https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.10.26/LICENSE'                  = 'tools\yt-dlp\licenses\yt-dlp-LICENSE.txt'
+            'https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.10.26/THIRD_PARTY_LICENSES.txt' = 'tools\yt-dlp\licenses\yt-dlp-THIRD_PARTY_LICENSES.txt'
+        }
+    },
+    @{
+        Name       = 'Deno 2.9.8 (official x86_64 Windows build)'
+        Url        = 'https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-pc-windows-msvc.zip'
+        Sha256     = 'cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf'
+        Marker     = 'tools\yt-dlp\deno.exe'
+        Files      = [ordered]@{ 'deno.exe' = 'tools\yt-dlp\deno.exe' }
+        Licenses   = [ordered]@{
+            'https://raw.githubusercontent.com/denoland/deno/v2.9.8/LICENSE.md' = 'tools\yt-dlp\licenses\deno-LICENSE.md'
         }
     }
 )
@@ -127,8 +154,16 @@ foreach ($dep in $deps) {
     $staging = Join-Path $cache ('extract-' + [IO.Path]::GetFileNameWithoutExtension($archive))
     if (Test-Path $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
     New-Item -ItemType Directory $staging | Out-Null
-    tar -xf $archive -C $staging
-    if ($LASTEXITCODE -ne 0) { throw "Could not extract $archive" }
+    if ($dep.Raw) {
+        # The download is the program itself, not an archive.
+        Copy-Item -LiteralPath $archive -Destination (Join-Path $staging (Split-Path $dep.Url -Leaf))
+    } else {
+        # Windows' own tar (bsdtar) reads zip files too; another tar earlier in PATH may not.
+        $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
+        if (-not (Test-Path $tar)) { $tar = 'tar' }
+        & $tar -xf $archive -C $staging
+        if ($LASTEXITCODE -ne 0) { throw "Could not extract $archive" }
+    }
     $package = Get-PackageRoot $staging
 
     foreach ($entry in $dep.Files.GetEnumerator()) {
@@ -150,8 +185,21 @@ foreach ($dep in $deps) {
         }
     }
 
+    if ($dep.Licenses) {
+        foreach ($license in $dep.Licenses.GetEnumerator()) {
+            $dest = Join-Path $root $license.Value
+            New-Item -ItemType Directory -Force (Split-Path $dest) | Out-Null
+            Invoke-WebRequest -Uri $license.Key -OutFile $dest -UseBasicParsing
+        }
+    }
+    if ($dep.Version) {
+        foreach ($version in $dep.Version.GetEnumerator()) {
+            [IO.File]::WriteAllText((Join-Path $root $version.Key), $version.Value)
+        }
+    }
+
     $licenses = @(Get-ChildItem -LiteralPath $package -File | Where-Object { $_.Name -match '^(LICENSE|COPYING)' })
-    if ($licenses.Count -gt 0) {
+    if ($licenses.Count -gt 0 -and $dep.LicenseDir) {
         $licenseDir = Join-Path $root $dep.LicenseDir
         New-Item -ItemType Directory -Force $licenseDir | Out-Null
         $licenses | Copy-Item -Destination $licenseDir -Force

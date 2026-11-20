@@ -2,16 +2,17 @@ import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { open as openFile } from "@tauri-apps/plugin-dialog";
 import { DropdownMenu } from "radix-ui";
-import { FolderInput, ImagePlus, ListMusic, Pencil, Plus, Trash } from "lucide-react";
+import { Download, FolderInput, ImagePlus, ListMusic, Pencil, Plus, Trash } from "lucide-react";
 import { api, errorText, type BulkActions, type BulkOp, type CoverShape, type QueryParams } from "../../lib/api";
 import { plural } from "../../lib/format";
-import { libraryChanged, useCategories } from "../../lib/queries";
+import { libraryChanged } from "../../lib/queries";
 import { useSelection } from "../../lib/selection";
 import { Dialog, Field } from "../../components/common";
 import { MoveDialog } from "../organize/dialogs";
 import { NewPlaylistDialog, usePlaylists } from "../music/Tracks";
+import { DownloadDialog } from "../online/DownloadDialog";
 
-type BulkDialog = "move" | "edit" | "cover" | "remove" | null;
+type BulkDialog = "move" | "edit" | "cover" | "remove" | "download" | null;
 
 const SHAPE_LABELS: Record<CoverShape, string> = { square: "Square", disc: "CD", landscape: "Horizontal", poster: "Vertical" };
 
@@ -315,7 +316,6 @@ export function BulkBar({
   itemsShown?: boolean;
 }) {
   const selection = useSelection();
-  const categories = useCategories();
   const [dialog, setDialog] = useState<BulkDialog>(null);
   const [error, setError] = useState<string | null>(null);
   const picked = selection?.active ? [...selection.selected] : [];
@@ -359,7 +359,14 @@ export function BulkBar({
         )}
         <span className="bulk-sep" aria-hidden />
         {fits?.playlist && <PlaylistMenu ids={ids} onError={setError} />}
-        <button type="button" className="btn btn-sm" disabled={nothing} onClick={() => setDialog("move")}>
+        {/* Items stay in their category (D-126): Move puts them in one of its collections, from the category's own view. */}
+        <button
+          type="button"
+          className="btn btn-sm"
+          disabled={nothing || !base.category}
+          title={base.category ? "Into one of this category's collections" : "Open their category to move them into one of its collections"}
+          onClick={() => setDialog("move")}
+        >
           <FolderInput size={15} /> Move…
         </button>
         <button type="button" className="btn btn-sm" disabled={none} onClick={() => setDialog("edit")}>
@@ -368,6 +375,11 @@ export function BulkBar({
         <button type="button" className="btn btn-sm" disabled={none} onClick={() => setDialog("cover")}>
           <ImagePlus size={15} /> Cover…
         </button>
+        {!!fits?.download && (
+          <button type="button" className="btn btn-sm" title="Download the online items among them, to keep and play offline" onClick={() => setDialog("download")}>
+            <Download size={15} /> Download…
+          </button>
+        )}
         <button type="button" className="btn btn-sm btn-danger" disabled={nothing} onClick={() => setDialog("remove")}>
           <Trash size={15} /> Remove…
         </button>
@@ -378,6 +390,7 @@ export function BulkBar({
       </div>
       <EditDialog ids={ids} actions={fits} open={dialog === "edit"} onOpenChange={close} />
       <CoverDialog ids={ids} actions={fits} open={dialog === "cover"} onOpenChange={close} />
+      <DownloadDialog ids={ids} music={!!fits?.coverShapes.includes("square")} open={dialog === "download"} onOpenChange={close} />
       <RemoveDialog ids={ids} collections={collectionIds} open={dialog === "remove"} onOpenChange={close} onRemoved={() => selection.set([])} />
       <MoveDialog
         open={dialog === "move"}
@@ -385,7 +398,7 @@ export function BulkBar({
         ids={ids}
         collections={collectionIds}
         title={`Move ${[ids.length ? plural(ids.length, "item") : null, collectionIds.length ? plural(collectionIds.length, "collection") : null].filter(Boolean).join(" and ")}`}
-        initialCategory={base.category ?? categories.data?.[0]?.key ?? "books"}
+        initialCategory={base.category ?? ""}
         initialCollection={base.collection ?? null}
       />
     </>

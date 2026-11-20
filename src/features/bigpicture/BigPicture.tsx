@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { Award, BookOpen, ChartColumn, ChevronLeft, ChevronRight, Delete, Gamepad2, Heart, House, LibraryBig, LogOut, MousePointer2, Pause, Play, Search, Settings2, SkipBack, SkipForward, Space, X, Eye, Joystick, Music, VolumeOff, Clapperboard } from "lucide-react";
+import { Award, BookOpen, CalendarHeart, ChartColumn, Star, ChevronLeft, ChevronRight, Delete, Gamepad2, Heart, House, LibraryBig, LogOut, MousePointer2, Pause, Play, Search, Settings2, SkipBack, SkipForward, Space, X, Eye, Joystick, Music, VolumeOff, Clapperboard } from "lucide-react";
+import { photoContext, viewList } from "../../lib/routes";
 import { api, type ArcadeGame, type ItemCard } from "../../lib/api";
 import { exitBigPicture, focusFirst, moveFocus, takeIntro } from "../../lib/bigpicture";
 import { ambientEngine } from "../../lib/ambient/engine";
@@ -11,7 +12,9 @@ import { controllerKind, onControllerChange, usePad, useSticks, type PadAction }
 import { Cursor } from "./Cursor";
 import { OnlineScreen } from "./OnlineScreen";
 import { ArcadeScreen, ArcadeTile } from "../arcade/ArcadeScreen";
-import { consoleOf, GameCover, matchingGames, PLATFORM_ASPECT, playTime, useLaunch } from "../arcade/shared";
+import { consoleOf, GameCover, lastPlayed, matchingGames, PLATFORM_ASPECT, playTime, useArcade, useLaunch } from "../arcade/shared";
+import { PlatformLogo } from "../arcade/logos";
+import { AchievementsList, YearReviewBody } from "../home/YearViews";
 import { useHomeGames } from "../home/GameSections";
 import { useAmbient } from "../../lib/ambient/AmbientProvider";
 import { useMusic } from "../../lib/music/MusicProvider";
@@ -22,7 +25,7 @@ import { SourceTag, sourceProps } from "../../components/SourceTag";
 import { libraryChanged, useCategories, useDashboard, useLibraryScope } from "../../lib/queries";
 import { CategoryIcon, Cover } from "../../components/common";
 
-export type BigPictureScreen = "home" | "library" | "item" | "search" | "online" | "arcade" | "music";
+export type BigPictureScreen = "home" | "library" | "item" | "search" | "online" | "arcade" | "music" | "game" | "achievements" | "year";
 export interface BigPictureSearch {
   screen?: BigPictureScreen;
   scope?: string;
@@ -165,17 +168,22 @@ function FeaturedCard({ item }: { item: ItemCard }) {
   );
 }
 
-/** Home's game rows in Big Picture (D-041): A plays a game, as in Arcade. */
+/** Opens a game's own screen in Big Picture (D-120), where it's played from. */
+function useOpenGame() {
+  const navigate = useNavigate();
+  return (game: ArcadeGame) => void navigate({ to: "/bp", search: { screen: "game", id: game.id } });
+}
+
+/** Home's game rows in Big Picture (D-041): A opens a game's screen, as in Arcade (D-120). */
 function GameRowBP({ title, games }: { title: ReactNode; games: ArcadeGame[] }) {
-  const { launch, error } = useLaunch();
+  const open = useOpenGame();
   if (!games.length) return null;
   return (
     <section className="bp-row">
       <h2>{title}</h2>
-      {error && <p className="bp-arcade-note error">{error}</p>}
       <Scroller>
         {games.map((game) => (
-          <ArcadeTile key={game.id} game={game} autofocus={false} height={240} onPlay={() => void launch(game)} />
+          <ArcadeTile key={game.id} game={game} autofocus={false} height={240} onPlay={() => open(game)} />
         ))}
       </Scroller>
     </section>
@@ -184,7 +192,7 @@ function GameRowBP({ title, games }: { title: ReactNode; games: ArcadeGame[] }) 
 
 /** "Up next" in Big Picture (D-050): what comes next, mixed; A opens an item or plays a game. */
 function UpNextBP({ watching, reading, next, games }: { watching: ItemCard[]; reading: ItemCard[]; next: ItemCard[]; games: ArcadeGame[] }) {
-  const { launch } = useLaunch();
+  const open = useOpenGame();
   const lists = [watching.slice(0, 4), reading.slice(0, 4), next.slice(0, 4)];
   const items: ItemCard[] = [];
   const seen = new Set<number>();
@@ -200,23 +208,22 @@ function UpNextBP({ watching, reading, next, games }: { watching: ItemCard[]; re
           <Tile key={`i${item.id}`} item={item} height={240} />
         ))}
         {games.slice(0, 4).map((game) => (
-          <ArcadeTile key={`g${game.id}`} game={game} autofocus={false} height={240} onPlay={() => void launch(game)} />
+          <ArcadeTile key={`g${game.id}`} game={game} autofocus={false} height={240} onPlay={() => open(game)} />
         ))}
       </Scroller>
     </section>
   );
 }
 
-/** "Game of the day" in Big Picture: A plays it. */
+/** "Game of the day" in Big Picture: A opens its screen (D-120). */
 function FeaturedGameBP({ game }: { game: ArcadeGame }) {
-  const { launch, error } = useLaunch();
+  const open = useOpenGame();
   return (
     <section className="bp-row">
       <h2>
         <Gamepad2 size={26} /> Game of the day <span className="section-source">(Arcade)</span>
       </h2>
-      {error && <p className="bp-arcade-note error">{error}</p>}
-      <button type="button" className="bp-featured" data-bp-focus onClick={() => void launch(game)}>
+      <button type="button" className="bp-featured" data-bp-focus onClick={() => open(game)}>
         {game.coverKey && (
           <span className="bp-featured-backdrop" aria-hidden>
             <GameCover game={game} size="cover" />
@@ -228,7 +235,7 @@ function FeaturedGameBP({ game }: { game: ArcadeGame }) {
         <span className="bp-featured-body">
           <strong>{game.title}</strong>
           <span className="bp-featured-sub">{consoleOf(game)}</span>
-          <span className="bp-featured-facts">{game.playSeconds > 0 ? `${playTime(game.playSeconds)} played` : "Not played yet"} · A to play</span>
+          <span className="bp-featured-facts">{game.playSeconds > 0 ? `${playTime(game.playSeconds)} played` : "Not played yet"}</span>
         </span>
       </button>
     </section>
@@ -237,6 +244,8 @@ function FeaturedGameBP({ game }: { game: ArcadeGame }) {
 
 /** Home in Big Picture: the same sections as Home, in the order (and with the ones hidden) set in "Customize Home". */
 function HomeScreen() {
+  // Items opened from Big Picture's Home step through no list (D-145).
+  photoContext.params = null;
   const dashboard = useDashboard();
   const categories = useCategories();
   const navigate = useNavigate();
@@ -306,7 +315,7 @@ function HomeScreen() {
         <h2>
           <ChartColumn size={26} /> <SectionTitle section="stats" />
         </h2>
-        <StatsPanel />
+        <StatsPanel bigPicture />
       </section>
     ),
   };
@@ -330,6 +339,8 @@ function LibraryScreen({ scope }: { scope: string }) {
     queryKey: ["bp-items", scope, sort, limit],
     queryFn: () => api.query({ ...base, sort, custom: sort === "custom" ? scope : null, offset: 0, limit }),
   });
+  // What's opened from here knows its list (D-091, D-145): a song played queues the ones after it.
+  photoContext.params = { ...base, sort, custom: sort === "custom" ? scope : null };
   // Library remembers its section here too (D-075).
   const { update } = usePreferences();
   useEffect(() => {
@@ -379,6 +390,85 @@ function LibraryScreen({ scope }: { scope: string }) {
   );
 }
 
+/**
+ * A game's screen in Big Picture (D-120), as Arcade's panel is in the regular mode: its cover, what
+ * it is and how much it was played, Play, and favorite. A game opens here first, then plays.
+ */
+function GameScreen({ id }: { id: number }) {
+  const queryClient = useQueryClient();
+  const { games, status, starting } = useArcade();
+  const { launch, error } = useLaunch();
+  const game = games.data?.find((g) => g.id === id);
+  if (!game) return games.data ? <p className="bp-empty">That game isn't in Arcade anymore.</p> : null;
+  const running = status.data?.running ?? null;
+  const when = lastPlayed(game.lastPlayedAt);
+  const facts = [
+    game.playSeconds > 0 ? `${playTime(game.playSeconds)} played` : "Not played yet",
+    game.playCount > 0 ? `${game.playCount} ${game.playCount === 1 ? "session" : "sessions"}` : null,
+    when ? `last played ${when}` : null,
+  ].filter(Boolean);
+  const favorite = async () => {
+    await api.arcadeSetFavorite(game.id, !game.isFavorite);
+    void queryClient.invalidateQueries({ queryKey: ["arcade-games"] });
+  };
+  return (
+    <div className="bp-item bp-game">
+      <div className="bp-item-art arcade-bp-art" style={{ ["--a" as string]: PLATFORM_ASPECT[game.platform] }}>
+        <GameCover game={game} size="cover" />
+      </div>
+      <div className="bp-item-body">
+        <h1>{game.title}</h1>
+        <p className="bp-item-sub bp-game-console">
+          <PlatformLogo game={game} />
+          {[consoleOf(game), game.gameId].filter(Boolean).join(" · ")}
+        </p>
+        <p className="bp-item-facts">{facts.join(" · ")}</p>
+        {/* Your review (D-049), as the regular panel shows it (D-121). */}
+        {game.rating != null && (
+          <p className="bp-game-rating" aria-label={`Your rating: ${game.rating} of 5`}>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <Star key={n} size={26} fill={n <= game.rating! ? "currentColor" : "none"} aria-hidden />
+            ))}
+          </p>
+        )}
+        {game.note && <p className="bp-item-description">“{game.note}”</p>}
+        {starting?.id === game.id && running !== game.id && <p className="bp-arcade-note">Starting through {starting.store}…</p>}
+        {running === game.id && <p className="bp-arcade-note">Playing now. Digitify's music is silent until the game closes.</p>}
+        {error && <p className="bp-arcade-note error">{error}</p>}
+        <div className="bp-actions">
+          <button type="button" className="bp-button primary" data-bp-focus data-bp-autofocus disabled={running != null} onClick={() => void launch(game)}>
+            <Play size={26} fill="currentColor" /> {running === game.id ? "Playing…" : "Play"}
+          </button>
+          <button type="button" className="bp-button" data-bp-focus aria-pressed={game.isFavorite} onClick={() => void favorite()}>
+            <Heart size={24} fill={game.isFavorite ? "currentColor" : "none"} /> {game.isFavorite ? "Favorite" : "Add to favorites"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Achievements in Big Picture (D-120): the same list, on Big Picture's screen. */
+function AchievementsScreen() {
+  return (
+    <div className="bp-achievements">
+      <AchievementsList />
+    </div>
+  );
+}
+
+/** "Your year" in Big Picture (D-120). */
+function YearScreen({ year }: { year: number }) {
+  return (
+    <div className="bp-year year-review viz-root">
+      <h2 className="year-title">
+        <CalendarHeart size={26} aria-hidden /> Your {year} in Digitify
+      </h2>
+      <YearReviewBody year={year} />
+    </div>
+  );
+}
+
 function ItemScreen({ id }: { id: number }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -398,6 +488,14 @@ function ItemScreen({ id }: { id: number }) {
   const favorite = async () => {
     await api.itemSetFavorite(id, !data.isFavorite);
     libraryChanged(queryClient);
+  };
+  // The songs after it in the list it was opened from play next (D-091), as in the regular app.
+  const playSong = async () => {
+    const items = await viewList(id, "audio").catch(() => null);
+    const tracks = items ? await api.musicTracks({ items }).catch(() => []) : [];
+    const at = tracks.findIndex((t) => t.id === ids[0]);
+    await (at >= 0 ? music.play(tracks.map((t) => t.id), at) : music.play(ids, 0));
+    void navigate({ to: "/bp", search: { screen: "music" } });
   };
   return (
     <div className="bp-item">
@@ -431,7 +529,7 @@ function ItemScreen({ id }: { id: number }) {
             </button>
           )}
           {data.handler === "audio" && ids.length > 0 && (
-            <button type="button" className="bp-button primary" data-bp-focus data-bp-autofocus onClick={() => void music.play(ids, 0).then(() => navigate({ to: "/bp", search: { screen: "music" } }))}>
+            <button type="button" className="bp-button primary" data-bp-focus data-bp-autofocus onClick={() => void playSong()}>
               <Play size={26} /> {music.current?.id === ids[0] && !music.paused ? "Playing" : "Play"}
             </button>
           )}
@@ -503,10 +601,11 @@ function SearchScreen() {
     return () => window.clearTimeout(timer);
   }, [text]);
   const results = useQuery({ queryKey: ["bp-search", query], queryFn: () => api.query({ search: query, offset: 0, limit: 60 }), enabled: !!query });
+  photoContext.params = query ? { search: query } : null;
   // Arcade's games are found too (D-105), after the media.
   const games = useQuery({ queryKey: ["arcade-games"], queryFn: api.arcadeGames });
   const found = useMemo(() => matchingGames(games.data, query), [games.data, query]);
-  const { launch } = useLaunch();
+  const open = useOpenGame();
   return (
     <div className="bp-search">
       <div className="bp-search-box">
@@ -518,7 +617,7 @@ function SearchScreen() {
         {/* The library's media, then Arcade's games, as the search screen shows them (D-114). */}
         {results.data?.items.map((item) => <Tile key={item.id} item={item} height={270} />)}
         {found.map((game) => (
-          <ArcadeTile key={`game:${game.id}`} game={game} autofocus={false} onPlay={() => void launch(game)} />
+          <ArcadeTile key={`game:${game.id}`} game={game} autofocus={false} onPlay={() => open(game)} />
         ))}
       </div>
       {query && results.data?.total === 0 && found.length === 0 && <p className="bp-empty">No matches for “{query}”.</p>}
@@ -618,7 +717,7 @@ function NowPlaying() {
       {/* The cover and title open Now playing (D-072). */}
       <button type="button" className="bp-now-open" data-bp-focus aria-label="Open Now playing" onClick={() => void navigate({ to: "/bp", search: { screen: "music" } })}>
         <span className="bp-now-art">
-          <Cover item={{ title: music.current.title, coverKey: music.current.coverKey, handler: "audio" }} />
+          <Cover item={{ title: music.current.title, coverKey: music.current.coverKey, handler: "audio" }} iconOnly />
         </span>
         <span className="bp-now-text">
           <strong>{music.current.title}</strong>
@@ -790,7 +889,7 @@ export function BigPicturePage() {
       {icon} {label}
     </button>
   );
-  const title = useMemo(() => ({ home: "Home", library: "Library", item: "", search: "Search", online: "", arcade: "Arcade", music: "" })[screen], [screen]);
+  const title = useMemo(() => ({ home: "Home", library: "Library", item: "", search: "Search", online: "", arcade: "Arcade", music: "", game: "", achievements: "", year: "" })[screen], [screen]);
 
   return (
     <div ref={shell} className={`bp${cursor ? " bp-cursor-mode" : ""}${arrived ? " after-intro" : ""}`}>
@@ -833,6 +932,9 @@ export function BigPicturePage() {
         {screen === "online" && search.id != null && <OnlineScreen id={search.id} />}
         {screen === "arcade" && <ArcadeScreen />}
         {screen === "music" && <NowPlayingScreen />}
+        {screen === "game" && search.id != null && <GameScreen id={search.id} />}
+        {screen === "achievements" && <AchievementsScreen />}
+        {screen === "year" && <YearScreen year={search.id ?? new Date().getFullYear()} />}
       </main>
       <footer className="bp-hints">
         <span>
@@ -855,14 +957,9 @@ export function BigPicturePage() {
           </span>
         )}
         {screen === "arcade" && (
-          <>
-            <span>
-              <b>{buttons.a}</b> Play
-            </span>
-            <span>
-              <b>LB</b> <b>RB</b> Consoles
-            </span>
-          </>
+          <span>
+            <b>LB</b> <b>RB</b> Consoles
+          </span>
         )}
         {screen === "music" && (
           <>

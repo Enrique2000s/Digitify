@@ -1120,9 +1120,10 @@ dependencies = [
 
 [[package]]
 name = "digitify"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "blake3",
+ "flate2",
  "gdkx11",
  "gtk",
  "image",

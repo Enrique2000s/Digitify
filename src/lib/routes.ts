@@ -15,10 +15,11 @@ export const photoContext: { params: Omit<QueryParams, "offset" | "limit"> | nul
 
 /**
  * The items of `handler` in the view something was opened from, in its order, when `id` is among
- * them (D-091); otherwise null.
+ * them (D-091); otherwise null. `withFiles` leaves out online items, which no player here plays
+ * (D-140).
  */
-export async function viewList(id: number, handler: Handler): Promise<number[] | null> {
+export async function viewList(id: number, handler: Handler, withFiles = false): Promise<number[] | null> {
   if (!photoContext.params) return null;
-  const ids = await api.queryIds({ ...photoContext.params, handler });
+  const ids = await api.queryIds({ ...photoContext.params, handler, ...(withFiles ? { ownership: "digital" as const } : {}) });
   return ids.includes(id) ? ids : null;
 }

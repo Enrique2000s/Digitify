@@ -10,10 +10,13 @@
 //! Dolphin's own cover cache, a picture the user picks, or — when allowed — GameTDB, by the disc's
 //! ID (the one online exception here, like Import from URL, D-028).
 
+mod artsources;
 mod detect;
 mod games;
+mod icons;
 mod launchers;
 mod retroarch;
+mod sgdb;
 mod stores;
 
 use std::collections::{HashMap, HashSet};
@@ -42,6 +45,8 @@ pub struct ArcadeState {
     /// A store game Digitify asked its launcher to start and is waiting to see (D-037), so the
     /// watch for games started elsewhere (D-083) leaves it to that launch.
     starting: Mutex<Option<i64>>,
+    /// The covers found for a game to choose from (D-118), by its id, until one is chosen.
+    choices: Mutex<HashMap<i64, Vec<(String, Vec<u8>)>>>,
 }
 
 #[derive(Clone, Copy)]
@@ -69,6 +74,10 @@ pub struct EmulatorStatus {
     pub custom_folders: bool,
     /// The game folders set up in it.
     pub folders: Vec<FolderStatus>,
+    /// The user said not to use it (D-117).
+    pub ignored: bool,
+    /// Its own icon, from its program on this computer, as a data URL (D-123).
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -125,6 +134,31 @@ fn picked_paths(library: &Library) -> AppResult<HashMap<String, PathBuf>> {
     })
 }
 
+/// The emulators the user said not to use (D-117), even where they're installed.
+fn ignored_emulators(library: &Library) -> AppResult<HashSet<String>> {
+    library.db.with(|conn| {
+        let rows = conn.prepare("SELECT kind FROM arcade_emulators WHERE ignored = 1")?.query_map([], |row| row.get::<_, String>(0))?.collect::<Result<_, _>>()?;
+        Ok(rows)
+    })
+}
+
+/// Stops using an emulator Arcade found (D-117), or uses it again: an ignored one isn't looked for,
+/// its folders aren't searched and no game starts in it, until it's used again.
+#[tauri::command]
+pub async fn arcade_ignore_emulator(state: State<'_, AppState>, emulator: String, ignored: bool) -> AppResult<()> {
+    let emulator = Emulator::parse(&emulator).ok_or_else(|| AppError::msg("unknown emulator"))?;
+    with_library(&state, move |library| {
+        library.db.with(|conn| {
+            conn.execute(
+                "INSERT INTO arcade_emulators (kind, ignored) VALUES (?1, ?2) ON CONFLICT(kind) DO UPDATE SET ignored = excluded.ignored",
+                params![emulator.key(), ignored],
+            )?;
+            Ok(())
+        })
+    })
+    .await
+}
+
 /// Game folders set in Arcade for an emulator (D-035), replacing the ones in its settings; `None`
 /// when it uses its own.
 fn custom_folders(library: &Library, emulator: Emulator) -> AppResult<Option<Vec<(PathBuf, bool)>>> {
@@ -148,11 +182,13 @@ fn custom_folders(library: &Library, emulator: Emulator) -> AppResult<Option<Vec
 /// Arcade's own.
 fn found_emulators(library: &Library) -> AppResult<Vec<(Emulator, Option<Found>, bool, bool)>> {
     let picked = picked_paths(library)?;
+    let ignored = ignored_emulators(library)?;
     Emulator::ALL
         .into_iter()
         .map(|emulator| {
             let hand = picked.get(emulator.key());
-            let mut found = detect::find(emulator, hand.map(PathBuf::as_path));
+            // One the user said not to use isn't looked for (D-117).
+            let mut found = if ignored.contains(emulator.key()) { None } else { detect::find(emulator, hand.map(PathBuf::as_path)) };
             let custom = custom_folders(library, emulator)?;
             if let (Some(found), Some(folders)) = (found.as_mut(), custom.as_ref()) {
                 found.folders = folders.clone();
@@ -190,7 +226,14 @@ const PLAYS: &[(Platform, &[Emulator])] = {
         (Platform::GameGear, &[Mesen, Fusion, Ares]),
         (Platform::Genesis, &[Fusion, Ares]),
         (Platform::SegaCd, &[Fusion, Ares]),
-        (Platform::Dreamcast, &[NullDc]),
+        (Platform::Dreamcast, &[Flycast, NullDc]),
+        // D-116.
+        (Platform::Psp, &[Ppsspp]),
+        (Platform::N3ds, &[Azahar]),
+        (Platform::WiiU, &[Cemu]),
+        (Platform::Xbox, &[Xemu]),
+        (Platform::Xbox360, &[Xenia]),
+        (Platform::Switch, &[Ryujinx]),
     ]
 };
 
@@ -211,7 +254,8 @@ fn looking_for(emulator: Emulator) -> Option<Looking> {
         Emulator::Pcsx2 => Some(Platform::Ps2),
         Emulator::Fceux | Emulator::Nestopia => Some(Platform::Nes),
         Emulator::Fusion => Some(Platform::SegaCd),
-        Emulator::NullDc => Some(Platform::Dreamcast),
+        Emulator::NullDc | Emulator::Flycast => Some(Platform::Dreamcast),
+        Emulator::Ppsspp => Some(Platform::Psp),
         _ => None,
     };
     Some(Looking { platforms, hint })
@@ -228,12 +272,19 @@ fn user_folders(library: &Library) -> AppResult<Vec<(i64, PathBuf, bool)>> {
 }
 
 #[tauri::command]
-pub async fn arcade_status(state: State<'_, AppState>, arcade: State<'_, ArcadeState>) -> AppResult<ArcadeStatus> {
+pub async fn arcade_status(app: AppHandle, state: State<'_, AppState>, arcade: State<'_, ArcadeState>) -> AppResult<ArcadeStatus> {
     let running = arcade.running.lock().ok().and_then(|r| r.map(|r| r.game));
+    let cache = crate::config::config_dir(&app)?.join("cache").join("emulator-icons");
     with_library(&state, move |library| {
-        let emulators = found_emulators(library)?
+        let ignored = ignored_emulators(library)?;
+        let found = found_emulators(library)?;
+        let programs: Vec<(Emulator, Program)> = found.iter().filter_map(|(e, f, _, _)| f.as_ref().map(|f| (*e, f.program.clone()))).collect();
+        let icons = icons::icons(&programs, &cache);
+        let emulators = found
             .into_iter()
             .map(|(emulator, found, picked, custom)| EmulatorStatus {
+                ignored: ignored.contains(emulator.key()),
+                icon: icons.get(emulator.key()).cloned(),
                 key: emulator.key(),
                 name: emulator.name(),
                 platforms: platforms_of(emulator),
@@ -283,7 +334,7 @@ pub async fn arcade_set_emulator(state: State<'_, AppState>, emulator: String, p
     with_library(&state, move |library| {
         library.db.with(|conn| {
             conn.execute(
-                "INSERT INTO arcade_emulators (kind, path) VALUES (?1, ?2) ON CONFLICT(kind) DO UPDATE SET path = excluded.path",
+                "INSERT INTO arcade_emulators (kind, path, ignored) VALUES (?1, ?2, 0) ON CONFLICT(kind) DO UPDATE SET path = excluded.path, ignored = 0",
                 params![emulator.key(), path],
             )?;
             Ok(())
@@ -394,11 +445,15 @@ impl Looking {
     /// How deep to look: PlayStation 3 games are folders whose PARAM.SFO is two levels down.
     fn depth(&self, recursive: bool) -> usize {
         if self.platforms == [Platform::Ps3] {
-            3
-        } else if recursive {
-            12
+            return 3;
+        }
+        let base = if recursive { 12 } else { 1 };
+        // Games kept as folders (a Wii U game's code/*.rpx, an Xbox 360 game's default.xex) sit a
+        // few levels down even in a folder searched alone.
+        if self.platforms.iter().any(|p| matches!(p, Platform::WiiU | Platform::Xbox360)) {
+            base.max(3)
         } else {
-            1
+            base
         }
     }
 }
@@ -594,6 +649,8 @@ fn store_art_now() -> StoreArt {
 }
 
 fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], local: &LocalArt, download: bool, store_art: Option<StoreArt>) -> AppResult<usize> {
+    let sgdb_key = steamgriddb_key(app);
+    let launchbox = art_cache(app).map(|c| artsources::launchbox_db_path(&c)).filter(|db| db.is_file());
     type Row = (i64, Option<String>, String, String, String, Option<String>, Option<String>, Option<String>);
     let games: Vec<Row> = library.db.with(|conn| {
         let mut stmt = conn.prepare("SELECT id, game_id, platform, path, title, store, store_key, system FROM arcade_games WHERE id = ?1")?;
@@ -630,6 +687,17 @@ fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], 
                 if store.as_deref() != Some("steam") {
                     urls.push(format!("steam-search:{title}"));
                 }
+                // LaunchBox, when its database is here, and the Microsoft Store (D-131).
+                if launchbox.is_some() {
+                    urls.push(format!("lb:pc|{title}"));
+                }
+                if store.as_deref() != Some("steam") {
+                    urls.push(format!("ms:{title}"));
+                }
+                // Then SteamGridDB, by name, with the user's key (D-128).
+                if sgdb_key.is_some() {
+                    urls.push(format!("sgdb:{title}"));
+                }
                 if !urls.is_empty() {
                     queue.push((id, urls));
                 }
@@ -663,12 +731,22 @@ fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], 
             continue;
         }
         let mut urls = Vec::new();
-        if let Some(game_id) = game_id.filter(|_| platform == Platform::GameCube.key() || platform == Platform::Wii.key()) {
-            urls.extend(games::cover_regions(&game_id).into_iter().map(|region| format!("https://art.gametdb.com/wii/cover/{region}/{game_id}.png")));
+        urls.extend(gametdb_urls(&platform, game_id.as_deref()));
+        // LaunchBox by name, on this console (D-131).
+        if launchbox.is_some() && !artsources::launchbox_platforms(&platform).is_empty() {
+            urls.push(format!("lb:{platform}|{title}"));
         }
         let libretro = system.as_deref().map(retroarch::libretro_system).or_else(|| games::libretro_system(&platform).map(str::to_string));
         if let Some(collection) = libretro {
             urls.extend(names.iter().map(|name| games::libretro_url(&collection, name)));
+        }
+        // The Microsoft Store for Xbox games (D-131).
+        if platform == "ogxbox" || platform == "x360" {
+            urls.push(format!("ms:{title}"));
+        }
+        // SteamGridDB by the game's name (D-128): not only the IDs GameTDB knows.
+        if sgdb_key.is_some() {
+            urls.push(format!("sgdb:{title}"));
         }
         urls.extend(icon.map(|p| format!("file:{}", p.display())));
         if !urls.is_empty() {
@@ -696,6 +774,22 @@ fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], 
                             Some(found) => found,
                             None => continue,
                         }
+                    } else if let Some(rest) = url.strip_prefix("lb:") {
+                        let (platform, title) = rest.split_once('|').unwrap_or(("", rest));
+                        match launchbox.as_deref().and_then(|db| artsources::launchbox_covers(db, title, artsources::launchbox_platforms(platform), 1).into_iter().next()) {
+                            Some((_, found)) => found,
+                            None => continue,
+                        }
+                    } else if let Some(title) = url.strip_prefix("ms:") {
+                        match artsources::msstore_covers(title, 1).into_iter().next() {
+                            Some((_, found)) => found,
+                            None => continue,
+                        }
+                    } else if let Some(title) = url.strip_prefix("sgdb:") {
+                        match sgdb_key.as_deref().and_then(|key| sgdb::first_for(key, title)) {
+                            Some(found) => found,
+                            None => continue,
+                        }
                     } else if let Some(title) = url.strip_prefix("steam-search:") {
                         let urls = stores::steam_search(title).map(|game| stores::steam_cover_urls(&game)).unwrap_or_default();
                         if urls.iter().any(|u| crate::online::http::image(u).is_some_and(|bytes| set_cover(&library, id, &bytes, "steam").is_ok())) {
@@ -706,7 +800,13 @@ fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], 
                     } else {
                         url
                     };
-                    let source = if url.contains("gametdb") {
+                    let source = if url.contains("steamgriddb") {
+                        "steamgriddb"
+                    } else if url.contains("launchbox") {
+                        "launchbox"
+                    } else if url.contains("store-images.s-microsoft") {
+                        "msstore"
+                    } else if url.contains("gametdb") {
                         "gametdb"
                     } else if url.contains("libretro") {
                         "libretro"
@@ -728,6 +828,272 @@ fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], 
         });
     }
     Ok(queued)
+}
+
+/// Where Arcade keeps what it downloads to search (LaunchBox's index, D-131).
+fn art_cache(app: &AppHandle) -> Option<PathBuf> {
+    crate::config::config_dir(app).ok().map(|d| d.join("cache"))
+}
+
+/// LaunchBox's index: when it was downloaded and how many games it knows, if it's here (D-131).
+#[tauri::command]
+pub fn arcade_launchbox_status(app: AppHandle) -> Option<artsources::LaunchBoxStatus> {
+    art_cache(&app).and_then(|c| artsources::status(&c))
+}
+
+/// Downloads LaunchBox's database (about 110 MB) and indexes it, replacing the one here (D-131).
+#[tauri::command]
+pub async fn arcade_launchbox_download(app: AppHandle) -> AppResult<artsources::LaunchBoxStatus> {
+    let cache = art_cache(&app).ok_or_else(|| AppError::msg("Digitify's settings folder isn't available."))?;
+    crate::library::blocking(move || artsources::download(&cache)).await
+}
+
+/// Removes LaunchBox's index from this computer (D-131).
+#[tauri::command]
+pub fn arcade_launchbox_remove(app: AppHandle) -> AppResult<()> {
+    if let Some(cache) = art_cache(&app) {
+        let db = artsources::launchbox_db_path(&cache);
+        if db.is_file() {
+            std::fs::remove_file(db)?;
+        }
+    }
+    Ok(())
+}
+
+/// The user's SteamGridDB key, if they gave one (D-128).
+fn steamgriddb_key(app: &AppHandle) -> Option<String> {
+    app.try_state::<AppState>().and_then(|state| state.config.get().steamgriddb_key).filter(|k| !k.trim().is_empty())
+}
+
+/// Whether a SteamGridDB key is set (D-128).
+#[tauri::command]
+pub fn arcade_steamgriddb_status(app: AppHandle) -> bool {
+    steamgriddb_key(&app).is_some()
+}
+
+/// Opens SteamGridDB's page where an account's API key is made (D-128), in the browser.
+#[tauri::command]
+pub fn arcade_steamgriddb_open() -> AppResult<()> {
+    crate::tools::open_link("https://www.steamgriddb.com/profile/preferences/api").map_err(|e| AppError::msg(format!("Couldn't open the browser: {e}")))
+}
+
+/// Sets the user's SteamGridDB key after checking that SteamGridDB answers with it; `None` removes it.
+#[tauri::command]
+pub async fn arcade_steamgriddb_set(state: State<'_, AppState>, key: Option<String>) -> AppResult<()> {
+    let key = key.map(|k| k.trim().to_string()).filter(|k| !k.is_empty());
+    if let Some(key) = key.clone() {
+        let works = crate::library::blocking(move || Ok(sgdb::key_works(&key))).await?;
+        if !works {
+            return Err(AppError::msg("SteamGridDB didn't accept that key. Check it in your SteamGridDB preferences (API)."));
+        }
+    }
+    state.config.update(|config| config.steamgriddb_key = key)?;
+    Ok(())
+}
+
+/// GameTDB's box art for a game by its ID: GameCube and Wii, 3DS and Wii U (D-116).
+fn gametdb_urls(platform: &str, game_id: Option<&str>) -> Vec<String> {
+    let Some(id) = game_id else { return Vec::new() };
+    let (folder, kinds): (&str, &[&str]) = match platform {
+        "gamecube" | "wii" => ("wii", &["png"]),
+        "3ds" => ("3ds", &["jpg", "png"]),
+        "wiiu" => ("wiiu", &["jpg", "png"]),
+        _ => return Vec::new(),
+    };
+    games::cover_regions(id).into_iter().flat_map(|region| kinds.iter().map(move |kind| format!("https://art.gametdb.com/{folder}/cover/{region}/{id}.{kind}"))).collect()
+}
+
+/// Where a cover to choose from comes from.
+enum CoverSource {
+    File(PathBuf),
+    Url(String),
+}
+
+/// Every cover Arcade can find for a game (D-118), for the user to choose among: what's on this
+/// computer (the launcher's, Dolphin's, RetroArch's, a PlayStation 3 game's icon), then online
+/// (GameTDB, libretro-thumbnails, the stores; Steam's store by name, a few close matches).
+fn cover_sources(library: &Library, id: i64, sgdb_key: Option<&str>, launchbox: Option<&Path>) -> AppResult<Vec<(String, CoverSource)>> {
+    type Row = (Option<String>, String, String, String, Option<String>, Option<String>, Option<String>);
+    let (game_id, platform, path, title, store, store_key, system): Row = library
+        .db
+        .with(|conn| {
+            Ok(conn.query_row("SELECT game_id, platform, path, title, store, store_key, system FROM arcade_games WHERE id = ?1", [id], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?))
+            })?)
+        })?;
+    let mut out: Vec<(String, CoverSource)> = Vec::new();
+    if platform == "pc" {
+        let art = store_art_now().get(&path).cloned().unwrap_or_default();
+        out.extend(art.0.map(|p| ("Its launcher".to_string(), CoverSource::File(p))));
+        out.extend(art.1.map(|u| ("Its launcher".to_string(), CoverSource::Url(u))));
+        match (store.as_deref(), store_key.as_deref()) {
+            (Some("steam"), Some(app)) => out.extend(stores::steam_cover_urls(app).into_iter().map(|u| ("Steam".to_string(), CoverSource::Url(u)))),
+            (Some("gog"), Some(game)) => out.extend(stores::gog_cover_url(game).map(|u| ("GOG".to_string(), CoverSource::Url(u)))),
+            _ => {}
+        }
+        if store.as_deref() != Some("steam") {
+            for (name, app) in stores::steam_search_all(&title).into_iter().take(3) {
+                out.extend(stores::steam_cover_urls(&app).into_iter().take(2).map(|u| (format!("Steam · {name}"), CoverSource::Url(u))));
+            }
+        }
+        // LaunchBox and the Microsoft Store, by name (D-131).
+        if let Some(db) = launchbox {
+            out.extend(artsources::launchbox_covers(db, &title, artsources::launchbox_platforms("pc"), 4).into_iter().map(|(label, u)| (label, CoverSource::Url(u))));
+        }
+        out.extend(artsources::msstore_covers(&title, 3).into_iter().map(|(label, u)| (label, CoverSource::Url(u))));
+        if let Some(key) = sgdb_key {
+            match (store.as_deref(), store_key.as_deref()) {
+                (Some("steam"), Some(app)) => out.extend(sgdb::steam_grids(key, app, 6).into_iter().map(|u| ("SteamGridDB".to_string(), CoverSource::Url(u)))),
+                _ => out.extend(sgdb_by_name(key, &title)),
+            }
+        }
+        return Ok(out);
+    }
+    let emulators = found_emulators(library)?;
+    let local = local_art(&emulators);
+    if let (Some(game), Some(dir)) = (game_id.as_deref(), local.dolphin.as_ref()) {
+        out.push(("Dolphin".to_string(), CoverSource::File(dir.join(format!("{game}.png")))));
+    }
+    let stem = games::title_from_name(Path::new(path.rsplit('#').next().unwrap_or(&path)));
+    let names = games::libretro_names(&stem, &title);
+    let collection = system.clone().map(|s| retroarch::libretro_system(&s)).or_else(|| games::libretro_system(&platform).map(str::to_string));
+    if let Some(thumbnails) = local.retroarch.as_deref() {
+        let folder = system.clone().or_else(|| collection.as_ref().map(|c| c.replace('_', " ")));
+        if let Some(folder) = folder {
+            let mut wanted = vec![title.clone()];
+            wanted.extend(names.iter().cloned());
+            out.extend(retroarch::thumbnail(thumbnails, &folder, &wanted).map(|p| ("RetroArch".to_string(), CoverSource::File(p))));
+        }
+    }
+    if platform == Platform::Ps3.key() {
+        out.extend(games::ps3_icon(Path::new(&path)).map(|p| ("The game's icon".to_string(), CoverSource::File(p))));
+    }
+    out.extend(gametdb_urls(&platform, game_id.as_deref()).into_iter().map(|u| ("GameTDB".to_string(), CoverSource::Url(u))));
+    if let Some(collection) = collection {
+        out.extend(names.iter().map(|name| ("libretro".to_string(), CoverSource::Url(games::libretro_url(&collection, name)))));
+    }
+    // By the game's name too, not only its ID (D-128, D-131): LaunchBox, Nintendo's store, the
+    // Microsoft Store, SteamGridDB.
+    if let Some(db) = launchbox {
+        out.extend(artsources::launchbox_covers(db, &title, artsources::launchbox_platforms(&platform), 6).into_iter().map(|(label, u)| (label, CoverSource::Url(u))));
+    }
+    out.extend(artsources::eshop_covers(&platform, &title, 3).into_iter().map(|(label, u)| (label, CoverSource::Url(u))));
+    if platform == "ogxbox" || platform == "x360" {
+        out.extend(artsources::msstore_covers(&title, 3).into_iter().map(|(label, u)| (label, CoverSource::Url(u))));
+    }
+    if let Some(key) = sgdb_key {
+        out.extend(sgdb_by_name(key, &title));
+    }
+    Ok(out)
+}
+
+/// SteamGridDB's box art for the games it finds by a name: the two closest, a few each.
+fn sgdb_by_name(key: &str, title: &str) -> Vec<(String, CoverSource)> {
+    sgdb::search(key, title)
+        .into_iter()
+        .take(2)
+        .flat_map(|(game, name)| sgdb::game_grids(key, game, 4).into_iter().map(move |u| (format!("SteamGridDB · {name}"), CoverSource::Url(u))))
+        .collect()
+}
+
+/// A cover to choose from, as the panel shows it: a small picture and where it's from.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoverChoice {
+    pub index: usize,
+    pub source: String,
+    /// A small JPEG of it, as a data URL.
+    pub preview: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+fn base64(bytes: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        for i in 0..4 {
+            if i <= chunk.len() {
+                out.push(TABLE[(n >> (18 - 6 * i) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+/// Looks for every cover of a game (D-118) and keeps them to choose from: each found once (the
+/// same picture from two places counts once), at most a dozen. Online, as asked for by the click.
+#[tauri::command]
+pub async fn arcade_cover_choices(app: AppHandle, state: State<'_, AppState>, arcade: State<'_, ArcadeState>, id: i64) -> AppResult<Vec<CoverChoice>> {
+    let library = state.library()?;
+    let key = state.config.get().steamgriddb_key.filter(|k| !k.trim().is_empty());
+    let launchbox = art_cache(&app).map(|c| artsources::launchbox_db_path(&c)).filter(|db| db.is_file());
+    let found: Vec<(String, Vec<u8>)> = crate::library::blocking(move || {
+        let sources = cover_sources(&library, id, key.as_deref(), launchbox.as_deref())?;
+        let fetched: Vec<Option<(String, Vec<u8>)>> = std::thread::scope(|scope| {
+            let handles: Vec<_> = sources
+                .into_iter()
+                .take(40)
+                .map(|(source, from)| {
+                    scope.spawn(move || {
+                        let bytes = match from {
+                            CoverSource::File(path) => std::fs::read(path).ok(),
+                            CoverSource::Url(url) => crate::online::http::image(&url),
+                        }?;
+                        Some((source, bytes))
+                    })
+                })
+                .collect();
+            handles.into_iter().map(|h| h.join().ok().flatten()).collect()
+        });
+        let mut seen = HashSet::new();
+        Ok(fetched.into_iter().flatten().filter(|(_, bytes)| seen.insert(blake3::hash(bytes))).take(12).collect())
+    })
+    .await?;
+    let mut choices = Vec::new();
+    let mut kept = Vec::new();
+    for (source, bytes) in found {
+        let Ok(picture) = image::load_from_memory(&bytes) else { continue };
+        let (width, height) = (picture.width(), picture.height());
+        let small = picture.thumbnail(320, 320).to_rgb8();
+        let mut jpeg = Vec::new();
+        if image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 82).encode_image(&small).is_err() {
+            continue;
+        }
+        choices.push(CoverChoice { index: kept.len(), source: source.clone(), preview: format!("data:image/jpeg;base64,{}", base64(&jpeg)), width, height });
+        kept.push((source, bytes));
+    }
+    if let Ok(mut all) = arcade.choices.lock() {
+        all.insert(id, kept);
+    }
+    Ok(choices)
+}
+
+/// Uses one of the covers found for a game (D-118) as its cover.
+#[tauri::command]
+pub async fn arcade_choose_cover(app: AppHandle, state: State<'_, AppState>, arcade: State<'_, ArcadeState>, id: i64, index: usize) -> AppResult<()> {
+    let chosen = arcade.choices.lock().ok().and_then(|mut all| all.remove(&id)).and_then(|mut list| (index < list.len()).then(|| list.swap_remove(index)));
+    let (source, bytes) = chosen.ok_or_else(|| AppError::msg("Those covers aren't there anymore; look for them again."))?;
+    let source = match source.as_str() {
+        "GameTDB" => "gametdb",
+        "libretro" => "libretro",
+        "RetroArch" => "retroarch",
+        "Dolphin" => "dolphin",
+        "GOG" => "gog",
+        s if s.starts_with("SteamGridDB") => "steamgriddb",
+        s if s.starts_with("LaunchBox") => "launchbox",
+        s if s.starts_with("Nintendo eShop") => "eshop",
+        s if s.starts_with("Microsoft Store") => "msstore",
+        s if s.starts_with("Steam") => "steam",
+        _ => "store",
+    };
+    with_library(&state, move |library| set_cover(library, id, &bytes, source)).await?;
+    let _ = app.emit("arcade-changed", ());
+    Ok(())
 }
 
 fn set_cover(library: &Library, id: i64, bytes: &[u8], source: &str) -> AppResult<()> {
@@ -1130,7 +1496,8 @@ pub async fn arcade_launch(
         return launch_store_game(app, library, id, name, &launch, install_dir.map(PathBuf::from), mode);
     }
     let file = retroarch::file_of(&path);
-    let there = if platform == Platform::Ps3.key() { file.is_dir() } else { file.is_file() };
+    // A game kept as a folder (PlayStation 3, Wii U, Xbox 360) is its folder.
+    let there = file.exists();
     if !there {
         return Err(AppError::msg("The game's file isn't there anymore (was its drive unplugged?)."));
     }
@@ -1249,6 +1616,27 @@ fn launch_store_game(app: AppHandle, library: std::sync::Arc<Library>, id: i64, 
         }
         #[cfg(not(windows))]
         return Err(AppError::msg(format!("Battle.net ({code}) is only on Windows.")));
+    } else if let Some(key) = launch.strip_prefix("rockstar:") {
+        // Rockstar's games start by their program, which hands them to its launcher (D-116).
+        let dir = install_dir.clone().ok_or_else(|| AppError::msg("Rockstar's record of that game isn't there anymore."))?;
+        let program = launchers::rockstar_program(key, &dir).filter(|p| p.is_file()).ok_or_else(|| AppError::msg("The game's program isn't there anymore. Is it still installed?"))?;
+        let mut command = crate::tools::command(&program);
+        command.arg("-launchTitleInFolder").arg(&dir).arg("@commandline.txt").current_dir(&dir);
+        command.spawn().map_err(|e| AppError::msg(format!("Couldn't start the game: {e}")))?;
+    } else if let Some(product) = launch.strip_prefix("riot:") {
+        // The Riot Client starts its games itself (D-116).
+        #[cfg(windows)]
+        {
+            let (product, patchline) = product.split_once(':').unwrap_or((product, "live"));
+            let client = launchers::riot_client().ok_or_else(|| AppError::msg("The Riot Client isn't found anymore. Is it still installed?"))?;
+            crate::tools::command(&client)
+                .arg(format!("--launch-product={product}"))
+                .arg(format!("--launch-patchline={patchline}"))
+                .spawn()
+                .map_err(|e| AppError::msg(format!("Couldn't ask the Riot Client to start the game: {e}")))?;
+        }
+        #[cfg(not(windows))]
+        return Err(AppError::msg(format!("The Riot Client ({product}) is only on Windows.")));
     } else if let Some(program) = launch.strip_prefix("exe:") {
         // A program of its own (added by hand, D-107, or installed by itch.io): from its folder.
         let program = Path::new(program);
@@ -1498,6 +1886,12 @@ fn launch_command(found: &Found, game: &Path, core: Option<&str>, platform: &str
         Emulator::Ares if platform == Platform::SegaCd.key() => command.args(["--system", "Mega CD"]).arg(game),
         Emulator::Ares if platform == Platform::Genesis.key() && games::extension(game) == "bin" => command.args(["--system", "Mega Drive"]).arg(game),
         Emulator::Ares => command.arg(game),
+        // D-116: each opens the game as given; Cemu with -g, xemu its disc with -dvd_path; a game
+        // kept as a folder starts by its program.
+        Emulator::Ppsspp | Emulator::Flycast | Emulator::Azahar | Emulator::Ryujinx => command.arg(game),
+        Emulator::Cemu => command.arg("-g").arg(if game.is_dir() { games::folder_program(game) } else { game.to_path_buf() }),
+        Emulator::Xenia => command.arg(if game.is_dir() { games::folder_program(game) } else { game.to_path_buf() }),
+        Emulator::Xemu => command.arg("-dvd_path").arg(game),
         Emulator::RetroArch => {
             if let Some(core) = core {
                 command.arg("-L").arg(core);
@@ -1542,6 +1936,9 @@ mod schema_tests {
             // D-111: any emulator's name, none empty.
             conn.execute("INSERT INTO arcade_emulators (kind, path) VALUES ('ares', 'a'), ('nulldc', 'n'), ('snes9x', 's')", [])?;
             assert!(conn.execute("INSERT INTO arcade_emulators (kind, path) VALUES ('', 'e')", []).is_err(), "an emulator needs a name");
+            // D-117: one set aside.
+            conn.execute("INSERT INTO arcade_emulators (kind, ignored) VALUES ('nulldc', 1) ON CONFLICT(kind) DO UPDATE SET ignored = 1", [])?;
+            assert!(conn.query_row("SELECT ignored FROM arcade_emulators WHERE kind = 'nulldc'", [], |r| r.get::<_, bool>(0))?);
             conn.execute("INSERT INTO arcade_games (path, platform, title, sort_title, core, system) VALUES ('a.sfc', 'snes', 'A', 'a', 'c', 'Nintendo - Super Nintendo Entertainment System')", [])?;
             assert!(conn.execute("INSERT INTO arcade_games (path, platform, title, sort_title) VALUES ('b', '', 'B', 'b')", []).is_err(), "a console needs a name");
             Ok(())

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { BackButton } from "../../components/BackButton";
 import { Dialog as RadixDialog } from "radix-ui";
 import { Award, CalendarDays, ChevronLeft, ChevronRight, X, CalendarHeart } from "lucide-react";
 import { api, type Achievement } from "../../lib/api";
@@ -130,7 +131,8 @@ function checkAchievements(): Promise<Achievement[]> {
 }
 
 /** Statistics' achievements (D-093): how many are reached, the latest, and the way to their screen. */
-export function AchievementsSummary() {
+export function AchievementsSummary({ bigPicture = false }: { bigPicture?: boolean }) {
+  const navigate = useNavigate();
   const list = useQuery({ queryKey: ["achievements"], queryFn: checkAchievements, staleTime: 60_000 });
   if (!list.data) return null;
   const reached = list.data.filter((a) => a.unlockedAt).sort((a, b) => (b.unlockedAt ?? "").localeCompare(a.unlockedAt ?? ""));
@@ -146,9 +148,15 @@ export function AchievementsSummary() {
           {reached.length} of {list.data.length} reached{latest ? ` · latest: ${latest.title}` : ""}
         </span>
       </div>
-      <Link to="/achievements" className="btn btn-sm">
-        See all
-      </Link>
+      {bigPicture ? (
+        <button type="button" className="bp-button" data-bp-focus onClick={() => void navigate({ to: "/bp", search: { screen: "achievements" } })}>
+          See all
+        </button>
+      ) : (
+        <Link to="/achievements" className="btn btn-sm">
+          See all
+        </Link>
+      )}
     </section>
   );
 }
@@ -160,11 +168,21 @@ const longDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { 
  * as medals (reached ones lit, with the day), what it counts, and how far to the next.
  */
 export function AchievementsPage() {
+  return (
+    <div className="page achievements-page">
+      <BackButton />
+      <AchievementsList />
+    </div>
+  );
+}
+
+/** Every achievement (D-093), on its page or on Big Picture's screen (D-120). */
+export function AchievementsList() {
   const list = useQuery({ queryKey: ["achievements"], queryFn: checkAchievements, staleTime: 30_000 });
   const all = list.data ? families(list.data) : [];
   const count = list.data?.filter((a) => a.unlockedAt).length ?? 0;
   return (
-    <div className="page achievements-page">
+    <>
       <div className="page-header">
         <div className="title-row">
           <span className="title-badge">
@@ -212,7 +230,7 @@ export function AchievementsPage() {
           </section>
         ))}
       </div>
-    </div>
+    </>
   );
 }
 
@@ -266,17 +284,6 @@ const MONTH = (m: number) => new Date(2000, m - 1, 1).toLocaleDateString(undefin
 
 /** Your year in Digitify (D-065): the year's summary, one big screen. */
 export function YearReview({ year, open, onOpenChange }: { year: number; open: boolean; onOpenChange: (open: boolean) => void }) {
-  const review = useQuery({ queryKey: ["year-review", year], queryFn: () => api.yearReview(year), enabled: open });
-  const r = review.data;
-  const hours = r ? r.read + r.watch + r.listen + r.play : 0;
-  const tiles = r
-    ? [
-        { label: "Reading", value: r.read, series: "read" },
-        { label: "Watching", value: r.watch, series: "watch" },
-        { label: "Listening", value: r.listen, series: "listen" },
-        { label: "Playing", value: r.play, series: "play" },
-      ]
-    : [];
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
@@ -288,77 +295,97 @@ export function YearReview({ year, open, onOpenChange }: { year: number; open: b
           <RadixDialog.Title className="year-title">
             <CalendarHeart size={22} aria-hidden /> Your {year} in Digitify
           </RadixDialog.Title>
-          {!r ? (
-            <div className="year-loading" aria-busy />
-          ) : hours === 0 && r.added === 0 ? (
-            <p className="year-lead">Nothing recorded in {year}. Time spent reading, watching, listening and playing shows up here.</p>
-          ) : (
-            <>
-              <p className="year-lead">
-                <b>{timeLabel(hours)}</b> with your library, over <b>{plural(r.daysActive, "day")}</b>.
-              </p>
-              <div className="year-tiles">
-                {tiles.map((t) => (
-                  <div key={t.label} className="year-tile">
-                    <span className="stat-label">
-                      <i className={`stats-swatch series-${t.series}`} aria-hidden />
-                      {t.label}
-                    </span>
-                    <strong>{timeLabel(t.value)}</strong>
-                  </div>
-                ))}
-              </div>
-              <div className="year-facts">
-                <div>
-                  <strong>{r.finished.toLocaleString()}</strong>
-                  <span>finished</span>
-                </div>
-                <div>
-                  <strong>{r.added.toLocaleString()}</strong>
-                  <span>added to the library</span>
-                </div>
-                <div>
-                  <strong>{plural(r.longestStreak, "day")}</strong>
-                  <span>longest streak</span>
-                </div>
-                {r.bestMonth && (
-                  <div>
-                    <strong>{MONTH(r.bestMonth[0])}</strong>
-                    <span>busiest month · {timeLabel(r.bestMonth[1])}</span>
-                  </div>
-                )}
-                {r.bestDay && (
-                  <div>
-                    <strong>{new Date(`${r.bestDay[0]}T12:00:00`).toLocaleDateString(undefined, { month: "long", day: "numeric" })}</strong>
-                    <span>busiest day · {timeLabel(r.bestDay[1])}</span>
-                  </div>
-                )}
-              </div>
-              <div className="year-lists">
-                {[
-                  { title: "Most time with", list: r.topItems, value: (n: number) => timeLabel(n * 60) },
-                  { title: "Most played games", list: r.topGames, value: (n: number) => timeLabel(n * 60) },
-                  { title: "Most played artists", list: r.topArtists, value: (n: number) => plural(n, "play") },
-                ]
-                  .filter((l) => l.list.length > 0)
-                  .map((l) => (
-                    <section key={l.title}>
-                      <h3>{l.title}</h3>
-                      <ol>
-                        {l.list.map((entry) => (
-                          <li key={entry.key}>
-                            <span>{entry.name}</span>
-                            <b>{l.value(entry.count)}</b>
-                          </li>
-                        ))}
-                      </ol>
-                    </section>
-                  ))}
-              </div>
-            </>
-          )}
+          {open && <YearReviewBody year={year} />}
         </RadixDialog.Content>
       </RadixDialog.Portal>
     </RadixDialog.Root>
+  );
+}
+
+/** A year in Digitify: the review's contents, in its dialog or on Big Picture's screen (D-120). */
+export function YearReviewBody({ year }: { year: number }) {
+  const review = useQuery({ queryKey: ["year-review", year], queryFn: () => api.yearReview(year) });
+  const r = review.data;
+  const hours = r ? r.read + r.watch + r.listen + r.play : 0;
+  const tiles = r
+    ? [
+        { label: "Reading", value: r.read, series: "read" },
+        { label: "Watching", value: r.watch, series: "watch" },
+        { label: "Listening", value: r.listen, series: "listen" },
+        { label: "Playing", value: r.play, series: "play" },
+      ]
+    : [];
+  return (
+    <>
+          {!r ? (
+        <div className="year-loading" aria-busy />
+      ) : hours === 0 && r.added === 0 ? (
+        <p className="year-lead">Nothing recorded in {year}. Time spent reading, watching, listening and playing shows up here.</p>
+      ) : (
+        <>
+          <p className="year-lead">
+            <b>{timeLabel(hours)}</b> with your library, over <b>{plural(r.daysActive, "day")}</b>.
+          </p>
+          <div className="year-tiles">
+            {tiles.map((t) => (
+              <div key={t.label} className="year-tile">
+                <span className="stat-label">
+                  <i className={`stats-swatch series-${t.series}`} aria-hidden />
+                  {t.label}
+                </span>
+                <strong>{timeLabel(t.value)}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="year-facts">
+            <div>
+              <strong>{r.finished.toLocaleString()}</strong>
+              <span>finished</span>
+            </div>
+            <div>
+              <strong>{r.added.toLocaleString()}</strong>
+              <span>added to the library</span>
+            </div>
+            <div>
+              <strong>{plural(r.longestStreak, "day")}</strong>
+              <span>longest streak</span>
+            </div>
+            {r.bestMonth && (
+              <div>
+                <strong>{MONTH(r.bestMonth[0])}</strong>
+                <span>busiest month · {timeLabel(r.bestMonth[1])}</span>
+              </div>
+            )}
+            {r.bestDay && (
+              <div>
+                <strong>{new Date(`${r.bestDay[0]}T12:00:00`).toLocaleDateString(undefined, { month: "long", day: "numeric" })}</strong>
+                <span>busiest day · {timeLabel(r.bestDay[1])}</span>
+              </div>
+            )}
+          </div>
+          <div className="year-lists">
+            {[
+              { title: "Most time with", list: r.topItems, value: (n: number) => timeLabel(n * 60) },
+              { title: "Most played games", list: r.topGames, value: (n: number) => timeLabel(n * 60) },
+              { title: "Most played artists", list: r.topArtists, value: (n: number) => plural(n, "play") },
+            ]
+              .filter((l) => l.list.length > 0)
+              .map((l) => (
+                <section key={l.title}>
+                  <h3>{l.title}</h3>
+                  <ol>
+                    {l.list.map((entry) => (
+                      <li key={entry.key}>
+                        <span>{entry.name}</span>
+                        <b>{l.value(entry.count)}</b>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              ))}
+          </div>
+        </>
+      )}
+    </>
   );
 }

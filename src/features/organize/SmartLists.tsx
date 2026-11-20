@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { BackButton } from "../../components/BackButton";
 import { Pencil, Plus, Trash, ListFilter } from "lucide-react";
 import { api, errorText, type SmartList, type SmartQuery } from "../../lib/api";
 import { plural } from "../../lib/format";
@@ -239,6 +240,7 @@ export function SmartListPage() {
   return (
     <>
       <LibraryView
+        back={<BackButton fallback={() => void navigate({ to: "/smart" })} />}
         key={`smart:${smart.id}:${JSON.stringify(smart.query)}`}
         viewKey={`smart:${smart.id}`}
         base={smart.query}

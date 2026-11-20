@@ -5,6 +5,7 @@ import { usePad } from "../../lib/gamepad";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { Cover } from "../../components/common";
 import { SeekBar } from "../../components/SeekBar";
+import { Marquee } from "../../components/Marquee";
 
 const clock = (seconds: number) => {
   const s = Math.max(0, Math.floor(seconds));
@@ -41,14 +42,17 @@ export function NowPlayingScreen() {
         return;
     }
   });
-  // The queue keeps the playing track's neighbours in view.
-  useEffect(() => list.current?.scrollTo({ top: 0, behavior: "smooth" }), [music.index]);
+  // The queue keeps the playing track's neighbours in view. (In braces: scrollTo returns a promise
+  // in newer WebView2, and an effect may only return its clean-up, D-143.)
+  useEffect(() => {
+    list.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [music.index]);
 
   if (!track) {
     return (
       <div className="bp-np-empty">
         <Music size={64} />
-        <p>Nothing is playing. Pick an album or a song in the Library and press Play.</p>
+        <p>Nothing is playing. Pick a song or a playlist in Music and press Play.</p>
       </div>
     );
   }
@@ -61,8 +65,12 @@ export function NowPlayingScreen() {
       </div>
       <div className="bp-np-main">
         <span className="bp-np-kicker">{music.paused ? "Paused" : "Now playing"}</span>
-        <h1 className="bp-np-title">{track.title}</h1>
-        <p className="bp-np-sub">{[track.artist, track.album].filter(Boolean).join(" · ") || "Unknown artist"}</p>
+        <h1 className="bp-np-title">
+          <Marquee text={track.title} />
+        </h1>
+        <p className="bp-np-sub">
+          <Marquee text={[track.artist, track.album].filter(Boolean).join(" · ") || "Unknown artist"} />
+        </p>
         <div className="bp-np-seek">
           <SeekBar time={music.time} duration={music.duration} clock={clock} timeClassName="bp-np-time" onSeek={(s) => music.seek(s)} />
         </div>

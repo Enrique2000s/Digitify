@@ -25,6 +25,7 @@ import {
   Bookmark as BookmarkIcon,
   Trash2,
 } from "lucide-react";
+import { Marquee } from "../../components/Marquee";
 import { api, artworkUrl, errorText, onLinux, type WatchTarget } from "../../lib/api";
 import { useAmbientHold } from "../../lib/ambient/AmbientProvider";
 import { useMusic } from "../../lib/music/MusicProvider";
@@ -308,6 +309,9 @@ function VideoPlayer({ source }: { source: Source }) {
     (partId: number) => void navigate({ to: "/watch/$id", params: { id }, search: { part: partId }, replace: true }),
     [navigate, id],
   );
+  // Back (D-141): by default the video keeps playing in a corner while you browse; with the
+  // setting off it closes, and the corner has its own button beside Back. Discs, full screen,
+  // Big Picture and a video that has ended just close.
 
   // ------------------------------------------------------------------ opening and events
 
@@ -485,16 +489,22 @@ function VideoPlayer({ source }: { source: Source }) {
     queryKey: ["video-list", id],
     enabled: source.kind === "item" && !!id,
     staleTime: Infinity,
-    queryFn: () => viewList(Number(id), "video").catch(() => null),
+    // Online videos play in their service's player, not here, so previous and next pass them by;
+    // past the last video it goes round to the first, and before the first to the last (D-140).
+    queryFn: () => viewList(Number(id), "video", true).catch(() => null),
   });
   const at = list.data ? list.data.indexOf(Number(id)) : -1;
-  const listPrevious = at > 0 ? list.data![at - 1] : null;
-  const listNext = at >= 0 && at < (list.data?.length ?? 0) - 1 ? list.data![at + 1] : null;
+  const count = list.data?.length ?? 0;
+  const listPrevious = at >= 0 && count > 1 ? list.data![(at - 1 + count) % count] : null;
+  const listNext = at >= 0 && count > 1 ? list.data![(at + 1) % count] : null;
   const openVideo = (other: number) => void navigate({ to: "/watch/$id", params: { id: String(other) }, replace: true });
   const goNext = () => (target?.next ? playPart(target.next) : listNext != null ? openVideo(listNext) : undefined);
   const goPrevious = () => (target?.previous ? playPart(target.previous) : listPrevious != null ? openVideo(listPrevious) : undefined);
   const hasNext = !!target?.next || listNext != null;
   const hasPrevious = !!target?.previous || listPrevious != null;
+  const canCorner = !!target && target.itemId !== 0 && !fullscreen && !bigPicture;
+  const backCorners = preferences.videoBackToCorner && canCorner && !playback.ended;
+  const back = () => (backCorners ? toCorner() : close());
   const buttons = useButtonNames();
   const hints = usePlayerHints(driving, [
     { keys: [buttons.x], label: "Play / pause" },
@@ -563,7 +573,7 @@ function VideoPlayer({ source }: { source: Source }) {
         case "video.close":
           if (menu) setMenu(null);
           else if (fullscreen) void toggleFullscreen();
-          else close();
+          else back();
           break;
         default:
           return;
@@ -573,7 +583,7 @@ function VideoPlayer({ source }: { source: Source }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggleFullscreen, fullscreen, close, poke, menu, target, playPart]);
+  }, [toggleFullscreen, fullscreen, close, poke, menu, target, playPart, backCorners, toCorner]);
 
   // ------------------------------------------------------------------ view
 
@@ -654,20 +664,26 @@ function VideoPlayer({ source }: { source: Source }) {
       )}
 
       <header className={`reader-bar top${showBars ? "" : " hidden"}`} data-tauri-drag-region {...barProps}>
-        <button type="button" className="round-btn" aria-label="Close the player" title={`Close${hint("video.close")}`} onClick={close}>
+        <button
+          type="button"
+          className="round-btn"
+          aria-label={backCorners ? "Back, the video keeps playing in a corner" : "Close the player"}
+          title={backCorners ? `Back: keeps playing in a corner while you browse${hint("video.close")}` : `Close${hint("video.close")}`}
+          onClick={back}
+        >
           <ArrowLeft size={18} strokeWidth={2.6} />
         </button>
-        <div className="reader-title" data-tauri-drag-region>
-          <strong>{target?.title ?? "Opening…"}</strong>
-          {target?.episode && <span>{target.episode}</span>}
-        </div>
-        <span className="appbar-drag" data-tauri-drag-region />
-        {bigPicture && <BpClock />}
-        {target && target.itemId !== 0 && !fullscreen && (
+        {canCorner && !preferences.videoBackToCorner && (
           <button type="button" className="round-btn" aria-label="Keep watching in a corner" title="Keep watching in a corner while you browse" onClick={toCorner}>
             <PictureInPicture2 size={18} strokeWidth={2.4} />
           </button>
         )}
+        <div className="reader-title" data-tauri-drag-region>
+          <Marquee className="reader-name" text={target?.title ?? "Opening…"} />
+          {target?.episode && <Marquee className="reader-sub" text={target.episode} />}
+        </div>
+        <span className="appbar-drag" data-tauri-drag-region />
+        {bigPicture && <BpClock />}
         {!fullscreen && <WindowButtons />}
       </header>
 

@@ -10,10 +10,11 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-use rusqlite::params;
 use serde::Serialize;
+use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager};
 
+use super::ytdlp::{self, Quality};
 use super::{http, keys, save_download, save_link, Entry, ImportRequest};
 use crate::error::{AppError, AppResult};
 use crate::{files, AppState, Library};
@@ -45,11 +46,38 @@ struct Job {
     playlist: Option<i64>,
     /// An online-only item this download replaces.
     replaces: Option<i64>,
+    /// How yt-dlp downloads it (D-133).
+    quality: Quality,
     state: JobState,
     progress: Option<f64>,
     error: Option<String>,
     item: Option<i64>,
     cancel: Arc<AtomicBool>,
+    /// Its row in the imports history once it has ended (D-137).
+    history: Option<i64>,
+}
+
+impl Job {
+    /// Keeps its outcome in the imports history (D-137), with what it takes to try it again.
+    fn remember(&mut self, library: &Library) {
+        let state = match self.state {
+            JobState::Done => "done",
+            JobState::Skipped => "skipped",
+            JobState::Failed => "failed",
+            JobState::Cancelled => "cancelled",
+            JobState::Pending | JobState::Working => return,
+        };
+        let request = json!({
+            "entries": [self.entry],
+            "musicCategory": self.category,
+            "videoCategory": self.category,
+            "download": self.download,
+            "playlistName": null,
+            "quality": self.quality,
+        });
+        let action = if self.download { "download" } else { "link" };
+        self.history = crate::history::record_link(library, self.history, &self.entry.title, &self.entry.service, action, state, self.error.as_deref(), self.item, &request);
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -67,6 +95,8 @@ pub struct JobView {
     pub progress: Option<f64>,
     pub error: Option<String>,
     pub item_id: Option<i64>,
+    /// The online-only item this download takes the place of.
+    pub replaces: Option<i64>,
 }
 
 impl Job {
@@ -83,6 +113,7 @@ impl Job {
             progress: self.progress,
             error: self.error.clone(),
             item_id: self.item,
+            replaces: self.replaces,
         }
     }
 }
@@ -115,9 +146,13 @@ impl OnlineState {
         {
             let mut jobs = self.shared.jobs.lock().unwrap_or_else(|e| e.into_inner());
             let mut seen: HashSet<(String, String)> = HashSet::new();
-            for (position, entry) in request.entries.into_iter().enumerate() {
+            for (position, mut entry) in request.entries.into_iter().enumerate() {
                 let id = self.shared.next.fetch_add(1, Ordering::Relaxed) + 1;
                 let download = request.download && entry.downloadable && entry.download.is_some();
+                // yt-dlp keeps a video or its sound (D-133): each is its own item.
+                if download && entry.ytdlp && matches!(entry.kind.as_str(), "video" | "track") {
+                    entry.kind = if entry.audio { "track".into() } else { "video".into() };
+                }
                 let category = if entry.audio { request.music_category.clone() } else { request.video_category.clone() };
                 let key = (entry.provider.clone(), entry.external_id.clone());
                 // Already here: the same thing earlier in this list, queued now, or in the library.
@@ -139,7 +174,9 @@ impl OnlineState {
                     (JobState::Pending, None, None)
                 };
                 let item = if state == JobState::Skipped { existing } else { None };
-                jobs.push(Job { id, batch, position, entry, download, category, playlist, replaces, state, progress: None, error, item, cancel: Arc::new(AtomicBool::new(false)) });
+                let mut job = Job { id, batch, position, entry, download, category, playlist, replaces, quality: request.quality.clone(), state, progress: None, error, item, cancel: Arc::new(AtomicBool::new(false)), history: None };
+                job.remember(&library);
+                jobs.push(job);
             }
             let finished = jobs.iter().filter(|j| !matches!(j.state, JobState::Pending | JobState::Working)).count();
             if finished > KEEP {
@@ -174,6 +211,7 @@ impl OnlineState {
 
     /// Cancels one job, or every pending and running one.
     pub fn cancel(&self, app: &AppHandle, id: Option<u64>) {
+        let library = app.state::<AppState>().library().ok();
         {
             let mut jobs = self.shared.jobs.lock().unwrap_or_else(|e| e.into_inner());
             for job in jobs.iter_mut().filter(|j| id.is_none_or(|id| j.id == id)) {
@@ -181,6 +219,9 @@ impl OnlineState {
                     JobState::Pending => {
                         job.state = JobState::Cancelled;
                         job.progress = None;
+                        if let Some(library) = &library {
+                            job.remember(library);
+                        }
                     }
                     JobState::Working => job.cancel.store(true, Ordering::Relaxed),
                     _ => {}
@@ -218,13 +259,13 @@ fn work(app: AppHandle, fallback: Arc<Library>, shared: Arc<Shared>) {
                 if let Some(job) = jobs.iter_mut().find(|j| j.state == JobState::Pending) {
                     job.state = JobState::Working;
                     job.progress = job.download.then_some(0.0);
-                    break (job.id, job.entry.clone(), job.download, job.category.clone(), job.replaces, job.cancel.clone());
+                    break (job.id, job.entry.clone(), job.download, job.category.clone(), job.replaces, job.quality.clone(), job.cancel.clone());
                 }
                 jobs = shared.wake.wait(jobs).unwrap_or_else(|e| e.into_inner());
             }
         };
         emit(&app, &shared);
-        let (id, entry, download, category, replaces, cancel) = picked;
+        let (id, entry, download, category, replaces, quality, cancel) = picked;
         // The library open now (it may have been switched since the queue started).
         let library = app.state::<AppState>().library().unwrap_or_else(|_| fallback.clone());
         let mut last_emit = Instant::now();
@@ -238,8 +279,8 @@ fn work(app: AppHandle, fallback: Arc<Library>, shared: Arc<Shared>) {
                     emit(&app, &shared);
                 }
             };
-            fetch_file(&app, &library, &entry, &category, &cancel, progress).and_then(|path| {
-                let saved = save_download(&library, &entry, &category, &path);
+            fetch_file(&app, &library, &entry, &category, &quality, &cancel, progress).and_then(|(path, cover)| {
+                let saved = save_download(&library, &entry, &category, &path, cover.as_deref(), replaces);
                 if saved.is_err() {
                     let _ = std::fs::remove_file(&path);
                 }
@@ -248,12 +289,6 @@ fn work(app: AppHandle, fallback: Arc<Library>, shared: Arc<Shared>) {
         } else {
             save_link(&library, &entry, &category).map(|item| (item, false))
         };
-        let result = result.and_then(|(item, already)| {
-            if let Some(old) = replaces.filter(|old| *old != item) {
-                take_over(&library, old, item)?;
-            }
-            Ok((item, already))
-        });
         let batch = {
             let mut jobs = shared.jobs.lock().unwrap_or_else(|e| e.into_inner());
             let Some(job) = jobs.iter_mut().find(|j| j.id == id) else { continue };
@@ -275,6 +310,7 @@ fn work(app: AppHandle, fallback: Arc<Library>, shared: Arc<Shared>) {
                     job.progress = None;
                 }
             }
+            job.remember(&library);
             job.playlist.map(|_| job.batch)
         };
         if let Some(batch) = batch {
@@ -283,21 +319,6 @@ fn work(app: AppHandle, fallback: Arc<Library>, shared: Arc<Shared>) {
         emit(&app, &shared);
         let _ = app.emit("library-changed", ());
     }
-}
-
-/// A download replacing an online-only item: the new item keeps its favorite mark and tags, and
-/// the online-only one goes.
-fn take_over(library: &Library, old: i64, new: i64) -> AppResult<()> {
-    library.db.with(|conn| {
-        let tx = conn.transaction()?;
-        tx.execute("UPDATE items SET is_favorite = is_favorite OR (SELECT is_favorite FROM items WHERE id = ?1) WHERE id = ?2", params![old, new])?;
-        tx.execute("INSERT OR IGNORE INTO item_tags (item_id, tag_id) SELECT ?2, tag_id FROM item_tags WHERE item_id = ?1", params![old, new])?;
-        tx.execute("DELETE FROM items_fts WHERE rowid = ?1", [old])?;
-        tx.execute("DELETE FROM items WHERE id = ?1", [old])?;
-        crate::library::reindex(&tx, new)?;
-        tx.commit()?;
-        Ok(())
-    })
 }
 
 /// The batch's playlist holds its tracks that are in the library, in their original order.
@@ -346,9 +367,74 @@ fn extension_for(content_type: &str) -> Option<&'static str> {
     })
 }
 
+/// The folder downloads for a category go in: `<Category>/Downloads` in the library's media folder.
+fn downloads_dir(library: &Library, category: &str) -> AppResult<PathBuf> {
+    let category_name: String = library.db.with(|conn| Ok(conn.query_row("SELECT name FROM categories WHERE key = ?1", [category], |row| row.get(0))?))?;
+    let dir = library.folder.media_dir().join(files::safe_name(&category_name)).join("Downloads");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
+}
+
+fn file_base(entry: &Entry) -> String {
+    match &entry.creator {
+        Some(creator) if entry.audio => format!("{creator} - {}", entry.title),
+        _ => entry.title.clone(),
+    }
+}
+
+/// Downloads an entry with yt-dlp (D-133) into a folder of its own inside the downloads folder,
+/// then moves the file next to the others under the entry's name. Returns it with its cover.
+fn fetch_with_ytdlp(app: &AppHandle, library: &Library, entry: &Entry, category: &str, quality: &Quality, cancel: &AtomicBool, progress: &mut dyn FnMut(f64)) -> AppResult<(PathBuf, Option<Vec<u8>>)> {
+    let source = entry.download.as_deref().filter(|u| u.starts_with("https://") || u.starts_with("http://")).ok_or_else(|| AppError::msg("This can't be downloaded."))?;
+    let tool = ytdlp::locate(&crate::config::config_dir(app)?).ok_or_else(|| AppError::msg("yt-dlp is missing from this installation. Reinstall Digitify, or update yt-dlp in Settings › Online services."))?;
+    let dir = downloads_dir(library, category)?;
+    // A folder of its own (two downloads can start at the same moment).
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let work = dir.join(format!(".downloading-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+    let mut attempt = 0;
+    let outcome = loop {
+        let outcome = tool.download(source, entry.audio, quality, &work, cancel, progress);
+        // A site's passing refusal (YouTube sometimes turns a first request away) gets one more try.
+        match &outcome {
+            Err(e) if attempt == 0 && !cancel.load(Ordering::Relaxed) && ytdlp::worth_retrying(&e.to_string()) => {
+                attempt += 1;
+                remove_folder(&work);
+                std::thread::sleep(Duration::from_secs(2));
+            }
+            _ => break outcome,
+        }
+    };
+    let outcome = outcome.and_then(|(file, cover)| {
+        let extension = file.extension().and_then(|e| e.to_str()).unwrap_or("mkv").to_ascii_lowercase();
+        let target = files::unique_path(&dir, &format!("{}.{extension}", files::safe_name(&file_base(entry))));
+        std::fs::rename(&file, &target)?;
+        let cover = cover.and_then(|c| std::fs::read(c).ok());
+        Ok((target, cover))
+    });
+    remove_folder(&work);
+    outcome
+}
+
+/// Removes a download's own folder. Right after a cancel, Windows may still hold its files for a
+/// moment, so it tries again for a few seconds.
+fn remove_folder(folder: &std::path::Path) {
+    for _ in 0..20 {
+        if !folder.exists() || std::fs::remove_dir_all(folder).is_ok() {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    }
+    log::warn!("couldn't remove {}", folder.display());
+}
+
 /// Downloads an entry's file into the library's media folder (`<Category>/Downloads`), with
-/// progress, stopping when cancelled. Only files the service allows downloading get here.
-fn fetch_file(app: &AppHandle, library: &Library, entry: &Entry, category: &str, cancel: &AtomicBool, mut progress: impl FnMut(f64)) -> AppResult<PathBuf> {
+/// progress, stopping when cancelled: a direct file or a SoundCloud track its uploader allows
+/// downloading, or anything else yt-dlp can download (D-133). Returns it with a cover when the
+/// download brought one.
+fn fetch_file(app: &AppHandle, library: &Library, entry: &Entry, category: &str, quality: &Quality, cancel: &AtomicBool, mut progress: impl FnMut(f64)) -> AppResult<(PathBuf, Option<Vec<u8>>)> {
+    if entry.ytdlp {
+        return fetch_with_ytdlp(app, library, entry, category, quality, cancel, &mut progress);
+    }
     let source = entry.download.as_deref().ok_or_else(|| AppError::msg("This can't be downloaded."))?;
     let mut request = match entry.provider.as_str() {
         // A direct link is downloaded from exactly the link that was pasted.
@@ -359,7 +445,7 @@ fn fetch_file(app: &AppHandle, library: &Library, entry: &Entry, category: &str,
             let token = super::providers::soundcloud_token(&id, &secret)?;
             http::get(source)?.set("Authorization", &format!("OAuth {token}"))
         }
-        _ => return Err(AppError::msg("This service doesn't allow downloads, so it's saved as an online item.")),
+        _ => return Err(AppError::msg("This can't be downloaded, so it's saved as an online item.")),
     };
     request = request.timeout(Duration::from_secs(60 * 60));
     // A direct link's errors speak of "the site" rather than a service name.
@@ -382,14 +468,8 @@ fn fetch_file(app: &AppHandle, library: &Library, entry: &Entry, category: &str,
         .ok_or_else(|| AppError::msg(format!("The file isn't audio or video Digitify can play ({}).", if content_type.is_empty() { "unknown type" } else { &content_type })))?;
     let total = response.header("content-length").and_then(|v| v.parse::<u64>().ok());
 
-    let category_name: String = library.db.with(|conn| Ok(conn.query_row("SELECT name FROM categories WHERE key = ?1", [category], |row| row.get(0))?))?;
-    let dir = library.folder.media_dir().join(files::safe_name(&category_name)).join("Downloads");
-    std::fs::create_dir_all(&dir)?;
-    let base = match &entry.creator {
-        Some(creator) if entry.audio => format!("{creator} - {}", entry.title),
-        _ => entry.title.clone(),
-    };
-    let target = files::unique_path(&dir, &format!("{}.{extension}", files::safe_name(&base)));
+    let dir = downloads_dir(library, category)?;
+    let target = files::unique_path(&dir, &format!("{}.{extension}", files::safe_name(&file_base(entry))));
     let partial = target.with_extension(format!("{extension}.part"));
     let outcome = (|| -> AppResult<()> {
         let mut reader = response.into_reader();
@@ -424,5 +504,5 @@ fn fetch_file(app: &AppHandle, library: &Library, entry: &Entry, category: &str,
         return Err(e);
     }
     std::fs::rename(&partial, &target)?;
-    Ok(target)
+    Ok((target, None))
 }

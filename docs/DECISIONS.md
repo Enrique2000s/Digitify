@@ -101,6 +101,164 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-145 · Twelve refinements: symbols, counts, the title bar, players, Big Picture's queue, the corner video
+- **Date:** 2026-11-19 · **Approved by:** project owner (asked for each)
+- **PC games' badge** has a symbol too: a monitor for a PC game without a store (one added by its .exe), as store games show their store's.
+- **Counts in a box:** Library's and Arcade's sections (and Search's filter) show how many each holds in a small box of its own, so the number isn't read as part of the name.
+- **The title bar's Home / Library / Arcade** slide their highlight to the chosen one, as Library's sections do.
+- **Downloads and imports** moved from Home to the title bar, left of Settings (beside Big Picture), reachable from every screen.
+- **Book from images, one per category:** Books' Add has "Book from images…", Comics' "Comic from images…", Manga's "Manga from images…"; each makes its item in that category (the category field is gone).
+- **Music:** every Music tab has Add where the Tracks tab has it; on Playlists, "New playlist" sits left of Add (it was above the playlists).
+- **New collection** shows only on a category's Collections tab, in the same place.
+- **Players' names scroll:** the video player's, the readers', the photo viewer's, the corner video's and the music players' names and details are one line that slides to show the rest when long, never "…".
+- **Nothing moves:** an item's previous and next stay in place from item to item (pages keep their scrollbar's room, the count its width); the music player's buttons stay put from song to song (title and artist are one scrolling line each), in the app and in Big Picture. The music player's cover backdrop no longer makes its page scroll sideways.
+- **Big Picture's queue:** a song played from Big Picture's Library (or Search) queues the songs after it in that list, as the regular app does (D-091).
+- **A song without a cover** shows the audio symbol in the title bar's player (and Big Picture's), not its first letters.
+- **The corner video moves:** dragged by its bar, it follows the mouse and settles in the nearest of the four corners when let go (the top ones below the title bar), and stays there next time.
+
+### D-144 · Whole selections and tidy cards
+- **Date:** 2026-11-19 · **Approved by:** project owner (asked for the selection's glow uncut, and for other visual glitches to be fixed)
+- **Big Picture's selection is whole:** a row that scrolls sideways (Home's categories and rows) cut a selected tile's ring, glow, lift and shadow at its edges; rows now keep room for them on every side (without moving the tiles), the screen scrolls a selection near its top or bottom in with room to spare, and the music queue's list has room for a selected song's ring.
+- **The ring over a service's color:** an online item's colored border (YouTube's red…) covered Big Picture's selection ring; selected, that border steps inside the cover so the ring shows.
+- **Achievements:** the cards of a row start at the same height (a gap meant for stacked panels pushed all but the first down), in the app and in Big Picture.
+- **Nothing playing:** Big Picture's empty music screen keeps its icon and words together, and both music screens speak of songs and playlists (there are no albums since D-027).
+
+### D-143 · Nothing seems stuck: Working…, a way out of a failed screen, and fixes
+- **Date:** 2026-11-19 · **Approved by:** project owner (asked for the fixes and for an indicator wherever something takes a moment)
+- **Big Picture's crash fixed** ("l is not a function", with no way back): in newer WebView2 (Edge 157) `scrollTo` returns a promise, and the music screen's effect returned it, so leaving the screen (to Search, with songs queued) called the promise as its clean-up. That effect no longer returns anything; no other effect or ref returned such a value.
+- **A failed screen has a way out:** instead of the router's bare "Something went wrong!", a screen that fails says so, with its reason, and offers **Back** and **Home** (Esc and the controller's B go back, Menu goes Home), in the app and in Big Picture.
+- **Working…:** anything asked of the core that takes more than half a second shows a small pill at the bottom, in the app and Big Picture, saying what's being done ("Looking for games and emulators…" while setting, adding or setting aside an emulator or a folder, "Saving the picture…", "Removing…", "Backing up…", "Checking the library…", "Adding to the queue…"…), so nothing looks frozen. Reads that draw their own placeholders, saves that run by themselves and actions with their own progress (looking a link up, a cover picker, downloads) stay quiet. Every command that runs on the main thread was checked: each is quick.
+- **The online player's Back** is every page's Back (D-138): it returns to where it was opened from, so the item's page no longer sends you forward to the player again.
+- **Where it came from, after Play:** "Open on YouTube" (or the site) comes after Play on an item's page, for downloaded items as for online ones.
+
+### D-142 · Previous and next go round; Play opens the music player
+- **Date:** 2026-11-19 · **Approved by:** project owner (asked for both)
+- An item's previous and next (D-138) go round too, as the video player's do (D-140): past the last item to the first, and before the first to the last.
+- Every Play that starts music opens the music player's screen, as Big Picture does: a song's page, a song's play button or double-click in a list, Music's Play and Shuffle, a playlist's Play. Its Back returns to where Play was pressed. Pausing or resuming the song already playing stays where you are.
+
+### D-141 · Back keeps the video playing
+- **Date:** 2026-11-19 · **Approved by:** project owner (asked for it, with a setting to keep them apart)
+- The video player's Back (and Esc, once menus and full screen are closed) leaves the video playing in the corner (D-053) while you browse, instead of closing it; it's closed from the corner. **Settings › Library › Watching › Back keeps the video playing**, on by default: turned off, Back closes the video, and "Keep watching in a corner" sits right beside Back (it was at the other end of the bar). A disc, full screen, Big Picture or a video that has ended just close.
+
+### D-140 · The player's previous and next pass online videos and go round
+- **Date:** 2026-11-19 · **Approved by:** project owner (asked for it)
+- Outside a series, the video player's previous and next (D-091) step through the videos with a file in the view it was opened from, so an online video (which plays in its service's player, not here) is passed by instead of showing "This can't be played". Past the last video they go round to the first, and before the first to the last.
+
+### D-139 · One height in a collection's window
+- **Date:** 2026-11-19 · **Approved by:** project owner (asked for it)
+- A collection's window (D-090) gives every card one cover height, as the category's grid does, so a wide video beside a tall one is as tall, not smaller (they were one width before).
+
+### D-138 · A page's own Back, and an item's previous and next
+- **Date:** 2026-11-19 · **Approved by:** project owner (asked for it; chose the arrows beside Back, and turning off the mouse's side buttons and Alt+←/→ too)
+- **No back or forward in the title bar** (D-026's arrows are gone), and the mouse's side buttons and Alt+←/→ don't go back or forward either. Every page past Home, Library and Arcade has its own **Back**, in the same place at its top, as the music player's screen had: an item's page, Search, Settings, Achievements, Discs, the library check, a smart list and the music player. It returns to the screen the page was opened from, or (when it was the first one shown) to its natural place (an item's category, Settings, the smart lists, Home). Players and readers keep their round one; a collection's window keeps its close button.
+- **An item's previous and next:** on an item's page, opposite Back, "‹ 3 of 24 ›" steps through the view it was opened from (its category or collection, filter and sort), in its order; ← and → too, when not typing. Stepping doesn't pile up: Back still returns to the list. (Since D-142 they go round at the ends.) An item opened from Home or anywhere without a list shows no arrows.
+
+### D-137 · Downloads and imports, with their history
+- **Date:** 2026-11-19 · **Approved by:** project owner (asked for a Home button with the downloads and imports, current and past, and clearing them; chose links and file imports, kept across restarts)
+- **Home's button** (a download arrow, with how many are running; in the title bar since D-145) opens **Downloads and imports**: what's coming in now (link downloads with their progress and cancel, file imports with theirs), then the history, newest first: each entry imported from a link (its service, downloaded or saved online, already in the library, failed with why, cancelled) and each import of files and folders (where it went; how many were added, already there, left out, failed), with when it ended. A line opens the item it made; a failed or cancelled link entry can be tried again from there, even after a restart. **Clear history** empties it (and the import queue's finished lines); the library isn't touched.
+- **Kept** in the library's database (schema 29, `import_history`), up to the last 2,000. A watched folder's look that brought nothing new isn't kept.
+
+### D-136 · A downloaded copy is a file like any other
+- **Date:** 2026-11-19 · **Approved by:** project owner (asked for it; chose keeping "Open on …")
+- Something downloaded from a link wears no service tag, colored border or "From … · Available offline" note, in any view, on its page or in Big Picture: it looks like any file added by hand. Its page keeps "Open on YouTube" (or the site it came from), after Play (D-143). Online items keep their tag, border and "Online, needs a connection". Where it came from stays recorded, so the same thing isn't downloaded twice.
+
+### D-135 · Videos into Movies & Series
+- **Date:** 2026-11-19 · **Approved by:** project owner (asked for it; chose movie or series)
+- **Movies & Series › Add › From Videos…** lists the videos in Videos that have a file (online ones have none to watch), with a search. Picked ones become **each a movie**, or together **a series' episodes**: a new series (named there) or one already in Movies & Series, in a season (a series' last one by default), numbered on from that season's last episode, in an order set with up and down arrows. A movie keeps its details, favorite mark and tags, and takes Movies & Series' vertical cover; episodes take their video's title and length, the video items go, and a new series takes the first one's picture as its cover. Files stay where they are. This is the one way across categories (D-126), and only from Videos to Movies & Series.
+
+### D-134 · Music's link menu and Videos' apart
+- **Date:** 2026-11-19 · **Approved by:** project owner (asked for it)
+- **From a link…** opens a menu of its own for music (in Music, or any music category) and for videos (in Videos), from the category's Add or Home's Add › the category, and the command palette has one of each. Each says what it takes before a link is pasted: music, songs, albums and playlists from YouTube Music, YouTube (the sound), SoundCloud, Bandcamp, Mixcloud, the Internet Archive and the other sites yt-dlp knows, Spotify saved online, and direct links to audio files; videos, videos, playlists and channels from YouTube, Twitch (past broadcasts), Dailymotion, the Internet Archive, Bilibili, Vimeo (videos that don't ask to sign in) and the others, live streams saved online, and direct links to video files. (These sites were each checked to work without signing in; TikTok, Reddit and X often refuse or ask to sign in, so they aren't named.)
+- **The menu decides what comes in:** the music menu downloads sound (into the category it was opened from) and the videos menu video (into Videos), so the "Download as" choice is gone; music in the videos menu (Spotify, SoundCloud, an audio file) and a video file in the music menu are shown as not taken, with where to add them. Videos from links can't go to Movies & Series (the core refuses it); a video goes there from Videos (D-135).
+
+### D-133 · Downloads from YouTube and other sites, with yt-dlp
+- **Date:** 2026-11-19 · **Approved by:** project owner (decided that Digitify downloads from YouTube, changing D-028; chose yt-dlp and Deno inside the installers, Deno as yt-dlp's JavaScript engine, picking quality and format, downloading items saved online, listing playlists without a key, and other sites too)
+- **What:** Import from URL downloads videos and songs from YouTube, YouTube Music, SoundCloud and the other sites yt-dlp knows (Vimeo, Twitch, Dailymotion, Bandcamp…) as files in the library folder (`<Category>\Downloads`) that play offline like any other. Spotify stays online only: its media is DRM-protected (D-007). Live streams are saved as online items until they're over. Digitify never signs in anywhere: what needs a sign-in (age-restricted, members-only, private) says so. yt-dlp is asked only about sites it knows by name, never to guess at any web page.
+- **Choices** (in Import from URL, remembered): download as video, or the sound alone into Music (since D-134 the menu decides: music's downloads sound, Videos' video); the video's quality (Best, 4K, 1440p, 1080p, 720p or 480p: the tallest up to it, or a smaller one when that's all there is) and format (MKV keeps the best picture and sound; MP4 plays on more devices); the sound as MP3 (LAME V0, about 245 kbps), M4A (AAC, kept as the site sends it when it can) or the original (usually Opus). The site's picture becomes the cover; songs carry it inside, with their title and artist.
+- **A video and its sound are two items:** the same YouTube video can be in Videos and, as sound, in Music. The same one again, as the same kind, is "Already in your library".
+- **Items saved online can be downloaded:** "Download" on an online item's page and in the selection bar (not Spotify's songs, nor a playlist kept as one link), as video or as sound. The download takes the online item's place, keeping its favorite mark, tags and collection, and its page moves on to the new item.
+- **Playlists and channels without a key:** yt-dlp lists a YouTube playlist's or channel's videos (up to 500) and a SoundCloud set's tracks without keys. With a YouTube key, YouTube's API lists playlists as before; with SoundCloud keys, a track its uploader allows is still downloaded as the original file.
+- **The programs:** yt-dlp's official build (2026.10.26; Unlicense, carrying its own Python and libraries) and Deno 2.9.8 (MIT), which runs the JavaScript yt-dlp needs for YouTube, ship inside the Windows installer, the `.deb` and the AppImage, pinned and hash-checked by `fetch-deps`; FFmpeg joins picture and sound and makes the MP3s. "Update yt-dlp" in Settings › Online services downloads its newest release from GitHub, checked against the release's SHA-256 list, into the config folder; that copy is used while it's newer than the shipped one. Digitify never checks for updates by itself (D-008).
+- **The queue:** progress, cancel (nothing left behind) and retry, as for other imports; a site's passing refusal is tried once more by itself; errors are explained (removed or private, age-restricted, sign-in needed, DRM, not out yet, no connection, the site changed: update yt-dlp).
+- **Changed:** D-028's "never downloaded" for YouTube and its "no downloading from YouTube", and D-029's decline, give way to this. The network exception (D-008) also covers downloading and the update button. Spotify, DRM and signing in stay out.
+
+### D-132 · A video added to Music keeps its sound
+- **Date:** 2026-11-19 · **Approved by:** project owner
+- Videos added to Music (a music video, a concert) become tracks: FFmpeg makes an MP3 of the video's sound (LAME at its best variable quality, about 245 kbps, with the video's title and artist tags) in the library folder, `<Music>\From videos`, and that MP3 is imported as any track is, with a frame of the video as its cover when it has none. The video itself isn't touched or moved, and isn't added to Videos. An MP3 already made for a video is used again. A video without sound says so. Music's file picker takes videos too.
+
+### D-131 · Covers from LaunchBox, Nintendo's store and the Microsoft Store
+- **Date:** 2026-11-19 · **Approved by:** project owner (chose all three; SteamGridDB and IGDB answer nothing without the user's own key or a registered app, so they stay as they are)
+- **LaunchBox Games Database:** its whole database, published as one file (about 110 MB), is downloaded when the user asks in Settings › Arcade (and refreshed or removed there). Digitify keeps a small index of it (each game's names, platform and front-box pictures; about 45 MB, made in seconds) and searches it on this computer: front boxes by the game's name on its console (other names too; North America's first, then the world's, Europe's, Japan's). Only the picture chosen is downloaded.
+- **Nintendo eShop:** Nintendo's store search, for Nintendo consoles' games, by name: its square store art, among the covers to choose from.
+- **Microsoft Store:** its catalogue, for PC and Xbox games, by name: the game's vertical poster, else its square box art (games only, not their add-ons).
+- In Find covers they join the others; for a game without a cover, LaunchBox comes after GameTDB, and the Microsoft Store after Steam's store, before SteamGridDB. A launcher's own cover still comes first.
+
+### D-130 · Home's tiles, centred and lively
+- **Date:** 2026-11-19 · **Approved by:** project owner
+- A tile's covers sit in the middle of its screen (an old rule kept them at the top, cut off): the middle one in front and a little larger, the others tilted out and lower. On hover they fan apart and rise; they come in one after another. Reduced motion and light mode keep them still.
+
+### D-129 · Light mode by itself
+- **Date:** 2026-11-19 · **Approved by:** project owner
+- Digitify watches how smoothly it draws while it's in front and in use (not while a game, a video or a disc plays, nor in its first seconds): when it stays under 24 frames a second, or a third of its frames come late, for three looks of four seconds in a row, it turns light mode on (D-031's fewer effects and animations) and a notice says so, with **Turn it off**. Settings › General has "Turn light mode on by itself"; turning light mode off by hand stops it, so the choice stays the user's.
+
+### D-128 · Covers from SteamGridDB, and by name
+- **Date:** 2026-11-19 · **Approved by:** project owner
+- With the user's own SteamGridDB API key (free, from their account's preferences; entered in Settings › Arcade, checked with SteamGridDB, kept on this computer and sent only to SteamGridDB), its community's box art comes into Find covers (a Steam game's by its app id; any other game, emulated ones too, by its name, the two closest matches) and is the last place looked for a game without a cover. Emulated games are no longer found by their ID alone. A launcher's own cover still comes first; another one is chosen by hand.
+
+### D-127 · Home's tiles in each category's shapes
+- **Date:** 2026-11-19 · **Approved by:** project owner
+- The covers fanned on Home's category tiles have the shape they have in their category: a video's wide frame, a photo's own proportions, a film's poster, an album's square (each kind of shape one height, centred), instead of all as book covers.
+
+### D-126 · Items stay in their category
+- **Date:** 2026-11-19 · **Approved by:** project owner
+- Each category keeps its own kind of media: an item can't move to another category, not from its edit form (its category is shown, not chosen), nor with Move (which now only puts items in one of their category's collections, from the category's own view), and the core refuses it either way. The one way across: videos from Videos into Movies & Series (D-135).
+
+### D-125 · Add, by category
+- **Date:** 2026-11-19 · **Approved by:** project owner
+- A category's **Add** offers only its own ways in (files and a folder of its kind; a link for Music and Videos; a book from images for Books, Comics and Manga; a disc for Music, Videos and Movies & Series), and what's added goes into it: nothing is guessed. Files it can't hold are left out (the import says how many) instead of landing in another category. On **Home** and in **Everything**, Add lists each category with its ways in, and Home adds "A game, for Arcade". Files dropped on the window go to the category open then, or the one chosen; "Detect automatically" is gone. Music's Add is blue like the others'.
+
+### D-124 · Emulators & folders in Settings too
+- **Date:** 2026-11-19 · **Approved by:** project owner
+- Settings › Arcade has the same Emulators & folders panel as Arcade (its four tabs), under the views' settings.
+
+### D-123 · The emulators' own icons
+- **Date:** 2026-11-19 · **Approved by:** project owner
+- Each emulator found shows its own icon beside its name, read from its program on this computer (on Windows from its .exe, once, then kept; on Linux the icon its Flatpak or desktop entry installs), as the launchers' art is: nothing is shipped or downloaded. One not found shows its initials in its colour; RetroArch has its symbol (Simple Icons).
+
+### D-122 · Names and symbols
+- **Date:** 2026-11-19 · **Approved by:** project owner
+- Epic Games' badge says "Epic Games"; the views are "PC games" and "ROM games"; All, Digital and Online have their symbols.
+
+### D-121 · Fewer buttons, grouped
+- **Date:** 2026-11-19 · **Approved by:** project owner (asked for all six)
+- **Arcade's header:** Look for games and Emulators & folders; Add a game… is in Emulators & folders › Launchers.
+- **A game's panel:** one **Cover** menu (Find covers…, Choose a picture…, its default or launcher's cover) instead of three buttons; with several games selected, one **Covers** menu (Find covers…, Default covers).
+- **Arcade's views:** a maker's consoles share one view, **Nintendo**, **PlayStation**, **Sega**, **Xbox consoles** or **More consoles**, with their total; it opens the list of its consoles (each with its symbol and count) and then shows the one chosen ("Nintendo · Wii U"). A maker with one console with games keeps it as a view of its own. Stores, the All views, Others and Favorites stay as they were; Big Picture's LB and RB still go through every view.
+- **Settings in tabs:** General (appearance, window and startup), Library (the library, reading, online services, backups), Arcade, Sound, Keyboard and About; the address names the tab, so links open the right one (a missing backup drive opens Library).
+- **Big Picture's game screen** shows your rating and note too.
+
+### D-120 · Big Picture all the way
+- **Date:** 2026-11-19 · **Approved by:** project owner
+- A game in Big Picture (Arcade, Home's rows, Game of the day, search) opens its own screen first, as Arcade's panel does in the regular mode: its cover, console, time played and sessions, **Play** (selected first) and favorite. Achievements and "Your year" open as Big Picture screens (the statistics' buttons go there) instead of the regular pages; the monthly goals are typed in, so they're set outside Big Picture. Big Picture's music screen opens again from a song's screen (its address had been refused). The readers and players stay full screen as they are.
+
+### D-119 · Symbols for every store and console
+- **Date:** 2026-11-19 · **Approved by:** project owner
+- The symbols are drawn at a whole-pixel size (14 px on badges) with room around them, so they're sharp and no edge is cut. New ones: Ubisoft, EA, Battle.net, Rockstar, Riot, Amazon, itch.io, Lutris, the Wii U, Switch and 3DS, the PSP (PlayStation's), Sega's consoles (Sega's S), the Xbox consoles (Xbox's), and Digitify's own Game Boy, Game Boy Advance, NES and Super Nintendo controllers and Wii U GamePad. They also show beside the launchers' and consoles' names in Emulators & folders.
+
+### D-118 · Find covers to choose from
+- **Date:** 2026-11-19 · **Approved by:** project owner (chose going game by game)
+- **Find covers**, in a game's panel and for selected games, looks everywhere at once (the launcher's art, Dolphin's and RetroArch's, a PlayStation 3 game's icon; GameTDB, libretro-thumbnails, Steam and GOG, and Steam's store by name with a few close matches) and shows each cover found once, with where it's from and its size, to pick one. With several games it goes one by one ("Game 2 of 5"): one with a single cover gets it, one with none is passed, the rest wait for a pick or Skip; a summary follows. It goes online as asked by the click.
+
+### D-117 · Don't use an emulator
+- **Date:** 2026-11-19 · **Approved by:** project owner (an old nullDC folder in Documents was being found)
+- A found emulator's row in Emulators & folders has **Don't use**: Arcade stops looking for it, its folders aren't searched and no game opens in it; its games stay, opening in another emulator for their console if there is one. Its row then says "Not used" with **Use again**; pointing to it by hand uses it again too. Migration 28 keeps the choice.
+
+### D-116 · PSP, 3DS, Wii U, Xbox, Xbox 360 and Switch; Rockstar and Riot
+- **Date:** 2026-11-19 · **Approved by:** project owner
+- **Emulators:** PPSSPP (PSP), Flycast (Dreamcast, before nullDC), Cemu (Wii U), Azahar / Lime3DS / Citra (3DS), xemu (Xbox), Xenia (Xbox 360, Windows) and Ryujinx (Switch), found installed or portable (Flatpak and the PATH on Linux) or pointed at; their game folders from `ppsspp.ini`, `emu.cfg`, `settings.xml`, `qt-config.ini`, `xemu.toml` and `Config.json`. Cemu starts with `-g`, xemu with `-dvd_path`, the others on the game.
+- **Games:** PSP discs by their "PSP GAME" system (named and numbered by their PARAM.SFO; CSO discs by their first sectors, so a PlayStation 2's stays a PlayStation 2's) and PSP EBOOTs; 3DS cartridges by NCSD/NCCH (their product code is GameTDB's ID); Wii U discs and installed folders (`code/*.rpx` with `meta/meta.xml` naming them, their GameTDB ID from the product code); Xbox and Xbox 360 discs by where their file system sits (a trimmed image by `default.xbe` or `default.xex`), and an Xbox 360 game as a folder with its `default.xex`; Switch packages and cartridges (their title ID from the name). Covers: GameTDB for 3DS and Wii U, libretro-thumbnails for the rest.
+- **Launchers (Windows):** the Rockstar Games Launcher's games by their uninstall entries (GTA V, RDR2, GTA IV, the trilogy, L.A. Noire, Max Payne 3, Bully), started by their program with `-launchTitleInFolder`, which hands them to the launcher; the Riot Client's games by each product's settings (League of Legends, VALORANT, Legends of Runeterra…), started with `--launch-product` and `--launch-patchline`.
+
 ### D-115 · Others: the games added by hand
 - **Date:** 2026-11-19 · **Approved by:** project owner
 - The PC games added by their program (D-107) have their own view, **Others**, after the stores' views, so they don't have to be looked for in All PC games. Like a store's view it shows once it has a game (and goes when the last one is removed), and can be reordered or hidden in Settings › Arcade.
@@ -523,7 +681,7 @@ Every product or architecture decision is recorded here with its reason. Anythin
 
 ### D-029 · One item per file; no shelves, physical copies or catalog; where a link came from
 - **Date:** 2026-11-06 · **Approved by:** project owner (asked for the changes; chose keeping physical-only items, shelves into collections, one item per file, and a disc format field)
-- **Downloads from YouTube and Spotify:** asked for and declined (YouTube's terms forbid it and its files sit behind technical protection; Spotify's are DRM-protected, D-007). The owner then kept links as online items (D-028) and turned down the lawful alternatives offered (replacing an online item with an owned file, Internet Archive, Vimeo downloads the author allows, Google Takeout).
+- **Downloads from YouTube and Spotify:** asked for and declined (YouTube's terms forbid it and its files sit behind technical protection; Spotify's are DRM-protected, D-007). The owner then kept links as online items (D-028) and turned down the lawful alternatives offered (replacing an online item with an owned file, Internet Archive, Vimeo downloads the author allows, Google Takeout). The owner later decided YouTube downloads go in (D-133).
 - **Removed:** "On the shelf" and "Not digitized" filters, Shelves (page, Home section, "Add to shelf", smart shelves), "Catalog a physical item" (Add menu, Home, and "Catalog this disc" on the Discs page) and "Your copies" (with "Add physical copy" and "Add files to this item"). The shelf view layout stays.
 - **Each file is its own item** (a series keeps its episodes, and a book of images is one file set). An item's page shows its file in a "File" panel (where it is, Show in folder, Arrange pages for image books).
 - **Migration (schema 9):** each hand-filled shelf became a collection of the same name in each of its items' categories; an item already in a collection kept it and got the shelf's name as a tag. Smart shelves were rules, not lists, so nothing moved (their rows stay in the database, unused). Every digital copy past an item's first became an item of its own with the same details, cover, people, tags and collection, told apart by its format. A film's DVD or Blu-ray physical copy became its disc format. Items recorded only as physical copies stay as items without files. Nothing is deleted; the library is backed up before upgrading.
@@ -536,7 +694,7 @@ Every product or architecture decision is recorded here with its reason. Anythin
 - **Date:** 2026-11-03 · **Approved by:** project owner (asked for Import from URL; chose links with the services' own players, downloads only where allowed, and playlists through their own API keys)
 - **Network (an approved exception to D-008):** Digitify goes online only when a link is pasted into "Import from URL", while an import runs, and while an online item plays in its service's player. Nothing else changed: no telemetry, no update checks.
 - **Services and what each allows** (checked against their current terms and APIs, November 2026):
-  - **YouTube and YouTube Music:** saved as online items and played in YouTube's embedded player (youtube-nocookie, with the app's origin, since YouTube refuses embeds that don't say where they are; "Open on YouTube" is always there for videos whose owners block embedding). Never downloaded: YouTube's terms don't allow it. Without a key a link is looked up through YouTube's public oEmbed (title, channel, thumbnail) and a playlist stays one link; with a YouTube Data API v3 key, playlists are listed video by video with lengths and availability (up to 500).
+  - **YouTube and YouTube Music:** saved as online items and played in YouTube's embedded player (youtube-nocookie, with the app's origin, since YouTube refuses embeds that don't say where they are; "Open on YouTube" is always there for videos whose owners block embedding). Never downloaded: YouTube's terms don't allow it (changed by D-133: downloaded with yt-dlp). Without a key a link is looked up through YouTube's public oEmbed (title, channel, thumbnail) and a playlist stays one link; with a YouTube Data API v3 key, playlists are listed video by video with lengths and availability (up to 500).
   - **Spotify:** saved as online items and played in Spotify's embedded player (previews unless signed in to Spotify there). Never downloaded. With the owner's client ID and secret, a track's artists and length and an album's songs are listed; since February 2026 Spotify lists a playlist's songs only to its owner or collaborators, so other playlists are saved as one link. Spotify also requires the developer app's owner to have Premium.
   - **SoundCloud:** with the owner's client ID and secret (client-credentials flow), tracks and sets are resolved and a set's tracks listed; a track whose uploader made it downloadable is downloaded; everything else is an online item played in SoundCloud's widget. Without keys a link is saved as one online item.
   - **Direct links to audio or video files:** downloaded.
@@ -545,7 +703,7 @@ Every product or architecture decision is recorded here with its reason. Anythin
 - **The queue:** two workers in the background; per-item progress, cancel (no half-downloaded files left) and retry; one failure doesn't stop the rest; requests to a service are spaced and a "slow down" answer is waited out once; errors are explained (removed, private or region-locked, no connection, keys refused, rate-limited, not a media file).
 - **Playlists:** importing a music playlist can make a Digitify playlist of its songs that are available offline, in the original order.
 - **Keys:** entered in Settings › Online services, stored encrypted for the Windows account (DPAPI) in the config folder, never sent back to the interface or written to logs.
-- **Not done, on purpose:** no downloading from YouTube or Spotify, no stream capture, no scraping of web pages, no signing in to the services.
+- **Not done, on purpose:** no downloading from YouTube (changed by D-133) or Spotify, no stream capture, no scraping of web pages, no signing in to the services.
 
 ### D-027 · Tracks instead of albums, Videos apart from Movies & Series, selections that fit
 - **Date:** 2026-11-03 · **Approved by:** project owner (asked for the changes; chose "Tracks, Artists, Playlists…" tabs, moving loose videos automatically, two rounds, and links plus their own API keys for importing from URLs)
@@ -560,7 +718,7 @@ Every product or architecture decision is recorded here with its reason. Anythin
 
 ### D-026 · Title bar navigation, cover colors, credit
 - **Date:** 2026-10-31 · **Approved by:** project owner (asked for each)
-- The title bar has Home and Library, as Big Picture does (the labels give way to icons in narrow windows); the search box sits next to them.
+- The title bar has Home and Library, as Big Picture does (the labels give way to icons in narrow windows); the search box sits next to them. (Its back and forward arrows went in D-138: each page has its own Back.)
 - Home has a "Discs" section so disc features are visible without a drive; "Featured today" has its own badge.
 - In Big Picture's cursor mode only the cursor selects.
 - A cover without artwork can be given a color on the item's page (stored as the item's cover color until it gets artwork); CDs stay round everywhere.

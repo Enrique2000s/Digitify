@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { ArrowLeft, ArrowLeftRight, ArrowUpDown, ChevronLeft, ChevronRight, Expand, FileText, Images, Info, LoaderCircle, Pause, Play, RotateCcw, RotateCw, Shrink, Wallpaper, ZoomIn, ZoomOut } from "lucide-react";
+import { Marquee } from "../../components/Marquee";
 import { api, errorText, pictureUrl, type ItemDetail, type PictureView, type QueryParams } from "../../lib/api";
 import { useItem } from "../../lib/queries";
 import { photoContext } from "../../lib/routes";
@@ -337,8 +338,8 @@ export function PictureViewerPage() {
           <ArrowLeft size={18} strokeWidth={2.6} />
         </button>
         <div className="reader-title" data-tauri-drag-region>
-          <strong>{data?.title ?? ""}</strong>
-          <span>{[album?.name, position].filter(Boolean).join(" · ")}</span>
+          <Marquee className="reader-name" text={data?.title ?? ""} />
+          <Marquee className="reader-sub" text={[album?.name, position].filter(Boolean).join(" · ")} />
         </div>
         <span className="pv-spacer" data-tauri-drag-region />
         {bigPicture && <BpClock />}

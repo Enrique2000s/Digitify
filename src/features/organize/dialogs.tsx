@@ -166,7 +166,8 @@ export function MoveDialog({
 }) {
   const queryClient = useQueryClient();
   const categories = useCategories();
-  const [category, setCategory] = useState(initialCategory);
+  // Items and collections stay in their category (D-126); only the collection is chosen.
+  const category = initialCategory;
   const [collection, setCollection] = useState<number | null>(initialCollection);
   const [newName, setNewName] = useState("");
   const tree = useCollectionTree(open ? category : null);
@@ -174,7 +175,6 @@ export function MoveDialog({
 
   useEffect(() => {
     if (open) {
-      setCategory(initialCategory);
       setCollection(initialCollection);
       setNewName("");
       setError(null);
@@ -200,7 +200,7 @@ export function MoveDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={title}
-      description="Every item has one home: a category, and optionally a collection inside it. Shelves and tags don't change."
+      description="Into a collection of this category, or out of every collection. Items stay in their category: each category keeps its own kind of media."
       footer={
         <>
           <button type="button" className="btn" onClick={() => onOpenChange(false)}>
@@ -212,9 +212,6 @@ export function MoveDialog({
             disabled={busy}
             onClick={() =>
               void run(async () => {
-                if (collections.length && category !== initialCategory) {
-                  throw new Error("Collections stay in their category; pick a place in it, or move only items.");
-                }
                 for (const id of collections) await api.collectionMove(id, collection);
                 if (ids.length) await api.itemsBulk(ids, [{ op: "move", category, collection }]);
                 libraryChanged(queryClient);
@@ -231,21 +228,7 @@ export function MoveDialog({
     >
       <div className="field-row">
         <Field label="Category">
-          <select
-            className="select"
-            value={category}
-            onChange={(event) => {
-              setCategory(event.target.value);
-              setCollection(null);
-            }}
-          >
-            {categories.data?.map((c) => (
-              <option key={c.key} value={c.key}>
-                {c.name}
-                {c.isHidden ? " (hidden)" : ""}
-              </option>
-            ))}
-          </select>
+          <p className="field-static">{categoryName}</p>
         </Field>
         <Field label="Collection">
           <select className="select" value={collection ?? ""} onChange={(event) => setCollection(event.target.value ? Number(event.target.value) : null)}>

@@ -2,7 +2,8 @@ import { useLibraryScope } from "../lib/queries";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ChevronLeft, ChevronRight, Disc3, Gamepad2, House, Joystick, LibraryBig, Search, Settings } from "lucide-react";
+import { ImportsButton } from "../features/online/History";
+import { Disc3, Gamepad2, House, Joystick, LibraryBig, Search, Settings } from "lucide-react";
 import { enterBigPicture, useBigPicture } from "../lib/bigpicture";
 import { Logo } from "./common";
 import { MiniPlayer } from "./MiniPlayer";
@@ -154,14 +155,7 @@ export function TitleBar({ searchEnabled }: { searchEnabled: boolean }) {
           <Logo size={34} />
           <span aria-hidden>Digitify</span>
         </Link>
-        <div className="history">
-          <button type="button" className="round-btn" aria-label="Back" title="Back" onClick={() => window.history.back()}>
-            <ChevronLeft size={19} strokeWidth={2.6} />
-          </button>
-          <button type="button" className="round-btn" aria-label="Forward" title="Forward" onClick={() => window.history.forward()}>
-            <ChevronRight size={19} strokeWidth={2.6} />
-          </button>
-        </div>
+        {/* No back or forward here (D-138): every page has its own Back. */}
         {searchEnabled && (
           // Home and Library, as in Big Picture (the search box is right next to them).
           <nav className="appbar-nav" aria-label="Go to">
@@ -215,6 +209,8 @@ export function TitleBar({ searchEnabled }: { searchEnabled: boolean }) {
             <Disc3 size={18} strokeWidth={2.4} />
           </Link>
         )}
+        {/* Downloads and imports, from anywhere (D-145). */}
+        {searchEnabled && <ImportsButton />}
         {searchEnabled && (
           <Link to="/settings" className="round-btn" aria-label="Settings" title="Settings">
             <Settings size={18} strokeWidth={2.4} />

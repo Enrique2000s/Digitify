@@ -1,5 +1,6 @@
 import { createHashHistory, createRootRoute, createRoute, createRouter, useNavigate } from "@tanstack/react-router";
 import { HomePage } from "../features/home/HomePage";
+import { ScreenError } from "./ScreenError";
 import { ItemPage } from "../features/item/ItemPage";
 import { OnlinePlayerPage } from "../features/online/OnlinePlayer";
 import { PictureViewerPage } from "../features/pictures/PictureViewer";
@@ -97,7 +98,13 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({ getParentRoute: () => rootRoute, path: "/disc/$letter/$title", component: DiscPlayPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/discs", component: DiscsPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: "/settings", component: SettingsPage }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/settings",
+    // `tab`: one of Settings' tabs (D-121); General without it.
+    validateSearch: (search: Record<string, unknown>): { tab?: string } => (typeof search.tab === "string" ? { tab: search.tab } : {}),
+    component: SettingsPage,
+  }),
   createRoute({ getParentRoute: () => rootRoute, path: "/now-playing", component: NowPlayingPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/achievements", component: AchievementsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/lab", component: Lab }),
@@ -106,7 +113,7 @@ const routeTree = rootRoute.addChildren([
     path: "/bp",
     // Big Picture's screens: home, a library category or Favorites, an item, search.
     validateSearch: (search: Record<string, unknown>): BigPictureSearch => {
-      const screen = ["home", "library", "item", "search", "online", "arcade"].includes(String(search.screen)) ? (search.screen as BigPictureSearch["screen"]) : undefined;
+      const screen = ["home", "library", "item", "search", "online", "arcade", "music", "game", "achievements", "year"].includes(String(search.screen)) ? (search.screen as BigPictureSearch["screen"]) : undefined;
       const id = Number(search.id);
       return {
         ...(screen ? { screen } : {}),
@@ -119,7 +126,8 @@ const routeTree = rootRoute.addChildren([
 ]);
 
 // Hash history: every route resolves to index.html without server-side fallbacks.
-export const router = createRouter({ routeTree, history: createHashHistory(), defaultPreload: false });
+// A screen that fails offers Back and Home instead of a dead end (D-143).
+export const router = createRouter({ routeTree, history: createHashHistory(), defaultPreload: false, defaultErrorComponent: ScreenError });
 
 declare module "@tanstack/react-router" {
   interface Register {

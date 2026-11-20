@@ -2,14 +2,31 @@ import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
 import { arrayMove, useReorder } from "../../lib/reorder";
 import { usePreferences, type ArcadeFilter } from "../../lib/preferences";
 import { Switch } from "../../components/common";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "../../lib/api";
-import { arcadeFilters, FILTER_LABELS, filledFilters } from "../arcade/shared";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, errorText } from "../../lib/api";
+import { addProgramGame, arcadeFilters, FILTER_LABELS, filledFilters } from "../arcade/shared";
+import { Setup } from "../arcade/ArcadePage";
 import { Setting } from "./Setting";
 
 /** Settings › Arcade (D-038): the views' order, which ones show, and one "All games" or two. */
 export function ArcadeSettings() {
   const { preferences, update } = usePreferences();
+  const queryClient = useQueryClient();
+  const status = useQuery({ queryKey: ["arcade-status"], queryFn: api.arcadeStatus });
+  const [addError, setAddError] = useState<string | null>(null);
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ["arcade-games"] });
+    void queryClient.invalidateQueries({ queryKey: ["arcade-status"] });
+  };
+  const addGame = async () => {
+    setAddError(null);
+    try {
+      if ((await addProgramGame(preferences.arcade.downloadCovers)) != null) refresh();
+    } catch (reason) {
+      setAddError(errorText(reason));
+    }
+  };
   const arcade = preferences.arcade;
   // The rows in their order, hidden ones included; "all" stands for the two All views when combined.
   // A store or console without games has no view to arrange (D-101).
@@ -62,8 +79,8 @@ export function ArcadeSettings() {
           <option value="quit">Close Digitify completely</option>
         </select>
       </Setting>
-      <Setting title="One “All games” view" text="Show your PC games and your ROM games together in one view, instead of “All PC games” and “All ROM games”.">
-        <Switch checked={arcade.combineAll} label="Combine All PC games and All ROM games" onChange={(combineAll) => update((c) => ({ arcade: { ...c.arcade, combineAll } }))} />
+      <Setting title="One “All games” view" text="Show your PC games and your ROM games together in one view, instead of “PC games” and “ROM games”.">
+        <Switch checked={arcade.combineAll} label="Combine PC games and ROM games" onChange={(combineAll) => update((c) => ({ arcade: { ...c.arcade, combineAll } }))} />
       </Setting>
       <p className="hint" style={{ margin: "14px 0 10px" }}>
         Drag the views (or use the arrows) to set the order of Arcade's buttons; switch off the ones you don't use. A store or console shows here once Arcade has one of its games.
@@ -91,6 +108,129 @@ export function ArcadeSettings() {
           );
         })}
       </ul>
+      <LaunchBoxSetting />
+      <SteamGridDbSetting />
+      {/* Emulators & folders here too (D-124): the same panel as in Arcade. */}
+      <h3 className="settings-subtitle">Emulators &amp; folders</h3>
+      {status.data && <Setup status={status.data} onChanged={refresh} onAddProgram={() => void addGame()} />}
+      {addError && <p className="notice danger">{addError}</p>}
     </section>
+  );
+}
+
+/**
+ * SteamGridDB (D-128): its community's box art for any game by its name, with the user's own key.
+ * The key is checked with SteamGridDB, then kept on this computer; it can be removed.
+ */
+function SteamGridDbSetting() {
+  const status = useQuery({ queryKey: ["steamgriddb"], queryFn: api.arcadeSteamGridDbStatus });
+  const queryClient = useQueryClient();
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const save = async (value: string | null) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.arcadeSteamGridDbSet(value);
+      setKey("");
+      void queryClient.invalidateQueries({ queryKey: ["steamgriddb"] });
+    } catch (reason) {
+      setError(errorText(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Setting
+      title="Covers from SteamGridDB"
+      text={
+        <>
+          Box art from SteamGridDB's community for any game, found by its name (emulated games too), in Find covers and for games without a cover. It needs your own free key: sign in at
+          SteamGridDB, then Preferences › API. The key stays on this computer and goes only to SteamGridDB. A launcher's own cover still comes first.
+          {error && <span className="setting-error"> {error}</span>}
+        </>
+      }
+    >
+      {status.data ? (
+        <div className="steamgriddb-row">
+          <span className="steamgriddb-ok">Key saved</span>
+          <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void save(null)}>
+            Remove
+          </button>
+        </div>
+      ) : (
+        <form
+          className="steamgriddb-row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (key.trim()) void save(key);
+          }}
+        >
+          <input className="input" type="password" autoComplete="off" placeholder="Your API key" value={key} onChange={(event) => setKey(event.target.value)} aria-label="SteamGridDB API key" />
+          <button type="submit" className="btn btn-sm btn-primary" disabled={busy || !key.trim()}>
+            {busy ? "Checking…" : "Save"}
+          </button>
+          <button type="button" className="btn btn-sm" onClick={() => void api.arcadeSteamGridDbOpen().catch((reason) => setError(errorText(reason)))}>
+            Get a key
+          </button>
+        </form>
+      )}
+    </Setting>
+  );
+}
+
+/**
+ * LaunchBox Games Database (D-131): its front boxes for nearly every console and PC game, by name.
+ * Its database is downloaded once (about 110 MB) and searched on this computer; no account.
+ */
+function LaunchBoxSetting() {
+  const status = useQuery({ queryKey: ["launchbox"], queryFn: api.arcadeLaunchBoxStatus });
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async (action: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      void queryClient.invalidateQueries({ queryKey: ["launchbox"] });
+    } catch (reason) {
+      setError(errorText(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const here = status.data;
+  return (
+    <Setting
+      title="Covers from LaunchBox Games Database"
+      text={
+        <>
+          Front boxes for nearly every console's games and PC games, found by name, in Find covers and for games without a cover. Its database is downloaded once (about 110 MB) and searched on
+          this computer; no account. Only the cover chosen is downloaded.
+          {here && ` ${here.games.toLocaleString()} games, downloaded ${new Date(here.updated).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}.`}
+          {busy && " Downloading and preparing it: a minute or two."}
+          {error && <span className="setting-error"> {error}</span>}
+        </>
+      }
+    >
+      <div className="steamgriddb-row">
+        {here ? (
+          <>
+            <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void run(api.arcadeLaunchBoxDownload)}>
+              {busy ? "Downloading…" : "Refresh"}
+            </button>
+            <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void run(api.arcadeLaunchBoxRemove)}>
+              Remove
+            </button>
+          </>
+        ) : (
+          <button type="button" className="btn btn-sm btn-primary" disabled={busy} onClick={() => void run(api.arcadeLaunchBoxDownload)}>
+            {busy ? "Downloading…" : "Download (110 MB)"}
+          </button>
+        )}
+      </div>
+    </Setting>
   );
 }

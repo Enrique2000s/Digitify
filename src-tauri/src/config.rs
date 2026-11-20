@@ -18,6 +18,8 @@ pub struct Config {
     pub library_path: Option<PathBuf>,
     /// Interface preferences (theme, accent, motion, layouts…). Owned and validated by the UI.
     pub preferences: Value,
+    /// The user's own SteamGridDB API key (D-128), for its box art; sent only to SteamGridDB.
+    pub steamgriddb_key: Option<String>,
 }
 
 pub struct ConfigStore {

@@ -21,6 +21,9 @@
 //! - Kega Fusion (Mega Drive, Sega CD, Master System, Game Gear), ZSNES and Snes9x (Super
 //!   Nintendo), Nestopia (NES), nullDC (Dreamcast, Windows) and ares (many consoles): the same, from
 //!   `Fusion.ini`, `zsnesw.cfg`, `snes9x.conf`, `nestopia.xml`, `nullDC.cfg` and `settings.bml` (D-111).
+//! - PPSSPP (PSP), Flycast (Dreamcast), Cemu (Wii U), Azahar / Lime3DS / Citra (3DS), xemu (Xbox),
+//!   Xenia (Xbox 360, Windows) and Ryujinx (Switch): their game folders from `ppsspp.ini`,
+//!   `emu.cfg`, `settings.xml`, `qt-config.ini`, `xemu.toml` and `Config.json` (D-116).
 //!
 //! An emulator can also be pointed at by hand (a portable copy, an unusual place); its settings
 //! are then looked for next to it.
@@ -51,10 +54,17 @@ pub enum Emulator {
     Nestopia,
     NullDc,
     Ares,
+    Ppsspp,
+    Flycast,
+    Cemu,
+    Azahar,
+    Xemu,
+    Xenia,
+    Ryujinx,
 }
 
 impl Emulator {
-    pub const ALL: [Emulator; 18] = [
+    pub const ALL: [Emulator; 25] = [
         Emulator::Dolphin,
         Emulator::Project64,
         Emulator::Rmg,
@@ -71,6 +81,13 @@ impl Emulator {
         Emulator::Mgba,
         Emulator::Fusion,
         Emulator::NullDc,
+        Emulator::Flycast,
+        Emulator::Ppsspp,
+        Emulator::Azahar,
+        Emulator::Cemu,
+        Emulator::Ryujinx,
+        Emulator::Xemu,
+        Emulator::Xenia,
         Emulator::Ares,
         Emulator::RetroArch,
     ];
@@ -95,6 +112,13 @@ impl Emulator {
             Emulator::Nestopia => "nestopia",
             Emulator::NullDc => "nulldc",
             Emulator::Ares => "ares",
+            Emulator::Ppsspp => "ppsspp",
+            Emulator::Flycast => "flycast",
+            Emulator::Cemu => "cemu",
+            Emulator::Azahar => "azahar",
+            Emulator::Xemu => "xemu",
+            Emulator::Xenia => "xenia",
+            Emulator::Ryujinx => "ryujinx",
         }
     }
 
@@ -122,6 +146,13 @@ impl Emulator {
             Emulator::Nestopia => "Nestopia",
             Emulator::NullDc => "nullDC",
             Emulator::Ares => "ares",
+            Emulator::Ppsspp => "PPSSPP",
+            Emulator::Flycast => "Flycast",
+            Emulator::Cemu => "Cemu",
+            Emulator::Azahar => "Azahar / Lime3DS",
+            Emulator::Xemu => "xemu",
+            Emulator::Xenia => "Xenia",
+            Emulator::Ryujinx => "Ryujinx",
         }
     }
 
@@ -146,12 +177,19 @@ impl Emulator {
             Emulator::Nestopia => &["nestopia"],
             Emulator::NullDc => &["nulldc"],
             Emulator::Ares => &["ares"],
+            Emulator::Ppsspp => &["ppsspp"],
+            Emulator::Flycast => &["flycast"],
+            Emulator::Cemu => &["cemu"],
+            Emulator::Azahar => &["azahar", "lime3ds", "citra"],
+            Emulator::Xemu => &["xemu"],
+            Emulator::Xenia => &["xenia"],
+            Emulator::Ryujinx => &["ryujinx"],
         }
     }
 
     /// Whether it exists for this system at all (Project64 is Windows-only).
     pub fn available_here(self) -> bool {
-        !(matches!(self, Emulator::Project64 | Emulator::NullDc) && cfg!(not(windows)))
+        !(matches!(self, Emulator::Project64 | Emulator::NullDc | Emulator::Xenia) && cfg!(not(windows)))
     }
 
     #[cfg_attr(windows, allow(dead_code))]
@@ -171,7 +209,13 @@ impl Emulator {
             Emulator::Snes9x => Some("com.snes9x.Snes9x"),
             Emulator::Nestopia => Some("ca._0ldsk00l.Nestopia"),
             Emulator::Ares => Some("dev.ares.ares"),
-            Emulator::Project64 | Emulator::Fusion | Emulator::Zsnes | Emulator::NullDc => None,
+            Emulator::Ppsspp => Some("org.ppsspp.PPSSPP"),
+            Emulator::Flycast => Some("org.flycast.Flycast"),
+            Emulator::Cemu => Some("info.cemu.Cemu"),
+            Emulator::Azahar => Some("org.azahar_emu.Azahar"),
+            Emulator::Xemu => Some("app.xemu.xemu"),
+            Emulator::Ryujinx => Some("io.github.ryubing.Ryujinx"),
+            Emulator::Project64 | Emulator::Fusion | Emulator::Zsnes | Emulator::NullDc | Emulator::Xenia => None,
         }
     }
 }
@@ -271,7 +315,13 @@ fn installed(emulator: Emulator) -> Option<Program> {
             Emulator::Snes9x => &["snes9x-gtk", "snes9x"],
             Emulator::Nestopia => &["nestopia"],
             Emulator::Ares => &["ares"],
-            Emulator::Project64 | Emulator::NullDc => return None,
+            Emulator::Ppsspp => &["PPSSPPSDL", "PPSSPPQt", "ppsspp"],
+            Emulator::Flycast => &["flycast"],
+            Emulator::Cemu => &["cemu", "Cemu"],
+            Emulator::Azahar => &["azahar", "lime3ds", "lime3ds-gui", "citra-qt"],
+            Emulator::Xemu => &["xemu"],
+            Emulator::Ryujinx => &["ryujinx", "Ryujinx"],
+            Emulator::Project64 | Emulator::NullDc | Emulator::Xenia => return None,
         };
         if let Some(path) = binaries.iter().find_map(|b| crate::tools::find_in(Path::new("/nonexistent"), b)) {
             return Some(Program::Native(path));
@@ -357,7 +407,22 @@ fn settings(emulator: Emulator, program: &Program) -> (Vec<(PathBuf, bool)>, Opt
             Some((playlists, thumbnails)) => (vec![(playlists, false)], Some(thumbnails)),
             None => (Vec::new(), None),
         },
-        Emulator::Mesen | Emulator::Fceux | Emulator::Mgba | Emulator::Fusion | Emulator::Zsnes | Emulator::Snes9x | Emulator::Nestopia | Emulator::NullDc | Emulator::Ares => {
+        Emulator::Mesen
+        | Emulator::Fceux
+        | Emulator::Mgba
+        | Emulator::Fusion
+        | Emulator::Zsnes
+        | Emulator::Snes9x
+        | Emulator::Nestopia
+        | Emulator::NullDc
+        | Emulator::Ares
+        | Emulator::Ppsspp
+        | Emulator::Flycast
+        | Emulator::Cemu
+        | Emulator::Azahar
+        | Emulator::Xemu
+        | Emulator::Xenia
+        | Emulator::Ryujinx => {
             let text: String = settings_files(emulator, program).iter().filter_map(|p| std::fs::read_to_string(p).ok()).collect::<Vec<_>>().join("\n");
             (recent_folders(&text), None)
         }
@@ -376,6 +441,13 @@ fn settings_files(emulator: Emulator, program: &Program) -> Vec<PathBuf> {
         Emulator::Nestopia => &["nestopia.xml", "nestopia.conf"],
         Emulator::NullDc => &["nullDC.cfg"],
         Emulator::Ares => &["settings.bml"],
+        Emulator::Ppsspp => &["memstick/PSP/SYSTEM/ppsspp.ini", "PSP/SYSTEM/ppsspp.ini"],
+        Emulator::Flycast => &["emu.cfg"],
+        Emulator::Cemu => &["settings.xml", "portable/settings.xml"],
+        Emulator::Azahar => &["qt-config.ini", "config/qt-config.ini", "user/config/qt-config.ini"],
+        Emulator::Xemu => &["xemu.toml"],
+        Emulator::Xenia => &["xenia-canary.config.toml", "xenia.config.toml"],
+        Emulator::Ryujinx => &["Config.json", "portable/Config.json"],
         _ => &["config.ini", "qt.ini"],
     };
     let mut dirs: Vec<PathBuf> = Vec::new();
@@ -389,6 +461,12 @@ fn settings_files(emulator: Emulator, program: &Program) -> Vec<PathBuf> {
             Emulator::Mesen => dirs.extend(env("USERPROFILE").map(|p| p.join("Documents").join("Mesen2"))),
             Emulator::Mgba => dirs.extend(env("APPDATA").map(|p| p.join("mGBA"))),
             Emulator::Ares => dirs.extend(env("LOCALAPPDATA").map(|p| p.join("ares"))),
+            Emulator::Ppsspp => dirs.extend(env("USERPROFILE").map(|p| p.join("Documents").join("PPSSPP"))),
+            Emulator::Flycast => dirs.extend(env("APPDATA").map(|p| p.join("flycast"))),
+            Emulator::Cemu => dirs.extend(env("APPDATA").map(|p| p.join("Cemu"))),
+            Emulator::Azahar => dirs.extend(["Azahar", "Lime3DS", "Citra"].iter().filter_map(|n| env("APPDATA").map(|p| p.join(n)))),
+            Emulator::Xemu => dirs.extend(env("APPDATA").map(|p| p.join("xemu").join("xemu"))),
+            Emulator::Ryujinx => dirs.extend(env("APPDATA").map(|p| p.join("Ryujinx"))),
             _ => {}
         }
     }
@@ -400,12 +478,18 @@ fn settings_files(emulator: Emulator, program: &Program) -> Vec<PathBuf> {
             Emulator::Snes9x => ("config/snes9x", "snes9x"),
             Emulator::Nestopia => ("config/nestopia", "nestopia"),
             Emulator::Ares => ("data/ares", "ares"),
+            Emulator::Ppsspp => ("config/ppsspp", "ppsspp"),
+            Emulator::Flycast => ("config/flycast", "flycast"),
+            Emulator::Cemu => ("config/Cemu", "Cemu"),
+            Emulator::Azahar => ("config/azahar-emu", "azahar-emu"),
+            Emulator::Xemu => ("data/xemu/xemu", "xemu/xemu"),
+            Emulator::Ryujinx => ("config/Ryujinx", "Ryujinx"),
             _ => ("config/mgba", "mgba"),
         };
         match program {
             Program::Flatpak(id) => dirs.push(home().join(".var/app").join(id).join(flatpak)),
             // ares keeps its settings with its data.
-            Program::Native(_) if emulator == Emulator::Ares => dirs.push(xdg("XDG_DATA_HOME", ".local/share").join(native)),
+            Program::Native(_) if matches!(emulator, Emulator::Ares | Emulator::Xemu) => dirs.push(xdg("XDG_DATA_HOME", ".local/share").join(native)),
             Program::Native(_) => dirs.push(xdg("XDG_CONFIG_HOME", ".config").join(native)),
         }
         match emulator {
@@ -413,6 +497,7 @@ fn settings_files(emulator: Emulator, program: &Program) -> Vec<PathBuf> {
             Emulator::Nestopia => dirs.push(home().join(".nestopia")),
             Emulator::Zsnes => dirs.push(home().join(".zsnes")),
             Emulator::Fusion => dirs.push(home().join(".Kega Fusion")),
+            Emulator::Azahar => dirs.extend(["lime3ds-emu", "citra-emu"].iter().map(|n| xdg("XDG_CONFIG_HOME", ".config").join(n))),
             _ => {}
         }
     }
@@ -424,7 +509,9 @@ fn settings_files(emulator: Emulator, program: &Program) -> Vec<PathBuf> {
 fn folder_setting(key: &str) -> bool {
     let rom = key.contains("rom") && (key.contains("dir") || key.contains("path") || key.contains("folder"));
     let console = ["md", "gen", "sms", "gg", "scd", "32x", "cd", "iso", "image", "game"].iter().any(|c| key.starts_with(c)) && (key.ends_with("path") || key.ends_with("dir"));
-    key.contains("lastdir") || key.contains("lastfolder") || key.contains("lastrom") || rom || console || key == "path"
+    // Azahar's `Paths\gamedirs\2\path`, xemu's `games_dir`, Cemu's `<Entry>`, PPSSPP's `CurrentDirectory`.
+    let more = (key.contains("gamedirs") && key.ends_with("path")) || key.contains("games_dir") || key.contains("gamesdir") || key == "entry" || key == "currentdirectory";
+    key.contains("lastdir") || key.contains("lastfolder") || key.contains("lastrom") || rom || console || key == "path" || more
 }
 
 /// The quoted strings of a line of JSON, unescaped (`\\` and `\"`).
@@ -463,19 +550,37 @@ pub(crate) fn recent_folders(text: &str) -> Vec<(PathBuf, bool)> {
         }
     };
     let is_game = |path: &Path| super::games::GAME_FILE_EXTENSIONS.contains(&super::games::extension(path).as_str());
+    // The JSON key a list of values belongs to (Ryujinx's `"game_dirs": [ … ]`).
+    let mut json_key = String::new();
     for line in text.lines() {
         let line = line.trim();
-        // JSON (Mesen): every quoted path to a game.
+        // JSON (Mesen, Ryujinx): every quoted path to a game, and the folders of a "…dirs" list.
         if line.contains('"') && (line.starts_with('"') || line.starts_with('{') || line.starts_with('[')) {
-            for quoted in json_strings(line) {
-                let path = PathBuf::from(&quoted);
-                if (quoted.contains('/') || quoted.contains('\\')) && is_game(&path) {
+            let strings = json_strings(line);
+            let pair = line.starts_with('"') && line.contains("\":");
+            if pair {
+                json_key = strings.first().map(|k| k.to_ascii_lowercase()).unwrap_or_default();
+            }
+            for (index, quoted) in strings.iter().enumerate() {
+                if pair && index == 0 {
+                    continue;
+                }
+                let path = PathBuf::from(quoted);
+                if !(quoted.contains('/') || quoted.contains('\\')) {
+                    continue;
+                }
+                if is_game(&path) {
                     if let Some(parent) = path.parent() {
                         add(parent.to_path_buf());
                     }
+                } else if json_key.contains("dir") && super::games::extension(&path).is_empty() {
+                    add(path);
                 }
             }
             continue;
+        }
+        if line.starts_with(']') || line.starts_with('}') {
+            json_key.clear();
         }
         // `<key>value</key>` (Nestopia's XML), `key = value` (FCEUX, mGBA, Snes9x, Fusion, nullDC),
         // `key: value` (ares's BML) or `key value` (older FCEUX).
@@ -492,7 +597,12 @@ pub(crate) fn recent_folders(text: &str) -> Vec<(PathBuf, bool)> {
             continue;
         };
         let key = key.trim().trim_end_matches(':').to_ascii_lowercase();
-        let value = value.trim().trim_end_matches(',').trim().trim_matches('"').replace("\\\\", "\\");
+        let value = value.trim().trim_end_matches(',').trim().trim_matches('"').trim_matches('\'').replace("\\\\", "\\");
+        // Flycast keeps its content folders in one setting, separated by semicolons.
+        if key.contains("contentpath") {
+            value.split(';').map(str::trim).filter(|p| !p.is_empty()).for_each(|p| add(PathBuf::from(p)));
+            continue;
+        }
         // ares names a recent game "System;path".
         let value = match value.rsplit_once(';') {
             Some((_, path)) if path.starts_with('/') || path.get(1..3) == Some(":\\") || path.get(1..3) == Some(":/") => path.to_string(),
@@ -887,6 +997,22 @@ mod tests {
         let folders = rpcs3_folders(&dir);
         assert_eq!(folders, vec![(PathBuf::from("D:/PS3"), true)], "D:/PS3 once; no installed games or games folder yet");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ppsspp_flycast_cemu_azahar_xemu_and_ryujinx_folders() {
+        let ppsspp = "[General]\nCurrentDirectory = /games/psp/\n[Recent]\nFileName0 = /media/umd/Lumen.iso\n";
+        assert_eq!(recent_folders(ppsspp), vec![(PathBuf::from("/games/psp/"), false), (PathBuf::from("/media/umd"), false)]);
+        let flycast = "[config]\nDreamcast.ContentPath = /dc/one;/dc/two\n";
+        assert_eq!(recent_folders(flycast), vec![(PathBuf::from("/dc/one"), false), (PathBuf::from("/dc/two"), false)]);
+        let cemu = "<content>\n  <GamePaths>\n    <Entry>/wiiu/games</Entry>\n  </GamePaths>\n</content>";
+        assert_eq!(recent_folders(cemu), vec![(PathBuf::from("/wiiu/games"), false)]);
+        let azahar = "[UI]\nPaths\\gamedirs\\3\\path=/3ds/carts\nPaths\\gamedirs\\size=3\n";
+        assert_eq!(recent_folders(azahar), vec![(PathBuf::from("/3ds/carts"), false)]);
+        let xemu = "[general]\ngames_dir = '/xbox/discs'\n[sys.files]\ndvd_path = '/xbox/other/Halo.iso'\nbootrom_path = '/bios/mcpx.bin'\n";
+        assert_eq!(recent_folders(xemu)[..2], [(PathBuf::from("/xbox/discs"), false), (PathBuf::from("/xbox/other"), false)]);
+        let ryujinx = "{\n  \"game_dirs\": [\n    \"/switch/games\",\n    \"/switch/more\"\n  ],\n  \"language_code\": \"en_US\"\n}";
+        assert_eq!(recent_folders(ryujinx), vec![(PathBuf::from("/switch/games"), false), (PathBuf::from("/switch/more"), false)]);
     }
 
     #[test]

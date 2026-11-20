@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
-import { ArrowLeft, Copy, FileWarning, FolderSearch, RefreshCw } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { BackButton } from "../../components/BackButton";
+import { Copy, FileWarning, FolderSearch, RefreshCw } from "lucide-react";
 import { api, type CheckedFile } from "../../lib/api";
 import { bytes } from "../../lib/format";
 import { plural } from "../../lib/format";
@@ -25,16 +26,15 @@ function FileRow({ file }: { file: CheckedFile }) {
 
 /** Settings › Library check (D-057): files that can't be found, and the same file in several items. */
 export function LibraryCheckPage() {
+  const navigate = useNavigate();
   const check = useQuery({ queryKey: ["library-check"], queryFn: api.libraryCheck });
   const relink = useRelink();
   const data = check.data;
   return (
     <div className="page settings-page check-page">
+      <BackButton fallback={() => void navigate({ to: "/settings", search: { tab: "library" } })} />
       <div className="page-header">
         <div className="title-row">
-          <Link to="/settings" className="round-btn" aria-label="Back to Settings" title="Back to Settings">
-            <ArrowLeft size={18} />
-          </Link>
           <div>
             <h1 className="display">Library check</h1>
             <div className="count">Files that can't be found, and the same file in more than one item</div>

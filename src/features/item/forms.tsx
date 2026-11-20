@@ -179,14 +179,9 @@ export function EditItemDialog({ item, open, onOpenChange }: { item: ItemDetail;
         </Field>
       </div>
       <div className="field-row">
+        {/* An item stays in its category (D-126). */}
         <Field label="Category">
-          <select className="select" value={category} onChange={(e) => setCategory(e.target.value)}>
-            {categories.data?.map((c) => (
-              <option key={c.key} value={c.key}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <p className="field-static">{categories.data?.find((c) => c.key === category)?.name ?? category}</p>
         </Field>
         <Field label="Year">
           <input className="input" inputMode="numeric" value={year} onChange={(e) => setYear(e.target.value)} />

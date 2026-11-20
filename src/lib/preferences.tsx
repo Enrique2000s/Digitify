@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { api, ARCADE_CONSOLES, type ArcadeConsole, type ArcadeEmulator, type ArcadeStore, type CoverShape, type ImportMode, type MusicSource, type Ownership, type SortKey } from "./api";
+import { api, ARCADE_CONSOLES, type ArcadeConsole, type ArcadeEmulator, type ArcadeStore, type CoverShape, type DownloadQuality, type ImportMode, type MusicSource, type Ownership, type SortKey } from "./api";
 import { accentVariables } from "./color";
 import { sanitizeShortcuts, setCustomShortcuts, type ShortcutMap } from "./shortcuts";
 
@@ -134,6 +134,8 @@ export interface Preferences {
   motion: MotionChoice;
   /** Light mode for slower computers: no blur, reflections, heavy shadows or animations (D-030). */
   lightMode: boolean;
+  /** Light mode turns itself on when the computer struggles (D-129), until it's turned off by hand. */
+  autoLightMode: boolean;
   /** The window opens maximized (D-046); off, it opens at its regular size. */
   startMaximized: boolean;
   /** Closing the window keeps Digitify running in the tray (D-059), off by default. */
@@ -177,6 +179,12 @@ export interface Preferences {
   shelfStyle: "covers" | "spines";
   shelfLook: ShelfLook;
   importMode: "ask" | ImportMode;
+  /** What yt-dlp downloads from links (D-133). */
+  downloads: DownloadQuality;
+  /** The video player's Back leaves the video playing in a corner (D-141); otherwise it closes it. */
+  videoBackToCorner: boolean;
+  /** Which corner the small video sits in (D-145): top or bottom, left or right. */
+  pipCorner: "tl" | "tr" | "bl" | "br";
   music: MusicPreferences;
   /** Soft tones when pointing at and pressing things. */
   interfaceSounds: boolean;
@@ -201,7 +209,7 @@ export interface Preferences {
 export type ArcadeFilter = "all" | "all-pc" | "all-roms" | ArcadeStore | "others" | ArcadeConsole | "favorites";
 
 /** Their default order; "all" stands in for "all-pc" and "all-roms" when they're combined. */
-export const ARCADE_FILTER_ORDER: ArcadeFilter[] = ["all-pc", "all-roms", "steam", "epic", "xbox", "gog", "ubisoft", "ea", "battlenet", "amazon", "itch", "heroic", "lutris", "others", ...ARCADE_CONSOLES, "favorites"];
+export const ARCADE_FILTER_ORDER: ArcadeFilter[] = ["all-pc", "all-roms", "steam", "epic", "xbox", "gog", "ubisoft", "ea", "battlenet", "rockstar", "riot", "amazon", "itch", "heroic", "lutris", "others", ...ARCADE_CONSOLES, "favorites"];
 
 export interface ArcadePreferences {
   downloadCovers: boolean;
@@ -279,6 +287,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   accent: "#1592d0",
   motion: "system",
   lightMode: false,
+  autoLightMode: true,
   startMaximized: true,
   closeToTray: true,
   resumeOnOpen: true,
@@ -301,6 +310,9 @@ export const DEFAULT_PREFERENCES: Preferences = {
   shelfStyle: "covers",
   shelfLook: "breeze",
   importMode: "ask",
+  downloads: { video: "best", container: "mkv", audio: "mp3" },
+  videoBackToCorner: true,
+  pipCorner: "br",
   music: DEFAULT_MUSIC,
   interfaceSounds: true,
   reader: DEFAULT_READER,
@@ -385,6 +397,15 @@ function sanitizeVolumes(raw: unknown): Preferences["volumes"] {
   const pick = picker(raw, DEFAULT_PREFERENCES.volumes);
   const isVolume = (v: unknown) => typeof v === "number" && v >= 0 && v <= 100;
   return { video: Math.round(pick("video", isVolume)), music: Math.round(pick("music", isVolume)) };
+}
+
+function sanitizeDownloads(raw: unknown): DownloadQuality {
+  const pick = picker(raw, DEFAULT_PREFERENCES.downloads);
+  return {
+    video: pick("video", (v) => ["best", "2160", "1440", "1080", "720", "480"].includes(v as string)),
+    container: pick("container", (v) => v === "mkv" || v === "mp4"),
+    audio: pick("audio", (v) => v === "mp3" || v === "m4a" || v === "original"),
+  };
 }
 
 function sanitizeBigPicture(raw: unknown): Preferences["bigPicture"] {
@@ -560,6 +581,7 @@ function sanitize(raw: unknown): Preferences {
     accent: breeze ? pick("accent", (v) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v)) : DEFAULT_PREFERENCES.accent,
     motion: pick("motion", (v) => ["system", "full", "reduced", "off"].includes(v as string)),
     lightMode: pick("lightMode", isBoolean),
+    autoLightMode: pick("autoLightMode", isBoolean),
     startMaximized: pick("startMaximized", isBoolean),
     closeToTray: pick("closeToTray", isBoolean),
     resumeOnOpen: pick("resumeOnOpen", isBoolean),
@@ -588,6 +610,9 @@ function sanitize(raw: unknown): Preferences {
     shelfStyle: pick("shelfStyle", (v) => v === "covers" || v === "spines"),
     shelfLook: pick("shelfLook", (v) => ["breeze", "wood", "glass", "metal"].includes(v as string)),
     importMode: pick("importMode", (v) => v === "ask" || v === "reference" || v === "copy"),
+    downloads: sanitizeDownloads((raw as Raw<Preferences>)?.downloads),
+    videoBackToCorner: pick("videoBackToCorner", isBoolean),
+    pipCorner: pick("pipCorner", (v) => v === "tl" || v === "tr" || v === "bl" || v === "br"),
     music: sanitizeMusic((raw as Raw<Preferences>)?.music),
     interfaceSounds: pick("interfaceSounds", isBoolean),
     reader: sanitizeReader((raw as Raw<Preferences>)?.reader),

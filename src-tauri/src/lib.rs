@@ -18,7 +18,9 @@ mod ebooks;
 mod episodes;
 mod error;
 mod files;
+mod films;
 mod formats;
+mod history;
 mod import;
 mod library;
 mod library_folder;
@@ -258,6 +260,15 @@ pub fn run() {
             arcade::arcade_reveal,
             arcade::arcade_launch,
             arcade::arcade_add_program,
+            arcade::arcade_ignore_emulator,
+            arcade::arcade_cover_choices,
+            arcade::arcade_choose_cover,
+            arcade::arcade_steamgriddb_status,
+            arcade::arcade_steamgriddb_set,
+            arcade::arcade_steamgriddb_open,
+            arcade::arcade_launchbox_status,
+            arcade::arcade_launchbox_download,
+            arcade::arcade_launchbox_remove,
             arcade::arcade_emulator_folders,
             arcade::arcade_set_favorite_many,
             arcade::arcade_forget_many,
@@ -274,6 +285,14 @@ pub fn run() {
             online::online_retry,
             online::online_clear,
             online::online_keys_status,
+            online::online_download_items,
+            history::history_list,
+            history::history_clear,
+            history::history_retry,
+            films::films_series,
+            films::videos_to_films,
+            online::ytdlp_status,
+            online::ytdlp_update,
             online::online_keys_set,
             online::online_open,
             pages::reader_open,

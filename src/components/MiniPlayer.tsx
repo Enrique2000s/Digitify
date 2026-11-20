@@ -16,7 +16,7 @@ export function MiniPlayer() {
       </button>
       {/* The cover and title open the Now playing page (D-078). */}
       <Link to="/now-playing" className="mini-player-open" aria-label="Now playing" title="Now playing">
-        <span className="mini-cover">{track && <Cover item={{ title: track.title, coverKey: track.coverKey, handler: "audio" }} />}</span>
+        <span className="mini-cover">{track && <Cover item={{ title: track.title, coverKey: track.coverKey, handler: "audio" }} iconOnly />}</span>
         <span className="music-text">
           <Marquee className="music-title" text={track?.title ?? "Loading…"} />
           <Marquee className="music-status" text={track ? (track.artist ?? track.album ?? "") : ""} />

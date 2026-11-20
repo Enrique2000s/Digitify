@@ -4,7 +4,7 @@ import { Dialog as RadixDialog } from "radix-ui";
 import { FolderOpen, Pencil, Trash, X } from "lucide-react";
 import { api, type Category } from "../../lib/api";
 import { libraryChanged, useCollections } from "../../lib/queries";
-import { usePreferences } from "../../lib/preferences";
+import { useCoverShape, usePreferences } from "../../lib/preferences";
 import { photoContext } from "../../lib/routes";
 import { plural } from "../../lib/format";
 import { MediaCard } from "../../components/MediaCard";
@@ -28,6 +28,10 @@ export function CollectionDialog({ category, id, onClose }: { category: Category
   photoContext.params = params;
   const name = info?.name ?? "Collection";
   const total = items.data?.total ?? info?.itemCount ?? 0;
+  // One art height for every card, as in the category's grid (D-139): a wide video beside a tall
+  // one is as tall, not smaller.
+  const shapeOf = useCoverShape();
+  const artHeight = Math.round(preferences.cardSize * 1.5 * 0.95);
   const size = Math.round(preferences.cardSize * 0.95);
   return (
     <RadixDialog.Root open onOpenChange={(open) => !open && onClose()}>
@@ -62,7 +66,7 @@ export function CollectionDialog({ category, id, onClose }: { category: Category
             ) : (
               <div className="collection-window-grid" style={{ ["--card" as string]: `${size}px` }}>
                 {items.data?.items.map((item) => (
-                  <MediaCard key={item.id} item={item} width={size} transitionId={item.id} />
+                  <MediaCard key={item.id} item={item} width={Math.round(artHeight * shapeOf(item).aspect)} transitionId={item.id} />
                 ))}
               </div>
             )}

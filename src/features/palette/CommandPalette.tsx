@@ -111,7 +111,8 @@ export function CommandPalette() {
       { id: "bp", group: "Go to", label: "Big Picture", hint: "TV and controller", icon: <Monitor size={17} />, words: "tv controller fullscreen", run: go(() => void enterBigPicture(() => void navigate({ to: "/bp" }))) },
       { id: "import-folder", group: "Do", label: "Import a folder", icon: <FolderPlus size={17} />, words: "add", run: go(() => void importer.pickFolder()) },
       { id: "import-files", group: "Do", label: "Import files", icon: <FilePlus size={17} />, words: "add", run: go(() => void importer.pickFiles()) },
-      { id: "import-url", group: "Do", label: "Import from a link", hint: "YouTube, Spotify, SoundCloud", icon: <LinkIcon size={17} />, words: "url add", run: go(openImportUrl) },
+      { id: "import-url-music", group: "Do", label: "Add music from a link", hint: "YouTube Music, SoundCloud, Bandcamp and more", icon: <LinkIcon size={17} />, words: "url add download song", run: go(() => openImportUrl("music")) },
+      { id: "import-url-videos", group: "Do", label: "Add videos from a link", hint: "YouTube, Twitch, Dailymotion and more", icon: <LinkIcon size={17} />, words: "url add download video", run: go(() => openImportUrl("videos")) },
       {
         id: "theme",
         group: "Do",

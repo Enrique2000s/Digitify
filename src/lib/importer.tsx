@@ -2,17 +2,19 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, errorText, type ImportMode, type ImportProgress } from "./api";
+import { api, errorText, type Category, type ImportMode, type ImportProgress } from "./api";
 
 interface ImporterContext {
   /** Paths waiting for confirmation in the import dialog. */
   pending: string[] | null;
+  /** The category they go into (D-125): the one they were added from, or none yet (dropped files). */
+  pendingCategory: Category | null;
   jobs: ImportProgress[];
   dragging: boolean;
   error: string | null;
-  pickFiles: () => Promise<void>;
-  pickFolder: () => Promise<void>;
-  review: (paths: string[]) => void;
+  pickFiles: (category?: Category | null) => Promise<void>;
+  pickFolder: (category?: Category | null) => Promise<void>;
+  review: (paths: string[], category?: Category | null) => void;
   closeReview: () => void;
   start: (mode: ImportMode, category: string | null) => Promise<void>;
   cancel: (jobId: number) => void;
@@ -21,19 +23,29 @@ interface ImporterContext {
 
 const Context = createContext<ImporterContext | null>(null);
 
-const MEDIA_FILTER = {
-  name: "Media",
-  extensions: [
-    "epub", "pdf", "mobi", "azw3", "azw", "fb2",
-    "cbz", "cbr", "cb7", "cbt",
-    "jpg", "jpeg", "png", "webp", "gif", "bmp", "tif", "tiff",
-    "mp4", "m4v", "mkv", "mov", "avi", "webm", "wmv", "mpg", "mpeg", "ts", "m2ts",
-    "mp3", "flac", "wav", "m4a", "aac", "ogg", "opus", "wma", "aiff", "ape", "wv",
-  ],
+/** The kinds of file each kind of category takes (D-125), for the file picker. */
+const KINDS: Record<string, string[]> = {
+  book: ["epub", "pdf", "mobi", "azw3", "azw", "fb2"],
+  comic: ["cbz", "cbr", "cb7", "cbt", "pdf", "zip", "rar", "7z"],
+  image: ["jpg", "jpeg", "png", "webp", "gif", "bmp", "tif", "tiff", "heic", "avif"],
+  video: ["mp4", "m4v", "mkv", "mov", "avi", "webm", "wmv", "mpg", "mpeg", "ts", "m2ts"],
+  audio: ["mp3", "flac", "wav", "m4a", "aac", "ogg", "opus", "wma", "aiff", "ape", "wv"],
 };
 
+function fileFilter(category: Category | null | undefined) {
+  // Music takes videos too: their sound becomes an MP3 (D-132).
+  const kinds = category?.handler === "audio" ? [...KINDS.audio, ...KINDS.video] : category ? KINDS[category.handler] : undefined;
+  const extensions = kinds ?? [...new Set(Object.values(KINDS).flat())];
+  return { name: category ? category.name : "Media", extensions };
+}
+
 export function ImporterProvider({ children, enabled }: { children: ReactNode; enabled: boolean }) {
-  const [pending, setPending] = useState<string[] | null>(null);
+  const [pending, setPendingPaths] = useState<string[] | null>(null);
+  const [pendingCategory, setPendingCategory] = useState<Category | null>(null);
+  const setPending = useCallback((paths: string[] | null, category: Category | null = null) => {
+    setPendingPaths(paths);
+    setPendingCategory(category);
+  }, []);
   const [jobs, setJobs] = useState<ImportProgress[]>([]);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,17 +79,17 @@ export function ImporterProvider({ children, enabled }: { children: ReactNode; e
     };
   }, [enabled]);
 
-  const pickFiles = useCallback(async () => {
-    const selected = await open({ multiple: true, directory: false, filters: [MEDIA_FILTER], title: "Import files" });
+  const pickFiles = useCallback(async (category?: Category | null) => {
+    const selected = await open({ multiple: true, directory: false, filters: [fileFilter(category)], title: category ? `Add to ${category.name}` : "Import files" });
     const paths = Array.isArray(selected) ? selected : selected ? [selected] : [];
-    if (paths.length) setPending(paths);
-  }, []);
+    if (paths.length) setPending(paths, category ?? null);
+  }, [setPending]);
 
-  const pickFolder = useCallback(async () => {
-    const selected = await open({ multiple: true, directory: true, title: "Import folders" });
+  const pickFolder = useCallback(async (category?: Category | null) => {
+    const selected = await open({ multiple: true, directory: true, title: category ? `Add a folder to ${category.name}` : "Import folders" });
     const paths = Array.isArray(selected) ? selected : selected ? [selected] : [];
-    if (paths.length) setPending(paths);
-  }, []);
+    if (paths.length) setPending(paths, category ?? null);
+  }, [setPending]);
 
   const start = useCallback(
     async (mode: ImportMode, category: string | null) => {
@@ -90,18 +102,19 @@ export function ImporterProvider({ children, enabled }: { children: ReactNode; e
         setError(errorText(reason));
       }
     },
-    [pending],
+    [pending, setPending],
   );
 
   const value = useMemo<ImporterContext>(
     () => ({
       pending,
+      pendingCategory,
       jobs,
       dragging,
       error,
       pickFiles,
       pickFolder,
-      review: setPending,
+      review: (paths: string[], category?: Category | null) => setPending(paths, category ?? null),
       closeReview: () => {
         setPending(null);
         setError(null);
@@ -110,7 +123,7 @@ export function ImporterProvider({ children, enabled }: { children: ReactNode; e
       cancel: (jobId) => void api.importCancel(jobId),
       dismiss: (jobId) => setJobs((current) => current.filter((job) => job.jobId !== jobId)),
     }),
-    [pending, jobs, dragging, error, pickFiles, pickFolder, start],
+    [pending, pendingCategory, jobs, dragging, error, pickFiles, pickFolder, start, setPending],
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

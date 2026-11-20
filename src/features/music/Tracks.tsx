@@ -6,6 +6,7 @@ import { DropdownMenu } from "radix-ui";
 import { AudioLines, Check, ChevronDown, ChevronUp, Disc3, GripVertical, Heart, ListEnd, ListMusic, ListPlus, MoreHorizontal, Pencil, Play, Plus, Shuffle, X } from "lucide-react";
 import { api, errorText, type Playlist, type Track, type TrackFilter } from "../../lib/api";
 import { useMusic } from "../../lib/music/MusicProvider";
+import { usePlayAndShow } from "./playAndShow";
 import { Dialog, Field } from "../../components/common";
 import { arrayMove, useVirtualReorder } from "../../lib/reorder";
 
@@ -276,6 +277,7 @@ export function TrackList({ filter, empty, playlistId, showAlbum = true, compact
   compact?: boolean;
 }) {
   const music = useMusic();
+  const playAndShow = usePlayAndShow();
   const queryClient = useQueryClient();
   const tracks = useTracks(filter);
   const [editing, setEditing] = useState<Track | null>(null);
@@ -320,14 +322,14 @@ export function TrackList({ filter, empty, playlistId, showAlbum = true, compact
         key={`${track.id}:${index}`}
         className={`track-row${playing ? " playing" : ""}${playlistId != null ? " reorderable" : ""}`}
         style={playlistId != null ? { ...style, ...reorder.style(index) } : style}
-        onDoubleClick={() => void music.play(ids, index)}
+        onDoubleClick={() => void playAndShow(ids, index)}
       >
         {playlistId != null && !compact && (
           <span {...reorder.handle(index, list.length)} aria-label={`Drag ${track.title}`}>
             <GripVertical size={16} />
           </span>
         )}
-        <button type="button" className="track-play" aria-label={`Play ${track.title}`} onClick={() => void music.play(ids, index)}>
+        <button type="button" className="track-play" aria-label={`Play ${track.title}`} onClick={() => void playAndShow(ids, index)}>
           <span className="track-no">{playing ? <AudioLines size={15} /> : (track.number ?? index + 1)}</span>
           <Play size={15} className="track-play-icon" />
         </button>
@@ -367,10 +369,10 @@ export function TrackList({ filter, empty, playlistId, showAlbum = true, compact
   return (
     <div className="track-list">
       <div className="track-actions">
-        <button type="button" className="btn btn-primary btn-sm" disabled={list.length === 0} onClick={() => void music.play(ids, 0)}>
+        <button type="button" className="btn btn-primary btn-sm" disabled={list.length === 0} onClick={() => void playAndShow(ids, 0)}>
           <Play size={15} /> Play
         </button>
-        <button type="button" className="btn btn-sm" disabled={list.length < 2} onClick={() => void music.play(shuffled(ids), 0)}>
+        <button type="button" className="btn btn-sm" disabled={list.length < 2} onClick={() => void playAndShow(shuffled(ids), 0)}>
           <Shuffle size={15} /> Shuffle
         </button>
         {list.length > 0 && playlistId == null && (

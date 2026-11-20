@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, ARCADE_CONSOLES, artworkUrl, errorText, onLinux, type ArcadeConsole, type ArcadeGame, type ArcadePlatform, type ArcadeStore } from "../../lib/api";
 import { usePreferences, type ArcadeFilter, type ArcadePreferences } from "../../lib/preferences";
 
@@ -26,6 +27,10 @@ export const PLATFORM_NAMES: Record<ArcadePlatform, string> = {
   dreamcast: "Dreamcast",
   psp: "PSP",
   pce: "PC Engine",
+  wiiu: "Wii U",
+  switch: "Nintendo Switch",
+  ogxbox: "Xbox (original)",
+  x360: "Xbox 360",
   arcade: "Arcade",
   atari2600: "Atari 2600",
   other: "Other consoles",
@@ -53,6 +58,10 @@ export const PLATFORM_SHORT: Record<ArcadePlatform, string> = {
   dreamcast: "DC",
   psp: "PSP",
   pce: "PCE",
+  wiiu: "Wii U",
+  switch: "Switch",
+  ogxbox: "Xbox",
+  x360: "360",
   arcade: "Arcade",
   atari2600: "2600",
   other: "Retro",
@@ -66,6 +75,8 @@ export const STORE_NAMES: Record<ArcadeStore, string> = {
   ubisoft: "Ubisoft Connect",
   ea: "EA app",
   battlenet: "Battle.net",
+  rockstar: "Rockstar Games",
+  riot: "Riot Games",
   amazon: "Amazon Games",
   itch: "itch.io",
   heroic: "Heroic",
@@ -96,6 +107,10 @@ export const PLATFORM_ASPECT: Record<ArcadePlatform, number> = {
   dreamcast: 1,
   psp: 0.58,
   pce: 1,
+  wiiu: 0.71,
+  switch: 0.62,
+  ogxbox: 0.7,
+  x360: 0.7,
   arcade: 0.75,
   atari2600: 0.72,
   other: 0.75,
@@ -109,15 +124,16 @@ export function consoleOf(game: ArcadeGame): string {
 
 /** The short badge on a game's box. */
 export function badgeOf(game: ArcadeGame): string {
-  const short: Partial<Record<ArcadeStore, string>> = { epic: "Epic", ubisoft: "Ubisoft", ea: "EA", amazon: "Amazon" };
+  // Epic Games by its full name (D-122); the longer names shortened.
+  const short: Partial<Record<ArcadeStore, string>> = { ubisoft: "Ubisoft", ea: "EA", amazon: "Amazon", rockstar: "Rockstar", riot: "Riot" };
   return game.platform === "pc" && game.store ? (short[game.store] ?? STORE_NAMES[game.store]) : PLATFORM_SHORT[game.platform];
 }
 
 /** Arcade's views (D-038), with what each one holds. */
 export const FILTER_LABELS: Record<ArcadeFilter, string> = {
   all: "All games",
-  "all-pc": "All PC games",
-  "all-roms": "All ROM games",
+  "all-pc": "PC games",
+  "all-roms": "ROM games",
   steam: "Steam",
   epic: "Epic Games",
   xbox: "Xbox",
@@ -125,6 +141,8 @@ export const FILTER_LABELS: Record<ArcadeFilter, string> = {
   ubisoft: "Ubisoft Connect",
   ea: "EA app",
   battlenet: "Battle.net",
+  rockstar: "Rockstar Games",
+  riot: "Riot Games",
   amazon: "Amazon Games",
   itch: "itch.io",
   heroic: "Heroic",
@@ -152,6 +170,8 @@ export function inFilter(game: ArcadeGame, filter: ArcadeFilter): boolean {
     case "ubisoft":
     case "ea":
     case "battlenet":
+    case "rockstar":
+    case "riot":
     case "amazon":
     case "itch":
     case "heroic":
@@ -166,7 +186,7 @@ export function inFilter(game: ArcadeGame, filter: ArcadeFilter): boolean {
 
 /** Whether a view exists on this system (Epic and Xbox are Windows-only; Heroic is for Linux). */
 export function filterAvailable(filter: ArcadeFilter): boolean {
-  if (["epic", "xbox", "gog", "ubisoft", "ea", "battlenet", "amazon"].includes(filter)) return !onLinux;
+  if (["epic", "xbox", "gog", "ubisoft", "ea", "battlenet", "rockstar", "riot", "amazon"].includes(filter)) return !onLinux;
   if (filter === "heroic" || filter === "lutris") return onLinux;
   return true;
 }
@@ -292,6 +312,16 @@ export function matchingGames(games: ArcadeGame[] | undefined, q: string): Arcad
       return words.every((word) => text.includes(word));
     })
     .sort((a, b) => Number(!a.title.toLowerCase().includes(words[0])) - Number(!b.title.toLowerCase().includes(words[0])) || a.title.localeCompare(b.title, undefined, { sensitivity: "base", numeric: true }));
+}
+
+/**
+ * Adds a PC game by its program (D-107): asks for the program, adds it, and gives its id (null when
+ * nothing was chosen). From Arcade, Emulators & folders and Home's Add menu (D-124).
+ */
+export async function addProgramGame(downloadCovers: boolean): Promise<number | null> {
+  const path = await openDialog({ multiple: false, title: "Choose the game's program", filters: onLinux ? undefined : [{ name: "Programs", extensions: ["exe"] }] });
+  if (typeof path !== "string") return null;
+  return api.arcadeAddProgram(path, downloadCovers);
 }
 
 /** Starting a game, with its error (a missing emulator, a moved file) kept to show. */

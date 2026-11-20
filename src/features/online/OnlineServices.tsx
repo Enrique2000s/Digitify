@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound } from "lucide-react";
+import { KeyRound, LoaderCircle, RefreshCw } from "lucide-react";
 import { api, errorText, type OnlineKeysStatus } from "../../lib/api";
 
 type Service = keyof OnlineKeysStatus;
@@ -10,7 +10,7 @@ const SERVICES: { key: Service; name: string; fields: [string, string?]; what: s
     key: "youtube",
     name: "YouTube",
     fields: ["API key"],
-    what: "Lists each video of a playlist, with lengths and availability. Without it, YouTube and YouTube Music links are saved one by one.",
+    what: "Lists a playlist's videos through YouTube's own API, with lengths and availability. Without it, yt-dlp lists them.",
     where: "Google Cloud Console › APIs & Services: enable “YouTube Data API v3” and create an API key.",
   },
   {
@@ -24,7 +24,7 @@ const SERVICES: { key: Service; name: string; fields: [string, string?]; what: s
     key: "soundcloud",
     name: "SoundCloud",
     fields: ["Client ID", "Client secret"],
-    what: "Lists each track of a set, and downloads the tracks their uploaders made downloadable.",
+    what: "Lists a set's tracks through SoundCloud's own API, and downloads the original files of the tracks their uploaders made downloadable. Without keys, yt-dlp lists and downloads them.",
     where: "soundcloud.com › Settings › Your apps (or the SoundCloud API CLI).",
   },
 ];
@@ -78,7 +78,56 @@ function ServiceKeys({ service, saved, onSaved }: { service: (typeof SERVICES)[n
   );
 }
 
-/** Settings › Online services (D-028): optional keys for Import from URL. */
+/** yt-dlp, which downloads from YouTube and other sites (D-133): its version, and updating it. */
+function YtDlpRow() {
+  const queryClient = useQueryClient();
+  const status = useQuery({ queryKey: ["ytdlp"], queryFn: api.ytdlpStatus });
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const update = async () => {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    const before = status.data?.version;
+    try {
+      const next = await api.ytdlpUpdate();
+      queryClient.setQueryData(["ytdlp"], next);
+      setMessage(next.version === before ? "It's the newest already." : `Updated to ${next.version}.`);
+    } catch (reason) {
+      setError(errorText(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const data = status.data;
+  return (
+    <div className="setting online-service">
+      <div className="setting-text">
+        <strong>Downloads (yt-dlp)</strong>
+        <p>
+          Downloads videos and songs from YouTube, YouTube Music, SoundCloud and the many other sites yt-dlp knows, as video or as sound, in the quality you pick in Import from URL. It never signs in,
+          and nothing protected with DRM (Spotify, streaming services' films) is downloaded.
+        </p>
+        <p>
+          {data?.available
+            ? `yt-dlp ${data.version ?? ""}${data.updated ? " (updated here)" : " (shipped with Digitify)"}${data.deno ? ", with Deno" : ", without Deno (some YouTube formats may be missing)"}${data.ffmpeg ? "" : ", without FFmpeg"}.`
+            : "yt-dlp is missing from this installation."}{" "}
+          Sites change often: if downloads start failing, update it. Digitify never checks by itself.
+        </p>
+        {message && <p className="muted">{message}</p>}
+        {error && <div className="dialog-error">{error}</div>}
+      </div>
+      <div className="online-key-fields">
+        <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void update()}>
+          {busy ? <LoaderCircle size={14} className="spin" /> : <RefreshCw size={14} />} Update yt-dlp
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Settings › Online services (D-028, D-133): yt-dlp, and optional keys for Import from URL. */
 export function OnlineServicesPanel() {
   const queryClient = useQueryClient();
   const status = useQuery({ queryKey: ["online-keys"], queryFn: api.onlineKeysStatus });
@@ -86,9 +135,10 @@ export function OnlineServicesPanel() {
     <section className="panel" id="online-services">
       <h2>Online services</h2>
       <p className="hint">
-        Optional keys for Import from URL, from your own developer accounts. They're stored encrypted for your Windows account and used only when you look up a link.
-        Without them, links still work one at a time. Digitify never downloads from YouTube or Spotify; SoundCloud tracks are downloaded only when their uploader allows it.
+        For Import from URL. The keys are optional, from your own developer accounts; they're stored encrypted for your account and used only when you look up a link. Spotify's songs are
+        always saved as online items: they're protected with DRM.
       </p>
+      <YtDlpRow />
       {SERVICES.map((service) => (
         <ServiceKeys key={service.key} service={service} saved={!!status.data?.[service.key]} onSaved={(next) => queryClient.setQueryData(["online-keys"], next)} />
       ))}

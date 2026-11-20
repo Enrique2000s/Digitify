@@ -1,10 +1,13 @@
-import { useState, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "@tanstack/react-router";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { BookOpen, Cloud, CloudDownload, ExternalLink, FolderOpen, HardDrive, ImagePlus, Pause, Pencil, Play, Star, Trash, Eye } from "lucide-react";
-import { viewList } from "../../lib/routes";
-import { api, artworkUrl, errorText, type CoverShape, type ItemDetail, type VersionInfo } from "../../lib/api";
+import { BookOpen, ChevronLeft, ChevronRight, Cloud, Download, ExternalLink, FolderOpen, HardDrive, ImagePlus, Pause, Pencil, Play, Star, Trash, Eye } from "lucide-react";
+import { photoContext, viewList } from "../../lib/routes";
+import { isTyping } from "../../lib/shortcuts";
+import { BackButton } from "../../components/BackButton";
+import { api, artworkUrl, errorText, type CoverShape, type ItemDetail, type OnlineJob, type VersionInfo } from "../../lib/api";
 import { bytes, date, formatLabel, longDuration, ROLE_LABELS } from "../../lib/format";
 import { libraryChanged, useItem } from "../../lib/queries";
 import { ReviewPanel } from "../../components/Review";
@@ -19,6 +22,82 @@ import { ChaptersPanel, SeriesPanel } from "./SeriesPanels";
 import { canWatch, EpisodesPanel, WatchButton, WatchedButton } from "./WatchPanels";
 import { ArrangePagesDialog } from "../builder/BookBuilder";
 import { EditItemDialog, RemoveItemDialog } from "./forms";
+import { DownloadDialog } from "../online/DownloadDialog";
+import { usePlayAndShow } from "../music/playAndShow";
+
+/**
+ * Downloads an online item (D-133). The download takes the online item's place, so once it's in
+ * the library this page moves on to it.
+ */
+function DownloadButton({ item }: { item: ItemDetail }) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [queued, setQueued] = useState(false);
+  useEffect(() => {
+    const stop = listen<OnlineJob[]>("online-queue", ({ payload }) => {
+      const job = payload.find((j) => j.replaces === item.id);
+      if (!job) return;
+      setQueued(job.state === "pending" || job.state === "working");
+      if ((job.state === "done" || job.state === "skipped") && job.itemId != null && job.itemId !== item.id) {
+        void navigate({ to: "/item/$id", params: { id: String(job.itemId) }, replace: true });
+      }
+    });
+    return () => void stop.then((unlisten) => unlisten());
+  }, [item.id, navigate]);
+  return (
+    <>
+      <button type="button" className="btn" disabled={queued} onClick={() => setOpen(true)}>
+        <Download size={16} /> {queued ? "Downloading…" : "Download"}
+      </button>
+      <DownloadDialog ids={[item.id]} music={item.handler === "audio"} open={open} onOpenChange={setOpen} onQueued={() => setQueued(true)} />
+    </>
+  );
+}
+
+/**
+ * Previous and next (D-138): the items of the view this one was opened from (its category or
+ * collection, filter and sort), in its order; ← and → too, when not typing.
+ */
+function ItemSteps({ id }: { id: number }) {
+  const navigate = useNavigate();
+  const params = photoContext.params;
+  const list = useQuery({ queryKey: ["item-steps", JSON.stringify(params)], queryFn: () => (params ? api.queryIds(params) : Promise.resolve([] as number[])), staleTime: 30_000 });
+  const ids = list.data ?? [];
+  const at = ids.indexOf(id);
+  // Past the last it goes round to the first, and before the first to the last (D-142).
+  const count = ids.length;
+  const previous = at >= 0 && count > 1 ? ids[(at - 1 + count) % count] : undefined;
+  const next = at >= 0 && count > 1 ? ids[(at + 1) % count] : undefined;
+  // Stepping replaces the page in the history, so Back still returns to the list.
+  const go = (to: number | undefined) => to != null && void navigate({ to: "/item/$id", params: { id: String(to) }, replace: true });
+  const keys = useRef({ previous, next, go });
+  keys.current = { previous, next, go };
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || isTyping(event) || document.querySelector("[role=dialog]")) return;
+      if (event.key === "ArrowLeft" && keys.current.previous != null) keys.current.go(keys.current.previous);
+      else if (event.key === "ArrowRight" && keys.current.next != null) keys.current.go(keys.current.next);
+      else return;
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  if (at < 0 || ids.length < 2) return null;
+  return (
+    <div className="item-steps" role="group" aria-label="Previous and next">
+      <button type="button" className="round-btn" aria-label="Previous item" title="Previous (←)" disabled={previous == null} onClick={() => go(previous)}>
+        <ChevronLeft size={18} strokeWidth={2.6} />
+      </button>
+      <span className="item-steps-count">
+        {at + 1} of {ids.length}
+      </span>
+      <button type="button" className="round-btn" aria-label="Next item" title="Next (→)" disabled={next == null} onClick={() => go(next)}>
+        <ChevronRight size={18} strokeWidth={2.6} />
+      </button>
+    </div>
+  );
+}
 
 function meta(item: ItemDetail, key: string): string | null {
   const value = item.metadata?.[key];
@@ -138,6 +217,8 @@ const COVER_COLORS = ["#1592d0", "#3fae49", "#f2a516", "#ef5f4f", "#d94f8c", "#8
 
 export function ItemPage() {
   const { id } = useParams({ from: "/item/$id" });
+  const navigate = useNavigate();
+  const playAndShow = usePlayAndShow();
   const queryClient = useQueryClient();
   const query = useItem(Number(id));
   const { preferences } = usePreferences();
@@ -208,19 +289,25 @@ export function ItemPage() {
   const source = item.online;
   const onlineOnly = !!source && !source.downloaded;
   const openOnline = () => void api.onlineOpen(item.id).catch((reason) => setError(errorText(reason)));
+  // An online item can be downloaded (D-133), except Spotify's songs (DRM) and whole playlists saved as one link.
+  const downloadable = onlineOnly && !!source && source.provider !== "spotify" && source.kind !== "playlist" && source.kind !== "album";
   const file = item.versions.find((v) => v.kind === "digital" && v.files.length > 0);
 
   return (
     <div className="page">
+      <div className="page-top">
+        <BackButton fallback={() => void navigate({ to: "/library/$scope", params: { scope: item.category } })} />
+        <ItemSteps id={item.id} />
+      </div>
       <section className="hero" aria-labelledby="item-title">
         {backdrop ? (
         <div className="hero-backdrop custom" style={{ backgroundImage: `url(${artworkUrl(backdrop, "cover")})` }} />
       ) : (
         item.coverKey && <div className="hero-backdrop" style={{ backgroundImage: `url(${artworkUrl(item.coverKey)})` }} />
       )}
-        <div className="hero-cover" data-shape={shape} style={{ flexBasis: shape === "landscape" ? 360 : 220, aspectRatio: SHAPE_ASPECT[shape] }} {...sourceProps(source?.provider === "web" ? null : source?.service)}>
+        <div className="hero-cover" data-shape={shape} style={{ flexBasis: shape === "landscape" ? 360 : 220, aspectRatio: SHAPE_ASPECT[shape] }} {...sourceProps(onlineOnly && source?.provider !== "web" ? source?.service : null)}>
           <Cover item={item} size="cover" />
-          <SourceTag service={source?.provider === "web" ? null : source?.service} />
+          <SourceTag service={onlineOnly && source?.provider !== "web" ? source?.service : null} />
         </div>
         <div className="hero-body">
           <span className="eyebrow">
@@ -245,17 +332,12 @@ export function ItemPage() {
               ))}
             </div>
           )}
-          {source && (
+          {/* A downloaded copy is a file like any other (D-136): only online items say where they live. */}
+          {source && onlineOnly && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {onlineOnly ? (
-                <span className="chip online-chip" title="Plays in its service's own player and needs an internet connection">
-                  <Cloud size={12} /> {source.service} · Online, needs a connection
-                </span>
-              ) : (
-                <span className="chip" title="Downloaded into your library">
-                  <CloudDownload size={12} /> From {source.service} · Available offline
-                </span>
-              )}
+              <span className="chip online-chip" title="Plays in its service's own player and needs an internet connection">
+                <Cloud size={12} /> {source.service} · Online, needs a connection
+              </span>
             </div>
           )}
           <div className="hero-actions">
@@ -264,11 +346,7 @@ export function ItemPage() {
                 <Play size={16} /> Play
               </Link>
             )}
-            {source && (
-              <button type="button" className="btn" onClick={openOnline}>
-                <ExternalLink size={16} /> Open on {source.service}
-              </button>
-            )}
+            {downloadable && <DownloadButton item={item} />}
             {watchable && clip && (
               <Link to="/watch/$id" params={{ id: String(item.id) }} className="btn btn-primary">
                 <Play size={16} /> Play
@@ -287,7 +365,7 @@ export function ItemPage() {
                     const items = await viewList(item.id, "audio").catch(() => null);
                     const tracks = items ? await api.musicTracks({ items }).catch(() => []) : [];
                     const at = tracks.findIndex((t) => t.id === track.id);
-                    return at >= 0 ? music.play(tracks.map((t) => t.id), at) : music.play([track.id], 0);
+                    return at >= 0 ? playAndShow(tracks.map((t) => t.id), at) : playAndShow([track.id], 0);
                   })
                 }
               >
@@ -304,6 +382,12 @@ export function ItemPage() {
                 <BookOpen size={16} />
                 {item.progress != null && item.progress > 0 && item.progress < 1 ? `Continue reading · ${Math.round(item.progress * 100)}%` : "Read"}
               </Link>
+            )}
+            {/* Where it came from, after Play, online or downloaded alike (D-143). */}
+            {source && (
+              <button type="button" className="btn" onClick={openOnline}>
+                <ExternalLink size={16} /> Open on {source.service}
+              </button>
             )}
             <button
               type="button"

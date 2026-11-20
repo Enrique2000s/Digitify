@@ -8,13 +8,16 @@ import { useEffect } from "react";
  * highlight where the same group's was, so it still slides.
  */
 const CHOSEN = ':scope > [aria-pressed="true"], :scope > [aria-selected="true"], :scope > [data-status="active"]';
+/** The title bar's Home / Library / Arcade mark theirs as the current page (D-145). */
+const CURRENT = ':scope > [aria-current="page"]';
+const GROUPS = ".segmented, .appbar-nav";
 
 /** Where each named group's highlight last was, so a redrawn group slides from there. */
 const last = new Map<string, { x: number; y: number; w: number; h: number }>();
 
 function place(group: HTMLElement) {
   let glider = group.querySelector<HTMLElement>(":scope > .seg-glider");
-  const chosen = group.querySelector<HTMLElement>(CHOSEN);
+  const chosen = group.querySelector<HTMLElement>(group.classList.contains("appbar-nav") ? CURRENT : CHOSEN);
   const name = group.getAttribute("aria-label") ?? "";
   if (!glider) {
     glider = document.createElement("span");
@@ -58,14 +61,14 @@ export function useSegmentedGlide() {
     let frame = 0;
     const update = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => document.querySelectorAll<HTMLElement>(".segmented").forEach(place));
+      frame = requestAnimationFrame(() => document.querySelectorAll<HTMLElement>(GROUPS).forEach(place));
     };
     const observer = new MutationObserver((records) => {
       // Our own highlight moving isn't a change to follow.
       if (records.every((r) => (r.target as HTMLElement).classList?.contains("seg-glider"))) return;
       update();
     });
-    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["aria-pressed", "aria-selected", "data-status"] });
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["aria-pressed", "aria-selected", "data-status", "aria-current"] });
     const resized = new ResizeObserver(update);
     resized.observe(document.body);
     window.addEventListener("resize", update);

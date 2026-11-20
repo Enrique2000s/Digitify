@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { BackButton } from "../../components/BackButton";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { CircleAlert, Joystick, LibraryBig, LoaderCircle, Search, X } from "lucide-react";
 import { api } from "../../lib/api";
@@ -64,6 +65,7 @@ export function SearchPage() {
   const gamesLabel = `${found.length.toLocaleString()} ${found.length === 1 ? "game" : "games"} in Arcade`;
   return (
     <div className="page search-page">
+      <BackButton />
       <header className="search-head">
         <span className="title-badge">
           <Search size={26} strokeWidth={2.4} aria-hidden />

@@ -11,17 +11,17 @@ import { CollectionDialog } from "../organize/CollectionDialog";
 import { LibraryView } from "./LibraryView";
 import { MUSIC_TABS, MusicPage, MusicTabs, type MusicTab } from "../music/MusicPage";
 
-function EmptyLibrary({ text }: { text: string }) {
+function EmptyLibrary({ text, category = null }: { text: string; category?: Category | null }) {
   const importer = useImporter();
   return (
     <div className="empty">
       <p>{text}</p>
       <div className="actions">
-        <button type="button" className="btn btn-primary" onClick={() => void importer.pickFolder()}>
-          <FolderPlus size={16} /> Import a folder
+        <button type="button" className="btn btn-primary" onClick={() => void importer.pickFolder(category)}>
+          <FolderPlus size={16} /> {category ? "Add a folder" : "Import a folder"}
         </button>
-        <button type="button" className="btn" onClick={() => void importer.pickFiles()}>
-          <FilePlus size={16} /> Import files
+        <button type="button" className="btn" onClick={() => void importer.pickFiles(category)}>
+          <FilePlus size={16} /> {category ? "Add files" : "Import files"}
         </button>
       </div>
     </div>
@@ -77,7 +77,7 @@ function CategoryView({ category, collection, tab }: { category: Category; colle
         square={music}
         handler={category.handler}
         mode={shown === "collections" ? "collections" : "items"}
-        actions={music || shown === "favorites" ? undefined : <CollectionActions category={category} />}
+        actions={!music && shown === "collections" ? <CollectionActions category={category} /> : undefined}
         tabs={music ? <MusicTabs category={category} tab="tracks" /> : <CategoryTabs category={category} tab={shown} />}
         collections={music ? undefined : { category: category.key, parent: null }}
         empty={
@@ -90,7 +90,7 @@ function CategoryView({ category, collection, tab }: { category: Category; colle
               <p>Mark {category.name.toLowerCase()} as favorites from their page (the star), and they'll appear here.</p>
             </div>
           ) : (
-            <EmptyLibrary text={`No ${category.name.toLowerCase()} in your library yet.`} />
+            <EmptyLibrary text={`No ${category.name.toLowerCase()} in your library yet.`} category={category} />
           )
         }
       />

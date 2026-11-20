@@ -1,17 +1,20 @@
 import { CircleAlert, Heart, Joystick } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import type { ArcadeGame } from "../../lib/api";
 import { usePad } from "../../lib/gamepad";
 import { badgeOf, consoleOf, FILTER_LABELS, GameCover, PLATFORM_ASPECT, playTime, useArcade, useArcadeFilters, useLaunch, useShownGames } from "./shared";
 import { PlatformLogo } from "./logos";
 
 /**
- * Arcade in Big Picture (D-034): the games as big tiles a controller reaches. A plays, LB and RB
- * switch between the consoles (Y stays Big Picture's search).
+ * Arcade in Big Picture (D-034): the games as big tiles a controller reaches. A opens the game's
+ * screen, where it's played from (D-120); LB and RB switch between the consoles (Y stays Big
+ * Picture's search).
  */
 export function ArcadeScreen() {
   const { status, games, starting } = useArcade();
   const shown = useShownGames(games.data, "");
-  const { launch, error } = useLaunch();
+  const { error } = useLaunch();
+  const navigate = useNavigate();
   const view = useArcadeFilters();
   usePad((action) => {
     if ((action === "lb" || action === "rb") && view.filters.length) {
@@ -49,7 +52,7 @@ export function ArcadeScreen() {
         // A new console pops its games in, like the library's items (D-041).
         <div className="bp-grid" key={view.current}>
           {shown.map((game, index) => (
-            <ArcadeTile key={game.id} game={game} autofocus={index === 0} onPlay={() => void launch(game)} />
+            <ArcadeTile key={game.id} game={game} autofocus={index === 0} onPlay={() => void navigate({ to: "/bp", search: { screen: "game", id: game.id } })} />
           ))}
         </div>
       )}
@@ -57,7 +60,7 @@ export function ArcadeScreen() {
   );
 }
 
-/** A game as a Big Picture tile: A plays it. Also Home's game rows in Big Picture (D-041). */
+/** A game as a Big Picture tile: A opens its screen (D-120). Also Home's game rows in Big Picture (D-041). */
 export function ArcadeTile({ game, autofocus, onPlay, height = 270 }: { game: ArcadeGame; autofocus: boolean; onPlay: () => void; height?: number }) {
   const width = Math.round(height * PLATFORM_ASPECT[game.platform]);
   return (

@@ -123,9 +123,17 @@ function fallbackColors(color: string): CSSProperties {
   return { background: `linear-gradient(160deg, ${color}, ${background})`, color: ink, ["--fallback-ink" as string]: ink };
 }
 
-/** Artwork, or a neutral tile with the title when there is none. */
-export function Cover({ item, size = "thumb" }: { item: CoverSource; size?: "thumb" | "cover" }) {
+/** Artwork, or a neutral tile with the title when there is none (`iconOnly`: just its symbol, for small spots). */
+export function Cover({ item, size = "thumb", iconOnly = false }: { item: CoverSource; size?: "thumb" | "cover"; iconOnly?: boolean }) {
   const [failed, setFailed] = useState(false);
+  if ((!item.coverKey || failed) && iconOnly) {
+    const Icon = HANDLER_ICONS[item.handler] ?? Folder;
+    return (
+      <div className="cover-fallback icon-only">
+        <Icon size={18} strokeWidth={2.2} aria-hidden />
+      </div>
+    );
+  }
   if (!item.coverKey || failed) {
     const Icon = HANDLER_ICONS[item.handler] ?? Folder;
     return (

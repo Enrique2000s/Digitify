@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Digitify",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "identifier": "com.digitify.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -47,6 +47,10 @@
       "binaries/pdfium.dll": "pdfium.dll",
       "binaries/licenses/pdfium/*": "licenses/pdfium/",
       "../tools/ffmpeg/*": "ffmpeg/",
+      "../tools/yt-dlp/yt-dlp.exe": "yt-dlp/yt-dlp.exe",
+      "../tools/yt-dlp/deno.exe": "yt-dlp/deno.exe",
+      "../tools/yt-dlp/yt-dlp.version": "yt-dlp/yt-dlp.version",
+      "../tools/yt-dlp/licenses/*": "yt-dlp/licenses/",
       "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
     },
     "windows": {

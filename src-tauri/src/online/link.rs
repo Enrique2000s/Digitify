@@ -13,6 +13,8 @@ pub enum Provider {
     SoundCloud,
     /// A direct link to an audio or video file.
     Web,
+    /// Another site yt-dlp knows (Vimeo, Twitch, Bandcamp…), D-133.
+    Site,
 }
 
 impl Provider {
@@ -22,6 +24,7 @@ impl Provider {
             Provider::Spotify => "spotify",
             Provider::SoundCloud => "soundcloud",
             Provider::Web => "web",
+            Provider::Site => "site",
         }
     }
 }
@@ -78,7 +81,7 @@ pub fn media_of_extension(extension: &str) -> Option<bool> {
 }
 
 fn unsupported() -> AppError {
-    AppError::msg("That isn't a link Digitify can import. It takes YouTube, YouTube Music, Spotify and SoundCloud links, and direct links to audio or video files.")
+    AppError::msg("That isn't a link Digitify can import. It takes links to videos, songs and playlists (YouTube, YouTube Music, Spotify, SoundCloud and the other sites yt-dlp knows), and direct links to audio or video files.")
 }
 
 fn valid_id(id: &str, max: usize) -> bool {
@@ -119,6 +122,17 @@ pub fn detect(raw: &str) -> AppResult<Link> {
             if let Some(list) = query("list").filter(|l| valid_id(l, 64)) {
                 return Ok(Link { provider: Provider::YouTube, service, kind: LinkKind::Playlist, url: format!("{base}/playlist?list={list}"), id: list });
             }
+            // A channel (D-133): its videos, listed through yt-dlp; or the tab the link names.
+            let handle = |s: &str| s.len() > 1 && s.len() <= 100 && s[1..].chars().all(|c| c.is_alphanumeric() || matches!(c, '_' | '-' | '.' | '·'));
+            let (channel, tab) = match segments.as_slice() {
+                [name, rest @ ..] if name.starts_with('@') && handle(name) => (Some(name.to_string()), rest.first().copied()),
+                [kind @ ("channel" | "c" | "user"), name, rest @ ..] if valid_id(name, 100) => (Some(format!("{kind}/{name}")), rest.first().copied()),
+                _ => (None, None),
+            };
+            if let Some(channel) = channel {
+                let tab = tab.filter(|t| ["videos", "shorts", "streams", "podcasts"].contains(t)).unwrap_or("videos");
+                return Ok(Link { provider: Provider::YouTube, service, kind: LinkKind::Playlist, url: format!("https://www.youtube.com/{channel}/{tab}"), id: format!("{channel}/{tab}") });
+            }
             Err(unsupported())
         }
         "open.spotify.com" | "play.spotify.com" => {
@@ -152,10 +166,14 @@ pub fn detect(raw: &str) -> AppResult<Link> {
             // A direct link to a media file, recognized by its extension.
             let name = segments.last().copied().unwrap_or_default();
             let extension = name.rsplit_once('.').map(|(_, e)| e).unwrap_or_default();
+            let mut clean = url.clone();
+            clean.set_fragment(None);
             if media_of_extension(extension).is_some() && url.host_str().is_some() {
-                let mut clean = url.clone();
-                clean.set_fragment(None);
                 return Ok(Link { provider: Provider::Web, service: "Web", kind: LinkKind::File, id: clean.to_string(), url: clean.to_string() });
+            }
+            // Any other page: yt-dlp is asked whether it knows the site (D-133).
+            if host.contains('.') {
+                return Ok(Link { provider: Provider::Site, service: "Web", kind: LinkKind::Video, id: clean.to_string(), url: clean.to_string() });
             }
             Err(unsupported())
         }
@@ -200,11 +218,16 @@ mod tests {
         assert_eq!(d("https://soundcloud.com/artist-name/a-track?in=x"), (SoundCloud, "SoundCloud", Track, "artist-name/a-track".into()));
         assert_eq!(d("https://soundcloud.com/artist-name/sets/my-set"), (SoundCloud, "SoundCloud", Playlist, "artist-name/sets/my-set".into()));
         assert_eq!(d("https://example.com/media/Song%20One.mp3#t=3").2, File);
+        assert_eq!(d("https://www.youtube.com/@SomeChannel"), (YouTube, "YouTube", Playlist, "@SomeChannel/videos".into()));
+        assert_eq!(d("https://www.youtube.com/@SomeChannel/shorts").3, "@SomeChannel/shorts");
+        assert_eq!(detect("https://youtube.com/channel/UCabc_DEF-123/featured").unwrap().url, "https://www.youtube.com/channel/UCabc_DEF-123/videos");
+        assert_eq!(d("https://vimeo.com/76979871#t=1").0, Site);
+        assert_eq!(d("https://example.com/page.html").0, Site);
     }
 
     #[test]
     fn other_links_are_refused() {
-        for bad in ["", "hello", "ftp://example.com/a.mp3", "file:///C:/a.mp3", "https://example.com/page.html", "https://www.youtube.com/@channel", "https://open.spotify.com/artist/abc", "https://soundcloud.com/artist-name"] {
+        for bad in ["", "hello", "ftp://example.com/a.mp3", "file:///C:/a.mp3", "https://localhost/page", "https://www.youtube.com/feed/history", "https://open.spotify.com/artist/abc", "https://soundcloud.com/artist-name"] {
             assert!(detect(bad).is_err(), "{bad}");
         }
     }

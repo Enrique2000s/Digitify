@@ -6,6 +6,7 @@ import { Check, ChevronDown, ChevronUp, CircleCheck, Cloud, Download, Link2, Loa
 import { api, errorText, type OnlineEntry, type OnlineJob, type OnlinePreview } from "../../lib/api";
 import { libraryChanged, useCategories } from "../../lib/queries";
 import { Dialog, Field, Switch } from "../../components/common";
+import { DownloadOptions, useDownloadQuality } from "./DownloadDialog";
 
 function clock(seconds: number | null): string {
   if (!seconds || seconds <= 0) return "";
@@ -20,6 +21,12 @@ function clock(seconds: number | null): string {
 function EntryStatus({ entry, download }: { entry: OnlineEntry; download: boolean }) {
   if (!entry.available) return <span className="chip warning">Unavailable</span>;
   if (entry.existing != null) return <span className="chip">In your library</span>;
+  if (entry.live)
+    return (
+      <span className="chip online-chip" title="Live now: saved as an online item; it can be downloaded once the stream is over">
+        <Cloud size={12} /> Live
+      </span>
+    );
   if (entry.downloadable && download)
     return (
       <span className="chip accent" title="Downloaded into your library and available offline">
@@ -33,22 +40,53 @@ function EntryStatus({ entry, download }: { entry: OnlineEntry; download: boolea
   );
 }
 
+/** What each kind of link menu takes (D-134): the sites it downloads from, and what's online only. */
+const SITES = {
+  music: {
+    what: "Songs, albums and playlists, downloaded as sound (or saved online).",
+    sites: ["YouTube Music", "YouTube (the sound)", "SoundCloud", "Bandcamp", "Mixcloud", "Internet Archive"],
+    online: "Spotify: saved online, as its music is DRM-protected.",
+    files: "Direct links to audio files: MP3, FLAC, M4A, Opus, OGG, WAV.",
+  },
+  video: {
+    what: "Videos, playlists and channels, downloaded into Videos (or saved online).",
+    sites: ["YouTube", "Twitch (past broadcasts)", "Dailymotion", "Internet Archive", "Bilibili", "Vimeo (videos that don't ask to sign in)"],
+    online: "Live streams: saved online until they're over.",
+    files: "Direct links to video files: MP4, MKV, WebM, MOV.",
+  },
+} as const;
+
+/** An entry as this menu takes it: music in the music menu, videos in the videos menu (D-134). */
+function fitFor(entry: OnlineEntry, mode: "music" | "video"): OnlineEntry {
+  if (mode === "video" && entry.audio && entry.provider !== "youtube") return { ...entry, available: false, downloadable: false, reason: "It's music: add it from Music." };
+  if (mode === "music" && entry.provider === "web" && !entry.audio) return { ...entry, available: false, downloadable: false, reason: "It's a video file: add it from Videos." };
+  return entry;
+}
+
 /**
- * "Import from URL" (D-028): paste a link, see what it holds, pick what to import. What a service
- * allows downloading is downloaded and kept offline; the rest is saved as online items played in
- * the service's own player.
+ * Adding from a link (D-028, D-133, D-134): one menu for music (a music category) and one for
+ * videos (Videos), each saying which sites and links it takes. Paste a link, see what it holds,
+ * pick what to import. What can be downloaded (direct files, and through yt-dlp YouTube,
+ * SoundCloud and the other sites it knows) is downloaded and kept offline, as sound in the music
+ * menu and as video in the videos one; the rest (Spotify, live streams) is saved as online items
+ * played in the service's own player. Videos go to Videos; one can go to Movies & Series from there.
  */
-export function ImportUrlDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function ImportUrlDialog({ category, onClose }: { category: string | null; onClose: () => void }) {
   const categories = useCategories();
+  const open = category != null;
+  const onOpenChange = (next: boolean) => !next && onClose();
+  const target = categories.data?.find((c) => c.key === category);
+  const mode: "music" | "video" = target?.handler === "audio" ? "music" : "video";
+  const sites = SITES[mode];
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<OnlinePreview | null>(null);
   const [chosen, setChosen] = useState<Set<number>>(new Set());
   const [download, setDownload] = useState(true);
-  const [videoCategory, setVideoCategory] = useState("videos");
   const [makePlaylist, setMakePlaylist] = useState(false);
   const [playlistName, setPlaylistName] = useState("");
+  const [quality] = useDownloadQuality();
 
   useEffect(() => {
     if (!open) return;
@@ -66,10 +104,10 @@ export function ImportUrlDialog({ open, onOpenChange }: { open: boolean; onOpenC
     try {
       const found = await api.onlineInspect(link);
       setPreview(found);
-      setChosen(new Set(found.entries.map((entry, index) => (entry.available && entry.existing == null ? index : -1)).filter((i) => i >= 0)));
+      const fitted = found.entries.map((entry) => fitFor(entry, mode));
+      setChosen(new Set(fitted.map((entry, index) => (entry.available && entry.existing == null ? index : -1)).filter((i) => i >= 0)));
       setPlaylistName(found.title);
       setMakePlaylist(false);
-      setVideoCategory(found.audio ? "videos" : "videos");
     } catch (reason) {
       setError(errorText(reason));
     } finally {
@@ -77,26 +115,27 @@ export function ImportUrlDialog({ open, onOpenChange }: { open: boolean; onOpenC
     }
   };
 
-  const entries = preview?.entries ?? [];
-  const picked = entries.filter((_, index) => chosen.has(index));
+  const entries = (preview?.entries ?? []).map((entry) => fitFor(entry, mode));
+  // The menu decides: sound in the music one, video in the videos one (D-134).
+  const picked = entries.filter((_, index) => chosen.has(index)).map((entry) => ({ ...entry, audio: mode === "music" }));
   const anyDownloadable = entries.some((entry) => entry.downloadable);
-  const anyVideo = picked.some((entry) => !entry.audio);
-  const offlineTracks = picked.filter((entry) => entry.audio && ((entry.downloadable && download) || entry.existing != null)).length;
-  const musicCategory = categories.data?.find((c) => c.key === "music")?.key ?? categories.data?.find((c) => c.handler === "audio")?.key ?? "music";
+  const viaYtdlp = download && picked.some((entry) => entry.ytdlp);
+  const offlineTracks = picked.filter((entry) => (entry.downloadable && download) || entry.existing != null).length;
 
   const start = async () => {
-    if (!preview || picked.length === 0) return;
+    if (!preview || picked.length === 0 || !category) return;
     setBusy(true);
     setError(null);
     try {
       await api.onlineImport({
         entries: picked,
-        musicCategory,
-        videoCategory,
+        musicCategory: mode === "music" ? category : "music",
+        videoCategory: "videos",
         download,
-        playlistName: makePlaylist && offlineTracks > 0 ? playlistName : null,
+        playlistName: mode === "music" && makePlaylist && offlineTracks > 0 ? playlistName : null,
+        quality,
       });
-      onOpenChange(false);
+      onClose();
     } catch (reason) {
       setError(errorText(reason));
     } finally {
@@ -117,11 +156,11 @@ export function ImportUrlDialog({ open, onOpenChange }: { open: boolean; onOpenC
       open={open}
       onOpenChange={onOpenChange}
       wide
-      title="Import from URL"
-      description="YouTube, YouTube Music, Spotify and SoundCloud links, or a direct link to an audio or video file. Digitify goes online only to look the link up."
+      title={`Add ${mode === "music" ? (target?.name ?? "music") : "videos"} from a link`}
+      description="Digitify goes online only to look the link up and to download."
       footer={
         <>
-          <button type="button" className="btn" onClick={() => onOpenChange(false)}>
+          <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>
           <button type="button" className="btn btn-primary" disabled={!preview || picked.length === 0 || busy} onClick={() => void start()}>
@@ -130,6 +169,22 @@ export function ImportUrlDialog({ open, onOpenChange }: { open: boolean; onOpenC
         </>
       }
     >
+      {!preview && (
+        <div className="url-sites" aria-label="What this takes">
+          <p>{sites.what}</p>
+          <div className="url-site-list">
+            {sites.sites.map((site) => (
+              <span key={site} className="chip">
+                {site}
+              </span>
+            ))}
+            <span className="muted">and many more sites yt-dlp knows</span>
+          </div>
+          <p className="hint">{sites.online}</p>
+          <p className="hint">{sites.files}</p>
+          {mode === "video" && <p className="hint">To make one a movie or a series' episode: Movies & Series › Add › From Videos.</p>}
+        </div>
+      )}
       <form
         className="url-row"
         onSubmit={(event) => {
@@ -142,7 +197,7 @@ export function ImportUrlDialog({ open, onOpenChange }: { open: boolean; onOpenC
           <input
             type="url"
             autoFocus
-            placeholder="Paste a link"
+            placeholder={mode === "music" ? "Paste a link to a song, album or playlist" : "Paste a link to a video, playlist or channel"}
             aria-label="Link"
             value={url}
             onChange={(event) => setUrl(event.target.value)}
@@ -168,7 +223,7 @@ export function ImportUrlDialog({ open, onOpenChange }: { open: boolean; onOpenC
             {preview.thumbnail ? <img src={preview.thumbnail} alt="" className="url-thumb" referrerPolicy="no-referrer" /> : <span className="url-thumb" />}
             <div className="url-preview-text">
               <span className="eyebrow">
-                {preview.service} · {preview.collection ? `${preview.kind === "album" ? "Album" : "Playlist"} · ${entries.length} items` : preview.audio ? "Music" : "Video"}
+                {preview.service} · {preview.collection ? `${preview.kind === "album" ? "Album" : "Playlist"} · ${entries.length} items` : mode === "music" ? "Music" : "Video"}
               </span>
               <strong>{preview.title}</strong>
               {preview.creator && <span className="muted">{preview.creator}</span>}
@@ -210,27 +265,17 @@ export function ImportUrlDialog({ open, onOpenChange }: { open: boolean; onOpenC
 
           <div className="url-options">
             {anyDownloadable && (
-              <Field label="Downloads" hint="Downloaded files go into your library folder and play offline, like your own files.">
+              <Field
+                label="Downloads"
+                hint={`Downloaded files go into your library folder and play offline, like your own files.${mode === "music" ? " Videos come in as their sound." : ""} ${sites.online}`}
+              >
                 <label className="inline">
-                  <Switch checked={download} onChange={setDownload} label="Download where allowed" /> Download where the service allows it
+                  <Switch checked={download} onChange={setDownload} label="Download" /> Download, to keep and play offline
                 </label>
               </Field>
             )}
-            {anyVideo && (
-              <Field label="Videos go to">
-                <div className="segmented" role="group" aria-label="Videos go to">
-                  {[
-                    ["videos", "Videos"],
-                    ["video", "Movies & Series"],
-                  ].map(([key, label]) => (
-                    <button key={key} type="button" aria-pressed={videoCategory === key} onClick={() => setVideoCategory(key)}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </Field>
-            )}
-            {preview.collection && preview.audio && offlineTracks > 0 && (
+            {viaYtdlp && <DownloadOptions video={mode === "video"} audio={mode === "music"} />}
+            {mode === "music" && preview.collection && offlineTracks > 0 && (
               <Field label="Playlist" hint="Holds the songs that are available offline, in the original order.">
                 <label className="checkbox">
                   <input type="checkbox" checked={makePlaylist} onChange={(event) => setMakePlaylist(event.target.checked)} />
@@ -255,14 +300,14 @@ const STATE_TEXT: Record<OnlineJob["state"], string> = {
   cancelled: "Cancelled",
 };
 
-function jobText(job: OnlineJob): string {
+export function jobText(job: OnlineJob): string {
   if (job.state === "working") return job.action === "download" ? `Downloading ${Math.round((job.progress ?? 0) * 100)}%` : "Saving";
   if (job.state === "done") return job.action === "download" ? "Downloaded · offline" : "Added · online";
   if (job.state === "failed" || job.state === "skipped") return job.error ?? STATE_TEXT[job.state];
   return STATE_TEXT[job.state];
 }
 
-function JobIcon({ job }: { job: OnlineJob }): ReactNode {
+export function JobIcon({ job }: { job: OnlineJob }): ReactNode {
   switch (job.state) {
     case "working":
       return <LoaderCircle size={16} className="spin" aria-hidden />;

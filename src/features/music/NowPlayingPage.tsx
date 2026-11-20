@@ -1,7 +1,9 @@
 import type { CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowDown, ArrowLeft, ArrowUp, Heart, Music, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Square, Volume2, VolumeX, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Heart, Music, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Square, Volume2, VolumeX, X } from "lucide-react";
+import { BackButton } from "../../components/BackButton";
+import { Marquee } from "../../components/Marquee";
 import { api, artworkUrl } from "../../lib/api";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { SleepTimerButton } from "../../lib/sleepTimer";
@@ -23,17 +25,14 @@ export function NowPlayingPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const track = music.current;
-  const back = () => (window.history.length > 1 ? window.history.back() : void navigate({ to: "/" }));
 
   if (!track) {
     return (
       <div className="page now-page">
-        <button type="button" className="btn now-back" onClick={back}>
-          <ArrowLeft size={16} /> Back
-        </button>
+        <BackButton className="now-back" />
         <div className="empty now-empty">
           <Music size={44} />
-          <p>Nothing is playing. Play an album, a song or a playlist from Music, and it shows here.</p>
+          <p>Nothing is playing. Play a song or a playlist from Music, and it shows here.</p>
           <button type="button" className="btn btn-primary" onClick={() => void navigate({ to: "/library/$scope", params: { scope: "music" } })}>
             Open Music
           </button>
@@ -51,18 +50,18 @@ export function NowPlayingPage() {
   return (
     <div className="page now-page">
       {cover && <div className="now-backdrop" style={{ backgroundImage: `url("${cover}")` }} aria-hidden />}
-      <button type="button" className="btn now-back" onClick={back}>
-        <ArrowLeft size={16} /> Back
-      </button>
+      <BackButton className="now-back" />
       <div className="now-stage">
         <div className={`now-art${music.paused ? "" : " playing"}`}>
           <Cover item={{ title: track.title, coverKey: track.coverKey, handler: "audio" }} size="cover" />
         </div>
         <div className="now-main">
           <span className="now-kicker">{music.paused ? "Paused" : "Now playing"}</span>
-          <h1 className="display now-title">{track.title}</h1>
+          <h1 className="display now-title">
+            <Marquee text={track.title} />
+          </h1>
           <div className="now-sub">
-            <span>{[track.artist, track.album].filter(Boolean).join(" · ") || "Unknown artist"}</span>
+            <Marquee text={[track.artist, track.album].filter(Boolean).join(" · ") || "Unknown artist"} />
             <button type="button" className="icon-btn" aria-pressed={track.favorite} aria-label={track.favorite ? "Remove from favorites" : "Add to favorites"} onClick={() => void favorite()}>
               <Heart size={19} fill={track.favorite ? "currentColor" : "none"} />
             </button>

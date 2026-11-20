@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { BackButton } from "../../components/BackButton";
 import { AudioLines, ChevronRight, Disc3, Download, FileIcon, Folder, HardDriveDownload, Pause, Play, ShieldAlert, Square, Upload, X } from "lucide-react";
 import { api, cdTrackUrl, errorText, type DiscContents, type DiscJob, type DiscTitle, type DriveInfo, driveName, onLinux } from "../../lib/api";
 import { useAmbientHold } from "../../lib/ambient/AmbientProvider";
@@ -390,6 +391,7 @@ export function DiscsPage() {
   return (
     <div className="library-view">
       <div className="discs-page">
+        <BackButton />
         <CategoryStrip />
         <div className="page-header">
           <div className="title-row">

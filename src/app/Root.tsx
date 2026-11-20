@@ -25,8 +25,11 @@ import { CommandPalette } from "../features/palette/CommandPalette";
 import { FloatingVideo } from "../features/player/FloatingVideo";
 import { AchievementNotice } from "../features/home/YearViews";
 import { ResumeNotice } from "../features/home/ResumeNotice";
+import { PerfWatch } from "../lib/perfWatch";
 import { CloseConfirm, WhatsNew } from "../features/app/AppDialogs";
 import { BigPictureCursor, BigPictureLauncher } from "../features/bigpicture/Launcher";
+import { blockHistoryKeys } from "../components/BackButton";
+import { BusyIndicator } from "./BusyIndicator";
 
 /** Colors per section (D-054): tells the preferences which section is on screen. */
 function SectionColor() {
@@ -50,9 +53,11 @@ export function Root() {
   // progress the address already changed, and deciding from it would mount the old page again.
   const fullWindow = useRouterState({ select: (state) => state.matches.some((match) => match.routeId === "/lab" || match.routeId === "/read/$id" || match.routeId === "/watch/$id" || match.routeId === "/disc/$letter/$title" || match.routeId === "/bp") });
   const bigPictureRoute = useRouterState({ select: (state) => state.matches.some((match) => match.routeId === "/bp") });
-  const [builderOpen, setBuilderOpen] = useState(false);
-  const [importUrlOpen, setImportUrlOpen] = useState(false);
+  const [builderCategory, setBuilderCategory] = useState<string | null>(null);
+  const [importUrlCategory, setImportUrlCategory] = useState<string | null>(null);
   useLibraryEvents();
+  // A page's Back is the one way back (D-138): no mouse side buttons or Alt+←/→.
+  useEffect(() => blockHistoryKeys(), []);
 
   // Automated video-lab runs (DIGITIFY_POC=video:<path>) open the lab directly.
   useEffect(() => {
@@ -76,6 +81,7 @@ export function Root() {
         <SectionColor />
         <ArcadeSession />
         <BigPictureLauncher />
+        <BusyIndicator />
         {fullWindow ? (
           // The video lab and the reader take the whole window.
           <>
@@ -85,8 +91,8 @@ export function Root() {
           </>
         ) : (
           <ImporterProvider enabled={libraryOpen}>
-            <BuilderContext.Provider value={() => setBuilderOpen(true)}>
-            <ImportUrlContext.Provider value={() => setImportUrlOpen(true)}>
+            <BuilderContext.Provider value={setBuilderCategory}>
+            <ImportUrlContext.Provider value={setImportUrlCategory}>
               <div className="app">
                 <TitleBar searchEnabled={libraryOpen} />
                 {libraryOpen ? (
@@ -102,13 +108,14 @@ export function Root() {
                   <ImportReviewDialog />
                   <ImportPanel />
                   <DropOverlay />
-                  <BookBuilderDialog open={builderOpen} onOpenChange={setBuilderOpen} />
-                  <ImportUrlDialog open={importUrlOpen} onOpenChange={setImportUrlOpen} />
+                  <BookBuilderDialog category={builderCategory} onClose={() => setBuilderCategory(null)} />
+                  <ImportUrlDialog category={importUrlCategory} onClose={() => setImportUrlCategory(null)} />
                   <OnlineQueuePanel />
                   <DiscNotice />
                   <CommandPalette />
                   <FloatingVideo />
                   <AchievementNotice />
+                  <PerfWatch />
                   <ResumeNotice />
                   <WhatsNew />
                 </>

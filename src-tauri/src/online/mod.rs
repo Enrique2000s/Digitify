@@ -1,11 +1,12 @@
-//! Import from URL (D-028): links from YouTube, YouTube Music, Spotify and SoundCloud, and direct
-//! links to media files.
+//! Import from URL (D-028): links from YouTube, YouTube Music, Spotify and SoundCloud, the other
+//! sites yt-dlp knows (D-133), and direct links to media files.
 //!
 //! 1. Recognize the link (`link`), without going online.
-//! 2. Ask the service what it is (`providers`): official, documented interfaces only.
-//! 3. Queue the chosen entries (`queue`): each is either downloaded, where the service allows it,
-//!    and added like any local file; or saved as an online item that plays in the service's own
-//!    player and needs a connection. Nothing online is ever presented as available offline.
+//! 2. Ask what it is (`providers`): the services' official interfaces, or yt-dlp (`ytdlp`).
+//! 3. Queue the chosen entries (`queue`): each is either downloaded (a direct file, a SoundCloud
+//!    track its uploader allows, or through yt-dlp) and added like any local file; or saved as an
+//!    online item that plays in the service's own player and needs a connection. Nothing online is
+//!    ever presented as available offline, and nothing protected with DRM is downloaded.
 //!
 //! Digitify goes online only here, when the owner pastes a link, and when an online item is played.
 
@@ -14,6 +15,7 @@ pub mod keys;
 pub mod link;
 mod providers;
 mod queue;
+pub mod ytdlp;
 
 use std::path::{Path, PathBuf};
 
@@ -49,6 +51,12 @@ pub struct Entry {
     pub downloadable: bool,
     /// Where the file comes from, when it's downloadable.
     pub download: Option<String>,
+    /// Downloaded through yt-dlp (D-133) rather than as a plain file.
+    #[serde(default)]
+    pub ytdlp: bool,
+    /// A live stream: saved as an online item, downloadable once it's over.
+    #[serde(default)]
+    pub live: bool,
     pub available: bool,
     /// Why it's unavailable, or a limit worth knowing.
     pub reason: Option<String>,
@@ -85,7 +93,8 @@ pub async fn online_inspect(app: AppHandle, state: State<'_, AppState>, url: Str
     blocking(move || {
         let link = link::detect(&url)?;
         let keys = keys::load(&dir);
-        let mut preview = providers::inspect(&link, &keys)?;
+        let tool = ytdlp::locate(&dir);
+        let mut preview = providers::inspect(&link, &keys, tool.as_ref())?;
         library.db.with(|conn| {
             for entry in &mut preview.entries {
                 entry.existing = existing(conn, entry)?;
@@ -97,13 +106,15 @@ pub async fn online_inspect(app: AppHandle, state: State<'_, AppState>, url: Str
     .await
 }
 
-/// The item an entry already is: the same thing on the same service, or the same file link.
+/// The item an entry already is: the same thing on the same service, or the same file link. What
+/// yt-dlp downloads as a video and as sound (D-133) are two things; an online-only item is either.
 fn existing(conn: &Connection, entry: &Entry) -> AppResult<Option<i64>> {
     Ok(conn
         .query_row(
             "SELECT o.item_id FROM online_sources o WHERE o.provider = ?1 AND o.external_id = ?2 \
-             AND (o.kind = ?3 OR (o.kind IN ('video', 'track') AND ?3 IN ('video', 'track'))) LIMIT 1",
-            params![entry.provider, entry.external_id, entry.kind],
+             AND (o.kind = ?3 OR (o.kind IN ('video', 'track') AND ?3 IN ('video', 'track') AND (o.downloaded = 0 OR NOT ?4))) \
+             ORDER BY o.kind = ?3 DESC LIMIT 1",
+            params![entry.provider, entry.external_id, entry.kind, entry.ytdlp],
             |row| row.get(0),
         )
         .optional()?)
@@ -121,6 +132,9 @@ pub struct ImportRequest {
     pub download: bool,
     /// A new playlist for the imported tracks that are available offline, in their original order.
     pub playlist_name: Option<String>,
+    /// How yt-dlp downloads (D-133).
+    #[serde(default)]
+    pub quality: ytdlp::Quality,
 }
 
 /// Queues the chosen entries; progress arrives as `online-queue` events.
@@ -146,6 +160,10 @@ pub async fn online_import(app: AppHandle, state: State<'_, AppState>, online: S
     for key in [&request.music_category, &request.video_category] {
         library.db.with(|conn| crate::library::category_id(conn, key))?;
     }
+    // Videos from links go to Videos (D-134); one can be moved into Movies & Series from there.
+    if request.video_category != "videos" {
+        return Err(AppError::msg("Videos from links go to Videos; from there one can go to Movies & Series."));
+    }
     Ok(online.enqueue(&app, library, request, playlist))
 }
 
@@ -168,6 +186,105 @@ pub fn online_retry(app: AppHandle, online: State<'_, OnlineState>, id: u64) {
 #[tauri::command]
 pub fn online_clear(app: AppHandle, online: State<'_, OnlineState>) {
     online.clear(&app);
+}
+
+/// Downloads items saved as online items (D-133), each replacing its online item and keeping its
+/// favorite mark, tags and collection. `audio` keeps only the sound (into Music); otherwise each
+/// keeps what it is. Returns how many were queued.
+#[tauri::command]
+pub async fn online_download_items(app: AppHandle, state: State<'_, AppState>, online: State<'_, OnlineState>, ids: Vec<i64>, quality: ytdlp::Quality, audio: Option<bool>) -> AppResult<usize> {
+    let library = state.library()?;
+    let dir = config_dir(&app)?;
+    let lookup = library.clone();
+    let planned: Vec<(Entry, String, String)> = blocking(move || {
+        if ytdlp::locate(&dir).is_none() {
+            return Err(AppError::msg("yt-dlp is missing from this installation. Reinstall Digitify, or update yt-dlp in Settings › Online services."));
+        }
+        lookup.db.with(|conn| {
+            let mut planned = Vec::new();
+            for id in ids {
+                let row = conn
+                    .query_row(
+                        "SELECT o.provider, o.service, o.kind, o.external_id, o.url, i.title, c.key, c.handler, \
+                         (SELECT p.name FROM item_people ip JOIN people p ON p.id = ip.person_id WHERE ip.item_id = i.id ORDER BY ip.position LIMIT 1), \
+                         json_extract(i.metadata, '$.durationSec') \
+                         FROM online_sources o JOIN items i ON i.id = o.item_id JOIN categories c ON c.id = i.category_id \
+                         WHERE o.item_id = ?1 AND o.downloaded = 0",
+                        [id],
+                        |row| {
+                            Ok((
+                                row.get::<_, String>(0)?,
+                                row.get::<_, String>(1)?,
+                                row.get::<_, String>(2)?,
+                                row.get::<_, String>(3)?,
+                                row.get::<_, String>(4)?,
+                                row.get::<_, String>(5)?,
+                                row.get::<_, String>(6)?,
+                                row.get::<_, String>(7)?,
+                                row.get::<_, Option<String>>(8)?,
+                                row.get::<_, Option<f64>>(9)?,
+                            ))
+                        },
+                    )
+                    .optional()?;
+                let Some((provider, service, kind, external_id, url, title, category, handler, creator, duration)) = row else { continue };
+                // Spotify's media is DRM-protected, and a whole playlist saved as one link has no one file.
+                if provider == "spotify" || matches!(kind.as_str(), "playlist" | "album") || !(url.starts_with("https://") || url.starts_with("http://")) {
+                    continue;
+                }
+                let as_audio = audio.unwrap_or(handler == "audio");
+                let music = if handler == "audio" { category.clone() } else { "music".to_string() };
+                let videos = if handler == "video" { category.clone() } else { "videos".to_string() };
+                let entry = Entry {
+                    provider,
+                    service,
+                    kind,
+                    external_id,
+                    url: url.clone(),
+                    title,
+                    creator,
+                    duration_sec: duration,
+                    thumbnail: None,
+                    audio: as_audio,
+                    downloadable: true,
+                    download: Some(url),
+                    ytdlp: true,
+                    live: false,
+                    available: true,
+                    reason: None,
+                    existing: Some(id),
+                };
+                planned.push((entry, music, videos));
+            }
+            Ok(planned)
+        })
+    })
+    .await?;
+    if planned.is_empty() {
+        return Err(AppError::msg("None of these can be downloaded (Spotify's songs and whole playlists saved as one link can't)."));
+    }
+    let count = planned.len();
+    for (entry, music, videos) in planned {
+        let request = ImportRequest { entries: vec![entry], music_category: music, video_category: videos, download: true, playlist_name: None, quality: quality.clone() };
+        online.enqueue(&app, library.clone(), request, None);
+    }
+    Ok(count)
+}
+
+#[tauri::command]
+pub fn ytdlp_status(app: AppHandle) -> AppResult<ytdlp::Status> {
+    Ok(ytdlp::status(&config_dir(&app)?))
+}
+
+/// Updates yt-dlp to its newest release (only when asked: Digitify never checks by itself).
+#[tauri::command]
+pub async fn ytdlp_update(app: AppHandle) -> AppResult<ytdlp::Status> {
+    let dir = config_dir(&app)?;
+    blocking(move || {
+        ytdlp::update(&dir)?;
+        Ok(ytdlp::status(&dir))
+    })
+    .await
 }
 
 #[tauri::command]
@@ -278,10 +395,27 @@ fn record_source(conn: &Connection, item: i64, entry: &Entry, downloaded: bool) 
     Ok(())
 }
 
+/// A download taking an online-only item's place: the new item keeps its favorite mark, tags and
+/// (in the same category) collection, and the online-only one goes.
+fn take_over(conn: &Connection, old: i64, new: i64) -> AppResult<()> {
+    conn.execute("UPDATE items SET is_favorite = is_favorite OR (SELECT is_favorite FROM items WHERE id = ?1) WHERE id = ?2", params![old, new])?;
+    conn.execute("INSERT OR IGNORE INTO item_tags (item_id, tag_id) SELECT ?2, tag_id FROM item_tags WHERE item_id = ?1", params![old, new])?;
+    conn.execute(
+        "UPDATE items SET collection_id = (SELECT o.collection_id FROM items o WHERE o.id = ?1 AND o.category_id = items.category_id) \
+         WHERE id = ?2 AND collection_id IS NULL",
+        params![old, new],
+    )?;
+    conn.execute("DELETE FROM items_fts WHERE rowid = ?1", [old])?;
+    conn.execute("DELETE FROM items WHERE id = ?1", [old])?;
+    Ok(())
+}
+
 /// A downloaded file, added like any local file (tags, artwork, the same-file check), then given
-/// the service's details where the file has none, the chosen category, and its origin.
+/// the service's details where the file has none, the chosen category, and its origin. `cover` is
+/// the picture yt-dlp saved for it, used over a frame of the video. `replaces` is an online-only
+/// item this download takes the place of.
 /// Returns the item and whether it was already in the library.
-pub(crate) fn save_download(library: &Library, entry: &Entry, category: &str, path: &Path) -> AppResult<(i64, bool)> {
+pub(crate) fn save_download(library: &Library, entry: &Entry, category: &str, path: &Path, cover: Option<&[u8]>, replaces: Option<i64>) -> AppResult<(i64, bool)> {
     let ids = crate::import::import_in_place(library, &[path.to_path_buf()])?;
     let Some(&item) = ids.first() else {
         // The very same file is already in the library: keep that one, drop this copy.
@@ -295,9 +429,20 @@ pub(crate) fn save_download(library: &Library, entry: &Entry, category: &str, pa
                 .optional()?)
         })?;
         let _ = std::fs::remove_file(path);
-        return found.map(|id| (id, true)).ok_or_else(|| AppError::msg("The downloaded file isn't a format Digitify can play."));
+        let found = found.ok_or_else(|| AppError::msg("The downloaded file isn't a format Digitify can play."))?;
+        if let Some(old) = replaces.filter(|old| *old != found) {
+            library.db.with(|conn| {
+                let tx = conn.transaction()?;
+                take_over(&tx, old, found)?;
+                reindex(&tx, found)?;
+                tx.commit()?;
+                Ok(())
+            })?;
+        }
+        return Ok((found, true));
     };
-    let art = fetch_artwork(library, entry);
+    let saved = cover.and_then(|bytes| artwork::store(&library.folder, bytes).ok());
+    let art = if saved.is_some() { saved.clone() } else { fetch_artwork(library, entry) };
     library.db.with(|conn| {
         let tx = conn.transaction()?;
         let category_id = crate::library::category_id(&tx, category)?;
@@ -315,11 +460,17 @@ pub(crate) fn save_download(library: &Library, entry: &Entry, category: &str, pa
             let role = if entry.audio { "artist" } else { "creator" };
             tx.execute("INSERT INTO item_people (item_id, person_id, role, position) VALUES (?1, ?2, ?3, 0)", params![item, person, role])?;
         }
-        if let Some(art) = &art {
+        if let Some(art) = &saved {
+            tx.execute("UPDATE items SET cover_key = ?2, cover_color = ?3 WHERE id = ?1", params![item, art.key, art.color])?;
+        } else if let Some(art) = &art {
             tx.execute("UPDATE items SET cover_key = ?2, cover_color = ?3 WHERE id = ?1 AND cover_key IS NULL", params![item, art.key, art.color])?;
         }
         if let Some(seconds) = entry.duration_sec {
             tx.execute("UPDATE items SET metadata = json_set(metadata, '$.durationSec', ?2) WHERE id = ?1 AND json_extract(metadata, '$.durationSec') IS NULL", params![item, seconds.round() as i64])?;
+        }
+        // The online-only item goes before this one takes its link (one item per link).
+        if let Some(old) = replaces.filter(|old| *old != item) {
+            take_over(&tx, old, item)?;
         }
         record_source(&tx, item, entry, true)?;
         reindex(&tx, item)?;

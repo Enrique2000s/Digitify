@@ -503,9 +503,90 @@ input[type="checkbox"] {
 .brand:hover svg {
   transform: rotate(-8deg) scale(1.08);
 }
-.history {
+/* "Working…" while something takes a moment (D-143). */
+.busy-indicator {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  z-index: 2147483000;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: var(--surface, var(--field));
+  box-shadow: var(--shadow, 0 6px 24px rgba(0, 0, 0, 0.18));
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 800;
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: busy-in 160ms var(--ease, ease-out);
+}
+@keyframes busy-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
+
+/* A screen that failed (D-143): what happened, with Back and Home. */
+.screen-error {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  min-height: 70vh;
+  padding: 40px;
+  text-align: center;
+}
+.screen-error.bp {
+  min-height: 100vh;
+}
+.screen-error.bp > svg,
+.screen-error.bp h1 {
+  color: #fff;
+}
+.screen-error p {
+  max-width: 640px;
+  margin: 0;
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+}
+.screen-error-actions {
   display: flex;
-  gap: 6px;
+  gap: 10px;
+}
+
+/* A page's own Back (D-138), in the same place on every page past Home, Library and Arcade. */
+.page-back {
+  align-self: flex-start;
+  margin-bottom: 14px;
+}
+.page-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.page-top .page-back {
+  margin-bottom: 0;
+}
+/* An item's previous and next (D-138). */
+.item-steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.item-steps-count {
+  min-width: 84px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 .search-pill {
   flex: 1 1 200px;
@@ -705,6 +786,8 @@ span.music-play {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* The scrollbar's room is always kept, so nothing on the right moves when a page is short (D-145). */
+  scrollbar-gutter: stable;
   padding: 20px 40px 56px;
 }
 
@@ -1077,14 +1160,25 @@ span.music-play {
 .tile.add .tile-screen {
   border: 2px dashed var(--accent-bright);
 }
+/* D-130: a tile's covers centred in its screen, the middle one in front; they fan out and rise on
+   hover, and come in one after another. `--side` is -1, 0 or 1; `--drop` lowers the side ones. */
 .tile-cover {
   position: absolute;
+  translate: -50% -50%;
   overflow: hidden;
   border-radius: 7px;
   background: var(--raised);
-  box-shadow: 0 6px 12px rgba(20, 40, 70, 0.28);
-  transform: rotate(var(--tilt, 0deg));
-  transition: transform 260ms var(--spring);
+  box-shadow: 0 6px 14px rgba(20, 40, 70, 0.3);
+  transform: translateY(var(--drop, 0%)) rotate(var(--tilt, 0deg));
+  transition: transform 340ms var(--spring), box-shadow 240ms var(--ease);
+  animation: tile-cover-in 520ms var(--spring) both;
+  animation-delay: calc(var(--n, 0) * 70ms);
+}
+@keyframes tile-cover-in {
+  from {
+    opacity: 0;
+    transform: translateY(26%) rotate(0deg) scale(0.92);
+  }
 }
 .tile-cover img {
   display: block;
@@ -1092,8 +1186,10 @@ span.music-play {
   height: 100%;
   object-fit: cover;
 }
-.tile:hover .tile-cover {
-  transform: translateY(-4px) rotate(var(--tilt, 0deg));
+.tile:hover .tile-cover,
+.tile:focus-visible .tile-cover {
+  transform: translate(calc(var(--side, 0) * 16%), calc(var(--drop, 0%) - 7%)) rotate(calc(var(--tilt, 0deg) * 1.7)) scale(1.05);
+  box-shadow: 0 12px 22px rgba(20, 40, 70, 0.34);
 }
 .tile-icon {
   position: absolute;
@@ -1235,6 +1331,11 @@ span.music-play {
   padding: 12%;
   background: linear-gradient(160deg, var(--surface-hover), var(--track));
   color: var(--accent-bright);
+}
+.cover-fallback.icon-only {
+  justify-content: center;
+  align-items: center;
+  padding: 0;
 }
 .cover-fallback span {
   font-size: 13px;
@@ -2796,24 +2897,20 @@ span.music-play {
 .reader-bar.bottom.hidden {
   transform: translate(-50%, 12px);
 }
+/* A player's or reader's name: one line that scrolls when it doesn't fit, never "…" (D-145). */
 .reader-title {
   display: flex;
+  flex: 0 1 auto;
   flex-direction: column;
   min-width: 0;
-  max-width: 320px;
+  max-width: min(640px, 46vw);
   padding: 0 4px;
-  line-height: 1.2;
+  line-height: 1.25;
 }
-.reader-title strong,
-.reader-title span {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.reader-title strong {
+.reader-title .reader-name {
   font-weight: 900;
 }
-.reader-title span {
+.reader-title .reader-sub {
   font-size: 12.5px;
   font-weight: 700;
   color: var(--muted);
@@ -4165,8 +4262,11 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
 :root[data-motion="reduced"] .shelf-item:hover {
   transform: none;
 }
-:root[data-motion="reduced"] .tile:hover .tile-cover {
-  transform: rotate(var(--tilt, 0deg));
+:root[data-motion="reduced"] .tile:hover .tile-cover,
+:root[data-motion="reduced"] .tile-cover,
+:root[data-perf="light"] .tile-cover {
+  transform: translateY(var(--drop, 0%)) rotate(var(--tilt, 0deg));
+  animation: none;
 }
 :root[data-motion="reduced"] .music-play.on {
   animation: none;
@@ -4178,8 +4278,10 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
   :root:not([data-motion="full"]) .shelf-item:hover {
     transform: none;
   }
-  :root:not([data-motion="full"]) .tile:hover .tile-cover {
-    transform: rotate(var(--tilt, 0deg));
+  :root:not([data-motion="full"]) .tile:hover .tile-cover,
+  :root:not([data-motion="full"]) .tile-cover {
+    transform: translateY(var(--drop, 0%)) rotate(var(--tilt, 0deg));
+    animation: none;
   }
   :root:not([data-motion="full"]) .music-play.on {
     animation: none;
@@ -5322,4 +5424,159 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
 .arcade-badge[data-platform="segacd"],
 .arcade-badge[data-platform="dreamcast"] {
   background: rgba(20, 70, 160, 0.92);
+}
+
+/* D-117: an emulator set aside. */
+.emulator-rows > li.ignored {
+  opacity: 0.6;
+}
+/* D-119: symbols beside the names of launchers and consoles. */
+.arcade-console-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+.arcade-rows > li .setup-logo {
+  margin-left: -2px;
+}
+/* D-118: the covers found for a game, to choose from. */
+.cover-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px;
+  max-height: min(62vh, 640px);
+  overflow-y: auto;
+  padding: 4px;
+}
+.cover-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 8px;
+  border: 2px solid transparent;
+  border-radius: 16px;
+  background: var(--panel);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.cover-choice img {
+  width: 100%;
+  height: 190px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: var(--track);
+}
+.cover-choice:hover {
+  box-shadow: var(--glow-sm);
+}
+.cover-choice.picked {
+  border-color: var(--accent);
+  box-shadow: var(--glow-sm);
+}
+.cover-choice-source {
+  font-size: 13px;
+  font-weight: 800;
+}
+.cover-choice-size {
+  font-size: 12px;
+  color: var(--muted);
+}
+.cover-picker-wait {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 30px 6px;
+  font-weight: 700;
+}
+
+/* D-121: Settings in tabs; a maker's consoles in one view menu. */
+.settings-tabs {
+  display: flex;
+  width: fit-content;
+  max-width: min(860px, 100%);
+  margin: 0 auto 18px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.maker-view svg {
+  margin-left: 2px;
+  opacity: 0.7;
+}
+.maker-menu {
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+}
+.maker-menu .menu-item .maker-menu-name {
+  flex: 1;
+}
+.maker-menu .menu-item .muted {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* D-123: each emulator's own icon (or its initials) beside its name. */
+.emulator-mark {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  object-fit: contain;
+}
+.emulator-mark.letters {
+  display: inline-grid;
+  place-items: center;
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+/* D-124: Emulators & folders inside Settings › Arcade. */
+.settings-subtitle {
+  margin: 22px 0 10px;
+  font-size: 16px;
+  font-weight: 900;
+}
+.panel .arcade-setup {
+  margin-bottom: 0;
+  padding: 14px;
+  box-shadow: none;
+}
+/* D-125: Home's and Everything's Add menu, a category each. */
+.menu-item .menu-sub-arrow {
+  margin-left: auto;
+  opacity: 0.6;
+}
+.menu-item[data-state="open"] {
+  background: var(--hover, rgba(0, 0, 0, 0.05));
+}
+.import-into {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+/* D-126: an item's category, shown, not changed. */
+.field-static {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  margin: 0;
+  font-weight: 800;
+}
+/* D-128: SteamGridDB's key. */
+.steamgriddb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.steamgriddb-row .input {
+  width: 200px;
+}
+.steamgriddb-ok {
+  font-weight: 800;
+  color: #30a46c;
+}
+.setting-error {
+  color: var(--danger, #d64545);
+  font-weight: 700;
 }

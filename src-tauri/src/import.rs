@@ -48,8 +48,12 @@ pub enum ImportMode {
 pub struct ImportRequest {
     pub paths: Vec<String>,
     pub mode: ImportMode,
-    /// Put what this category can hold into it instead of detecting one per file.
+    /// Put what this category can hold into it instead of detecting one per file; what it can't
+    /// hold is left out (D-125), so nothing lands in a category it wasn't added to.
     pub category: Option<String>,
+    /// Started by a watched folder (D-060): kept in the history only when it added or failed something.
+    #[serde(default, skip_deserializing)]
+    pub watched: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -62,9 +66,19 @@ pub struct ImportProgress {
     pub processed: usize,
     pub imported: usize,
     pub duplicates: usize,
+    /// Files the picked category can't hold (D-125), left out rather than put elsewhere.
+    pub skipped: usize,
     pub failed: usize,
     pub current: Option<String>,
     pub errors: Vec<String>,
+}
+
+/// What became of one file.
+enum Outcome {
+    Imported,
+    Duplicate,
+    /// The picked category can't hold it (D-125).
+    Skipped,
 }
 
 #[tauri::command]
@@ -93,6 +107,8 @@ pub fn start(app: AppHandle, library: Arc<Library>, request: ImportRequest) -> A
                 progress.phase = "failed";
                 progress.errors.push(e.to_string());
             }
+            // Kept in the imports history (D-137).
+            crate::history::record_files(&library, &request, &progress);
             emit(&app, &progress);
             let _ = app.emit("library-changed", ());
             if let Ok(mut jobs) = app.state::<AppState>().imports.jobs.lock() {
@@ -134,7 +150,22 @@ fn run(
         Some("book" | "comic") => ImageMode::Pages,
         _ => ImageMode::Photos,
     };
-    let candidates = scan(&paths, cancel, images);
+    let mut candidates = scan(&paths, cancel, images, picked_handler.as_deref() == Some("image"));
+    // Videos added to a music category keep their sound, as MP3s (D-132).
+    if picked_handler.as_deref() == Some("audio") {
+        let name: Option<String> = library.db.with(|conn| {
+            Ok(conn.query_row("SELECT name FROM categories WHERE key = ?1", [request.category.as_deref().unwrap_or_default()], |row| row.get(0)).optional()?)
+        })?;
+        let into = library.folder.media_dir().join(files::safe_name(&name.unwrap_or_else(|| "Music".to_string()))).join("From videos");
+        candidates = candidates
+            .into_iter()
+            .flat_map(|candidate| match candidate {
+                Candidate::Single { kind: Kind::Video, path } => vec![Candidate::FromVideo { path, into: into.clone() }],
+                Candidate::Series { episodes, .. } => episodes.into_iter().map(|(path, _)| Candidate::FromVideo { path, into: into.clone() }).collect(),
+                other => vec![other],
+            })
+            .collect();
+    }
     progress.total = candidates.len();
     progress.phase = "importing";
     emit(app, progress);
@@ -162,28 +193,32 @@ fn run(
         for (label, result) in prepared {
             progress.current = Some(label.clone());
             let outcome = result.and_then(|prepared| match prepared {
-                Prepared::Duplicate => Ok(false),
+                Prepared::Duplicate => Ok(Outcome::Duplicate),
                 Prepared::Draft(draft) => {
-                    // A picked category applies to what it can hold (Videos or Movies & Series for
-                    // videos, say); anything else keeps the category it was detected as.
+                    // A picked category takes what it can hold (Videos or Movies & Series for
+                    // videos, say); the rest is left out (D-125), never put in another category.
                     let handler = |key: &str| categories.get(key).map(|c| c.2.as_str());
                     let key = match request.category.as_deref() {
                         Some(picked) if handler(picked) == handler(draft.category) || handler(picked) == Some("generic") => picked,
-                        _ => draft.category,
+                        Some(_) => return Ok(Outcome::Skipped),
+                        None => draft.category,
                     };
                     let (category_id, category_name, _) = categories
                         .get(key)
                         .cloned()
                         .ok_or_else(|| AppError::msg(format!("unknown category '{key}'")))?;
-                    save(library, *draft, request.mode, category_id, &category_name).map(|_| true)
+                    // A file Digitify made in the library folder stays where it is (D-132).
+                    let mode = if draft.managed { ImportMode::Reference } else { request.mode };
+                    save(library, *draft, mode, category_id, &category_name).map(|_| Outcome::Imported)
                 }
             });
             match outcome {
-                Ok(true) => {
+                Ok(Outcome::Imported) => {
                     progress.imported += 1;
                     since_refresh += 1;
                 }
-                Ok(false) => progress.duplicates += 1,
+                Ok(Outcome::Duplicate) => progress.duplicates += 1,
+                Ok(Outcome::Skipped) => progress.skipped += 1,
                 Err(e) => {
                     progress.failed += 1;
                     log::warn!("import of {label} failed: {e}");
@@ -245,6 +280,9 @@ enum Candidate {
     Series { name: String, episodes: Vec<(PathBuf, EpisodeName)> },
     /// One photo (D-033), with the albums it sits in: the picked folder, then its subfolders.
     Picture { path: PathBuf, album: Vec<String> },
+    /// A video added to Music (D-132): its sound becomes an MP3 in the library folder, imported as
+    /// a track; the video stays as it is. `into` is the folder the MP3 goes in.
+    FromVideo { path: PathBuf, into: PathBuf },
 }
 
 /// What images in the picked paths are.
@@ -265,6 +303,7 @@ impl Candidate {
             Candidate::Track { path } => name(path),
             Candidate::Series { name, .. } => name.clone(),
             Candidate::Picture { path, .. } => name(path),
+            Candidate::FromVideo { path, .. } => name(path),
         }
     }
 
@@ -275,11 +314,14 @@ impl Candidate {
             Candidate::Track { path } => vec![path],
             Candidate::Series { episodes, .. } => episodes.iter().map(|(path, _)| path).collect(),
             Candidate::Picture { path, .. } => vec![path],
+            Candidate::FromVideo { path, .. } => vec![path],
         }
     }
 }
 
-fn scan(paths: &[PathBuf], cancel: &AtomicBool, images: ImageMode) -> Vec<Candidate> {
+/// `pictures`: they're being added to a picture category (D-125), so every image counts, even one
+/// beside music or a video.
+fn scan(paths: &[PathBuf], cancel: &AtomicBool, images: ImageMode, pictures: bool) -> Vec<Candidate> {
     let mut found: Vec<PathBuf> = Vec::new();
     // The picked folder each file was found in, for photo albums.
     let mut roots: HashMap<PathBuf, PathBuf> = HashMap::new();
@@ -327,9 +369,10 @@ fn scan(paths: &[PathBuf], cancel: &AtomicBool, images: ImageMode) -> Vec<Candid
             None => {}
         }
     }
-    // Images next to music or video are album art and posters, neither photos nor books.
+    // Images next to music or video are album art and posters, neither photos nor books (unless
+    // they're being added to Pictures).
     for (dir, pages) in image_dirs {
-        if av_dirs.contains(&dir) {
+        if av_dirs.contains(&dir) && !pictures {
             continue;
         }
         match images {
@@ -398,6 +441,9 @@ struct Draft {
     album: Vec<String>,
     /// Artwork made while preparing (photos are decoded in parallel there).
     ready_art: Option<artwork::Artwork>,
+    /// Its file was made by Digitify in the library folder (a video's sound, D-132): registered
+    /// where it is, never copied again.
+    managed: bool,
 }
 
 enum Prepared {
@@ -406,6 +452,22 @@ enum Prepared {
 }
 
 fn prepare(library: &Library, candidate: &Candidate) -> AppResult<Prepared> {
+    // A video for Music (D-132): its sound as an MP3 first, then imported as any track is, with a
+    // frame of the video as its cover when it has none of its own.
+    if let Candidate::FromVideo { path, into } = candidate {
+        let mp3 = video_to_mp3(path, into)?;
+        let prepared = prepare(library, &Candidate::Track { path: mp3 })?;
+        return Ok(match prepared {
+            Prepared::Draft(mut draft) => {
+                draft.managed = true;
+                if draft.artwork.is_none() {
+                    draft.artwork = formats::video_frame(path, 12.0).or_else(|| formats::video_frame(path, 1.0));
+                }
+                Prepared::Draft(draft)
+            }
+            other => other,
+        });
+    }
     // Fingerprint first: files already in the library are skipped before any heavy work.
     let mut files = Vec::new();
     for path in candidate.paths() {
@@ -428,7 +490,7 @@ fn prepare(library: &Library, candidate: &Candidate) -> AppResult<Prepared> {
     let draft = match candidate {
         Candidate::Single { kind, path } => describe_single(*kind, path, files),
         Candidate::ImageSet { dir, .. } => describe_image_set(dir, files),
-        Candidate::Track { path } => describe_track(path, files),
+        Candidate::Track { path } | Candidate::FromVideo { path, .. } => describe_track(path, files),
         Candidate::Series { name, episodes } => describe_series(name, episodes, files),
         Candidate::Picture { path, album } => {
             let mut d = describe_picture(path, album, files);
@@ -439,6 +501,35 @@ fn prepare(library: &Library, candidate: &Candidate) -> AppResult<Prepared> {
         }
     };
     Ok(Prepared::Draft(Box::new(draft)))
+}
+
+/// A video's sound as an MP3 (D-132), in `into`, named after the video: FFmpeg's LAME encoder at its
+/// best variable quality (about 245 kbps), with the video's title and artist tags. Made once: an
+/// MP3 already there for it is used again.
+fn video_to_mp3(video: &Path, into: &Path) -> AppResult<PathBuf> {
+    let stem = video.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "Track".to_string());
+    std::fs::create_dir_all(into)?;
+    let mp3 = into.join(format!("{}.mp3", files::safe_name(&stem)));
+    let modified = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+    if mp3.is_file() && modified(&mp3) >= modified(video) {
+        return Ok(mp3);
+    }
+    let ffmpeg = crate::tools::find("ffmpeg").ok_or_else(|| AppError::msg("FFmpeg is missing from the installation."))?;
+    let partial = mp3.with_extension("mp3.part");
+    let output = crate::tools::command(&ffmpeg)
+        .args(["-hide_banner", "-loglevel", "error", "-y", "-i"])
+        .arg(video)
+        .args(["-map", "0:a:0", "-vn", "-c:a", "libmp3lame", "-q:a", "0", "-map_metadata", "0", "-id3v2_version", "3", "-f", "mp3"])
+        .arg(&partial)
+        .output()
+        .map_err(|e| AppError::msg(format!("FFmpeg couldn't start: {e}")))?;
+    if !output.status.success() {
+        let _ = std::fs::remove_file(&partial);
+        let reason = String::from_utf8_lossy(&output.stderr);
+        return Err(AppError::msg(if reason.contains("matches no streams") { "This video has no sound to keep.".to_string() } else { format!("Its sound couldn't be made into an MP3: {}", reason.trim()) }));
+    }
+    std::fs::rename(&partial, &mp3)?;
+    Ok(mp3)
 }
 
 /// Title from a file name: "Metropolis (1927).mkv" → ("Metropolis", 1927); dots and underscores
@@ -482,6 +573,7 @@ fn draft(category: &'static str, title: String, year: Option<i64>, format: Strin
         copy_folder: None,
         album: Vec::new(),
         ready_art: None,
+        managed: false,
     }
 }
 
@@ -851,7 +943,7 @@ pub fn import_in_place(library: &Library, paths: &[PathBuf]) -> AppResult<Vec<i6
         Ok(rows)
     })?;
     let mut ids = Vec::new();
-    for candidate in scan(paths, &AtomicBool::new(false), ImageMode::Photos) {
+    for candidate in scan(paths, &AtomicBool::new(false), ImageMode::Photos, false) {
         let Prepared::Draft(draft) = prepare(library, &candidate)? else { continue };
         let category_id = *categories.get(draft.category).ok_or_else(|| AppError::msg(format!("unknown category '{}'", draft.category)))?;
         let stored: Vec<Stored> = draft
@@ -1028,6 +1120,41 @@ fn insert_version(conn: &Connection, item_id: i64, draft: &Draft, with_parts: bo
         )?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod conversion_tests {
+    use super::*;
+
+    #[test]
+    fn a_videos_sound_becomes_an_mp3() {
+        // Needs FFmpeg (bundled with Digitify, or found on the system).
+        let Some(ffmpeg) = crate::tools::find("ffmpeg") else { return };
+        let dir = std::env::temp_dir().join(format!("digitify-v2a-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let video = dir.join("Song (Official Video).mp4");
+        let made = crate::tools::command(&ffmpeg)
+            .args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=160x90:rate=10:duration=2", "-f", "lavfi", "-i", "sine=frequency=440:duration=2"])
+            .args(["-shortest", "-metadata", "title=Night Drive", "-metadata", "artist=Test Band", "-c:v", "mpeg4", "-c:a", "aac"])
+            .arg(&video)
+            .status()
+            .unwrap();
+        assert!(made.success());
+        let mp3 = video_to_mp3(&video, &dir.join("From videos")).unwrap();
+        assert_eq!(mp3.file_name().unwrap(), "Song (Official Video).mp3");
+        let info = formats::read_track(&mp3, false);
+        assert_eq!((info.title.as_deref(), info.artist.as_deref()), (Some("Night Drive"), Some("Test Band")), "its tags carried over");
+        // Made once: asked again, the same file.
+        let again = std::fs::metadata(&mp3).unwrap().modified().unwrap();
+        video_to_mp3(&video, &dir.join("From videos")).unwrap();
+        assert_eq!(std::fs::metadata(&mp3).unwrap().modified().unwrap(), again);
+        // A video without sound says so.
+        let silent = dir.join("silent.mp4");
+        crate::tools::command(&ffmpeg).args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=160x90:rate=10:duration=1", "-c:v", "mpeg4"]).arg(&silent).status().unwrap();
+        assert!(video_to_mp3(&silent, &dir.join("From videos")).unwrap_err().to_string().contains("no sound"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[cfg(test)]

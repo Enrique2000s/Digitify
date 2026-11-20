@@ -29,6 +29,21 @@ Digitify ships the following third-party software. Licenses for Digitify's own c
 - **Binary:** `pdfium-win-x64.tgz` from <https://github.com/bblanchon/pdfium-binaries> (MIT build scripts), release `chromium/7881`, SHA-256 `73cc0de6…ac08` (see `scripts/fetch-deps.ps1`). Source: <https://pdfium.googlesource.com/pdfium/>.
 - **No decryption code:** checked the same way as mpv and FFmpeg (decision D-007).
 
+### yt-dlp 2026.10.26
+- **Used for:** downloading videos and songs from YouTube and other sites (decision D-133).
+- **Files:** `yt-dlp\yt-dlp.exe` (Windows) or `yt-dlp/yt-dlp` (Linux): yt-dlp's official builds, a separate program.
+- **License:** the Unlicense (public domain), in `yt-dlp\licenses\yt-dlp-LICENSE.txt`. The build carries Python (PSF-2.0) and libraries under their own licenses, among them mutagen (GPL-2.0-or-later), curl-impersonate and curl_cffi (MIT), certifi (MPL-2.0), PyCryptodome (public domain and BSD), websockets and Brotli, and on Linux libidn2 and libunistring (LGPL-3.0-or-later); their full texts are in `yt-dlp\licenses\yt-dlp-THIRD_PARTY_LICENSES.txt`.
+- **Source code:** <https://github.com/yt-dlp/yt-dlp/releases/tag/2026.10.26>, with its build scripts; the bundled components' sources are listed in its third-party file, and its maintainers provide them on request, as that file says.
+- **Binary:** official release files `yt-dlp.exe` (SHA-256 `f5389d36…7a7d`) and `yt-dlp_linux` (`767ba9dc…6795`), see `scripts/fetch-deps.ps1` and `scripts/fetch-deps.sh`. "Update yt-dlp" in Settings can replace it, in the config folder, with a newer official release checked against that release's SHA-256 list.
+- **No decryption code:** checked the same way as mpv and FFmpeg (decision D-007); yt-dlp downloads nothing protected with DRM.
+
+### Deno 2.9.8
+- **Used for:** running the JavaScript yt-dlp needs to read YouTube.
+- **Files:** `yt-dlp\deno.exe` (Windows) or `yt-dlp/deno` (Linux), a separate program.
+- **License:** MIT, in `yt-dlp\licenses\deno-LICENSE.md`. It includes V8 (BSD 3-Clause) and Rust crates under their own permissive licenses.
+- **Source code:** <https://github.com/denoland/deno/releases/tag/v2.9.8>.
+- **Binary:** official `deno-x86_64-pc-windows-msvc.zip` (SHA-256 `cba84b26…93bf`) and `deno-x86_64-unknown-linux-gnu.zip` (`e890975b…4609`).
+
 ## Code compiled into Digitify with its own license
 
 ### UnRAR (RARLAB), through the `unrar` crate
@@ -169,7 +184,7 @@ SOFTWARE.
 | Radix UI | MIT |
 | Lucide icons | ISC |
 | SQLite (via rusqlite) | Public domain (rusqlite: MIT) |
-| image, lofty, roxmltree, rayon, serde, thiserror, log, windows-sys, pdfium-render | MIT or Apache-2.0 |
+| image, lofty, roxmltree, rayon, serde, thiserror, log, windows-sys, pdfium-render, flate2 | MIT or Apache-2.0 |
 | imagesize | MIT |
 | unrar, unrar_sys (Rust bindings; the UnRAR code itself is above) | MIT or Apache-2.0 |
 | sevenz-rust2 (7z, read-only) | Apache-2.0 |
@@ -183,7 +198,7 @@ SOFTWARE.
 | sysinfo (recognizing a running game, D-037) | MIT |
 | tiny_http (Linux: YouTube's host page, D-032) | MIT or Apache-2.0 |
 | souvlaki (media keys and system media controls, D-058) | MIT |
-| Simple Icons (the Steam, Epic Games, Xbox, GameCube, GOG and PlayStation symbols on Arcade's badges, D-097, D-101); the marks belong to their owners | CC0-1.0 |
+| Simple Icons (the Steam, Epic Games, Xbox, GameCube, GOG, PlayStation, Ubisoft, EA, Battle.net, Rockstar Games, Riot Games, Amazon, itch.io, Lutris, Nintendo Switch, Nintendo 3DS, Sega and RetroArch symbols in Arcade, D-097, D-101, D-119, D-123); the marks belong to their owners | CC0-1.0 |
 | tauri-plugin-single-instance (one Digitify at a time, D-077) | MIT or Apache-2.0 |
 | Linux only: libc, x11-dl, gtk, gdkx11, keyring | MIT or Apache-2.0 |
 | Linux only, loaded at run time (the system's, or the AppImage's copy): libayatana-appindicator, libayatana-indicator, libdbusmenu (the tray icon, D-059) | LGPL-2.1 or LGPL-3.0 |

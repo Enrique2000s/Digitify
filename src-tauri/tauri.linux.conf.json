@@ -7,6 +7,10 @@
       "binaries/vulkan-1.dll": null,
       "binaries/pdfium.dll": null,
       "../tools/ffmpeg/*": null,
+      "../tools/yt-dlp/yt-dlp.exe": null,
+      "../tools/yt-dlp/deno.exe": null,
+      "../tools/yt-dlp/yt-dlp": "yt-dlp/yt-dlp",
+      "../tools/yt-dlp/deno": "yt-dlp/deno",
       "binaries/libpdfium.so": "libpdfium.so",
       "binaries/licenses/pdfium/*": "licenses/pdfium/",
       "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"

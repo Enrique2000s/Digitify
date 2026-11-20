@@ -124,6 +124,8 @@
   overflow-y: auto;
   padding: 10px 48px 40px;
   scroll-behavior: smooth;
+  /* Selecting something near the top or bottom scrolls it in with room for its glow. */
+  scroll-padding: 48px 0 72px;
 }
 .bp-main::-webkit-scrollbar {
   width: 0;
@@ -146,8 +148,11 @@
   align-items: flex-end;
   gap: 26px;
   overflow-x: auto;
-  padding: 14px 8px 18px;
-  margin: -14px -8px -10px;
+  /* Room on every side for a selected tile's ring, glow, lift and shadow, which a scrolling row
+     would otherwise cut; the negative margins keep the tiles where they were. */
+  padding: 30px 44px 46px;
+  margin: -30px -44px -38px;
+  scroll-padding-inline: 44px;
   scroll-behavior: smooth;
 }
 .bp-row-items::-webkit-scrollbar {
@@ -1199,15 +1204,13 @@ html.bp-mode .pv-side {
   text-transform: uppercase;
   color: color-mix(in srgb, var(--accent-bright) 70%, white);
 }
+/* One line each, scrolling when long (D-145): the controls under them never move. */
 .bp-np-title {
   margin: 0;
-  overflow: hidden;
+  min-width: 0;
   font-size: clamp(40px, 5vw, 76px);
   font-weight: 900;
-  line-height: 1.05;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  line-height: 1.15;
 }
 .bp-np-sub {
   margin: 0;
@@ -1275,6 +1278,9 @@ html.bp-mode .pv-side {
   display: grid;
   gap: 8px;
   overflow: auto;
+  /* Room for a selected song's ring. */
+  padding: 10px;
+  margin: -10px;
 }
 .bp-np-entry {
   display: flex;
@@ -1323,8 +1329,101 @@ html.bp-mode .pv-side {
 .bp-np-empty {
   display: grid;
   place-items: center;
+  align-content: center;
   gap: 18px;
   min-height: 50vh;
   color: var(--bp-muted);
   text-align: center;
+}
+
+/* D-120: a game's own screen, Achievements and "Your year", all inside Big Picture. */
+.bp-game .bp-item-art {
+  position: relative;
+}
+.bp-game .bp-item-art .arcade-badge {
+  top: 14px;
+  left: 14px;
+  padding: 4px 12px;
+  font-size: 15px;
+}
+.bp-game .bp-item-art img,
+.bp-game .bp-item-art .arcade-cover-blank {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.bp-button:disabled {
+  opacity: 0.55;
+}
+.bp-achievements,
+.bp-year {
+  max-width: 1500px;
+  margin: 0 auto;
+  font-size: 18px;
+}
+.bp-achievements .page-header {
+  margin-bottom: 18px;
+}
+.bp-achievements .achievement-families {
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+}
+.bp-year.year-review {
+  position: static;
+  inset: auto;
+  transform: none;
+  width: auto;
+  max-height: none;
+  box-shadow: none;
+  border: 0;
+  background: transparent;
+  animation: none;
+}
+.bp-year .year-title {
+  font-size: 34px;
+}
+.bp .year-button {
+  font-size: 18px;
+}
+/* Achievements and the year in Big Picture's colors: the regular views' own pieces, darkened. */
+.bp-achievements,
+.bp-year {
+  --panel: var(--bp-panel);
+  --surface: var(--bp-panel-strong);
+  --field: var(--bp-panel);
+  --track: rgba(255, 255, 255, 0.1);
+  --line: rgba(255, 255, 255, 0.12);
+  --text: var(--bp-text);
+  --muted: var(--bp-muted);
+  --raise-sm: none;
+  color: var(--bp-text);
+}
+.bp-achievements .panel {
+  border-color: transparent;
+  background: var(--bp-panel);
+  box-shadow: none;
+}
+.bp-achievements .achievement-levels li {
+  background: transparent;
+}
+.bp-achievements .achievement-levels li.on {
+  background: var(--bp-panel-strong);
+}
+.bp-year .year-tile,
+.bp-year .year-facts > div {
+  border-color: transparent;
+  background: var(--bp-panel-strong);
+}
+.bp-game-console {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bp-game-console .platform-logo {
+  width: 24px;
+  height: 24px;
+}
+.bp-game-rating {
+  display: flex;
+  gap: 6px;
+  color: #f6c453;
 }

@@ -2,7 +2,7 @@ import { useEffect, useState, type ComponentType } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import { Dialog as RadixDialog } from "radix-ui";
-import { BookmarkCheck, ChartColumn, Check, Gamepad2, Image as ImageIcon, LibraryBig, MonitorSmartphone, Music, Power, Search, ShieldCheck, Wrench, X, type LucideProps } from "lucide-react";
+import { BookmarkCheck, ChartColumn, Check, Download, Gamepad2, Image as ImageIcon, LibraryBig, MonitorSmartphone, Music, Power, Search, ShieldCheck, Wrench, X, type LucideProps } from "lucide-react";
 import { api } from "../../lib/api";
 import { usePreferences } from "../../lib/preferences";
 import { notesSince, RELEASE_NOTES, type ReleaseNote } from "../../lib/releaseNotes";
@@ -66,6 +66,7 @@ const ICONS: Record<string, ComponentType<LucideProps>> = {
   chart: ChartColumn,
   monitor: MonitorSmartphone,
   shield: ShieldCheck,
+  download: Download,
 };
 
 const longDate = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });

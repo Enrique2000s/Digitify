@@ -333,7 +333,7 @@ const CARD_COLUMNS: &str = concat!("i.id, i.title, \
     EXISTS (SELECT 1 FROM files f JOIN versions v ON v.id = f.version_id WHERE v.item_id = i.id AND f.status <> 'ok'), \
     (SELECT pr.fraction FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0), \
     coalesce(json_extract(i.metadata, '$.coverShape'), CASE WHEN c.handler = 'image' THEN ", photo_shape!(), " END),     EXISTS (SELECT 1 FROM online_sources o WHERE o.item_id = i.id AND o.downloaded = 0), \
-    (SELECT o.service FROM online_sources o WHERE o.item_id = i.id AND o.provider <> 'web'), \
+    (SELECT o.service FROM online_sources o WHERE o.item_id = i.id AND o.provider <> 'web' AND o.downloaded = 0), \
     json_extract(i.metadata, '$.discFormat'),     CASE WHEN c.handler = 'image' THEN ", photo_aspect!(), " END");
 
 fn card(row: &Row<'_>) -> rusqlite::Result<ItemCard> {
@@ -754,6 +754,11 @@ pub struct TileCover {
     pub key: String,
     pub color: Option<String>,
     pub handler: String,
+    /// Its category's key, its own cover shape, and a photo's proportions (D-127), so a tile's
+    /// covers are shaped as they are in their category.
+    pub category: Option<String>,
+    pub cover_shape: Option<String>,
+    pub aspect: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -781,16 +786,19 @@ pub struct Dashboard {
 
 fn tile_covers(conn: &Connection) -> AppResult<HashMap<String, Vec<TileCover>>> {
     let cover = |row: &Row<'_>| -> rusqlite::Result<(String, TileCover)> {
-        Ok((row.get(0)?, TileCover { key: row.get(1)?, color: row.get(2)?, handler: row.get(3)? }))
+        Ok((row.get(0)?, TileCover { key: row.get(1)?, color: row.get(2)?, handler: row.get(3)?, category: row.get(0)?, cover_shape: row.get(5)?, aspect: row.get(6)? }))
     };
     let mut tiles: HashMap<String, Vec<TileCover>> = HashMap::new();
     let mut newest_per_category: Vec<TileCover> = Vec::new();
     let mut stmt = conn.prepare(
-        "SELECT c.key, r.cover_key, r.cover_color, c.handler, r.n FROM \
-           (SELECT category_id, cover_key, cover_color, added_at, id, \
-              row_number() OVER (PARTITION BY category_id ORDER BY added_at DESC, id DESC) AS n \
-            FROM items WHERE cover_key IS NOT NULL) r \
-         JOIN categories c ON c.id = r.category_id WHERE r.n <= 3 ORDER BY r.added_at DESC, r.id DESC",
+        concat!(
+            "SELECT c.key, r.cover_key, r.cover_color, c.handler, r.n, r.shape, r.aspect FROM \
+               (SELECT i.category_id, i.cover_key, i.cover_color, i.added_at, i.id, json_extract(i.metadata, '$.coverShape') AS shape, ",
+            photo_aspect!(),
+            " AS aspect, row_number() OVER (PARTITION BY i.category_id ORDER BY i.added_at DESC, i.id DESC) AS n \
+                FROM items i WHERE i.cover_key IS NOT NULL) r \
+             JOIN categories c ON c.id = r.category_id WHERE r.n <= 3 ORDER BY r.added_at DESC, r.id DESC"
+        ),
     )?;
     for row in stmt.query_map([], |row| Ok((cover(row)?, row.get::<_, i64>(4)?)))? {
         let ((category, tile), n) = row?;
@@ -801,11 +809,14 @@ fn tile_covers(conn: &Connection) -> AppResult<HashMap<String, Vec<TileCover>>> 
     }
     // "Everything" shows one cover from each of the most recently used categories.
     tiles.insert("all".into(), newest_per_category);
+    // The same columns as above (each cover keeps its own category's shape).
     let favorites = conn
-        .prepare(
-            "SELECT 'favorites', i.cover_key, i.cover_color, c.handler FROM items i JOIN categories c ON c.id = i.category_id \
-             WHERE i.is_favorite = 1 AND i.cover_key IS NOT NULL ORDER BY i.updated_at DESC, i.id DESC LIMIT 3",
-        )?
+        .prepare(concat!(
+            "SELECT c.key, i.cover_key, i.cover_color, c.handler, 1, json_extract(i.metadata, '$.coverShape'), ",
+            photo_aspect!(),
+            " FROM items i JOIN categories c ON c.id = i.category_id \
+             WHERE i.is_favorite = 1 AND i.cover_key IS NOT NULL ORDER BY i.updated_at DESC, i.id DESC LIMIT 3"
+        ))?
         .query_map([], cover)?
         .map(|row| row.map(|(_, tile)| tile))
         .collect::<Result<_, _>>()?;
@@ -1253,6 +1264,13 @@ fn write_item(conn: &Connection, item_id: Option<i64>, edit: &ItemEdit) -> AppRe
         return Err(AppError::msg("A title is required."));
     }
     let category = category_id(conn, &edit.category)?;
+    // An item stays in its category (D-126).
+    if let Some(id) = item_id {
+        let own: i64 = conn.query_row("SELECT category_id FROM items WHERE id = ?1", [id], |row| row.get(0))?;
+        if own != category {
+            return Err(AppError::msg("Items stay in their category."));
+        }
+    }
     let metadata = if edit.metadata.is_object() { edit.metadata.to_string() } else { "{}".to_string() };
     let subtitle = clean(edit.subtitle.clone());
     let description = clean(edit.description.clone());
@@ -1543,6 +1561,22 @@ pub async fn file_reveal(state: State<'_, AppState>, id: i64) -> AppResult<()> {
         files::reveal(&library.folder.resolve(&path, &storage))
     })
     .await
+}
+
+#[cfg(test)]
+mod dashboard_tests {
+    use rusqlite::params;
+
+    #[test]
+    fn tiles_with_a_favorite_cover() {
+        // Home's tiles read the same columns for favorites as for categories (it failed before).
+        let conn = crate::db::memory();
+        let music: i64 = conn.query_row("SELECT id FROM categories WHERE key = 'music'", [], |row| row.get(0)).unwrap();
+        conn.execute("INSERT INTO items (category_id, title, sort_title, cover_key, is_favorite) VALUES (?1, 'Song', 'song', 'abc', 1)", params![music]).unwrap();
+        let tiles = super::tile_covers(&conn).unwrap();
+        assert_eq!(tiles["favorites"].len(), 1);
+        assert_eq!(tiles["favorites"][0].category.as_deref(), Some("music"));
+    }
 }
 
 #[cfg(test)]

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowLeft, ArrowLeftRight, ArrowRight, ChevronLeft, ChevronRight, Columns2, Expand, RectangleVertical, Rows3, Shrink, ZoomIn, ZoomOut } from "lucide-react";
+import { Marquee } from "../../components/Marquee";
 import { api, pageUrl, type BookmarkLocator, type Chapter, type ReaderBook, type SeriesEntry } from "../../lib/api";
 import { useAmbient, useAmbientHold } from "../../lib/ambient/AmbientProvider";
 import { accentVariables } from "../../lib/color";
@@ -463,8 +464,8 @@ export function PageReader({ book, startPage, onClose, next: nextVolume, onNext 
           <ArrowLeft size={18} strokeWidth={2.6} />
         </button>
         <div className="reader-title" data-tauri-drag-region>
-          <strong>{book.title}</strong>
-          <span>{label}</span>
+          <Marquee className="reader-name" text={book.title} />
+          <Marquee className="reader-sub" text={label} />
         </div>
         <ChaptersMenu
           chapters={chapters}

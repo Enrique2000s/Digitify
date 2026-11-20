@@ -28,10 +28,16 @@ pub enum Platform {
     Genesis,
     SegaCd,
     Dreamcast,
+    Psp,
+    N3ds,
+    WiiU,
+    Xbox,
+    Xbox360,
+    Switch,
 }
 
 impl Platform {
-    pub const ALL: [Platform; 18] = [
+    pub const ALL: [Platform; 24] = [
         Platform::GameCube,
         Platform::Wii,
         Platform::N64,
@@ -50,6 +56,12 @@ impl Platform {
         Platform::Genesis,
         Platform::SegaCd,
         Platform::Dreamcast,
+        Platform::Psp,
+        Platform::N3ds,
+        Platform::WiiU,
+        Platform::Xbox,
+        Platform::Xbox360,
+        Platform::Switch,
     ];
 
     pub fn parse(key: &str) -> Option<Self> {
@@ -77,6 +89,12 @@ impl Platform {
             Platform::Genesis => "Mega Drive",
             Platform::SegaCd => "Sega CD",
             Platform::Dreamcast => "Dreamcast",
+            Platform::Psp => "PSP",
+            Platform::N3ds => "Nintendo 3DS",
+            Platform::WiiU => "Wii U",
+            Platform::Xbox => "Xbox",
+            Platform::Xbox360 => "Xbox 360",
+            Platform::Switch => "Nintendo Switch",
         }
     }
 
@@ -100,6 +118,13 @@ impl Platform {
             Platform::Genesis => "genesis",
             Platform::SegaCd => "segacd",
             Platform::Dreamcast => "dreamcast",
+            Platform::Psp => "psp",
+            Platform::N3ds => "3ds",
+            Platform::WiiU => "wiiu",
+            // "xbox" is the Xbox app's (a store's) view.
+            Platform::Xbox => "ogxbox",
+            Platform::Xbox360 => "x360",
+            Platform::Switch => "switch",
         }
     }
 
@@ -123,6 +148,15 @@ impl Platform {
             Platform::Genesis => &["md", "gen", "smd", "32x", "bin", "zip"],
             Platform::SegaCd => &["cue", "iso", "bin", "chd"],
             Platform::Dreamcast => &["gdi", "cdi", "chd"],
+            // D-116: PSP discs and EBOOTs; 3DS cartridges; Wii U discs and installed folders (their
+            // `code/*.rpx`); Xbox and Xbox 360 discs (an Xbox 360 game also as a folder with its
+            // `default.xex`); Switch cartridges and packages.
+            Platform::Psp => &["iso", "cso", "chd", "pbp"],
+            Platform::N3ds => &["3ds", "cci", "cxi", "3dsx"],
+            Platform::WiiU => &["wud", "wux", "wua", "rpx"],
+            Platform::Xbox => &["iso"],
+            Platform::Xbox360 => &["iso", "xex"],
+            Platform::Switch => &["nsp", "xci"],
             Platform::Sms | Platform::GameGear => &["sms", "gg", "zip"],
         }
     }
@@ -212,23 +246,43 @@ pub fn identify(path: &Path, hint: Option<Platform>) -> Option<GameInfo> {
         }
         "chd" => {
             let platform = match chd_kind(path)? {
+                // A PSP's UMD is a DVD to MAME's tools: PPSSPP's folders say which.
+                DiscKind::Dvd if hint == Some(Platform::Psp) => Platform::Psp,
                 DiscKind::Dvd => Platform::Ps2,
                 DiscKind::GdRom => Platform::Dreamcast,
                 DiscKind::Cd => disc_hint.filter(|h| *h != Platform::Ps2).unwrap_or(Platform::Ps1),
             };
             return playstation(platform, None);
         }
+        // D-116.
+        "3ds" | "cci" | "cxi" => return n3ds_cartridge(path),
+        "3dsx" => return (read_at(path, 0, 4)? == b"3DSX").then(|| GameInfo::new(Platform::N3ds, fallback(), None)),
+        "wux" => return (read_at(path, 0, 4)? == b"WUX0").then(|| GameInfo::new(Platform::WiiU, fallback(), None)),
+        "wud" => return (std::fs::metadata(path).ok()?.len() > 1 << 30).then(|| GameInfo::new(Platform::WiiU, fallback(), None)),
+        "wua" => return (std::fs::metadata(path).ok()?.len() > 1 << 20).then(|| GameInfo::new(Platform::WiiU, fallback(), None)),
+        "rpx" => return wii_u_folder(path),
+        "xex" => return xbox_360_folder(path),
+        "nsp" => return (read_at(path, 0, 4)? == b"PFS0").then(|| GameInfo::new(Platform::Switch, fallback(), switch_title_id(path))),
+        "xci" => return (read_at(path, 0x100, 4)? == b"HEAD").then(|| GameInfo::new(Platform::Switch, fallback(), switch_title_id(path))),
         // Dreamcast: a GD-ROM's track list, or a DiscJuggler image.
         "gdi" => return gdi_disc(path).then(|| GameInfo::new(Platform::Dreamcast, disc_title(path), None)),
         "cdi" => return (std::fs::metadata(path).ok()?.len() > 1 << 20).then(|| GameInfo::new(Platform::Dreamcast, disc_title(path), None)),
-        // PlayStation 2's compressed discs: nothing readable without decompressing.
-        "cso" | "zso" => return playstation(Platform::Ps2, None),
+        // Compressed discs: a CSO's first sectors say PSP or not (PlayStation 2); ZSO is PlayStation 2's.
+        "cso" => return playstation(if hint == Some(Platform::Psp) || cso_is_psp(path) { Platform::Psp } else { Platform::Ps2 }, None),
+        "zso" => return playstation(Platform::Ps2, None),
         "iso" => {
             if let Some(found) = dolphin_disc(path, &ext) {
                 return Some(found);
             }
             if sega_cd_disc(path) {
                 return playstation(Platform::SegaCd, None);
+            }
+            // A PSP disc (UMD), an Xbox or Xbox 360 disc (D-116).
+            if let Some(found) = psp_disc(path) {
+                return Some(found);
+            }
+            if let Some(platform) = xbox_disc(path) {
+                return playstation(platform, None);
             }
             let (platform, id) = playstation_disc(path)?;
             return playstation(platform, id);
@@ -499,11 +553,171 @@ fn pbp_game(path: &Path) -> Option<GameInfo> {
     let end = u32::from_le_bytes(head[12..16].try_into().ok()?);
     let length = end.checked_sub(start).filter(|l| *l > 20 && *l < 64 * 1024)?;
     let values = sfo_values(&read_at(path, u64::from(start), length as usize)?);
-    if values.get("CATEGORY").map(String::as_str) != Some("ME") {
+    // "ME": a PlayStation game for the PSP's player; "EG", "UG", "PG"…: a PSP game (D-116).
+    let platform = match values.get("CATEGORY").map(String::as_str) {
+        Some("ME") => Platform::Ps1,
+        Some("EG" | "UG" | "PG" | "MG") => Platform::Psp,
+        _ => return None,
+    };
+    let title = values.get("TITLE").filter(|t| !t.is_empty()).cloned().unwrap_or_else(|| title_from_name(path));
+    Some(GameInfo::new(platform, title, values.get("DISC_ID").cloned()))
+}
+
+/// A file or folder in an ISO 9660 directory: its first sector, its size, whether it's a folder.
+fn iso_entry(disc: &mut Disc, lba: u32, size: u32, wanted: &str) -> Option<(u32, u32, bool)> {
+    for sector in 0..(size / 2048).clamp(1, 16) {
+        let records = disc.read(lba + sector, 2048)?;
+        let mut at = 0;
+        while at + 33 < records.len() {
+            let length = records[at] as usize;
+            if length == 0 {
+                break;
+            }
+            let name_length = records[at + 32] as usize;
+            let name = String::from_utf8_lossy(records.get(at + 33..at + 33 + name_length)?).to_uppercase();
+            if name.split(';').next() == Some(wanted) {
+                let extent = u32::from_le_bytes(records[at + 2..at + 6].try_into().ok()?);
+                let size = u32::from_le_bytes(records[at + 10..at + 14].try_into().ok()?);
+                return Some((extent, size, records[at + 25] & 2 != 0));
+            }
+            at += length;
+        }
+    }
+    None
+}
+
+/// A PSP disc (UMD image): "PSP GAME" as its system, named and numbered by `PSP_GAME/PARAM.SFO`.
+fn psp_disc(path: &Path) -> Option<GameInfo> {
+    let mut disc = Disc::open(path)?;
+    let pvd = disc.read(16, 2048)?;
+    if &pvd[1..6] != b"CD001" || !pvd[8..40].starts_with(b"PSP GAME") {
         return None;
     }
-    let title = values.get("TITLE").filter(|t| !t.is_empty()).cloned().unwrap_or_else(|| title_from_name(path));
-    Some(GameInfo::new(Platform::Ps1, title, values.get("DISC_ID").cloned()))
+    let root = (u32::from_le_bytes(pvd[158..162].try_into().ok()?), u32::from_le_bytes(pvd[166..170].try_into().ok()?));
+    let sfo = iso_entry(&mut disc, root.0, root.1, "PSP_GAME")
+        .filter(|e| e.2)
+        .and_then(|(lba, size, _)| iso_entry(&mut disc, lba, size, "PARAM.SFO"))
+        .and_then(|(lba, size, _)| {
+            let mut bytes = Vec::new();
+            for sector in 0..size.div_ceil(2048).min(32) {
+                bytes.extend(disc.read(lba + sector, 2048)?);
+            }
+            Some(sfo_values(&bytes))
+        })
+        .unwrap_or_default();
+    let title = sfo.get("TITLE").filter(|t| !t.is_empty()).cloned().unwrap_or_else(|| title_from_name(path));
+    Some(GameInfo::new(Platform::Psp, title, sfo.get("DISC_ID").cloned()))
+}
+
+/// Whether a CSO (compressed ISO) is a PSP's: its sector 16, inflated, says "PSP GAME".
+fn cso_is_psp(path: &Path) -> bool {
+    (|| -> Option<bool> {
+        let head = read_at(path, 0, 24)?;
+        if &head[0..4] != b"CISO" {
+            return None;
+        }
+        let block = u32::from_le_bytes(head[16..20].try_into().ok()?) as u64;
+        let align = u32::from(head[21]);
+        if block != 2048 {
+            return None;
+        }
+        let index = read_at(path, 24 + 16 * 4, 8)?;
+        let entry = u32::from_le_bytes(index[0..4].try_into().ok()?);
+        let next = u32::from_le_bytes(index[4..8].try_into().ok()?);
+        let start = u64::from(entry & 0x7FFF_FFFF) << align;
+        let end = u64::from(next & 0x7FFF_FFFF) << align;
+        let raw = read_at(path, start, (end.checked_sub(start)?).min(4096) as usize)?;
+        let sector = if entry & 0x8000_0000 != 0 {
+            raw
+        } else {
+            let mut out = Vec::new();
+            flate2::read::DeflateDecoder::new(&raw[..]).take(2048).read_to_end(&mut out).ok()?;
+            out
+        };
+        Some(sector.get(1..6) == Some(b"CD001") && sector.get(8..16) == Some(b"PSP GAME"))
+    })()
+    .unwrap_or(false)
+}
+
+/// An Xbox or Xbox 360 disc: the Xbox file system's "MICROSOFT*XBOX*MEDIA" where each kind of disc
+/// keeps it (XGD1 at 0x18310000, XGD2 at 0xFDA0000, XGD3 at 0x2090000, a trimmed image at 0x10000);
+/// a trimmed image is the Xbox 360's when it starts with `default.xex` rather than `default.xbe`.
+pub(crate) fn xbox_disc(path: &Path) -> Option<Platform> {
+    const MAGIC: &[u8] = b"MICROSOFT*XBOX*MEDIA";
+    let at = |offset: u64| read_at(path, offset, 0x20).filter(|b| b.starts_with(MAGIC));
+    if at(0x1831_0000).is_some() {
+        return Some(Platform::Xbox);
+    }
+    if at(0xFDA_0000).is_some() || at(0x209_0000).is_some() {
+        return Some(Platform::Xbox360);
+    }
+    let volume = at(0x1_0000)?;
+    let root = u64::from(u32::from_le_bytes(volume[0x14..0x18].try_into().ok()?)) * 2048;
+    let size = u32::from_le_bytes(volume[0x18..0x1C].try_into().ok()?).clamp(1, 64 * 1024) as usize;
+    let listing = read_at(path, root, size)?.to_ascii_lowercase();
+    let has = |name: &[u8]| listing.windows(name.len()).any(|w| w == name);
+    Some(if has(b"default.xex") && !has(b"default.xbe") { Platform::Xbox360 } else { Platform::Xbox })
+}
+
+/// A 3DS cartridge (`.3ds`/`.cci`: "NCSD"; `.cxi`: "NCCH"), with its product code ("CTR-P-AREE"
+/// gives AREE, GameTDB's ID).
+fn n3ds_cartridge(path: &Path) -> Option<GameInfo> {
+    let magic = read_at(path, 0x100, 4)?;
+    let ncch = match &magic[..] {
+        b"NCSD" => u64::from(u32::from_le_bytes(read_at(path, 0x120, 4)?.try_into().ok()?)) * 0x200,
+        b"NCCH" => 0,
+        _ => return None,
+    };
+    let code = read_at(path, ncch + 0x150, 16).map(|b| clean_text(&b)).unwrap_or_default();
+    let id = code.strip_prefix("CTR-").and_then(|c| c.rsplit('-').next()).filter(|c| c.len() == 4 && c.chars().all(|ch| ch.is_ascii_alphanumeric())).map(str::to_string);
+    Some(GameInfo::new(Platform::N3ds, title_from_name(path), id))
+}
+
+/// A Wii U game installed as a folder: its `code/*.rpx`, with `meta/meta.xml` beside `code` naming
+/// it and giving its product code (GameTDB's ID: "WUP-P-ARPE" with company 0001 gives ARPE01).
+fn wii_u_folder(rpx: &Path) -> Option<GameInfo> {
+    let code = rpx.parent()?;
+    if !code.file_name()?.to_string_lossy().eq_ignore_ascii_case("code") {
+        return None;
+    }
+    let folder = code.parent()?.to_path_buf();
+    let meta = std::fs::read_to_string(folder.join("meta").join("meta.xml")).ok()?;
+    let doc = roxmltree::Document::parse(&meta).ok()?;
+    let value = |tag: &str| doc.descendants().find(|n| n.has_tag_name(tag)).and_then(|n| n.text()).map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
+    let title = value("longname_en").or_else(|| value("shortname_en")).map(|t| t.split_whitespace().collect::<Vec<_>>().join(" ")).unwrap_or_else(|| title_from_name(&folder));
+    let id = value("product_code").and_then(|p| p.rsplit('-').next().map(str::to_string)).filter(|p| p.len() == 4).map(|p| {
+        let company = value("company_code").unwrap_or_default();
+        format!("{p}{}", company.get(company.len().saturating_sub(2)..).unwrap_or("01"))
+    });
+    Some(GameInfo { platform: Platform::WiiU, title, game_id: id, folder: Some(folder) })
+}
+
+/// An Xbox 360 game as a folder: its `default.xex` (other programs in it aren't games).
+fn xbox_360_folder(xex: &Path) -> Option<GameInfo> {
+    if !xex.file_name()?.to_string_lossy().eq_ignore_ascii_case("default.xex") || read_at(xex, 0, 4)? != b"XEX2" {
+        return None;
+    }
+    let folder = xex.parent()?.to_path_buf();
+    Some(GameInfo { platform: Platform::Xbox360, title: title_from_name(&PathBuf::from(format!("{}.x", folder.file_name()?.to_string_lossy()))), game_id: None, folder: Some(folder) })
+}
+
+/// A Switch game's title ID, when its file is named with it ("Game [0100ABCD12345000][v0].nsp").
+fn switch_title_id(path: &Path) -> Option<String> {
+    let name = path.file_name()?.to_string_lossy().into_owned();
+    name.split(['[', ']']).find(|part| part.len() == 16 && part.starts_with("01") && part.chars().all(|c| c.is_ascii_hexdigit())).map(|id| id.to_uppercase())
+}
+
+/// The program that starts a game kept as a folder (D-116): a Wii U game's `code/*.rpx`, an
+/// Xbox 360 game's `default.xex`; the folder itself otherwise (a PlayStation 3 game).
+pub fn folder_program(folder: &Path) -> PathBuf {
+    let xex = folder.join("default.xex");
+    if xex.is_file() {
+        return xex;
+    }
+    std::fs::read_dir(folder.join("code"))
+        .ok()
+        .and_then(|entries| entries.filter_map(Result::ok).map(|e| e.path()).find(|p| extension(p) == "rpx"))
+        .unwrap_or_else(|| folder.to_path_buf())
 }
 
 /// A PlayStation 3 game's own picture (`ICON0.PNG`), beside its PARAM.SFO.
@@ -781,6 +995,11 @@ pub fn libretro_system(platform: &str) -> Option<&'static str> {
         "genesis" => Some("Sega_-_Mega_Drive_-_Genesis"),
         "segacd" => Some("Sega_-_Mega-CD_-_Sega_CD"),
         "dreamcast" => Some("Sega_-_Dreamcast"),
+        "psp" => Some("Sony_-_PlayStation_Portable"),
+        "3ds" => Some("Nintendo_-_Nintendo_3DS"),
+        "wiiu" => Some("Nintendo_-_Wii_U"),
+        "ogxbox" => Some("Microsoft_-_Xbox"),
+        "x360" => Some("Microsoft_-_Xbox_360"),
         _ => None,
     }
 }
@@ -1077,6 +1296,86 @@ mod tests {
         assert_eq!((shenmue.platform, shenmue.title.as_str()), (Platform::Dreamcast, "Shenmue"));
         assert_eq!(parts_of(&gdi), vec![dir.join("Shenmue").join("track01.bin"), dir.join("Shenmue").join("track02.raw"), dir.join("Shenmue").join("track03.bin")]);
         assert!(identify(&dir.join("notes.gdi").tap_write(b"hello"), None).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn psp_3ds_wii_u_xbox_and_switch() {
+        let dir = std::env::temp_dir().join(format!("digitify-d116-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // PSP: a UMD image, named by its PARAM.SFO.
+        let mut iso = vec![0u8; 2048 * 24];
+        let pvd = 16 * 2048;
+        iso[pvd] = 1;
+        iso[pvd + 1..pvd + 6].copy_from_slice(b"CD001");
+        iso[pvd + 8..pvd + 16].copy_from_slice(b"PSP GAME");
+        iso[pvd + 158..pvd + 162].copy_from_slice(&18u32.to_le_bytes());
+        iso[pvd + 166..pvd + 170].copy_from_slice(&2048u32.to_le_bytes());
+        let record = |iso: &mut Vec<u8>, at: usize, name: &[u8], lba: u32, size: u32, folder: bool| {
+            iso[at] = (33 + name.len()) as u8;
+            iso[at + 2..at + 6].copy_from_slice(&lba.to_le_bytes());
+            iso[at + 10..at + 14].copy_from_slice(&size.to_le_bytes());
+            iso[at + 25] = if folder { 2 } else { 0 };
+            iso[at + 32] = name.len() as u8;
+            iso[at + 33..at + 33 + name.len()].copy_from_slice(name);
+        };
+        record(&mut iso, 18 * 2048, b"PSP_GAME", 19, 2048, true);
+        record(&mut iso, 19 * 2048, b"PARAM.SFO;1", 20, 2048, false);
+        let sfo = {
+            // A minimal PARAM.SFO: TITLE and DISC_ID.
+            let keys = b"DISC_ID\0TITLE\0\0\0";
+            let data: Vec<u8> = [b"ULUS10041\0\0\0".to_vec(), b"Lumen Racer\0".to_vec()].concat();
+            let mut out = b"\0PSF".to_vec();
+            out.extend(0x0101u32.to_le_bytes());
+            out.extend((20u32 + 32).to_le_bytes());
+            out.extend((20u32 + 32 + keys.len() as u32).to_le_bytes());
+            out.extend(2u32.to_le_bytes());
+            for (key, len, at) in [(0u16, 12u32, 0u32), (8, 12, 12)] {
+                out.extend(key.to_le_bytes());
+                out.extend(0x0204u16.to_le_bytes());
+                out.extend(len.to_le_bytes());
+                out.extend(len.to_le_bytes());
+                out.extend(at.to_le_bytes());
+            }
+            out.extend(keys);
+            out.extend(data);
+            out
+        };
+        iso[20 * 2048..20 * 2048 + sfo.len()].copy_from_slice(&sfo);
+        let psp = identify(&dir.join("game.iso").tap_write(&iso), None).unwrap();
+        assert_eq!((psp.platform, psp.title.as_str(), psp.game_id.as_deref()), (Platform::Psp, "Lumen Racer", Some("ULUS10041")));
+        // 3DS: an NCSD cartridge with its product code.
+        let mut cart = vec![0u8; 0x400];
+        cart[0x100..0x104].copy_from_slice(b"NCSD");
+        cart[0x120..0x124].copy_from_slice(&1u32.to_le_bytes());
+        cart[0x200 + 0x150..0x200 + 0x15A].copy_from_slice(b"CTR-P-AREE");
+        let n3ds = identify(&dir.join("Land (USA).3ds").tap_write(&cart), None).unwrap();
+        assert_eq!((n3ds.platform, n3ds.game_id.as_deref()), (Platform::N3ds, Some("AREE")));
+        // Wii U: an installed folder, named by meta.xml, its rpx the program.
+        let wiiu = dir.join("Kart Party");
+        std::fs::create_dir_all(wiiu.join("code")).unwrap();
+        std::fs::create_dir_all(wiiu.join("meta")).unwrap();
+        std::fs::write(wiiu.join("meta").join("meta.xml"), r#"<?xml version="1.0"?><menu><product_code type="string">WUP-P-AMKE</product_code><company_code type="string">0001</company_code><longname_en type="string">Kart
+Party 8</longname_en></menu>"#).unwrap();
+        let rpx = wiiu.join("code").join("Kart.rpx").tap_write(b"\x7fELF");
+        let game = identify(&rpx, None).unwrap();
+        assert_eq!((game.platform, game.title.as_str(), game.game_id.as_deref(), game.folder.as_deref()), (Platform::WiiU, "Kart Party 8", Some("AMKE01"), Some(wiiu.as_path())));
+        assert_eq!(folder_program(&wiiu), rpx);
+        // Xbox and Xbox 360: a trimmed image with default.xbe or default.xex.
+        let xiso = |program: &[u8]| {
+            let mut bytes = vec![0u8; 0x12000];
+            bytes[0x10000..0x10014].copy_from_slice(b"MICROSOFT*XBOX*MEDIA");
+            bytes[0x10014..0x10018].copy_from_slice(&0x22u32.to_le_bytes());
+            bytes[0x10018..0x1001C].copy_from_slice(&2048u32.to_le_bytes());
+            bytes[0x11000 + 14..0x11000 + 14 + program.len()].copy_from_slice(program);
+            bytes
+        };
+        assert_eq!(identify(&dir.join("halo.iso").tap_write(&xiso(b"default.xbe")), None).unwrap().platform, Platform::Xbox);
+        assert_eq!(identify(&dir.join("gow.iso").tap_write(&xiso(b"default.xex")), None).unwrap().platform, Platform::Xbox360);
+        // Switch: a package, its title ID from its name.
+        let switch = identify(&dir.join("Hero Quest [0100ABCD12345000][v0].nsp").tap_write(b"PFS0\0\0\0\0"), None).unwrap();
+        assert_eq!((switch.platform, switch.title.as_str(), switch.game_id.as_deref()), (Platform::Switch, "Hero Quest", Some("0100ABCD12345000")));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

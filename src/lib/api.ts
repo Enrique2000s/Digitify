@@ -1,4 +1,10 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke as callCore } from "@tauri-apps/api/core";
+import { trackBusy } from "./busy";
+
+/** Every call to the core, watched so a slow one shows "Working…" (D-143). */
+function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  return trackBusy(command, callCore<T>(command, args));
+}
 
 export type Handler = "book" | "comic" | "video" | "audio" | "generic" | "image";
 /** The library filter (D-029): with files in the library, or added from a link and played online. */
@@ -67,7 +73,8 @@ export interface ItemCard {
 
 /** Where an item imported from a link lives (D-028). */
 export interface OnlineSource {
-  provider: "youtube" | "spotify" | "soundcloud" | "web";
+  /** youtube, spotify, soundcloud, web, or another site yt-dlp knows (vimeo, bandcamp…, D-133). */
+  provider: string;
   service: string;
   kind: "video" | "track" | "playlist" | "album" | "file";
   externalId: string;
@@ -88,9 +95,13 @@ export interface OnlineEntry {
   durationSec: number | null;
   thumbnail: string | null;
   audio: boolean;
-  /** The service allows downloading it; otherwise it can only be an online item. */
+  /** It can be downloaded (directly, or through yt-dlp); otherwise it can only be an online item. */
   downloadable: boolean;
   download: string | null;
+  /** Downloaded through yt-dlp (D-133): its quality and format can be chosen. */
+  ytdlp: boolean;
+  /** A live stream: saved as an online item until it's over. */
+  live: boolean;
   available: boolean;
   reason: string | null;
   /** The library item it already is. */
@@ -116,6 +127,49 @@ export interface OnlineImportRequest {
   videoCategory: string;
   download: boolean;
   playlistName: string | null;
+  quality: DownloadQuality;
+}
+
+/** How yt-dlp downloads (D-133): the tallest picture wanted, the video's format, the sound's format. */
+export interface DownloadQuality {
+  video: "best" | "2160" | "1440" | "1080" | "720" | "480";
+  container: "mkv" | "mp4";
+  audio: "mp3" | "m4a" | "original";
+}
+
+/** A series in Movies & Series that videos can join as episodes (D-135). */
+export interface FilmSeries {
+  id: number;
+  title: string;
+  coverKey: string | null;
+  episodes: number;
+  lastSeason: number;
+}
+
+/** One line of the imports history (D-137): an entry from a link, or one import of files. */
+export interface HistoryEntry {
+  id: number;
+  kind: "link" | "files";
+  title: string;
+  /** Links: the service. Files: the category they went into. */
+  detail: string | null;
+  action: "download" | "link" | null;
+  state: "done" | "skipped" | "failed" | "cancelled";
+  error: string | null;
+  itemId: number | null;
+  counts: { total?: number; imported?: number; duplicates?: number; skipped?: number; failed?: number };
+  retry: boolean;
+  finishedAt: string;
+}
+
+/** The yt-dlp Digitify runs (D-133): shipped with the app, or updated from Settings. */
+export interface YtDlpStatus {
+  available: boolean;
+  version: string | null;
+  shippedVersion: string | null;
+  updated: boolean;
+  deno: boolean;
+  ffmpeg: boolean;
 }
 
 export interface OnlineJob {
@@ -130,6 +184,8 @@ export interface OnlineJob {
   progress: number | null;
   error: string | null;
   itemId: number | null;
+  /** The online-only item this download takes the place of. */
+  replaces: number | null;
 }
 
 export interface OnlineKeysStatus {
@@ -295,6 +351,10 @@ export interface TileCover {
   key: string;
   color: string | null;
   handler: Handler;
+  /** Its category, own cover shape and a photo's proportions (D-127), for its shape on a tile. */
+  category?: string | null;
+  coverShape?: CoverShape | null;
+  aspect?: number | null;
 }
 
 export interface Dashboard {
@@ -640,6 +700,8 @@ export type BulkOp =
 /** What a selection allows beyond the actions every item takes (D-027): each only when every selected item supports it. */
 export interface BulkActions {
   playlist: boolean;
+  /** How many are online items that can be downloaded (D-133). */
+  download: number;
   coverShapes: CoverShape[];
   series: boolean;
   direction: boolean;
@@ -686,6 +748,8 @@ export interface ImportProgress {
   processed: number;
   imported: number;
   duplicates: number;
+  /** Files the picked category can't hold, left out (D-125). */
+  skipped: number;
   failed: number;
   current: string | null;
   errors: string[];
@@ -770,6 +834,14 @@ export const api = {
   onlineKeysSet: (service: "youtube" | "spotify" | "soundcloud", first: string | null, second: string | null) =>
     invoke<OnlineKeysStatus>("online_keys_set", { service, first, second }),
   onlineOpen: (id: number) => invoke<void>("online_open", { id }),
+  onlineDownloadItems: (ids: number[], quality: DownloadQuality, audio: boolean | null) => invoke<number>("online_download_items", { ids, quality, audio }),
+  ytdlpStatus: () => invoke<YtDlpStatus>("ytdlp_status"),
+  historyList: () => invoke<HistoryEntry[]>("history_list"),
+  historyClear: () => invoke<void>("history_clear"),
+  historyRetry: (id: number) => invoke<void>("history_retry", { id }),
+  filmsSeries: () => invoke<FilmSeries[]>("films_series"),
+  videosToFilms: (ids: number[], series: { existing: number | null; name: string | null; season: number } | null) => invoke<number[]>("videos_to_films", { request: { ids, series } }),
+  ytdlpUpdate: () => invoke<YtDlpStatus>("ytdlp_update"),
   arcadeStatus: () => invoke<ArcadeStatus>("arcade_status"),
   arcadeSetEmulator: (emulator: ArcadeEmulator, path: string | null) => invoke<void>("arcade_set_emulator", { emulator, path }),
   arcadeFolderAdd: (path: string) => invoke<void>("arcade_folder_add", { path }),
@@ -800,6 +872,19 @@ export const api = {
   /** `choices`: the emulator chosen for each console (D-111), by the console's key. */
   arcadeLaunch: (id: number, mode: "stay" | "hide" | "quit", choices: Partial<Record<ArcadeConsole, ArcadeEmulator>> = {}) =>
     invoke<void>("arcade_launch", { id, n64: null, ds: null, mode, choices }),
+  /** SteamGridDB's box art (D-128): whether a key is set, setting or removing it, its key page. */
+  arcadeSteamGridDbStatus: () => invoke<boolean>("arcade_steamgriddb_status"),
+  arcadeSteamGridDbSet: (key: string | null) => invoke<void>("arcade_steamgriddb_set", { key }),
+  arcadeSteamGridDbOpen: () => invoke<void>("arcade_steamgriddb_open"),
+  /** LaunchBox's database for covers (D-131): what's here, downloading it (about 110 MB), removing it. */
+  arcadeLaunchBoxStatus: () => invoke<{ updated: string; games: number } | null>("arcade_launchbox_status"),
+  arcadeLaunchBoxDownload: () => invoke<{ updated: string; games: number }>("arcade_launchbox_download"),
+  arcadeLaunchBoxRemove: () => invoke<void>("arcade_launchbox_remove"),
+  /** Sets an emulator aside, or uses it again (D-117). */
+  arcadeIgnoreEmulator: (emulator: ArcadeEmulator, ignored: boolean) => invoke<void>("arcade_ignore_emulator", { emulator, ignored }),
+  /** Every cover found for a game, to choose from (D-118). */
+  arcadeCoverChoices: (id: number) => invoke<ArcadeCoverChoice[]>("arcade_cover_choices", { id }),
+  arcadeChooseCover: (id: number, index: number) => invoke<void>("arcade_choose_cover", { id, index }),
   /** Adds a PC game by its program (D-107); returns its id. */
   arcadeAddProgram: (path: string, downloadCovers: boolean) => invoke<number>("arcade_add_program", { path, downloadCovers }),
   /** An emulator's game folders set in Arcade (D-035); null goes back to its own. */
@@ -906,14 +991,14 @@ export function driveName(letter: string): string {
 /** Arcade's consoles (D-034, D-101), in their default order: the emulators' own, then the ones
  *  RetroArch plays; "other" gathers RetroArch's consoles without a view of their own. */
 export const ARCADE_CONSOLES = [
-  "wii", "gamecube", "n64", "ps1", "ps2", "ps3", "ds",
-  "nes", "snes", "gb", "gbc", "gba", "3ds", "sms", "genesis", "segacd", "gamegear", "saturn", "dreamcast", "psp", "pce", "arcade", "atari2600", "other",
+  "wii", "wiiu", "gamecube", "n64", "switch", "ps1", "ps2", "ps3", "psp", "ds", "3ds",
+  "nes", "snes", "gb", "gbc", "gba", "sms", "genesis", "segacd", "gamegear", "saturn", "dreamcast", "ogxbox", "x360", "pce", "arcade", "atari2600", "other",
 ] as const;
 export type ArcadeConsole = (typeof ARCADE_CONSOLES)[number];
 /** Arcade (D-034): a console a game is for, or "pc". */
 export type ArcadePlatform = ArcadeConsole | "pc";
 /** The store a PC game came from (D-037). */
-export type ArcadeStore = "steam" | "epic" | "xbox" | "gog" | "ubisoft" | "ea" | "battlenet" | "amazon" | "itch" | "heroic" | "lutris";
+export type ArcadeStore = "steam" | "epic" | "xbox" | "gog" | "ubisoft" | "ea" | "battlenet" | "rockstar" | "riot" | "amazon" | "itch" | "heroic" | "lutris";
 export type ArcadeEmulator =
   | "dolphin"
   | "project64"
@@ -932,6 +1017,13 @@ export type ArcadeEmulator =
   | "fusion"
   | "nulldc"
   | "ares"
+  | "ppsspp"
+  | "flycast"
+  | "cemu"
+  | "azahar"
+  | "xemu"
+  | "xenia"
+  | "ryujinx"
   | "retroarch";
 
 export interface ArcadeFolder {
@@ -955,6 +1047,20 @@ export interface ArcadeEmulatorStatus {
   /** Its game folders are set in Arcade instead of read from its settings (D-035). */
   customFolders: boolean;
   folders: ArcadeFolder[];
+  /** Set aside by the user: not looked for nor used (D-117). */
+  ignored: boolean;
+  /** Its own icon from its program on this computer, as a data URL (D-123). */
+  icon: string | null;
+}
+
+/** A cover found for a game, to choose from (D-118). */
+export interface ArcadeCoverChoice {
+  index: number;
+  source: string;
+  /** A small JPEG of it, as a data URL. */
+  preview: string;
+  width: number;
+  height: number;
 }
 
 export interface ArcadeStatus {

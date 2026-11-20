@@ -1,7 +1,7 @@
-//! What each service tells about a link (D-028), through its official, documented interfaces only:
-//! public oEmbed descriptions without keys, and the services' Web APIs with the owner's own keys.
-//! Nothing here scrapes pages, and only a direct file link or a SoundCloud track its uploader made
-//! downloadable is ever offered for download.
+//! What each service tells about a link (D-028): public oEmbed descriptions without keys, the
+//! services' Web APIs with the owner's own keys, and yt-dlp (D-133) for YouTube playlists and
+//! channels without a key, SoundCloud without keys, and the other sites it knows. With yt-dlp,
+//! YouTube, SoundCloud and those sites can be downloaded; Spotify never (its media is DRM-protected).
 
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
@@ -12,19 +12,189 @@ use serde_json::Value;
 use super::http;
 use super::keys::Keys;
 use super::link::{self, Link, LinkKind, Provider};
+use super::ytdlp::{self, YtDlp};
 use super::{Entry, Preview};
 use crate::error::{AppError, AppResult};
 
 /// The most entries listed for one playlist or album.
 const MAX_ENTRIES: usize = 500;
 
-pub fn inspect(link: &Link, keys: &Keys) -> AppResult<Preview> {
+pub fn inspect(link: &Link, keys: &Keys, tool: Option<&YtDlp>) -> AppResult<Preview> {
     match link.provider {
-        Provider::YouTube => youtube(link, keys.youtube.as_deref()),
+        Provider::YouTube => youtube(link, keys.youtube.as_deref(), tool),
         Provider::Spotify => spotify(link, keys.spotify.as_ref()),
-        Provider::SoundCloud => soundcloud(link, keys.soundcloud.as_ref()),
+        Provider::SoundCloud => soundcloud(link, keys.soundcloud.as_ref(), tool),
         Provider::Web => web(link),
+        Provider::Site => {
+            let tool = tool.ok_or_else(missing_tool)?;
+            from_ytdlp(link, &tool.inspect(&link.url)?, false)
+        }
     }
+}
+
+fn missing_tool() -> AppError {
+    AppError::msg("yt-dlp is missing from this installation, so Digitify can't read that link. Reinstall Digitify, or update yt-dlp in Settings › Online services.")
+}
+
+/// An entry yt-dlp can download (D-133): what the service doesn't allow downloading itself.
+fn by_ytdlp(mut item: Entry, tool: Option<&YtDlp>) -> Entry {
+    if tool.is_some() && item.available && !item.downloadable && !item.live {
+        item.downloadable = true;
+        item.ytdlp = true;
+        item.download = Some(item.url.clone());
+    }
+    item
+}
+
+// ---------------------------------------------------------------------------------------------
+// What yt-dlp read from a link (D-133): one video or song, or a playlist's entries.
+
+/// Sites whose links are music rather than video.
+const AUDIO_SITES: &[&str] = &["bandcamp", "soundcloud", "mixcloud", "audiomack", "hearthis", "jamendo", "audius", "freesound"];
+
+/// A site's key and name from a link: "artist.bandcamp.com" → ("bandcamp", "Bandcamp").
+fn site_of(url: &str) -> (String, String) {
+    let host = url::Url::parse(url).ok().and_then(|u| u.host_str().map(str::to_ascii_lowercase)).unwrap_or_default();
+    let labels: Vec<&str> = host.trim_start_matches("www.").split('.').filter(|l| !l.is_empty()).collect();
+    let n = labels.len();
+    let name = match n {
+        0 => "web",
+        1 => labels[0],
+        // "bbc.co.uk": the name sits before a two-part ending.
+        _ if n >= 3 && labels[n - 2].len() <= 3 && labels[n - 1].len() == 2 => labels[n - 3],
+        _ => labels[n - 2],
+    };
+    let service = match name {
+        "soundcloud" => "SoundCloud".to_string(),
+        "tiktok" => "TikTok".to_string(),
+        "archive" => "Internet Archive".to_string(),
+        "nicovideo" => "Niconico".to_string(),
+        "x" | "twitter" => "X".to_string(),
+        other => {
+            let mut chars = other.chars();
+            chars.next().map(|first| first.to_uppercase().collect::<String>() + chars.as_str()).unwrap_or_default()
+        }
+    };
+    (name.to_string(), service)
+}
+
+fn ytdlp_thumbnail(value: &Value) -> Option<String> {
+    text(value, &["thumbnail"]).or_else(|| value["thumbnails"].as_array().and_then(|all| all.iter().rev().find_map(|t| text(t, &["url"]))))
+}
+
+/// One entry from yt-dlp's description of a video or song (a playlist's entries are briefer).
+fn ytdlp_entry(link: &Link, value: &Value, audio: bool) -> Option<Entry> {
+    // A playlist inside the list (a channel's tabs, an artist's albums) isn't an entry.
+    if value["_type"].as_str() == Some("playlist") || value["ie_key"].as_str().is_some_and(|k| k.ends_with("Tab") || k.ends_with("Playlist") || k.ends_with("Album") || k.ends_with("User")) {
+        return None;
+    }
+    let page = text(value, &["webpage_url"]).or_else(|| text(value, &["url"])).filter(|u| u.starts_with("https://") || u.starts_with("http://"))?;
+    let id = text(value, &["id"]).unwrap_or_else(|| page.clone());
+    let title = text(value, &["track"]).filter(|_| audio).or_else(|| text(value, &["title"])).unwrap_or_else(|| "Untitled".into());
+    let mut item = match link.provider {
+        Provider::YouTube => {
+            let base = if link.service == "YouTube Music" { "https://music.youtube.com" } else { "https://www.youtube.com" };
+            let mut item = entry(link, LinkKind::Video, &id, &format!("{base}/watch?v={id}"), title, audio);
+            item.thumbnail = Some(format!("https://i.ytimg.com/vi/{id}/hqdefault.jpg"));
+            item
+        }
+        Provider::SoundCloud => {
+            let mut item = entry(link, LinkKind::Track, &sc_path(&page).unwrap_or(id), &page, title, true);
+            item.thumbnail = ytdlp_thumbnail(value);
+            item
+        }
+        _ => {
+            let (key, service) = site_of(&page);
+            let audio = audio || AUDIO_SITES.contains(&key.as_str()) || value["vcodec"].as_str() == Some("none");
+            let mut item = entry(link, if audio { LinkKind::Track } else { LinkKind::Video }, &id, &page, title, audio);
+            item.provider = key;
+            item.service = service;
+            item.thumbnail = ytdlp_thumbnail(value);
+            item
+        }
+    };
+    item.creator = ["artist", "creator", "channel", "uploader"].iter().find_map(|k| text(value, &[k])).map(|c| c.trim_end_matches(" - Topic").to_string());
+    item.duration_sec = value["duration"].as_f64().filter(|d| *d > 0.0);
+    let hidden = item.title.starts_with("[Private") || item.title.starts_with("[Deleted");
+    match (value["availability"].as_str(), value["live_status"].as_str()) {
+        _ if hidden => {
+            item.available = false;
+            item.reason = Some("Private or removed.".into());
+        }
+        (Some("private" | "needs_auth" | "subscriber_only" | "premium_only"), _) => {
+            item.available = false;
+            item.reason = Some("Private, for members, or behind a sign-in.".into());
+        }
+        (_, Some("is_upcoming")) => {
+            item.available = false;
+            item.reason = Some("Not out yet.".into());
+        }
+        (_, Some("is_live")) => {
+            item.live = true;
+            item.reason = Some("Live now: it can be downloaded once the stream is over.".into());
+        }
+        _ => {}
+    }
+    Some(item)
+}
+
+/// A preview from yt-dlp's description of a link: everything it holds can be downloaded.
+fn from_ytdlp(link: &Link, info: &Value, audio: bool) -> AppResult<Preview> {
+    let mark = |mut item: Entry| {
+        if item.available && !item.downloadable && !item.live {
+            item.downloadable = true;
+            item.ytdlp = true;
+            item.download = Some(item.url.clone());
+        }
+        item
+    };
+    if info["_type"].as_str() == Some("playlist") {
+        let listed: Vec<Value> = info["entries"].as_array().cloned().unwrap_or_default();
+        // A channel's entries don't repeat its name.
+        let owner = ["channel", "uploader"].iter().find_map(|k| text(info, &[k])).map(|c| c.trim_end_matches(" - Topic").to_string());
+        let entries: Vec<Entry> = listed
+            .iter()
+            .filter_map(|value| ytdlp_entry(link, value, audio))
+            .map(|mut item| {
+                if item.creator.is_none() {
+                    item.creator = owner.clone();
+                }
+                mark(item)
+            })
+            .take(ytdlp::MAX_ENTRIES)
+            .collect();
+        if entries.is_empty() {
+            return Err(AppError::msg(if listed.is_empty() {
+                "That playlist is empty, or private."
+            } else {
+                "That page lists playlists rather than videos or songs: open one of them and copy its link."
+            }));
+        }
+        let mut notes = Vec::new();
+        if info["playlist_count"].as_u64().is_some_and(|n| n as usize > entries.len()) && entries.len() >= ytdlp::MAX_ENTRIES {
+            notes.push(format!("Only the first {} are listed.", ytdlp::MAX_ENTRIES));
+        }
+        let audio = audio || entries.iter().all(|e| e.audio);
+        let (provider, service) = (entries[0].provider.clone(), entries[0].service.clone());
+        return Ok(Preview {
+            provider,
+            service,
+            kind: link.kind.key().into(),
+            collection: true,
+            title: text(info, &["title"]).unwrap_or_else(|| "Playlist".into()),
+            creator: owner,
+            thumbnail: ytdlp_thumbnail(info).or_else(|| entries.iter().find_map(|e| e.thumbnail.clone())),
+            audio,
+            entries,
+            notes,
+        });
+    }
+    let item = mark(ytdlp_entry(link, info, audio).ok_or_else(|| AppError::msg("Digitify can't find anything to download at that link."))?);
+    let mut preview = single(link, item, Vec::new());
+    preview.provider = preview.entries[0].provider.clone();
+    preview.service = preview.entries[0].service.clone();
+    preview.kind = preview.entries[0].kind.clone();
+    Ok(preview)
 }
 
 fn text(value: &Value, path: &[&str]) -> Option<String> {
@@ -49,6 +219,8 @@ fn entry(link: &Link, kind: LinkKind, id: &str, url: &str, title: String, audio:
         audio,
         downloadable: false,
         download: None,
+        ytdlp: false,
+        live: false,
         available: true,
         reason: None,
         existing: None,
@@ -77,7 +249,7 @@ fn oembed(service: &str, endpoint: &str, url: &str) -> AppResult<Value> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// YouTube and YouTube Music: online links only (YouTube's terms allow no downloads).
+// YouTube and YouTube Music: online items in YouTube's player, or downloaded with yt-dlp (D-133).
 
 const YT_API: &str = "https://www.googleapis.com/youtube/v3";
 
@@ -109,12 +281,25 @@ fn yt_thumbnail(snippet: &Value) -> Option<String> {
     ["maxres", "standard", "high", "medium", "default"].iter().find_map(|size| text(snippet, &["thumbnails", size, "url"]))
 }
 
-fn youtube(link: &Link, key: Option<&str>) -> AppResult<Preview> {
+fn youtube(link: &Link, key: Option<&str>, tool: Option<&YtDlp>) -> AppResult<Preview> {
     let audio = link.service == "YouTube Music";
     let base = if audio { "https://music.youtube.com" } else { "https://www.youtube.com" };
+    // A channel's videos are listed by yt-dlp (YouTube's API would need its id looked up first).
+    let channel = link.kind == LinkKind::Playlist && link.id.contains('/');
+    if channel || (link.kind == LinkKind::Playlist && key.is_none() && tool.is_some()) {
+        let tool = tool.ok_or_else(missing_tool)?;
+        return from_ytdlp(link, &tool.inspect(&link.url)?, audio);
+    }
     let Some(key) = key else {
-        // Without a key: the public description of the link (no length, and a playlist stays one link).
-        let info = oembed(link.service, "https://www.youtube.com/oembed", &link.url)?;
+        // Without a key: the public description of the link (no length). When YouTube won't
+        // describe it, yt-dlp says why (removed, private…).
+        let info = match oembed(link.service, "https://www.youtube.com/oembed", &link.url) {
+            Ok(info) => info,
+            Err(error) => match tool {
+                Some(tool) if link.kind == LinkKind::Video => return from_ytdlp(link, &tool.inspect(&link.url)?, audio),
+                _ => return Err(error),
+            },
+        };
         let mut item = entry(link, link.kind, &link.id, &link.url, text(&info, &["title"]).unwrap_or_else(|| link.service.into()), audio);
         item.creator = text(&info, &["author_name"]);
         item.thumbnail = text(&info, &["thumbnail_url"]);
@@ -123,6 +308,7 @@ fn youtube(link: &Link, key: Option<&str>) -> AppResult<Preview> {
         } else {
             Vec::new()
         };
+        let item = if link.kind == LinkKind::Video { by_ytdlp(item, tool) } else { item };
         return Ok(single(link, item, notes));
     };
 
@@ -157,7 +343,11 @@ fn youtube(link: &Link, key: Option<&str>) -> AppResult<Preview> {
                 item.reason = Some("Private, removed or blocked in your region.".into());
             }
         }
-        item
+        if video.is_some_and(|v| v["snippet"]["liveBroadcastContent"].as_str() == Some("live")) {
+            item.live = true;
+            item.reason = Some("Live now: it can be downloaded once the stream is over.".into());
+        }
+        by_ytdlp(item, tool)
     };
 
     if link.kind == LinkKind::Video {
@@ -407,7 +597,7 @@ fn sc_track(link: &Link, track: &Value) -> Option<Entry> {
     Some(item)
 }
 
-fn soundcloud(link: &Link, keys: Option<&(String, String)>) -> AppResult<Preview> {
+fn soundcloud(link: &Link, keys: Option<&(String, String)>, tool: Option<&YtDlp>) -> AppResult<Preview> {
     // A short link first becomes the full one.
     if link.id.starts_with("on/") {
         let response = http::send("SoundCloud", http::get(&link.url)?, None)?;
@@ -415,7 +605,11 @@ fn soundcloud(link: &Link, keys: Option<&(String, String)>) -> AppResult<Preview
         if full.provider != Provider::SoundCloud || full.id.starts_with("on/") {
             return Err(AppError::msg("That SoundCloud short link doesn't lead to a track or a set."));
         }
-        return soundcloud(&full, keys);
+        return soundcloud(&full, keys, tool);
+    }
+    // Without keys, yt-dlp lists a set's tracks and downloads them (D-133).
+    if let (None, Some(tool)) = (keys, tool) {
+        return from_ytdlp(link, &tool.inspect(&link.url)?, true);
     }
     let Some((id, secret)) = keys else {
         let info = oembed("SoundCloud", "https://soundcloud.com/oembed", &link.url)?;
@@ -438,7 +632,7 @@ fn soundcloud(link: &Link, keys: Option<&(String, String)>) -> AppResult<Preview
     let auth = format!("OAuth {token}");
     let resolved = http::json("SoundCloud", http::get(&format!("{SC_API}/resolve"))?.query("url", &link.url).set("Authorization", &auth))?;
     match resolved["kind"].as_str() {
-        Some("track") => Ok(single(link, sc_track(link, &resolved).ok_or_else(|| AppError::msg("SoundCloud sent an answer Digitify couldn't read."))?, Vec::new())),
+        Some("track") => Ok(single(link, by_ytdlp(sc_track(link, &resolved).ok_or_else(|| AppError::msg("SoundCloud sent an answer Digitify couldn't read."))?, tool), Vec::new())),
         Some("playlist") => {
             let listed: Vec<Value> = resolved["tracks"].as_array().cloned().unwrap_or_default();
             // Long sets list some tracks by id only; those are fetched together.
@@ -457,6 +651,7 @@ fn soundcloud(link: &Link, keys: Option<&(String, String)>) -> AppResult<Preview
                 .iter()
                 .take(MAX_ENTRIES)
                 .filter_map(|t| if t.get("title").is_some() { sc_track(link, t) } else { t["id"].as_u64().and_then(|id| fetched.get(&id)).and_then(|t| sc_track(link, t)) })
+                .map(|t| by_ytdlp(t, tool))
                 .collect();
             Ok(Preview {
                 provider: "soundcloud".into(),
@@ -533,5 +728,28 @@ mod tests {
         assert_eq!(iso_duration("nope"), None);
         assert_eq!(basic("Aladdin", "open sesame"), "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
         assert_eq!(percent_decode("Song%20One"), "Song One");
+    }
+
+    #[test]
+    fn sites_and_ytdlp_entries() {
+        assert_eq!(site_of("https://artist.bandcamp.com/track/x"), ("bandcamp".into(), "Bandcamp".into()));
+        assert_eq!(site_of("https://www.bbc.co.uk/iplayer"), ("bbc".into(), "Bbc".into()));
+        assert_eq!(site_of("https://player.vimeo.com/video/1"), ("vimeo".into(), "Vimeo".into()));
+        let link = link::detect("https://www.youtube.com/playlist?list=PLabc").unwrap();
+        let info: Value = serde_json::from_str(r#"{"_type":"playlist","title":"Mix","channel":"Someone","playlist_count":3,"entries":[
+            {"_type":"url","ie_key":"Youtube","id":"aaaaaaaaaaa","url":"https://www.youtube.com/watch?v=aaaaaaaaaaa","title":"One","duration":61,"channel":"Band - Topic"},
+            {"_type":"url","ie_key":"Youtube","id":"bbbbbbbbbbb","url":"https://www.youtube.com/watch?v=bbbbbbbbbbb","title":"[Private video]"},
+            {"_type":"url","ie_key":"Youtube","id":"ccccccccccc","url":"https://www.youtube.com/watch?v=ccccccccccc","title":"Live","live_status":"is_live"}]}"#).unwrap();
+        let preview = from_ytdlp(&link, &info, false).unwrap();
+        assert_eq!((preview.title.as_str(), preview.entries.len(), preview.collection), ("Mix", 3, true));
+        let one = &preview.entries[0];
+        assert_eq!((one.creator.as_deref(), one.duration_sec, one.downloadable, one.ytdlp), (Some("Band"), Some(61.0), true, true));
+        assert_eq!(one.download.as_deref(), Some("https://www.youtube.com/watch?v=aaaaaaaaaaa"));
+        assert!(!preview.entries[1].available && !preview.entries[1].downloadable);
+        assert!(preview.entries[2].available && !preview.entries[2].downloadable, "a live stream is saved online");
+        let site = link::detect("https://vimeo.com/1").unwrap();
+        let video: Value = serde_json::from_str(r#"{"id":"1","title":"Short film","uploader":"Studio","webpage_url":"https://vimeo.com/1","duration":300,"vcodec":"avc1"}"#).unwrap();
+        let preview = from_ytdlp(&site, &video, false).unwrap();
+        assert_eq!((preview.service.as_str(), preview.entries[0].provider.as_str(), preview.entries[0].audio), ("Vimeo", "vimeo", false));
     }
 }
