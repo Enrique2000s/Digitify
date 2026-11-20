@@ -130,8 +130,12 @@ pub struct ImportRequest {
     pub video_category: String,
     /// Download what may be downloaded (otherwise everything is saved as online items).
     pub download: bool,
-    /// A new playlist for the imported tracks that are available offline, in their original order.
+    /// A playlist for the imported tracks that are available offline, in their original order: the
+    /// one with this name, or a new one (D-146: a playlist's next section joins the same one).
     pub playlist_name: Option<String>,
+    /// A collection in Videos for the imported videos (D-146): the one with this name, or a new one.
+    #[serde(default)]
+    pub collection_name: Option<String>,
     /// How yt-dlp downloads (D-133).
     #[serde(default)]
     pub quality: ytdlp::Quality,
@@ -151,11 +155,37 @@ pub async fn online_import(app: AppHandle, state: State<'_, AppState>, online: S
         Some(name) => {
             let name: String = name.chars().take(120).collect();
             Some(library.db.with(|conn| {
-                conn.execute("INSERT INTO playlists (name) VALUES (?1)", [&name])?;
-                Ok(conn.last_insert_rowid())
+                let existing: Option<i64> = conn.query_row("SELECT id FROM playlists WHERE lower(name) = lower(?1) ORDER BY id LIMIT 1", [&name], |row| row.get(0)).optional()?;
+                Ok(match existing {
+                    Some(id) => id,
+                    None => {
+                        conn.execute("INSERT INTO playlists (name) VALUES (?1)", [&name])?;
+                        conn.last_insert_rowid()
+                    }
+                })
             })?)
         }
         None => None,
+    };
+    let collection = match request.collection_name.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+        Some(name) if request.entries.iter().any(|e| !e.audio) => {
+            let name: String = name.chars().take(120).collect();
+            let category = request.video_category.clone();
+            Some(library.db.with(|conn| {
+                let category = crate::library::category_id(conn, &category)?;
+                let existing: Option<i64> = conn
+                    .query_row("SELECT id FROM collections WHERE category_id = ?1 AND parent_id IS NULL AND lower(name) = lower(?2) ORDER BY id LIMIT 1", rusqlite::params![category, name], |row| row.get(0))
+                    .optional()?;
+                Ok(match existing {
+                    Some(id) => id,
+                    None => {
+                        conn.execute("INSERT INTO collections (category_id, name, sort_name) VALUES (?1, ?2, ?3)", rusqlite::params![category, name, crate::library::sort_key(&name)])?;
+                        conn.last_insert_rowid()
+                    }
+                })
+            })?)
+        }
+        _ => None,
     };
     for key in [&request.music_category, &request.video_category] {
         library.db.with(|conn| crate::library::category_id(conn, key))?;
@@ -164,7 +194,7 @@ pub async fn online_import(app: AppHandle, state: State<'_, AppState>, online: S
     if request.video_category != "videos" {
         return Err(AppError::msg("Videos from links go to Videos; from there one can go to Movies & Series."));
     }
-    Ok(online.enqueue(&app, library, request, playlist))
+    Ok(online.enqueue(&app, library, request, playlist, collection))
 }
 
 #[tauri::command]
@@ -265,8 +295,8 @@ pub async fn online_download_items(app: AppHandle, state: State<'_, AppState>, o
     }
     let count = planned.len();
     for (entry, music, videos) in planned {
-        let request = ImportRequest { entries: vec![entry], music_category: music, video_category: videos, download: true, playlist_name: None, quality: quality.clone() };
-        online.enqueue(&app, library.clone(), request, None);
+        let request = ImportRequest { entries: vec![entry], music_category: music, video_category: videos, download: true, playlist_name: None, collection_name: None, quality: quality.clone() };
+        online.enqueue(&app, library.clone(), request, None, None);
     }
     Ok(count)
 }

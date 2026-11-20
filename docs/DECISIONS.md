@@ -101,6 +101,21 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-147 · Dark by default; covers found by a game's other names
+- **Date:** 2026-11-19 · **Approved by:** project owner (asked for both)
+- **Dark by default:** a first start is dark (it was light, D-016). A theme already chosen stays. The page is dark before the settings load too, so a dark start never flashes light; light and System are in Settings › Appearance as before.
+- **A game's other names:** Animal Forest (Nintendo 64) got no cover by its name: libretro-thumbnails has it only as "Doubutsu no Mori (Japan)". LaunchBox's database knows most games' other names, so the names it finds a game by (up to three, "A: B" written "A - B" as libretro does) are now tried in libretro-thumbnails and RetroArch's thumbnails too: "Animal Forest" found libretro's box beside LaunchBox's five. Without LaunchBox's database, typing the original name ("Doubutsu no Mori") finds libretro's.
+- **When nothing is found** and LaunchBox's database isn't downloaded, the cover picker says it knows games' other names and where to download it (Settings › Arcade).
+
+### D-146 · Covers by another name, a corner video that never shows the desktop, playlists a section at a time, Look for games with the folders
+- **Date:** 2026-11-19 · **Approved by:** project owner (asked for each; section size and the collection switch chosen by the owner)
+- **Find covers takes another name:** the cover picker has a search box holding the game's name; change it (the full or original title, with or without its region) and Search looks for covers under that name, in every place Arcade looks by name (libretro, LaunchBox, Nintendo's store, the Microsoft Store, Steam, SteamGridDB). A search's covers always show, even one alone. A name typed with its region, like "(USA, Europe)", is tried as it is.
+- **The corner video never shows the desktop:** on Windows the page has a hole where the video plays, and the picture (mpv's window, under the page) moves only once Digitify asks. The hole used to move at once, ahead of the picture, so a quick drag showed the desktop through it for a moment. Now the hole opens only where the picture surely is: while it's moving, over where it was and where it's going both; at its new place once it's there. Where the picture hasn't arrived, the frame is black.
+- **A playlist a section at a time:** a link's list (a playlist, a channel, an album) shows 25 at a time; a Section menu picks which 25 (saying how many of each are already in the library), the first one with something new chosen and only its new entries ticked. Nothing brings in more than a section at once; for the next, come back with the same link.
+- **Into a collection or a playlist:** a playlist's videos go into a collection in Videos, its songs into a Digitify playlist, named after it (editable), with a switch to turn it off (on by default). If one with that name is already there (any case), they join it: a playlist's later sections add to it after what it holds, in their original order, and videos already in Videos without a collection go in too (none is taken from another collection).
+- **Look for games moved:** from Arcade's page to Emulators & folders › Folders & covers, beside the folders it looks in (also in Settings › Arcade). Arcade still looks by itself on the first visit; while it does, the page says "Looking for games…".
+- **Also fixed:** a link's list of videos was squeezed to one line when the download options were open; the dialog scrolls instead.
+
 ### D-145 · Twelve refinements: symbols, counts, the title bar, players, Big Picture's queue, the corner video
 - **Date:** 2026-11-19 · **Approved by:** project owner (asked for each)
 - **PC games' badge** has a symbol too: a monitor for a PC game without a store (one added by its .exe), as store games show their store's.

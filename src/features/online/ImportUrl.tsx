@@ -40,6 +40,13 @@ function EntryStatus({ entry, download }: { entry: OnlineEntry; download: boolea
   );
 }
 
+/** A playlist comes in a section at a time (D-146), never all of a long one at once. */
+const SECTION = 25;
+
+/** The entries of a section that can come in and aren't here yet. */
+const fresh = (entries: OnlineEntry[], section: number) =>
+  entries.map((entry, index) => (entry.available && entry.existing == null && Math.floor(index / SECTION) === section ? index : -1)).filter((i) => i >= 0);
+
 /** What each kind of link menu takes (D-134): the sites it downloads from, and what's online only. */
 const SITES = {
   music: {
@@ -84,8 +91,10 @@ export function ImportUrlDialog({ category, onClose }: { category: string | null
   const [preview, setPreview] = useState<OnlinePreview | null>(null);
   const [chosen, setChosen] = useState<Set<number>>(new Set());
   const [download, setDownload] = useState(true);
-  const [makePlaylist, setMakePlaylist] = useState(false);
-  const [playlistName, setPlaylistName] = useState("");
+  const [section, setSection] = useState(0);
+  // A playlist's songs go into a Digitify playlist and its videos into a collection (D-146), on by default.
+  const [group, setGroup] = useState(true);
+  const [groupName, setGroupName] = useState("");
   const [quality] = useDownloadQuality();
 
   useEffect(() => {
@@ -105,9 +114,13 @@ export function ImportUrlDialog({ category, onClose }: { category: string | null
       const found = await api.onlineInspect(link);
       setPreview(found);
       const fitted = found.entries.map((entry) => fitFor(entry, mode));
-      setChosen(new Set(fitted.map((entry, index) => (entry.available && entry.existing == null ? index : -1)).filter((i) => i >= 0)));
-      setPlaylistName(found.title);
-      setMakePlaylist(false);
+      // The first section with something new in it.
+      const sections = Math.max(1, Math.ceil(fitted.length / SECTION));
+      const first = Array.from({ length: sections }, (_, i) => i).find((i) => fresh(fitted, i).length > 0) ?? 0;
+      setSection(first);
+      setChosen(new Set(fresh(fitted, first)));
+      setGroupName(found.title);
+      setGroup(true);
     } catch (reason) {
       setError(errorText(reason));
     } finally {
@@ -121,6 +134,13 @@ export function ImportUrlDialog({ category, onClose }: { category: string | null
   const anyDownloadable = entries.some((entry) => entry.downloadable);
   const viaYtdlp = download && picked.some((entry) => entry.ytdlp);
   const offlineTracks = picked.filter((entry) => (entry.downloadable && download) || entry.existing != null).length;
+  const sections = Math.ceil(entries.length / SECTION);
+  const inSection = entries.map((entry, index) => ({ entry, index })).filter(({ index }) => Math.floor(index / SECTION) === section);
+  const pickSection = (next: number) => {
+    setSection(next);
+    setChosen(new Set(fresh(entries, next)));
+  };
+  const grouping = !!preview?.collection && group && groupName.trim() !== "" && (mode === "video" || offlineTracks > 0);
 
   const start = async () => {
     if (!preview || picked.length === 0 || !category) return;
@@ -132,7 +152,8 @@ export function ImportUrlDialog({ category, onClose }: { category: string | null
         musicCategory: mode === "music" ? category : "music",
         videoCategory: "videos",
         download,
-        playlistName: mode === "music" && makePlaylist && offlineTracks > 0 ? playlistName : null,
+        playlistName: mode === "music" && grouping ? groupName : null,
+        collectionName: mode === "video" && grouping ? groupName : null,
         quality,
       });
       onClose();
@@ -235,9 +256,32 @@ export function ImportUrlDialog({ category, onClose }: { category: string | null
             </p>
           ))}
 
-          {entries.length > 1 && (
+          {sections > 1 && (
+            <div className="url-sections">
+              <label className="url-section-pick">
+                <span>Section</span>
+                <select className="input" aria-label="Section" value={section} onChange={(event) => pickSection(Number(event.target.value))}>
+                  {Array.from({ length: sections }, (_, i) => {
+                    const from = i * SECTION;
+                    const to = Math.min(entries.length, from + SECTION);
+                    const here = entries.slice(from, to).filter((e) => e.existing != null).length;
+                    return (
+                      <option key={i} value={i}>
+                        {`${from + 1}–${to}`}
+                        {here === to - from ? " · all in your library" : here > 0 ? ` · ${here} in your library` : ""}
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+              <span className="hint">
+                {SECTION} at a time. For the next ones, come back with the same link: what's already in your library shows as such.
+              </span>
+            </div>
+          )}
+          {inSection.length > 1 && (
             <div className="url-select">
-              <button type="button" className="btn btn-sm btn-ghost" onClick={() => setChosen(new Set(entries.map((e, i) => (e.available ? i : -1)).filter((i) => i >= 0)))}>
+              <button type="button" className="btn btn-sm btn-ghost" onClick={() => setChosen(new Set(inSection.filter(({ entry }) => entry.available).map(({ index }) => index)))}>
                 Select all
               </button>
               <button type="button" className="btn btn-sm btn-ghost" onClick={() => setChosen(new Set())}>
@@ -247,7 +291,7 @@ export function ImportUrlDialog({ category, onClose }: { category: string | null
             </div>
           )}
           <ul className="url-entries">
-            {entries.map((entry, index) => (
+            {inSection.map(({ entry, index }) => (
               <li key={`${entry.externalId}:${index}`} className={entry.available ? "" : "off"}>
                 <label>
                   <input type="checkbox" checked={chosen.has(index)} disabled={!entry.available} onChange={() => toggle(index)} />
@@ -275,13 +319,20 @@ export function ImportUrlDialog({ category, onClose }: { category: string | null
               </Field>
             )}
             {viaYtdlp && <DownloadOptions video={mode === "video"} audio={mode === "music"} />}
-            {mode === "music" && preview.collection && offlineTracks > 0 && (
-              <Field label="Playlist" hint="Holds the songs that are available offline, in the original order.">
-                <label className="checkbox">
-                  <input type="checkbox" checked={makePlaylist} onChange={(event) => setMakePlaylist(event.target.checked)} />
-                  Also make a Digitify playlist
+            {preview.collection && (mode === "video" || offlineTracks > 0) && (
+              <Field
+                label={mode === "music" ? "Playlist" : "Collection"}
+                hint={
+                  mode === "music"
+                    ? "Holds the songs that are available offline, in the original order. If you already have a playlist with this name, they join it (as the next sections do)."
+                    : "The videos go into this collection in Videos. If it's already there, they join it (as the next sections do)."
+                }
+              >
+                <label className="inline">
+                  <Switch checked={group} onChange={setGroup} label={mode === "music" ? "Put them in a playlist" : "Put them in a collection"} />{" "}
+                  {mode === "music" ? "Put them in a playlist" : "Put them in a collection"}
                 </label>
-                {makePlaylist && <input className="input" aria-label="Playlist name" value={playlistName} maxLength={120} onChange={(event) => setPlaylistName(event.target.value)} />}
+                {group && <input className="input" aria-label={mode === "music" ? "Playlist name" : "Collection name"} value={groupName} maxLength={120} onChange={(event) => setGroupName(event.target.value)} />}
               </Field>
             )}
           </div>

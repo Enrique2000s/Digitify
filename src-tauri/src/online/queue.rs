@@ -3,7 +3,7 @@
 //! online item; one that fails doesn't stop the others, and can be retried. Progress goes to the UI
 //! as `online-queue` events.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -44,6 +44,8 @@ struct Job {
     download: bool,
     category: String,
     playlist: Option<i64>,
+    /// The collection in Videos it goes into (D-146).
+    collection: Option<i64>,
     /// An online-only item this download replaces.
     replaces: Option<i64>,
     /// How yt-dlp downloads it (D-133).
@@ -58,6 +60,29 @@ struct Job {
 }
 
 impl Job {
+    /// Puts what it brought in into its collection (D-146): what it added, and what was already in
+    /// Videos without a collection; nothing in another category or collection is moved.
+    fn file_in_collection(&self, library: &Library) {
+        let (Some(collection), Some(item)) = (self.collection, self.item) else { return };
+        let fresh = self.state == JobState::Done;
+        if !(fresh || self.state == JobState::Skipped) {
+            return;
+        }
+        let result = library.db.with(|conn| {
+            let moved = conn.execute(
+                "UPDATE items SET collection_id = ?1 WHERE id = ?2 AND category_id = (SELECT category_id FROM collections WHERE id = ?1) AND (collection_id IS NULL OR ?3)",
+                rusqlite::params![collection, item, fresh],
+            )?;
+            if moved > 0 {
+                crate::library::reindex(conn, item)?;
+            }
+            Ok(())
+        });
+        if let Err(e) = result {
+            log::warn!("couldn't put the import into its collection: {e}");
+        }
+    }
+
     /// Keeps its outcome in the imports history (D-137), with what it takes to try it again.
     fn remember(&mut self, library: &Library) {
         let state = match self.state {
@@ -73,6 +98,7 @@ impl Job {
             "videoCategory": self.category,
             "download": self.download,
             "playlistName": null,
+            "collectionName": null,
             "quality": self.quality,
         });
         let action = if self.download { "download" } else { "link" };
@@ -121,6 +147,9 @@ impl Job {
 #[derive(Default)]
 struct Shared {
     jobs: Mutex<Vec<Job>>,
+    /// Each batch's playlist as it was when the batch began (D-146): its tracks keep their places
+    /// and the batch's new ones follow, in their original order.
+    bases: Mutex<HashMap<u64, HashSet<i64>>>,
     wake: Condvar,
     next: AtomicU64,
     started: AtomicBool,
@@ -141,8 +170,19 @@ impl OnlineState {
         self.shared.jobs.lock().unwrap_or_else(|e| e.into_inner()).iter().map(Job::view).collect()
     }
 
-    pub fn enqueue(&self, app: &AppHandle, library: Arc<Library>, request: ImportRequest, playlist: Option<i64>) -> u64 {
+    pub fn enqueue(&self, app: &AppHandle, library: Arc<Library>, request: ImportRequest, playlist: Option<i64>, collection: Option<i64>) -> u64 {
         let batch = self.shared.next.fetch_add(1, Ordering::Relaxed) + 1;
+        if let Some(playlist) = playlist {
+            let base: HashSet<i64> = library
+                .db
+                .with(|conn| {
+                    let mut stmt = conn.prepare("SELECT part_id FROM playlist_tracks WHERE playlist_id = ?1")?;
+                    let rows = stmt.query_map([playlist], |row| row.get(0))?.collect::<Result<_, _>>()?;
+                    Ok(rows)
+                })
+                .unwrap_or_default();
+            self.shared.bases.lock().unwrap_or_else(|e| e.into_inner()).insert(batch, base);
+        }
         {
             let mut jobs = self.shared.jobs.lock().unwrap_or_else(|e| e.into_inner());
             let mut seen: HashSet<(String, String)> = HashSet::new();
@@ -174,8 +214,10 @@ impl OnlineState {
                     (JobState::Pending, None, None)
                 };
                 let item = if state == JobState::Skipped { existing } else { None };
-                let mut job = Job { id, batch, position, entry, download, category, playlist, replaces, quality: request.quality.clone(), state, progress: None, error, item, cancel: Arc::new(AtomicBool::new(false)), history: None };
+                let collection = if entry.audio { None } else { collection };
+                let mut job = Job { id, batch, position, entry, download, category, playlist, collection, replaces, quality: request.quality.clone(), state, progress: None, error, item, cancel: Arc::new(AtomicBool::new(false)), history: None };
                 job.remember(&library);
+                job.file_in_collection(&library);
                 jobs.push(job);
             }
             let finished = jobs.iter().filter(|j| !matches!(j.state, JobState::Pending | JobState::Working)).count();
@@ -311,6 +353,7 @@ fn work(app: AppHandle, fallback: Arc<Library>, shared: Arc<Shared>) {
                 }
             }
             job.remember(&library);
+            job.file_in_collection(&library);
             job.playlist.map(|_| job.batch)
         };
         if let Some(batch) = batch {
@@ -330,16 +373,26 @@ fn sync_playlist(library: &Library, shared: &Shared, batch: u64) {
         (mine.first().and_then(|j| j.playlist), mine.iter().filter(|j| matches!(j.state, JobState::Done | JobState::Skipped)).filter_map(|j| j.item).collect())
     };
     let Some(playlist) = playlist else { return };
+    let base = shared.bases.lock().unwrap_or_else(|e| e.into_inner()).get(&batch).cloned().unwrap_or_default();
     let result = library.db.with(|conn| {
-        let mut parts = Vec::new();
+        let mut added = Vec::new();
         for item in items {
             if let Some(part) = conn
                 .query_row("SELECT id FROM parts WHERE item_id = ?1 AND kind = 'track' ORDER BY position LIMIT 1", [item], |row| row.get::<_, i64>(0))
                 .ok()
             {
-                parts.push(part);
+                if !base.contains(&part) {
+                    added.push(part);
+                }
             }
         }
+        // What the playlist holds now (earlier sections, and changes made meanwhile), then this
+        // batch's new tracks in their original order.
+        let mut stmt = conn.prepare("SELECT part_id FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY position")?;
+        let current: Vec<i64> = stmt.query_map([playlist], |row| row.get(0))?.collect::<Result<_, _>>()?;
+        drop(stmt);
+        let mut parts: Vec<i64> = current.into_iter().filter(|p| !added.contains(p)).collect();
+        parts.extend(added);
         crate::music::replace_playlist(conn, playlist, &parts)
     });
     if let Err(e) = result {

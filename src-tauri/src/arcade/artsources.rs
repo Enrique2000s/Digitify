@@ -212,6 +212,27 @@ pub fn status(cache: &Path) -> Option<LaunchBoxStatus> {
 
 /// LaunchBox's front boxes for a game by its name on one of `platforms` (any platform when empty):
 /// (where from, address), the boxes first, North America's, the world's, then the others.
+/// The names of the games LaunchBox finds by a name or one of their other names (D-147), on these
+/// platforms: its own name for each, best known first.
+pub fn launchbox_names(db: &Path, title: &str, platforms: &[&str]) -> Vec<String> {
+    let Some(conn) = open(db) else { return Vec::new() };
+    let wanted = simple(title);
+    if wanted.len() < 2 {
+        return Vec::new();
+    }
+    let Ok(mut stmt) = conn.prepare("SELECT name, platform FROM games WHERE id IN (SELECT id FROM games WHERE simple = ?1 UNION SELECT id FROM alts WHERE simple = ?1) ORDER BY id") else {
+        return Vec::new();
+    };
+    let rows: Vec<(String, String)> = stmt.query_map([&wanted], |row| Ok((row.get(0)?, row.get(1)?))).map(|rows| rows.filter_map(Result::ok).collect()).unwrap_or_default();
+    let mut out: Vec<String> = Vec::new();
+    for (name, platform) in rows {
+        if (platforms.is_empty() || platforms.contains(&platform.as_str())) && !out.contains(&name) {
+            out.push(name);
+        }
+    }
+    out
+}
+
 pub fn launchbox_covers(db: &Path, title: &str, platforms: &[&str], limit: usize) -> Vec<(String, String)> {
     let Some(conn) = open(db) else { return Vec::new() };
     let wanted = simple(title);
@@ -393,6 +414,8 @@ mod tests {
         assert_eq!(mario.iter().map(|(_, u)| u.rsplit('/').next().unwrap()).collect::<Vec<_>>(), ["sm64-na.jpg", "sm64-jp.jpg"], "boxes only, North America first");
         assert!(launchbox_covers(&db, "Super Mario 64", launchbox_platforms("ds"), 5).is_empty(), "another platform's game isn't this one");
         assert_eq!(launchbox_covers(&db, "Halo CE", launchbox_platforms("ogxbox"), 5).len(), 1, "found by its other name");
+        assert_eq!(launchbox_names(&db, "Halo CE (USA)", launchbox_platforms("ogxbox")), ["Halo: Combat Evolved"], "its own name, from another");
+        assert!(launchbox_names(&db, "Halo CE", launchbox_platforms("n64")).is_empty());
         let status = status(&dir).unwrap();
         assert_eq!(status.games, 2);
         let _ = std::fs::remove_dir_all(&dir);

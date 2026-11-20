@@ -41,21 +41,58 @@ function Floating() {
   const state = useRef({ time: session.time, duration: session.duration, paused: session.paused, ended: false });
   useAmbientHold("video", true);
 
-  // The page is see-through where the frame is (Windows), and the picture goes there.
+  // The page is see-through where the frame is (Windows), and the picture goes there. The hole only
+  // ever opens where the picture surely is (D-146): while it's being moved, over where it was and
+  // where it's going both, and over its new place once it's there. Opened ahead of the picture,
+  // the window showed the desktop through it for a moment when the video was dragged quickly.
   useLayoutEffect(() => {
     const element = frame.current;
     if (!element) return;
     const root = document.documentElement;
     root.classList.add("pip-mode");
     if (onLinux) root.classList.add("on-linux");
+    type Box = { x: number; y: number; w: number; h: number };
+    const hole = (box: Box | null) => {
+      root.style.setProperty("--pip-x", `${box ? box.x : -10}px`);
+      root.style.setProperty("--pip-y", `${box ? box.y : -10}px`);
+      root.style.setProperty("--pip-w", `${box ? box.w : 1}px`);
+      root.style.setProperty("--pip-h", `${box ? box.h : 1}px`);
+    };
+    const overlap = (a: Box | null, b: Box | null): Box | null => {
+      if (!a || !b) return null;
+      const x = Math.max(a.x, b.x);
+      const y = Math.max(a.y, b.y);
+      const w = Math.min(a.x + a.w, b.x + b.w) - x;
+      const h = Math.min(a.y + a.h, b.y + b.h) - y;
+      return w > 0 && h > 0 ? { x, y, w, h } : null;
+    };
+    const same = (a: Box | null, b: Box | null) => !!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+    /** Where the picture is, where it's being sent, and where the frame is now. */
+    let at: Box | null = null;
+    let sending: Box | null = null;
+    let wanted: Box | null = null;
+    let gone = false;
+    const step = () => {
+      if (gone || !wanted) return;
+      hole(sending ? overlap(overlap(at, sending), wanted) : same(at, wanted) ? wanted : overlap(at, wanted));
+      if (sending || same(at, wanted)) return;
+      const to = wanted;
+      sending = to;
+      const s = window.devicePixelRatio;
+      void api
+        .playerSetRect({ x: Math.round(to.x * s), y: Math.round(to.y * s), width: Math.round(to.w * s), height: Math.round(to.h * s) })
+        .catch(() => {})
+        .finally(() => {
+          at = to;
+          sending = null;
+          // The page shows the new hole a frame later; the picture is already there by then.
+          requestAnimationFrame(step);
+        });
+    };
     const place = () => {
       const r = element.getBoundingClientRect();
-      root.style.setProperty("--pip-x", `${r.left}px`);
-      root.style.setProperty("--pip-y", `${r.top}px`);
-      root.style.setProperty("--pip-w", `${r.width}px`);
-      root.style.setProperty("--pip-h", `${r.height}px`);
-      const s = window.devicePixelRatio;
-      void api.playerSetRect({ x: Math.round(r.left * s), y: Math.round(r.top * s), width: Math.round(r.width * s), height: Math.round(r.height * s) }).catch(() => {});
+      wanted = { x: r.left, y: r.top, w: r.width, h: r.height };
+      step();
     };
     placeNow.current = place;
     place();
@@ -71,6 +108,7 @@ function Floating() {
       window.removeEventListener("resize", place);
       card?.removeEventListener("animationend", place);
       window.clearTimeout(settle);
+      gone = true;
       root.classList.remove("pip-mode");
       if (!root.classList.contains("video-mode")) root.classList.remove("on-linux");
     };

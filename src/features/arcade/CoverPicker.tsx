@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Check, LoaderCircle } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check, LoaderCircle, Search } from "lucide-react";
 import { api, errorText, type ArcadeCoverChoice, type ArcadeGame } from "../../lib/api";
 import { Dialog } from "../../components/common";
 
@@ -8,7 +8,8 @@ import { Dialog } from "../../components/common";
  * Find covers (D-118): every cover Arcade finds for a game, to choose from, on this computer and
  * online. With several games it goes through them one by one ("Game 2 of 5"): a game with only one
  * cover found gets it without asking, one with none is passed; the rest show their covers to pick
- * one or skip. From a game's own panel the covers show even when there's only one.
+ * one or skip. From a game's own panel the covers show even when there's only one. The name looked
+ * up can be changed (D-146), for a game whose file name or title doesn't find its covers.
  */
 export function CoverPicker({ games, onClose }: { games: ArcadeGame[]; onClose: (summary: string | null) => void }) {
   const queryClient = useQueryClient();
@@ -20,6 +21,12 @@ export function CoverPicker({ games, onClose }: { games: ArcadeGame[]; onClose: 
   const [busy, setBusy] = useState(false);
   const tally = useRef({ chosen: 0, automatic: 0, none: 0 });
   const game = games[at];
+  /** The name in the search box, and the one last looked up (null: the game's own). */
+  const [query, setQuery] = useState(game?.title ?? "");
+  const [searched, setSearched] = useState<string | null>(null);
+  const [tries, setTries] = useState(0);
+  // Without LaunchBox's database, games known by another name (a Japanese title) are harder to find.
+  const launchbox = useQuery({ queryKey: ["launchbox"], queryFn: api.arcadeLaunchBoxStatus });
 
   const finish = () => {
     const { chosen, automatic, none } = tally.current;
@@ -32,17 +39,24 @@ export function CoverPicker({ games, onClose }: { games: ArcadeGame[]; onClose: 
     else setAt(at + 1);
   };
 
-  // Each game's covers as it comes up; one alone is used at once when going through several.
+  // A new game starts from its own name.
+  useEffect(() => {
+    setQuery(game?.title ?? "");
+    setSearched(null);
+  }, [game?.id, game?.title]);
+
+  // Each game's covers as it comes up; one alone is used at once when going through several
+  // (not after a search of yours, whose covers always show).
   useEffect(() => {
     if (!game) return;
     let alive = true;
     setChoices(null);
     setPicked(0);
     setError(null);
-    api.arcadeCoverChoices(game.id).then(
+    api.arcadeCoverChoices(game.id, searched ?? undefined).then(
       async (found) => {
         if (!alive) return;
-        if (!single && found.length <= 1) {
+        if (!single && searched == null && found.length <= 1) {
           if (found.length === 1) {
             await api.arcadeChooseCover(game.id, 0).catch(() => {});
             tally.current.automatic += 1;
@@ -60,7 +74,16 @@ export function CoverPicker({ games, onClose }: { games: ArcadeGame[]; onClose: 
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game?.id]);
+  }, [game?.id, searched, tries]);
+
+  const search = (event: React.FormEvent) => {
+    event.preventDefault();
+    const name = query.trim();
+    if (!name || choices == null) return;
+    setSearched(name === game?.title ? null : name);
+    // The same name again looks again.
+    setTries((n) => n + 1);
+  };
 
   const use = async () => {
     if (!game || !choices?.length) return;
@@ -96,6 +119,13 @@ export function CoverPicker({ games, onClose }: { games: ArcadeGame[]; onClose: 
         </>
       }
     >
+      <form className="cover-search" role="search" onSubmit={search}>
+        <Search size={16} aria-hidden />
+        <input className="input" aria-label="Name to look up" value={query} maxLength={160} onChange={(event) => setQuery(event.target.value)} placeholder="The game's name" />
+        <button type="submit" className="btn btn-sm" disabled={!query.trim() || choices == null}>
+          Search
+        </button>
+      </form>
       {error ? (
         <p className="notice danger">{error}</p>
       ) : choices == null ? (
@@ -103,7 +133,12 @@ export function CoverPicker({ games, onClose }: { games: ArcadeGame[]; onClose: 
           <LoaderCircle size={18} className="spin" /> Looking for covers on this computer and online…
         </p>
       ) : choices.length === 0 ? (
-        <p className="muted">No cover found for this game, on this computer or online. “Change cover” in its panel takes a picture of yours.</p>
+        <div className="muted">
+          <p>No cover found under that name, on this computer or online. Try another name (the game's full or original title, like a Japanese game's), or “Change cover” in its panel for a picture of yours.</p>
+          {launchbox.isSuccess && launchbox.data == null && (
+            <p>LaunchBox's database knows most games' other names (“Animal Forest” is “Doubutsu no Mori”): download it in Settings › Arcade and it finds them by any of them.</p>
+          )}
+        </div>
       ) : (
         <div className="cover-picker" role="radiogroup" aria-label="Covers">
           {choices.map((choice, i) => (

@@ -1536,9 +1536,33 @@ html.reordering * {
   gap: 6px;
   margin-top: 12px;
 }
+/* D-146: a playlist a section at a time. */
+.url-sections {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 12px;
+}
+.url-section-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+}
+.url-section-pick .input {
+  width: auto;
+  min-width: 200px;
+}
+.url-sections .hint {
+  flex: 1 1 260px;
+  margin: 0;
+}
 .url-entries {
   display: grid;
   gap: 2px;
+  /* Never squeezed by the options under it (D-146): the dialog scrolls instead. */
+  flex-shrink: 0;
   max-height: min(42vh, 360px);
   margin: 8px 0 0;
   padding: 4px;
@@ -2864,7 +2888,8 @@ body:has(.import-panel) .online-queue {
 }
 /* The hole the picture shows through (Windows) or the picture sits on (Linux). */
 .pip-frame {
-  background: transparent;
+  /* Black where the picture hasn't arrived yet while it's moved (D-146), never the desktop. */
+  background: #000;
   cursor: pointer;
 }
 .pip-bar {

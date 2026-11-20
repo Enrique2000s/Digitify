@@ -1,5 +1,6 @@
 /* Breeze design tokens (decision D-016): bright, rounded and glossy, an original style inspired by
-   mid-2000s console menus. Light is the default; dark ("night") keeps the same structure.
+   mid-2000s console menus. Dark is the default (D-147), also before the settings load; light keeps
+   the same structure.
    The accent is user-configurable and set at runtime by the preferences provider:
    --accent, --accent-ink, --accent-soft, --accent-text, --accent-bright, --accent-glow, --accent-ring. */
 :root {
@@ -35,7 +36,6 @@
   --glow-sm: 0 0 0 2px var(--accent-bright), 0 6px 14px var(--accent-glow);
 }
 
-:root,
 :root[data-theme="light"] {
   color-scheme: light;
   --bg: #edf1f5;
@@ -82,6 +82,7 @@
   --hero-backdrop-opacity: 0.6;
 }
 
+:root,
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #0f1620;

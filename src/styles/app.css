@@ -5580,3 +5580,37 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
   color: var(--danger, #d64545);
   font-weight: 700;
 }
+
+/* D-146: the name a game's covers are looked up by, editable. */
+.cover-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.cover-search > svg {
+  flex: none;
+  color: var(--muted);
+}
+.cover-search .input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* D-146: Look for games sits with the folders it looks in. */
+.arcade-scan-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.arcade-scan-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.arcade-head-busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--muted);
+}

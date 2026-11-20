@@ -142,9 +142,11 @@ export function ArcadePage() {
           </div>
         </div>
         <div className="arcade-head-actions">
-          <button type="button" className="btn" disabled={scanning || (!anyEmulator && !status.data?.folders.length)} onClick={() => void scan()}>
-            {scanning ? <LoaderCircle size={16} className="spin" /> : <RefreshCw size={16} />} Look for games
-          </button>
+          {scanning && (
+            <span className="arcade-head-busy" role="status">
+              <LoaderCircle size={16} className="spin" /> Looking for games…
+            </span>
+          )}
           <button type="button" className="btn glow-when-on" aria-pressed={showSetup} onClick={() => setSetup(!showSetup)}>
             <Settings2 size={16} /> Emulators & folders
           </button>
@@ -232,7 +234,7 @@ export function ArcadePage() {
           <p>
             {games.data.length === 0
               ? anyEmulator
-                ? "Arcade looks in the game folders set up in your emulators, and in folders you add here. Check them in Emulators & folders, then look for games."
+                ? "Arcade looks in the game folders set up in your emulators, and in folders you add here. Check them in Emulators & folders, then Look for games in its Folders & covers tab."
                 : `Install an emulator Arcade knows (Emulators & folders lists them) or games from a store (Steam, itch.io${onLinux ? ", Heroic or Lutris" : ", Epic Games, Xbox, GOG, Ubisoft Connect, the EA app, Battle.net or Amazon Games"}), point Arcade to your emulators in Emulators & folders, or add a game by its program.`
               : "Nothing matches this console or search."}
           </p>
@@ -937,6 +939,25 @@ function ConsolesTab({ status, games }: { status: ArcadeStatus; games: ArcadeGam
 
 function FoldersTab({ status, games, onRun }: { status: ArcadeStatus; games: ArcadeGame[] | undefined; onRun: Run }) {
   const { preferences, update } = usePreferences();
+  // Look for games (D-146): here rather than on Arcade's page, beside the folders it looks in.
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState<string | null>(null);
+  const canScan = status.emulators.some((e) => e.found) || status.stores.some((s) => s.found) || status.folders.length > 0;
+  const scan = () =>
+    onRun(async () => {
+      setScanning(true);
+      setScanNote(null);
+      try {
+        const report = await api.arcadeScan(preferences.arcade.downloadCovers);
+        const parts = [`${report.found} ${report.found === 1 ? "game" : "games"} found`];
+        if (report.added) parts.push(`${report.added} new`);
+        if (report.missing) parts.push(`${report.missing} missing`);
+        if (report.coversQueued) parts.push(`looking for ${report.coversQueued} ${report.coversQueued === 1 ? "cover" : "covers"}`);
+        setScanNote(parts.join(" · "));
+      } finally {
+        setScanning(false);
+      }
+    });
   const addFolder = async () => {
     const path = await openDialog({ directory: true, multiple: false, title: "Choose a game folder" });
     if (typeof path === "string") await onRun(() => api.arcadeFolderAdd(path));
@@ -967,9 +988,15 @@ function FoldersTab({ status, games, onRun }: { status: ArcadeStatus; games: Arc
             ))}
           </ul>
         )}
-        <button type="button" className="btn btn-sm" onClick={() => void addFolder()}>
-          <FolderPlus size={15} /> Add a folder…
-        </button>
+        <div className="arcade-scan-row">
+          <button type="button" className="btn btn-sm" onClick={() => void addFolder()}>
+            <FolderPlus size={15} /> Add a folder…
+          </button>
+          <button type="button" className="btn btn-sm" disabled={scanning || !canScan} onClick={() => void scan()}>
+            {scanning ? <LoaderCircle size={15} className="spin" /> : <RefreshCw size={15} />} Look for games
+          </button>
+        </div>
+        <p className="muted arcade-scan-note">{scanNote ?? "Looks again in every emulator's and launcher's folders and these, for games added or gone."}</p>
       </div>
       <div className="arcade-setup-block">
         <h3>Covers</h3>

@@ -127,6 +127,8 @@ export interface OnlineImportRequest {
   videoCategory: string;
   download: boolean;
   playlistName: string | null;
+  /** A collection in Videos for the videos (D-146). */
+  collectionName?: string | null;
   quality: DownloadQuality;
 }
 
@@ -883,7 +885,7 @@ export const api = {
   /** Sets an emulator aside, or uses it again (D-117). */
   arcadeIgnoreEmulator: (emulator: ArcadeEmulator, ignored: boolean) => invoke<void>("arcade_ignore_emulator", { emulator, ignored }),
   /** Every cover found for a game, to choose from (D-118). */
-  arcadeCoverChoices: (id: number) => invoke<ArcadeCoverChoice[]>("arcade_cover_choices", { id }),
+  arcadeCoverChoices: (id: number, search?: string) => invoke<ArcadeCoverChoice[]>("arcade_cover_choices", { id, search: search ?? null }),
   arcadeChooseCover: (id: number, index: number) => invoke<void>("arcade_choose_cover", { id, index }),
   /** Adds a PC game by its program (D-107); returns its id. */
   arcadeAddProgram: (path: string, downloadCovers: boolean) => invoke<number>("arcade_add_program", { path, downloadCovers }),

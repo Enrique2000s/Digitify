@@ -1018,6 +1018,9 @@ pub fn libretro_names(file_stem: &str, title: &str) -> Vec<String> {
             names.push(format!("{base} {region}"));
         }
         names.push(base);
+    } else if !base.is_empty() {
+        // A name with its region already, as typed in a cover search (D-146), is tried as it is.
+        names.push(base);
     }
     names.retain(|n| !n.is_empty());
     let mut seen = std::collections::HashSet::new();

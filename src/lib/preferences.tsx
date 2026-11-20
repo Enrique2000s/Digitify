@@ -283,7 +283,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   style: "breeze",
   look: "breeze",
   palette: "breeze",
-  theme: "light",
+  // A first start is dark (D-147); a theme already chosen stays.
+  theme: "dark",
   accent: "#1592d0",
   motion: "system",
   lightMode: false,

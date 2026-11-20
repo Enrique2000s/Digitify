@@ -159,7 +159,7 @@ pub async fn history_retry(app: AppHandle, state: State<'_, AppState>, online: S
         Ok(request)
     })
     .await?;
-    online.enqueue(&app, library, request, None);
+    online.enqueue(&app, library, request, None, None);
     let _ = app.emit("import-history", ());
     Ok(())
 }

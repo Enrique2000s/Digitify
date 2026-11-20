@@ -912,7 +912,8 @@ enum CoverSource {
 /// Every cover Arcade can find for a game (D-118), for the user to choose among: what's on this
 /// computer (the launcher's, Dolphin's, RetroArch's, a PlayStation 3 game's icon), then online
 /// (GameTDB, libretro-thumbnails, the stores; Steam's store by name, a few close matches).
-fn cover_sources(library: &Library, id: i64, sgdb_key: Option<&str>, launchbox: Option<&Path>) -> AppResult<Vec<(String, CoverSource)>> {
+/// `search` (D-146), when given, is the name looked up instead of the game's title.
+fn cover_sources(library: &Library, id: i64, search: Option<&str>, sgdb_key: Option<&str>, launchbox: Option<&Path>) -> AppResult<Vec<(String, CoverSource)>> {
     type Row = (Option<String>, String, String, String, Option<String>, Option<String>, Option<String>);
     let (game_id, platform, path, title, store, store_key, system): Row = library
         .db
@@ -921,6 +922,7 @@ fn cover_sources(library: &Library, id: i64, sgdb_key: Option<&str>, launchbox: 
                 Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?))
             })?)
         })?;
+    let title = search.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).unwrap_or(title);
     let mut out: Vec<(String, CoverSource)> = Vec::new();
     if platform == "pc" {
         let art = store_art_now().get(&path).cloned().unwrap_or_default();
@@ -955,7 +957,19 @@ fn cover_sources(library: &Library, id: i64, sgdb_key: Option<&str>, launchbox: 
         out.push(("Dolphin".to_string(), CoverSource::File(dir.join(format!("{game}.png")))));
     }
     let stem = games::title_from_name(Path::new(path.rsplit('#').next().unwrap_or(&path)));
-    let names = games::libretro_names(&stem, &title);
+    let mut names = games::libretro_names(&stem, &title);
+    // The names LaunchBox knows the game by (D-147): "Animal Forest" is libretro's "Doubutsu no Mori
+    // (Japan)". LaunchBox writes "A: B" where libretro writes "A - B".
+    if let Some(db) = launchbox {
+        for other in artsources::launchbox_names(db, &title, artsources::launchbox_platforms(&platform)).into_iter().take(3) {
+            let other = other.replace(": ", " - ");
+            for name in games::libretro_names(&other, &other) {
+                if !names.iter().any(|n| n.eq_ignore_ascii_case(&name)) {
+                    names.push(name);
+                }
+            }
+        }
+    }
     let collection = system.clone().map(|s| retroarch::libretro_system(&s)).or_else(|| games::libretro_system(&platform).map(str::to_string));
     if let Some(thumbnails) = local.retroarch.as_deref() {
         let folder = system.clone().or_else(|| collection.as_ref().map(|c| c.replace('_', " ")));
@@ -1027,13 +1041,14 @@ fn base64(bytes: &[u8]) -> String {
 
 /// Looks for every cover of a game (D-118) and keeps them to choose from: each found once (the
 /// same picture from two places counts once), at most a dozen. Online, as asked for by the click.
+/// `search` looks them up by another name than the game's (D-146).
 #[tauri::command]
-pub async fn arcade_cover_choices(app: AppHandle, state: State<'_, AppState>, arcade: State<'_, ArcadeState>, id: i64) -> AppResult<Vec<CoverChoice>> {
+pub async fn arcade_cover_choices(app: AppHandle, state: State<'_, AppState>, arcade: State<'_, ArcadeState>, id: i64, search: Option<String>) -> AppResult<Vec<CoverChoice>> {
     let library = state.library()?;
     let key = state.config.get().steamgriddb_key.filter(|k| !k.trim().is_empty());
     let launchbox = art_cache(&app).map(|c| artsources::launchbox_db_path(&c)).filter(|db| db.is_file());
     let found: Vec<(String, Vec<u8>)> = crate::library::blocking(move || {
-        let sources = cover_sources(&library, id, key.as_deref(), launchbox.as_deref())?;
+        let sources = cover_sources(&library, id, search.as_deref(), key.as_deref(), launchbox.as_deref())?;
         let fetched: Vec<Option<(String, Vec<u8>)>> = std::thread::scope(|scope| {
             let handles: Vec<_> = sources
                 .into_iter()

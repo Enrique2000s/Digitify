@@ -12,6 +12,21 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.7.1",
+    date: "2026-11-19",
+    added: [
+      { icon: "image", title: "Find covers by another name", text: "Find covers has a search box with the game's name: change it to the game's full or original title and search again when the covers aren't right." },
+      { icon: "download", title: "Playlists a section at a time", text: "A long playlist or channel comes in 25 at a time, never all at once; come back with the same link for the next. Its videos go into a collection and its songs into a playlist, which the next sections join." },
+      { icon: "monitor", title: "Dark by default", text: "Digitify starts dark the first time; light and System are in Settings › Appearance." },
+      { icon: "image", title: "Covers by a game's other names", text: "With LaunchBox's database, a game known by another name (Animal Forest is Doubutsu no Mori) finds its covers in more places." },
+      { icon: "gamepad", title: "Look for games, with the folders", text: "Look for games is in Emulators & folders › Folders & covers now, beside the folders it looks in." },
+    ],
+    fixed: [
+      "Dragging the corner video quickly no longer shows the desktop through the window for a moment.",
+      "A link's list of videos no longer shrinks to one line when the download options are open.",
+    ],
+  },
+  {
     version: "0.7.0",
     date: "2026-11-19",
     added: [
