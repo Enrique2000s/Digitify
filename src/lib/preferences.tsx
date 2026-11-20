@@ -8,7 +8,8 @@ export type MotionChoice = "system" | "full" | "reduced" | "off";
 export type Layout = "grid" | "list" | "shelf" | "detailed" | "carousel";
 export const LAYOUTS: Layout[] = ["grid", "shelf", "list", "detailed", "carousel"];
 /** The overall style (D-016, D-023): Breeze, or Cinematic as an option. */
-export type Look = "breeze" | "cinematic";
+/** The styles (D-016, D-015, D-149): Breeze, Cinematic, Frutiger Aero and Minimal. */
+export type Look = "breeze" | "cinematic" | "aero" | "minimal";
 /** Breeze's color variants (D-023). Midnight is always dark. */
 export type Palette = "breeze" | "sunset" | "midnight" | "contrast";
 /** What the shelves in the shelf view are made of (D-023). */
@@ -209,7 +210,8 @@ export interface Preferences {
 export type ArcadeFilter = "all" | "all-pc" | "all-roms" | ArcadeStore | "others" | ArcadeConsole | "favorites";
 
 /** Their default order; "all" stands in for "all-pc" and "all-roms" when they're combined. */
-export const ARCADE_FILTER_ORDER: ArcadeFilter[] = ["all-pc", "all-roms", "steam", "epic", "xbox", "gog", "ubisoft", "ea", "battlenet", "rockstar", "riot", "amazon", "itch", "heroic", "lutris", "others", ...ARCADE_CONSOLES, "favorites"];
+// Favorites is a collection now (D-149), not a view.
+export const ARCADE_FILTER_ORDER: ArcadeFilter[] = ["all-pc", "all-roms", "steam", "epic", "xbox", "gog", "ubisoft", "ea", "battlenet", "rockstar", "riot", "amazon", "itch", "heroic", "lutris", "others", ...ARCADE_CONSOLES];
 
 export interface ArcadePreferences {
   downloadCovers: boolean;
@@ -226,20 +228,25 @@ export interface ArcadePreferences {
   /** What Digitify does while a game runs (D-041): stays open with its music silenced (the default;
    *  the music can be switched back on), hides and comes back when the game ends, or quits. */
   whilePlaying: "stay" | "hide" | "quit";
-  sort: "title" | "played" | "most" | "added" | "rating" | "custom";
+  /** "console": by console and launcher, in the views' order, each under its name (D-149). */
+  sort: "title" | "played" | "most" | "added" | "rating" | "console" | "custom";
+  /** Games' badges (D-148): the console's or store's logo and name, the logo alone, or none. */
+  badge: "full" | "logo" | "none";
 }
 
 /** The page color under each look and palette, for accent text contrast. */
-const PAGE_BACKGROUNDS: Record<Palette | "cinematic", { light: string; dark: string }> = {
+const PAGE_BACKGROUNDS: Record<Palette | Exclude<Look, "breeze">, { light: string; dark: string }> = {
   breeze: { light: "#edf1f5", dark: "#0f1620" },
   sunset: { light: "#f6ede4", dark: "#1c1320" },
   midnight: { light: "#000000", dark: "#000000" },
   contrast: { light: "#ffffff", dark: "#000000" },
   cinematic: { light: "#f3f1ed", dark: "#0c0d10" },
+  aero: { light: "#e6f7ff", dark: "#032336" },
+  minimal: { light: "#f2f3f5", dark: "#15181d" },
 };
 
-/** Each look's own default accent: Breeze's sky blue, Cinematic's amber (D-015). */
-export const LOOK_ACCENTS: Record<Look, string> = { breeze: "#1592d0", cinematic: "#e0a43a" };
+/** Each look's own default accent: Breeze's sky blue, Cinematic's amber (D-015), Aero's aqua and Minimal's blue (D-149). */
+export const LOOK_ACCENTS: Record<Look, string> = { breeze: "#1592d0", cinematic: "#e0a43a", aero: "#0a9fe0", minimal: "#2f8fe8" };
 /** Breeze palettes' own accents: Sunset is coral, the others keep sky blue. */
 export const PALETTE_ACCENTS: Record<Palette, string> = { breeze: "#1592d0", sunset: "#ef5f4f", midnight: "#1592d0", contrast: "#1592d0" };
 
@@ -325,6 +332,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   slideshowSeconds: 5,
   arcade: {
     downloadCovers: true,
+    badge: "full",
     playsIn: {},
     platform: "all-pc",
     filterOrder: [...ARCADE_FILTER_ORDER],
@@ -513,7 +521,8 @@ function sanitizeArcade(raw: unknown): ArcadePreferences {
     hiddenFilters: Array.isArray(value.hiddenFilters) ? [...new Set(value.hiddenFilters.filter(isArcadeFilter))] : [],
     combineAll: pick("combineAll", isBoolean),
     whilePlaying: pick("whilePlaying", (v) => v === "stay" || v === "hide" || v === "quit"),
-    sort: pick("sort", (v) => ["title", "played", "most", "added", "rating", "custom"].includes(v as string)),
+    sort: pick("sort", (v) => ["title", "played", "most", "added", "rating", "console", "custom"].includes(v as string)),
+    badge: pick("badge", (v) => v === "full" || v === "logo" || v === "none"),
   };
 }
 
@@ -576,7 +585,7 @@ function sanitize(raw: unknown): Preferences {
   const breeze = (raw as Raw<Preferences> | null)?.style === "breeze";
   return {
     style: "breeze",
-    look: pick("look", (v) => v === "breeze" || v === "cinematic"),
+    look: pick("look", (v) => v === "breeze" || v === "cinematic" || v === "aero" || v === "minimal"),
     palette: pick("palette", (v) => ["breeze", "sunset", "midnight", "contrast"].includes(v as string)),
     theme: breeze ? pick("theme", (v) => v === "dark" || v === "light" || v === "system") : DEFAULT_PREFERENCES.theme,
     accent: breeze ? pick("accent", (v) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v)) : DEFAULT_PREFERENCES.accent,
@@ -672,7 +681,7 @@ export function PreferencesProvider({ initial, children }: { initial: unknown; c
     root.dataset.palette = breezePalette;
     root.dataset.motion = preferences.motion === "system" ? "" : preferences.motion;
     root.dataset.perf = preferences.lightMode ? "light" : "";
-    const page = PAGE_BACKGROUNDS[preferences.look === "cinematic" ? "cinematic" : breezePalette][resolvedTheme];
+    const page = PAGE_BACKGROUNDS[preferences.look === "breeze" ? breezePalette : preferences.look][resolvedTheme];
     const ratio = breezePalette === "contrast" ? 7 : 4.5;
     for (const [name, value] of Object.entries(accentVariables(accent, resolvedTheme, page, ratio))) {
       root.style.setProperty(name, value);

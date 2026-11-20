@@ -1,7 +1,7 @@
 {
   "name": "digitify",
   "private": true,
-  "version": "0.7.1",
+  "version": "0.9.0",
   "description": "Digitify: a home for all your media (Library) and a universal launcher for your games (Arcade).",
   "type": "module",
   "scripts": {
@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
     "installer": "tauri build && node scripts/copy-installer.mjs",
+    "manual": "node scripts/build-manual.mjs",
     "installer:linux": "node scripts/get-linux-installer.mjs"
   },
   "dependencies": {

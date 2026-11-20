@@ -93,6 +93,12 @@ export function LogoMark({ name, size, className = "platform-logo" }: { name: st
   );
 }
 
+/** Whether a game's console or store has a symbol to show (D-148: a badge with the logo alone). */
+export function hasPlatformLogo(game: Pick<ArcadeGame, "platform" | "store">): boolean {
+  const key = game.platform === "pc" ? (game.store ?? "pc") : game.platform;
+  return !!PATHS[SAME_AS[key] ?? key];
+}
+
 /** A game's symbol on its badge: its store for PC games (a monitor without one), else its console. */
 export function PlatformLogo({ game }: { game: Pick<ArcadeGame, "platform" | "store"> }) {
   const key = game.platform === "pc" ? (game.store ?? "pc") : game.platform;

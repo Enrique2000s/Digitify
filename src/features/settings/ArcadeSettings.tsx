@@ -79,6 +79,21 @@ export function ArcadeSettings() {
           <option value="quit">Close Digitify completely</option>
         </select>
       </Setting>
+      <Setting title="Games' badges" text="What the little tag on each game's box shows: its console's or store's logo and name, the logo alone, or nothing.">
+        <div className="segmented" role="group" aria-label="Games' badges">
+          {(
+            [
+              ["full", "Logo and name"],
+              ["logo", "Logo only"],
+              ["none", "No badge"],
+            ] as const
+          ).map(([value, label]) => (
+            <button key={value} type="button" aria-pressed={arcade.badge === value} onClick={() => update((c) => ({ arcade: { ...c.arcade, badge: value } }))}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </Setting>
       <Setting title="One “All games” view" text="Show your PC games and your ROM games together in one view, instead of “PC games” and “ROM games”.">
         <Switch checked={arcade.combineAll} label="Combine PC games and ROM games" onChange={(combineAll) => update((c) => ({ arcade: { ...c.arcade, combineAll } }))} />
       </Setting>

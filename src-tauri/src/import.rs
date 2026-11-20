@@ -960,6 +960,77 @@ pub fn import_in_place(library: &Library, paths: &[PathBuf]) -> AppResult<Vec<i6
     Ok(ids)
 }
 
+/// Adds a file Digitify brings with it (its manual, D-149) to a category, copied into the library
+/// folder, under `title`. Gives the new item's id, or the id of the item that already holds the
+/// same file.
+pub fn import_bundled(library: &Library, path: &Path, category: &str, title: &str) -> AppResult<i64> {
+    let (category_id, category_name): (i64, String) = library.db.with(|conn| {
+        conn.query_row("SELECT id, name FROM categories WHERE key = ?1", [category], |row| Ok((row.get(0)?, row.get(1)?)))
+            .optional()?
+            .ok_or_else(|| AppError::msg("That category isn't in this library."))
+    })?;
+    let kind = kind_of(path).ok_or_else(|| AppError::msg("That file isn't one Digitify can add."))?;
+    match prepare(library, &Candidate::Single { kind, path: path.to_path_buf() })? {
+        Prepared::Duplicate => {
+            let size = std::fs::metadata(path)?.len();
+            let quick_hash = files::quick_hash(path, size)?;
+            library.db.with(|conn| {
+                Ok(conn.query_row(
+                    "SELECT v.item_id FROM files f JOIN versions v ON v.id = f.version_id WHERE f.quick_hash = ?1 AND f.size = ?2 LIMIT 1",
+                    params![quick_hash, size as i64],
+                    |row| row.get(0),
+                )?)
+            })
+        }
+        Prepared::Draft(mut draft) => {
+            draft.title = title.to_string();
+            let stored = store_files(library, &draft, ImportMode::Copy, &category_name)?;
+            let art = store_artwork(library, &draft);
+            let result = library.db.with(|conn| insert(conn, &draft, &stored, category_id, art.as_ref()));
+            if result.is_err() {
+                discard_copies(library, &stored);
+            }
+            result
+        }
+    }
+}
+
+/// Puts a newer copy of a bundled file in place of an item's own copy (D-149: the manual updated),
+/// with its new cover and page count; the item keeps its id, collections and favorite mark.
+pub fn replace_bundled(library: &Library, item_id: i64, path: &Path) -> AppResult<()> {
+    let (file_id, stored): (i64, String) = library.db.with(|conn| {
+        conn.query_row(
+            "SELECT f.id, f.path FROM files f JOIN versions v ON v.id = f.version_id WHERE v.item_id = ?1 AND f.storage = 'managed' ORDER BY f.position LIMIT 1",
+            [item_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?
+        .ok_or_else(|| AppError::msg("That item has no copy of its own in the library folder."))
+    })?;
+    let kind = kind_of(path).ok_or_else(|| AppError::msg("That file isn't one Digitify can add."))?;
+    let metadata = std::fs::metadata(path)?;
+    let quick_hash = files::quick_hash(path, metadata.len())?;
+    let draft = describe_single(kind, path, vec![FileDraft { path: path.to_path_buf(), size: metadata.len(), modified: files::modified_unix(&metadata), quick_hash: quick_hash.clone(), part: None }]);
+    let destination = library.folder.resolve(&stored, "managed");
+    std::fs::copy(path, &destination).map_err(|e| AppError::msg(format!("could not copy {}: {e}", path.display())))?;
+    let copied = std::fs::metadata(&destination)?;
+    let art = store_artwork(library, &draft);
+    let pages = draft.metadata.get("pageCount").cloned();
+    library.db.with(|conn| {
+        conn.execute(
+            "UPDATE files SET size = ?2, modified_at = ?3, quick_hash = ?4, full_hash = NULL, status = 'ok' WHERE id = ?1",
+            params![file_id, copied.len() as i64, files::modified_unix(&copied), quick_hash],
+        )?;
+        if let Some(art) = &art {
+            conn.execute("UPDATE items SET cover_key = ?2, cover_color = ?3 WHERE id = ?1", params![item_id, art.key, art.color])?;
+        }
+        if let Some(pages) = pages {
+            conn.execute("UPDATE items SET metadata = json_set(coalesce(metadata, '{}'), '$.pageCount', json(?2)) WHERE id = ?1", params![item_id, pages.to_string()])?;
+        }
+        Ok(())
+    })
+}
+
 /// A book made from images picked and put in order by hand (the image-set book builder).
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

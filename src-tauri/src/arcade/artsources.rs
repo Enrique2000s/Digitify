@@ -11,7 +11,7 @@
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
-use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
+use rusqlite::{params, params_from_iter, Connection, OpenFlags, OptionalExtension};
 use serde::Serialize;
 
 use crate::error::{AppError, AppResult};
@@ -22,6 +22,92 @@ const LAUNCHBOX_IMAGES: &str = "https://images.launchbox-app.com/";
 /// A name to compare: letters and digits only, lower case, without "(USA)"-style tags.
 pub fn simple(title: &str) -> String {
     super::sgdb::search_name(title).chars().filter(|c| c.is_alphanumeric()).collect::<String>().to_lowercase()
+}
+
+// ---------------------------------------------------------------------------------------------
+// Searching by words (D-148)
+
+/// Words too common to tell games apart.
+const SMALL_WORDS: &[&str] = &["the", "and", "for", "of", "an", "no", "de", "la", "le", "el", "in", "on", "to"];
+
+/// The words of a name to look for, each simplified ("Animal Forest (Japan)" → animal, forest):
+/// numbers count ("64", "2"), small words don't.
+pub fn keywords(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for word in super::sgdb::search_name(text).split(|c: char| !c.is_alphanumeric()) {
+        let word = word.to_lowercase();
+        let digits = !word.is_empty() && word.chars().all(|c| c.is_ascii_digit());
+        if word.is_empty() || SMALL_WORDS.contains(&word.as_str()) || (word.chars().count() < 3 && !digits) {
+            continue;
+        }
+        if !out.contains(&word) {
+            out.push(word);
+        }
+    }
+    out.truncate(8);
+    out
+}
+
+/// How a name matches the words looked for: how many it has as whole words ("mori" in "Doubutsu no
+/// Mori", not in "Armorines"), how many anywhere, and whether it's the very name. None when it has
+/// none of them.
+pub fn word_score(name: &str, words: &[String], wanted: &str) -> Option<(usize, usize, bool)> {
+    let own: Vec<String> = super::sgdb::search_name(name).split(|c: char| !c.is_alphanumeric()).map(str::to_lowercase).filter(|w| !w.is_empty()).collect();
+    let joined = simple(name);
+    let whole = words.iter().filter(|w| own.iter().any(|o| o == *w)).count();
+    let hits = words.iter().filter(|w| joined.contains(w.as_str())).count();
+    (hits > 0).then_some((whole, hits, joined == wanted))
+}
+
+/// The names that have any of the words, the ones with most of them first, then the very name, a
+/// US one, the shortest (D-148).
+pub fn best_by_words<'a>(names: impl Iterator<Item = &'a str>, query: &str, limit: usize) -> Vec<String> {
+    let words = keywords(query);
+    if words.is_empty() {
+        return Vec::new();
+    }
+    let wanted = simple(query);
+    let mut scored: Vec<((usize, usize, bool), bool, usize, &str)> = names
+        .filter_map(|name| word_score(name, &words, &wanted).map(|score| (score, name.contains("(USA"), name.len(), name)))
+        .collect();
+    // Most whole words, then most words, the very name, a US box, the shortest name.
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)).then(a.2.cmp(&b.2)));
+    scored.into_iter().take(limit).map(|(.., name)| name.to_string()).collect()
+}
+
+/// libretro-thumbnails' box art names for a console (D-148), from GitHub's list of its files, kept a
+/// month in `cache` (an older list is used when GitHub can't be reached).
+pub fn libretro_index(cache: &Path, system: &str) -> Vec<String> {
+    let file = cache.join("libretro").join(format!("{system}.txt"));
+    let read = || std::fs::read_to_string(&file).map(|text| text.lines().map(str::to_string).collect::<Vec<_>>()).unwrap_or_default();
+    let fresh = file.metadata().and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age.as_secs() < 30 * 86_400);
+    if fresh {
+        let names = read();
+        if !names.is_empty() {
+            return names;
+        }
+    }
+    let fetched = (|| -> Option<Vec<String>> {
+        let request = crate::online::http::get(&format!("https://api.github.com/repos/libretro-thumbnails/{system}/git/trees/master?recursive=1")).ok()?;
+        let json = crate::online::http::json("GitHub", request).ok()?;
+        let names: Vec<String> = json
+            .get("tree")?
+            .as_array()?
+            .iter()
+            .filter_map(|entry| entry.get("path")?.as_str()?.strip_prefix("Named_Boxarts/")?.strip_suffix(".png").map(str::to_string))
+            .collect();
+        (!names.is_empty()).then_some(names)
+    })();
+    match fetched {
+        Some(names) => {
+            if let Some(dir) = file.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            let _ = std::fs::write(&file, names.join("\n"));
+            names
+        }
+        None => read(),
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -233,6 +319,61 @@ pub fn launchbox_names(db: &Path, title: &str, platforms: &[&str]) -> Vec<String
     out
 }
 
+/// The order of a game's boxes: North America's, the world's, Europe's, the others, Japan's.
+const REGION_RANK: &str = "CASE coalesce(region, '') WHEN 'North America' THEN 0 WHEN 'United States' THEN 0 WHEN 'World' THEN 1 WHEN '' THEN 1 WHEN 'Europe' THEN 2 WHEN 'United Kingdom' THEN 2 WHEN 'Japan' THEN 4 ELSE 3 END";
+
+/// LaunchBox's games with any of the words in a name of theirs (their own or another) on these
+/// platforms (any when empty), the ones with most of them first (D-148): a few front boxes of each,
+/// labelled with the game's name.
+pub fn launchbox_by_words(db: &Path, query: &str, platforms: &[&str], games: usize, per_game: usize) -> Vec<(String, String)> {
+    let Some(conn) = open(db) else { return Vec::new() };
+    let words = keywords(query);
+    if words.is_empty() {
+        return Vec::new();
+    }
+    let wanted = simple(query);
+    let likes = vec!["simple LIKE ?"; words.len()].join(" OR ");
+    let on = if platforms.is_empty() { String::new() } else { format!(" AND g.platform IN ({})", vec!["?"; platforms.len()].join(", ")) };
+    let sql = format!(
+        "SELECT g.id, g.name, (SELECT group_concat(simple, ' ') FROM alts a WHERE a.id = g.id) FROM games g \
+         WHERE g.id IN (SELECT id FROM games WHERE {likes} UNION SELECT id FROM alts WHERE {likes}){on}"
+    );
+    let patterns: Vec<String> = words.iter().map(|w| format!("%{w}%")).collect();
+    let values: Vec<String> = patterns.iter().chain(patterns.iter()).cloned().chain(platforms.iter().map(|p| p.to_string())).collect();
+    let Ok(mut stmt) = conn.prepare(&sql) else { return Vec::new() };
+    let rows: Vec<(i64, String, Option<String>)> = stmt
+        .query_map(params_from_iter(values.iter()), |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .map(|rows| rows.filter_map(Result::ok).collect())
+        .unwrap_or_default();
+    let mut scored: Vec<((usize, usize, bool), usize, i64, String)> = rows
+        .into_iter()
+        .filter_map(|(id, name, alts)| {
+            let mut best = word_score(&name, &words, &wanted);
+            // Other names are kept joined up ("animalforest"): their words count as found anywhere,
+            // and the very name as whole.
+            for alt in alts.as_deref().unwrap_or_default().split(' ').filter(|a| !a.is_empty()) {
+                let hits = words.iter().filter(|w| alt.contains(w.as_str())).count();
+                let candidate = (hits > 0).then_some(if alt == wanted { (words.len(), hits, true) } else { (0, hits, false) });
+                if candidate > best {
+                    best = candidate;
+                }
+            }
+            best.map(|score| (score, name.len(), id, name))
+        })
+        .collect();
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    let Ok(mut boxes) = conn.prepare(&format!("SELECT file, region FROM images WHERE id = ?1 ORDER BY kind, {REGION_RANK} LIMIT ?2")) else { return Vec::new() };
+    let mut out = Vec::new();
+    for (.., id, name) in scored.into_iter().take(games) {
+        let found: Vec<(String, Option<String>)> = boxes
+            .query_map(params![id, per_game as i64], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map(|rows| rows.filter_map(Result::ok).collect())
+            .unwrap_or_default();
+        out.extend(found.into_iter().map(|(file, region)| (format!("LaunchBox · {name}{}", region.map(|r| format!(" · {r}")).unwrap_or_default()), format!("{LAUNCHBOX_IMAGES}{file}"))));
+    }
+    out
+}
+
 pub fn launchbox_covers(db: &Path, title: &str, platforms: &[&str], limit: usize) -> Vec<(String, String)> {
     let Some(conn) = open(db) else { return Vec::new() };
     let wanted = simple(title);
@@ -279,7 +420,7 @@ fn eshop_systems(platform: &str) -> &'static [&'static str] {
 }
 
 /// Nintendo's store art for a game by its name (square, 500 px), when it's one of Nintendo's.
-pub fn eshop_covers(platform: &str, title: &str, limit: usize) -> Vec<(String, String)> {
+pub fn eshop_covers(platform: &str, title: &str, limit: usize, loose: bool) -> Vec<(String, String)> {
     let systems = eshop_systems(platform);
     let name = super::sgdb::search_name(title);
     if systems.is_empty() || name.len() < 2 {
@@ -289,6 +430,7 @@ pub fn eshop_covers(platform: &str, title: &str, limit: usize) -> Vec<(String, S
     let request = request.query("q", &name).query("fq", "type:GAME").query("rows", "12").query("wt", "json").query("fl", "title,system_names_txt,image_url,image_url_sq_s");
     let Ok(json) = crate::online::http::json("Nintendo eShop", request) else { return Vec::new() };
     let wanted = simple(&name);
+    let words = keywords(&name);
     let docs = json.pointer("/response/docs").and_then(|d| d.as_array()).cloned().unwrap_or_default();
     let mut found: Vec<(bool, String, String)> = docs
         .iter()
@@ -297,7 +439,8 @@ pub fn eshop_covers(platform: &str, title: &str, limit: usize) -> Vec<(String, S
             let on_system = doc.get("system_names_txt")?.as_array()?.iter().filter_map(|s| s.as_str()).any(|s| systems.contains(&s));
             let image = doc.get("image_url_sq_s").or_else(|| doc.get("image_url")).and_then(|u| u.as_str())?.to_string();
             let close = simple(&found_title);
-            (on_system && (close == wanted || close.contains(&wanted) || wanted.contains(&close))).then_some((close == wanted, found_title, image))
+            let near = close == wanted || close.contains(&wanted) || wanted.contains(&close) || (loose && word_score(&found_title, &words, &wanted).is_some());
+            (on_system && near).then_some((close == wanted, found_title, image))
         })
         .collect();
     found.sort_by_key(|(exact, _, _)| !exact);
@@ -309,7 +452,7 @@ pub fn eshop_covers(platform: &str, title: &str, limit: usize) -> Vec<(String, S
 
 /// The Microsoft Store's box art for a game by its name: its vertical poster, else its square box
 /// art, for the closest products.
-pub fn msstore_covers(title: &str, limit: usize) -> Vec<(String, String)> {
+pub fn msstore_covers(title: &str, limit: usize, loose: bool) -> Vec<(String, String)> {
     let name = super::sgdb::search_name(title);
     if name.len() < 2 {
         return Vec::new();
@@ -318,6 +461,7 @@ pub fn msstore_covers(title: &str, limit: usize) -> Vec<(String, String)> {
     let request = request.query("market", "US").query("languages", "en-us").query("query", &name).query("productFamilyNames", "Games");
     let Ok(json) = crate::online::http::json("the Microsoft Store", request) else { return Vec::new() };
     let wanted = simple(&name);
+    let words = keywords(&name);
     let mut products: Vec<(bool, String, String)> = json
         .get("Results")
         .and_then(|r| r.as_array())
@@ -329,7 +473,7 @@ pub fn msstore_covers(title: &str, limit: usize) -> Vec<(String, String)> {
         .filter_map(|p| Some((p.get("ProductId")?.as_str()?.to_string(), p.get("Title")?.as_str()?.to_string())))
         .filter(|(_, t)| {
             let close = simple(t);
-            close == wanted || close.contains(&wanted) || wanted.contains(&close)
+            close == wanted || close.contains(&wanted) || wanted.contains(&close) || (loose && word_score(t, &words, &wanted).is_some())
         })
         .map(|(id, t)| (simple(&t) == wanted, id, t))
         .collect();
@@ -416,9 +560,27 @@ mod tests {
         assert_eq!(launchbox_covers(&db, "Halo CE", launchbox_platforms("ogxbox"), 5).len(), 1, "found by its other name");
         assert_eq!(launchbox_names(&db, "Halo CE (USA)", launchbox_platforms("ogxbox")), ["Halo: Combat Evolved"], "its own name, from another");
         assert!(launchbox_names(&db, "Halo CE", launchbox_platforms("n64")).is_empty());
+        // D-148: by words, not the whole name.
+        let mario = launchbox_by_words(&db, "mario adventure", launchbox_platforms("n64"), 6, 2);
+        assert_eq!(mario.len(), 2, "two boxes of the one game with a word of it: {mario:?}");
+        assert!(mario[0].0.starts_with("LaunchBox · Super Mario 64 · North America"), "{mario:?}");
+        assert_eq!(launchbox_by_words(&db, "ce", launchbox_platforms("ogxbox"), 6, 2).len(), 0, "a word too short to tell");
+        assert_eq!(launchbox_by_words(&db, "combat", &[], 6, 2).len(), 1, "any platform");
         let status = status(&dir).unwrap();
         assert_eq!(status.games, 2);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn names_by_their_words() {
+        assert_eq!(keywords("The Legend of Zelda: Ocarina of Time (USA) [!]"), ["legend", "zelda", "ocarina", "time"]);
+        assert_eq!(keywords("Super Mario 64"), ["super", "mario", "64"]);
+        let names = ["Doubutsu no Mori (Japan)", "Animal Crossing (USA)", "Mario Kart 64 (USA)", "Mario Kart 64 (Europe)", "Animal Forest Plus (Japan)"];
+        assert_eq!(best_by_words(names.iter().copied(), "animal forest", 3), ["Animal Forest Plus (Japan)", "Animal Crossing (USA)"], "both words first, then one");
+        assert_eq!(best_by_words(names.iter().copied(), "kart", 1), ["Mario Kart 64 (USA)"], "the US box first");
+        let mori = ["Armorines - Project S.W.A.R.M. (USA)", "Morita Shougi 64 (Japan)", "Doubutsu no Mori (Japan)"];
+        assert_eq!(best_by_words(mori.iter().copied(), "mori", 1), ["Doubutsu no Mori (Japan)"], "a whole word before a part of one");
+        assert!(best_by_words(names.iter().copied(), "zelda", 3).is_empty());
     }
 
     /// With LaunchBox's real database (DIGITIFY_LAUNCHBOX_ZIP): how long the index takes, what it finds.

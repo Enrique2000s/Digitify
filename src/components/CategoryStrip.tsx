@@ -46,9 +46,6 @@ export function CategoryStrip({ tools }: { tools?: ReactNode }) {
               <span className="count">{category.itemCount.toLocaleString()}</span>
             </Link>
           ))}
-        <Link to="/smart" className="strip-pill" activeOptions={{ exact: false }} data-blip>
-          Smart lists
-        </Link>
       </nav>
       {/* Always there, even empty (Music's other tabs), so nothing moves between views. */}
       <div className="view-tools">{tools}</div>

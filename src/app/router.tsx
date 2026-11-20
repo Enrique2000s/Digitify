@@ -9,7 +9,7 @@ import { LibraryPage } from "../features/library/LibraryPage";
 import { SearchPage } from "../features/search/SearchPage";
 import { NowPlayingPage } from "../features/music/NowPlayingPage";
 import { AchievementsPage } from "../features/home/YearViews";
-import { SmartListPage, SmartListsPage } from "../features/organize/SmartLists";
+import { ProfilePage } from "../features/profile/ProfilePage";
 import { LibraryCheckPage } from "../features/settings/LibraryCheck";
 import { ReaderPage } from "../features/reader/ReaderPage";
 import { DiscPlayPage, WatchPage } from "../features/player/VideoPlayer";
@@ -51,9 +51,7 @@ const routeTree = rootRoute.addChildren([
     },
     component: LibraryPage,
   }),
-  createRoute({ getParentRoute: () => rootRoute, path: "/smart", component: SmartListsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/check", component: LibraryCheckPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: "/smart/$id", component: SmartListPage }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/search",
@@ -67,10 +65,16 @@ const routeTree = rootRoute.addChildren([
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/arcade",
-    // ?game=<id> opens that game's panel (from Home, D-041).
-    validateSearch: (search: Record<string, unknown>): { game?: number } => {
+    // ?game=<id> opens that game's panel (from Home, D-041); ?board=collections shows the
+    // collections and ?collection=<id> one of them (Favorites is 0, D-149).
+    validateSearch: (search: Record<string, unknown>): { game?: number; board?: "collections"; collection?: number } => {
       const game = Number(search.game);
-      return Number.isInteger(game) && game > 0 ? { game } : {};
+      const collection = Number(search.collection);
+      return {
+        ...(Number.isInteger(game) && game > 0 ? { game } : {}),
+        ...(search.board === "collections" ? { board: "collections" as const } : {}),
+        ...(search.collection != null && search.collection !== "" && Number.isInteger(collection) && collection >= 0 ? { collection } : {}),
+      };
     },
     component: ArcadePage,
   }),
@@ -107,13 +111,15 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({ getParentRoute: () => rootRoute, path: "/now-playing", component: NowPlayingPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/achievements", component: AchievementsPage }),
+  // Your profile (D-149).
+  createRoute({ getParentRoute: () => rootRoute, path: "/profile", component: ProfilePage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/lab", component: Lab }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/bp",
     // Big Picture's screens: home, a library category or Favorites, an item, search.
     validateSearch: (search: Record<string, unknown>): BigPictureSearch => {
-      const screen = ["home", "library", "item", "search", "online", "arcade", "music", "game", "achievements", "year"].includes(String(search.screen)) ? (search.screen as BigPictureSearch["screen"]) : undefined;
+      const screen = ["home", "library", "item", "search", "online", "arcade", "music", "game", "achievements", "year", "profile"].includes(String(search.screen)) ? (search.screen as BigPictureSearch["screen"]) : undefined;
       const id = Number(search.id);
       return {
         ...(screen ? { screen } : {}),

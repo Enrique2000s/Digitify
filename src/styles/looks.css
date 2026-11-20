@@ -331,3 +331,438 @@
   border-radius: 4px;
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.45);
 }
+
+/* ---------------------------------------------------------------- Frutiger Aero (D-149) */
+
+/* Sky, water and glass: a bright sky over aqua, frosted glass panels, glossy aqua buttons with a
+   lit top half, soft bubbles. A humanist sans (Segoe UI where there is one, Nunito elsewhere). */
+:root[data-look="aero"] {
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", "Nunito Variable", "Nunito", system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", "Nunito Variable", "Nunito", system-ui, sans-serif;
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 26px;
+  --accent-hi: color-mix(in srgb, var(--accent) 30%, white);
+  --accent-lo: color-mix(in srgb, var(--accent) 78%, #003a66);
+  --gel:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0.28) 48%, rgba(255, 255, 255, 0) 50%),
+    linear-gradient(180deg, var(--accent-hi) 0%, var(--accent) 52%, color-mix(in srgb, var(--accent) 70%, #00e0c6) 100%);
+  --bar: linear-gradient(180deg, color-mix(in srgb, var(--accent-bright) 35%, white) 0%, var(--accent-bright) 50%, color-mix(in srgb, var(--accent-bright) 75%, #00d6b8) 100%);
+  --glow: 0 0 0 3px color-mix(in srgb, var(--accent-bright) 70%, white), 0 10px 26px var(--accent-glow);
+  --glow-sm: 0 0 0 2px color-mix(in srgb, var(--accent-bright) 70%, white), 0 6px 14px var(--accent-glow);
+}
+:root[data-look="aero"][data-theme="light"] {
+  --bg: #d8eefb;
+  --warning-soft: rgba(255, 213, 92, 0.42);
+  --warning: #7a5000;
+  --stripe: transparent;
+  --panel: rgba(255, 255, 255, 0.78);
+  --raised: rgba(255, 255, 255, 0.62);
+  --surface: rgba(255, 255, 255, 0.6);
+  --surface-hover: rgba(255, 255, 255, 0.82);
+  --field: rgba(255, 255, 255, 0.82);
+  --frame: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(228, 245, 255, 0.78) 100%);
+  --gloss: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(244, 251, 255, 0.92) 48%, rgba(212, 236, 251, 0.92) 52%, rgba(236, 248, 255, 0.95) 100%);
+  --line: rgba(118, 172, 210, 0.5);
+  --line-strong: rgba(86, 145, 190, 0.62);
+  --track: rgba(186, 222, 244, 0.65);
+  --text: #0b3150;
+  --muted: #35607f;
+  --faint: #456e8c;
+  --raise: 0 6px 18px rgba(16, 88, 140, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  --raise-sm: 0 3px 8px rgba(16, 88, 140, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  --raise-lg: 0 18px 44px rgba(16, 88, 140, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  --inset-shadow: inset 0 2px 5px rgba(16, 88, 140, 0.14);
+  --pop-shadow: 0 24px 60px rgba(12, 70, 115, 0.28);
+  --cover-shadow: 0 8px 18px rgba(10, 60, 100, 0.26);
+  --scrim: rgba(20, 70, 110, 0.28);
+  --screen-gloss: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.08));
+  --screen-0: #d6f3ff;
+  --screen-1: #ddf7e8;
+  --screen-2: #e3e9ff;
+  --screen-3: #cfeeff;
+  --screen-4: #d4f7e6;
+  --screen-5: #eaf7ff;
+  --screen-6: #f2fbd8;
+  --screen-7: #d2f4f6;
+  --shelf-wall: rgba(255, 255, 255, 0.4);
+  --plank: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(214, 238, 252, 0.95) 55%, rgba(176, 216, 240, 0.95) 100%);
+  --plank-top: #ffffff;
+  --plank-shadow: 0 10px 20px rgba(16, 88, 140, 0.2);
+  --hero-wash: linear-gradient(90deg, rgba(240, 250, 255, 0.92) 0%, rgba(240, 250, 255, 0.78) 60%, rgba(240, 250, 255, 0.6) 100%);
+  --hero-backdrop-opacity: 0.55;
+}
+:root[data-look="aero"][data-theme="dark"] {
+  --bg: #032336;
+  --stripe: transparent;
+  --panel: rgba(8, 44, 66, 0.82);
+  --raised: rgba(14, 58, 84, 0.66);
+  --surface: rgba(8, 44, 66, 0.62);
+  --surface-hover: rgba(18, 70, 100, 0.78);
+  --field: rgba(4, 30, 48, 0.78);
+  --frame: linear-gradient(180deg, rgba(30, 90, 124, 0.85) 0%, rgba(10, 52, 78, 0.8) 100%);
+  --gloss: linear-gradient(180deg, rgba(64, 140, 180, 0.55) 0%, rgba(30, 96, 134, 0.5) 48%, rgba(12, 66, 98, 0.55) 52%, rgba(22, 84, 118, 0.55) 100%);
+  --line: rgba(110, 196, 236, 0.24);
+  --line-strong: rgba(120, 206, 246, 0.38);
+  --track: rgba(10, 56, 84, 0.8);
+  --text: #e4f7ff;
+  --muted: #a3cde3;
+  --faint: #8fbcd4;
+  --raise: 0 8px 22px rgba(0, 10, 20, 0.45), inset 0 1px 0 rgba(170, 230, 255, 0.18);
+  --raise-sm: 0 4px 10px rgba(0, 10, 20, 0.4), inset 0 1px 0 rgba(170, 230, 255, 0.16);
+  --raise-lg: 0 18px 44px rgba(0, 10, 20, 0.55), inset 0 1px 0 rgba(170, 230, 255, 0.18);
+  --inset-shadow: inset 0 2px 6px rgba(0, 10, 20, 0.45);
+  --pop-shadow: 0 24px 64px rgba(0, 8, 16, 0.6);
+  --cover-shadow: 0 8px 18px rgba(0, 8, 16, 0.5);
+  --scrim: rgba(0, 12, 22, 0.6);
+  --screen-gloss: linear-gradient(180deg, rgba(170, 230, 255, 0.16), rgba(255, 255, 255, 0));
+  --screen-0: #0d3a52;
+  --screen-1: #0b3f3a;
+  --screen-2: #18305a;
+  --screen-3: #0a3b5c;
+  --screen-4: #0c4337;
+  --screen-5: #0b3349;
+  --screen-6: #23442a;
+  --screen-7: #0a4148;
+  --shelf-wall: rgba(120, 206, 246, 0.04);
+  --plank: linear-gradient(180deg, rgba(40, 110, 150, 0.9) 0%, rgba(16, 70, 102, 0.9) 60%, rgba(8, 48, 74, 0.9) 100%);
+  --plank-top: #4aa6d2;
+  --plank-shadow: 0 12px 24px rgba(0, 10, 20, 0.55);
+  --hero-wash: linear-gradient(90deg, rgba(3, 35, 54, 0.92) 0%, rgba(3, 35, 54, 0.76) 60%, rgba(3, 35, 54, 0.58) 100%);
+  --hero-backdrop-opacity: 0.6;
+}
+/* The sky behind everything: a bright sun's glare, soft bubbles, aqua near the bottom. */
+:root[data-look="aero"][data-theme="light"] .app {
+  background-image:
+    radial-gradient(ellipse 60% 45% at 8% 0%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 70%),
+    radial-gradient(ellipse 70% 40% at 100% 100%, rgba(120, 230, 170, 0.45), rgba(120, 230, 170, 0) 70%),
+    linear-gradient(180deg, #8fd3ff 0%, #c9ecff 38%, #e6f7ff 64%, #c8f1e6 100%);
+}
+:root[data-look="aero"][data-theme="dark"] .app {
+  background-image:
+    radial-gradient(ellipse 60% 45% at 10% 0%, rgba(40, 160, 220, 0.4), rgba(40, 160, 220, 0) 70%),
+    radial-gradient(ellipse 70% 45% at 100% 100%, rgba(20, 200, 150, 0.32), rgba(20, 200, 150, 0) 70%),
+    linear-gradient(180deg, #021a2b 0%, #04304b 55%, #053b3c 100%);
+}
+/* Frosted glass. */
+:root[data-look="aero"] .panel,
+:root[data-look="aero"] .appbar-pill,
+:root[data-look="aero"] .menu,
+:root[data-look="aero"] .bulk-bar,
+:root[data-look="aero"] .segmented {
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  backdrop-filter: blur(16px) saturate(1.5);
+}
+:root[data-look="aero"][data-theme="light"] .dialog {
+  background: rgba(250, 253, 255, 0.94);
+}
+:root[data-look="aero"][data-theme="dark"] .dialog {
+  background: rgba(6, 38, 58, 0.96);
+}
+:root[data-look="aero"] .display,
+:root[data-look="aero"] h1,
+:root[data-look="aero"] .panel h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+/* Glossy aqua: the lit top half on buttons and the title bar. */
+:root[data-look="aero"] .btn-primary {
+  border-color: color-mix(in srgb, var(--accent) 70%, #004a7a);
+  box-shadow: 0 6px 16px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.85), inset 0 -2px 6px rgba(0, 220, 200, 0.25);
+  text-shadow: 0 1px 2px rgba(0, 50, 90, 0.35);
+}
+:root[data-look="aero"][data-theme="light"] .appbar-pill {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.35) 50%, rgba(255, 255, 255, 0.12) 51%, rgba(255, 255, 255, 0.4) 100%),
+    rgba(200, 236, 255, 0.45);
+}
+:root[data-look="aero"][data-theme="dark"] .appbar-pill {
+  background:
+    linear-gradient(180deg, rgba(170, 230, 255, 0.22) 0%, rgba(170, 230, 255, 0.06) 50%, rgba(170, 230, 255, 0) 51%, rgba(170, 230, 255, 0.08) 100%),
+    rgba(6, 40, 62, 0.62);
+}
+:root[data-look="aero"] .tile-screen,
+:root[data-look="aero"] .tile-cover {
+  box-shadow: var(--cover-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+/* Without blur (light mode for slower computers) the glass turns solid enough to read. */
+:root[data-look="aero"][data-theme="light"][data-perf="light"] {
+  --panel: #f4fbff;
+  --surface: rgba(246, 252, 255, 0.95);
+  --raised: #eaf6fd;
+}
+:root[data-look="aero"][data-theme="dark"][data-perf="light"] {
+  --panel: #07324c;
+  --surface: rgba(6, 42, 64, 0.96);
+  --raised: #0b3d5b;
+}
+
+/* ---------------------------------------------------------------- Minimal (D-149) */
+
+/* Calm and flat, like a game launcher: neutral greys, one accent, no gloss, no glow, small corners,
+   a flat title bar, Inter. */
+:root[data-look="minimal"] {
+  --font-ui: "Inter Variable", "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Inter Variable", "Inter", "Segoe UI", system-ui, sans-serif;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-cover: 4px;
+  --pill: 8px;
+  --gel: linear-gradient(var(--accent), var(--accent));
+  --bar: linear-gradient(var(--accent-bright), var(--accent-bright));
+  --glow: 0 0 0 2px var(--accent-bright);
+  --glow-sm: 0 0 0 1.5px var(--accent-bright);
+}
+:root[data-look="minimal"][data-theme="dark"] {
+  --bg: #15181d;
+  --stripe: transparent;
+  --panel: #1c2027;
+  --raised: #22272f;
+  --surface: #1c2027;
+  --surface-hover: #262c35;
+  --field: #13161b;
+  --frame: linear-gradient(#22272f, #22272f);
+  --gloss: linear-gradient(#262c35, #262c35);
+  --line: #2b313a;
+  --line-strong: #3a414c;
+  --track: #262c35;
+  --text: #e5e7ea;
+  --muted: #9ba3ad;
+  --faint: #8a929c;
+  --raise: none;
+  --raise-sm: none;
+  --raise-lg: 0 16px 40px rgba(0, 0, 0, 0.45);
+  --inset-shadow: none;
+  --pop-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+  --cover-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+  --scrim: rgba(5, 7, 10, 0.66);
+  --screen-gloss: none;
+  --screen-0: #272a2f;
+  --screen-1: #2a2628;
+  --screen-2: #26262e;
+  --screen-3: #232930;
+  --screen-4: #232a26;
+  --screen-5: #22272f;
+  --screen-6: #2b2a24;
+  --screen-7: #212a2c;
+  --shelf-wall: transparent;
+  --plank: linear-gradient(#262c35, #1f242b);
+  --plank-top: #343b46;
+  --plank-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+  --hero-wash: linear-gradient(90deg, rgba(21, 24, 29, 0.95) 0%, rgba(21, 24, 29, 0.82) 60%, rgba(21, 24, 29, 0.66) 100%);
+  --hero-backdrop-opacity: 0.45;
+}
+:root[data-look="minimal"][data-theme="light"] {
+  --bg: #f2f3f5;
+  --stripe: transparent;
+  --panel: #ffffff;
+  --raised: #f6f7f9;
+  --surface: #ffffff;
+  --surface-hover: #f0f2f5;
+  --field: #f2f3f5;
+  --frame: linear-gradient(#ffffff, #ffffff);
+  --gloss: linear-gradient(#ffffff, #ffffff);
+  --line: #e1e4e8;
+  --line-strong: #cbd0d6;
+  --track: #e5e8ec;
+  --text: #16191d;
+  --muted: #5b636d;
+  --faint: #66707a;
+  --raise: none;
+  --raise-sm: none;
+  --raise-lg: 0 16px 40px rgba(20, 24, 30, 0.14);
+  --inset-shadow: none;
+  --pop-shadow: 0 20px 50px rgba(20, 24, 30, 0.16);
+  --cover-shadow: 0 2px 6px rgba(20, 24, 30, 0.18);
+  --scrim: rgba(20, 24, 30, 0.3);
+  --screen-gloss: none;
+  --screen-0: #f3efe8;
+  --screen-1: #f4ecee;
+  --screen-2: #eeedf4;
+  --screen-3: #eaf0f5;
+  --screen-4: #ebf2ec;
+  --screen-5: #f0f2f5;
+  --screen-6: #f4f1e3;
+  --screen-7: #e8f1f1;
+  --shelf-wall: transparent;
+  --plank: linear-gradient(#e9ecef, #dde1e5);
+  --plank-top: #f6f7f9;
+  --plank-shadow: 0 6px 12px rgba(20, 24, 30, 0.12);
+  --hero-wash: linear-gradient(90deg, rgba(242, 243, 245, 0.95) 0%, rgba(242, 243, 245, 0.82) 60%, rgba(242, 243, 245, 0.66) 100%);
+  --hero-backdrop-opacity: 0.4;
+}
+:root[data-look="minimal"] .app {
+  background-image: none;
+}
+:root[data-look="minimal"] body {
+  font-weight: 500;
+}
+:root[data-look="minimal"] .display,
+:root[data-look="minimal"] h1,
+:root[data-look="minimal"] .panel h2,
+:root[data-look="minimal"] .section-head h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+/* The title bar: one flat strip across the window. */
+:root[data-look="minimal"] .appbar {
+  padding: 0;
+}
+:root[data-look="minimal"] .appbar-pill {
+  height: 56px;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: none;
+}
+/* Buttons: flat, a shade lighter on hover, the accent plain. */
+:root[data-look="minimal"] .btn {
+  font-weight: 600;
+}
+:root[data-look="minimal"] .btn:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-hover);
+  box-shadow: none;
+}
+:root[data-look="minimal"] .btn:active {
+  transform: none;
+}
+:root[data-look="minimal"] .btn-primary {
+  border-color: var(--accent);
+  box-shadow: none;
+}
+:root[data-look="minimal"] .btn-primary:hover {
+  border-color: var(--accent);
+  background: var(--gel);
+  filter: brightness(1.1);
+  box-shadow: none;
+}
+:root[data-look="minimal"] .btn-ghost:hover {
+  background: var(--surface-hover);
+}
+:root[data-look="minimal"] .btn-danger.solid {
+  border-color: #c9353b;
+  background: #d93d43;
+}
+:root[data-look="minimal"] .segmented button {
+  font-weight: 600;
+}
+:root[data-look="minimal"] .segmented button[aria-pressed="true"] {
+  border-color: transparent;
+  background: var(--raised);
+  box-shadow: none;
+}
+:root[data-look="minimal"][data-theme="dark"] .segmented button[aria-pressed="true"] {
+  background: #323944;
+}
+:root[data-look="minimal"] .switch,
+:root[data-look="minimal"] .switch span {
+  border-radius: 999px;
+}
+/* The knob stands out from its track, on or off. */
+:root[data-look="minimal"] .switch {
+  border-color: var(--line-strong);
+}
+:root[data-look="minimal"] .switch span {
+  border-color: transparent;
+  background: var(--muted);
+  box-shadow: none;
+}
+:root[data-look="minimal"] .switch[aria-checked="true"] {
+  border-color: var(--accent);
+}
+:root[data-look="minimal"] .switch[aria-checked="true"] span {
+  background: #ffffff;
+}
+:root[data-look="minimal"] .round-btn {
+  background: transparent;
+  border-color: transparent;
+}
+:root[data-look="minimal"] .round-btn:hover {
+  background: var(--surface-hover);
+}
+:root[data-look="minimal"] .tile-screen,
+:root[data-look="minimal"] .tile-cover {
+  box-shadow: var(--cover-shadow);
+}
+:root[data-look="minimal"] .chip,
+:root[data-look="minimal"] .strip-pill {
+  font-weight: 600;
+}
+
+/* D-150: Aero's bubbles float. Two layers of glass bubbles (a rim, a soft body and a glint) behind
+   everything, drifting slowly at their own pace; still when motion is off or in performance mode. */
+:root[data-look="aero"] .app {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+:root[data-look="aero"] .app::before,
+:root[data-look="aero"] .app::after {
+  content: "";
+  position: absolute;
+  inset: -60px;
+  z-index: -1;
+  pointer-events: none;
+  --b: rgba(255, 255, 255, 0.7);
+  --g: rgba(255, 255, 255, 0.9);
+  --f: rgba(255, 255, 255, 0.14);
+}
+:root[data-look="aero"][data-theme="dark"] .app::before,
+:root[data-look="aero"][data-theme="dark"] .app::after {
+  --b: rgba(150, 230, 255, 0.24);
+  --g: rgba(170, 235, 255, 0.5);
+  --f: rgba(150, 230, 255, 0.05);
+}
+:root[data-look="aero"] .app::before {
+  background-image:
+    radial-gradient(circle at calc(6% - 14px) calc(80% - 16px), var(--g) 0 6px, transparent 9px),
+    radial-gradient(circle at 6% 80%, var(--f) 0 40px, var(--b) 44px, transparent 47px),
+    radial-gradient(circle at calc(95% - 20px) calc(36% - 22px), var(--g) 0 8px, transparent 12px),
+    radial-gradient(circle at 95% 36%, var(--f) 0 58px, var(--b) 63px, transparent 66px),
+    radial-gradient(circle at calc(52% - 6px) calc(96% - 7px), var(--g) 0 3px, transparent 5px),
+    radial-gradient(circle at 52% 96%, var(--f) 0 16px, var(--b) 18px, transparent 20px);
+  animation: aero-float 22s ease-in-out infinite alternate;
+}
+:root[data-look="aero"] .app::after {
+  background-image:
+    radial-gradient(circle at calc(91% - 8px) calc(90% - 9px), var(--g) 0 4px, transparent 6px),
+    radial-gradient(circle at 91% 90%, var(--f) 0 22px, var(--b) 25px, transparent 27px),
+    radial-gradient(circle at calc(14% - 9px) calc(30% - 10px), var(--g) 0 4px, transparent 6px),
+    radial-gradient(circle at 14% 30%, var(--f) 0 24px, var(--b) 27px, transparent 29px),
+    radial-gradient(circle at calc(74% - 5px) calc(64% - 6px), var(--g) 0 3px, transparent 5px),
+    radial-gradient(circle at 74% 64%, var(--f) 0 12px, var(--b) 14px, transparent 16px);
+  animation: aero-float-2 31s ease-in-out infinite alternate;
+}
+@keyframes aero-float {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(-26px, -48px);
+  }
+}
+@keyframes aero-float-2 {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(30px, -40px);
+  }
+}
+/* The slider's knob and the switches' knob, solid glass (they showed the track through them). */
+:root[data-look="aero"][data-theme="light"] input[type="range"]::-webkit-slider-thumb,
+:root[data-look="aero"][data-theme="light"] .switch span {
+  background: linear-gradient(180deg, #ffffff 0%, #f2faff 48%, #d6edfb 52%, #eef8ff 100%);
+}
+:root[data-look="aero"][data-theme="dark"] input[type="range"]::-webkit-slider-thumb,
+:root[data-look="aero"][data-theme="dark"] .switch span {
+  background: linear-gradient(180deg, #6fb8dc 0%, #3d8db6 48%, #1f6f99 52%, #2f80aa 100%);
+}

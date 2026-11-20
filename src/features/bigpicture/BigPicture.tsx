@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Marquee } from "../../components/Marquee";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Award, BookOpen, CalendarHeart, ChartColumn, Star, ChevronLeft, ChevronRight, Delete, Gamepad2, Heart, House, LibraryBig, LogOut, MousePointer2, Pause, Play, Search, Settings2, SkipBack, SkipForward, Space, X, Eye, Joystick, Music, VolumeOff, Clapperboard } from "lucide-react";
 import { photoContext, viewList } from "../../lib/routes";
@@ -12,7 +13,7 @@ import { controllerKind, onControllerChange, usePad, useSticks, type PadAction }
 import { Cursor } from "./Cursor";
 import { OnlineScreen } from "./OnlineScreen";
 import { ArcadeScreen, ArcadeTile } from "../arcade/ArcadeScreen";
-import { consoleOf, GameCover, lastPlayed, matchingGames, PLATFORM_ASPECT, playTime, useArcade, useLaunch } from "../arcade/shared";
+import { consoleOf, GameCover, lastPlayed, matchingGames, gameAspect, playTime, useArcade, useLaunch } from "../arcade/shared";
 import { PlatformLogo } from "../arcade/logos";
 import { AchievementsList, YearReviewBody } from "../home/YearViews";
 import { useHomeGames } from "../home/GameSections";
@@ -22,10 +23,20 @@ import { useCoverShape, usePreferences, type HomeSection } from "../../lib/prefe
 import { StatsPanel } from "../home/Stats";
 import { SectionTitle } from "../home/HomePage";
 import { SourceTag, sourceProps } from "../../components/SourceTag";
-import { libraryChanged, useCategories, useDashboard, useLibraryScope } from "../../lib/queries";
+import { keys, libraryChanged, useCategories, useDashboard, useLibraryScope } from "../../lib/queries";
+import { BpCollectionCard } from "./BpCollectionCard";
+import { BpProfileScreen } from "../profile/BpProfile";
+import { useProfile } from "../profile/data";
+import { ProfileAvatar } from "../profile/Picture";
 import { CategoryIcon, Cover } from "../../components/common";
 
-export type BigPictureScreen = "home" | "library" | "item" | "search" | "online" | "arcade" | "music" | "game" | "achievements" | "year";
+/** Your picture in Big Picture's top bar (D-149). */
+function BpAvatar() {
+  const profile = useProfile();
+  return <ProfileAvatar profile={profile.data} size={44} />;
+}
+
+export type BigPictureScreen = "home" | "library" | "item" | "search" | "online" | "arcade" | "music" | "game" | "achievements" | "year" | "profile";
 export interface BigPictureSearch {
   screen?: BigPictureScreen;
   scope?: string;
@@ -78,7 +89,9 @@ function Tile({ item, autofocus, height = 300 }: { item: ItemCard; autofocus?: b
           </span>
         )}
       </span>
-      <span className="bp-tile-title">{item.title}</span>
+      <span className="bp-tile-title">
+        <Marquee hover text={item.title} />
+      </span>
     </button>
   );
 }
@@ -226,10 +239,10 @@ function FeaturedGameBP({ game }: { game: ArcadeGame }) {
       <button type="button" className="bp-featured" data-bp-focus onClick={() => open(game)}>
         {game.coverKey && (
           <span className="bp-featured-backdrop" aria-hidden>
-            <GameCover game={game} size="cover" />
+            <GameCover game={game} size="cover" fill />
           </span>
         )}
-        <span className="bp-featured-art arcade-bp-art" style={{ ["--a" as string]: PLATFORM_ASPECT[game.platform] }}>
+        <span className="bp-featured-art arcade-bp-art" style={{ ["--a" as string]: gameAspect(game) }}>
           <GameCover game={game} size="cover" />
         </span>
         <span className="bp-featured-body">
@@ -333,27 +346,31 @@ function LibraryScreen({ scope }: { scope: string }) {
   const navigate = useNavigate();
   const [limit, setLimit] = useState(120);
   const { preferences } = usePreferences();
+  // Library's collections (D-149): their own tab; "collection:<id>" is one of them open.
+  const inCollections = scope === "collections" || scope.startsWith("collection:");
   const base = scope === "favorites" ? { favorites: true } : scope === "all" ? {} : { category: scope };
   const sort = preferences.sorts[scope] ?? "title";
   const items = useQuery({
     queryKey: ["bp-items", scope, sort, limit],
     queryFn: () => api.query({ ...base, sort, custom: sort === "custom" ? scope : null, offset: 0, limit }),
+    enabled: !inCollections,
   });
   // What's opened from here knows its list (D-091, D-145): a song played queues the ones after it.
-  photoContext.params = { ...base, sort, custom: sort === "custom" ? scope : null };
-  // Library remembers its section here too (D-075).
+  if (!inCollections) photoContext.params = { ...base, sort, custom: sort === "custom" ? scope : null };
+  // Library remembers its section here too (D-075); the collections aren't a section.
   const { update } = usePreferences();
   useEffect(() => {
-    if (scope !== preferences.libraryScope && (scope !== "all" || preferences.showEverything)) update({ libraryScope: scope });
-  }, [scope, preferences.libraryScope, preferences.showEverything, update]);
+    if (!inCollections && scope !== preferences.libraryScope && (scope !== "all" || preferences.showEverything)) update({ libraryScope: scope });
+  }, [scope, inCollections, preferences.libraryScope, preferences.showEverything, update]);
   const tabs = [
     ...(preferences.showEverything ? [{ key: "all", name: "Everything" }] : []),
     ...(categories.data?.filter((c) => !c.isHidden).map((c) => ({ key: c.key, name: c.name })) ?? []),
+    { key: "collections", name: "Collections" },
   ];
   // LB and RB switch between the categories.
   usePad((action) => {
     if (action !== "lb" && action !== "rb") return;
-    const at = tabs.findIndex((t) => t.key === scope);
+    const at = tabs.findIndex((t) => t.key === (inCollections ? "collections" : scope));
     const next = tabs[(at + (action === "rb" ? 1 : -1) + tabs.length) % tabs.length];
     if (next) void navigate({ to: "/bp", search: { screen: "library", scope: next.key }, replace: true });
     return true;
@@ -367,7 +384,7 @@ function LibraryScreen({ scope }: { scope: string }) {
             key={tab.key}
             type="button"
             role="tab"
-            aria-selected={tab.key === scope}
+            aria-selected={tab.key === scope || (inCollections && tab.key === "collections")}
             className="bp-tab"
             data-bp-focus
             onClick={() => void navigate({ to: "/bp", search: { screen: "library", scope: tab.key }, replace: true })}
@@ -377,16 +394,72 @@ function LibraryScreen({ scope }: { scope: string }) {
         ))}
         <span className="bp-hint-key">RB</span>
       </div>
-      <div className="bp-grid">
-        {items.data?.items.map((item, index) => <Tile key={item.id} item={item} height={270} autofocus={index === 0} />)}
-      </div>
-      {items.data && items.data.total > items.data.items.length && (
+      {inCollections ? (
+        <LibraryCollectionsBP open={scope.startsWith("collection:") ? Number(scope.slice("collection:".length)) : null} />
+      ) : (
+        <div className="bp-grid">
+          {items.data?.items.map((item, index) => <Tile key={item.id} item={item} height={270} autofocus={index === 0} />)}
+        </div>
+      )}
+      {!inCollections && items.data && items.data.total > items.data.items.length && (
         <button type="button" className="bp-button bp-more" data-bp-focus onClick={() => setLimit((n) => Math.min(500, n + 120))}>
           Show more ({(items.data.total - items.data.items.length).toLocaleString()} left)
         </button>
       )}
-      {items.data?.total === 0 && <p className="bp-empty">Nothing here yet.</p>}
+      {!inCollections && items.data?.total === 0 && <p className="bp-empty">Nothing here yet.</p>}
     </>
+  );
+}
+
+/**
+ * Library's collections in Big Picture (D-149): every category's (Music has playlists instead) as
+ * big cards; one opens its items, Back returns to the cards.
+ */
+function LibraryCollectionsBP({ open }: { open: number | null }) {
+  const navigate = useNavigate();
+  const categories = useCategories();
+  const { preferences } = usePreferences();
+  const shown = (categories.data ?? []).filter((c) => !c.isHidden && c.handler !== "audio");
+  const levels = useQueries({ queries: shown.map((c) => ({ queryKey: keys.collections(c.key, null), queryFn: () => api.collections(c.key, null) })) });
+  const all = shown.flatMap((category, index) => (levels[index]?.data?.children ?? []).map((collection) => ({ collection, category })));
+  const current = open != null ? all.find((c) => c.collection.id === open) : undefined;
+  const sort = (current && preferences.sorts[current.category.key]) ?? "title";
+  const items = useQuery({
+    queryKey: ["bp-collection", open, sort],
+    queryFn: () => api.query({ category: current!.category.key, collection: open, sort, offset: 0, limit: 500 }),
+    enabled: open != null && !!current,
+  });
+  if (open != null) {
+    if (current) photoContext.params = { category: current.category.key, collection: open, sort };
+    return (
+      <>
+        <div className="bp-collection-head">
+          <h2>{current?.collection.name ?? "Collection"}</h2>
+          {current && <span>{`${current.category.name} · ${current.collection.itemCount.toLocaleString()} ${current.collection.itemCount === 1 ? "item" : "items"}`}</span>}
+        </div>
+        <div className="bp-grid">
+          {items.data?.items.map((item, index) => <Tile key={item.id} item={item} height={270} autofocus={index === 0} />)}
+        </div>
+        {items.data?.total === 0 && <p className="bp-empty">This collection is empty.</p>}
+      </>
+    );
+  }
+  return all.length === 0 && levels.every((l) => l.isSuccess) ? (
+    <p className="bp-empty">No collections yet. Make them in the regular app: in a category, Collections › New collection.</p>
+  ) : (
+    <div className="bp-grid bp-collections">
+      {all.map(({ collection, category }, index) => (
+        <BpCollectionCard
+          key={collection.id}
+          name={collection.name}
+          detail={`${category.name} · ${collection.itemCount.toLocaleString()} ${collection.itemCount === 1 ? "item" : "items"}`}
+          covers={collection.covers.map((c) => c.key)}
+          icon={<CategoryIcon icon={category.icon} size={40} />}
+          autofocus={index === 0}
+          onOpen={() => void navigate({ to: "/bp", search: { screen: "library", scope: `collection:${collection.id}` } })}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -413,7 +486,7 @@ function GameScreen({ id }: { id: number }) {
   };
   return (
     <div className="bp-item bp-game">
-      <div className="bp-item-art arcade-bp-art" style={{ ["--a" as string]: PLATFORM_ASPECT[game.platform] }}>
+      <div className="bp-item-art arcade-bp-art" style={{ ["--a" as string]: gameAspect(game) }}>
         <GameCover game={game} size="cover" />
       </div>
       <div className="bp-item-body">
@@ -889,7 +962,7 @@ export function BigPicturePage() {
       {icon} {label}
     </button>
   );
-  const title = useMemo(() => ({ home: "Home", library: "Library", item: "", search: "Search", online: "", arcade: "Arcade", music: "", game: "", achievements: "", year: "" })[screen], [screen]);
+  const title = useMemo(() => ({ home: "Home", library: "Library", item: "", search: "Search", online: "", arcade: "Arcade", music: "", game: "", achievements: "", year: "", profile: "" })[screen], [screen]);
 
   return (
     <div ref={shell} className={`bp${cursor ? " bp-cursor-mode" : ""}${arrived ? " after-intro" : ""}`}>
@@ -916,6 +989,10 @@ export function BigPicturePage() {
           <Gamepad2 size={22} /> {buttons.kind === "playstation" ? "PlayStation controller" : buttons.kind ? "Xbox controller" : "No controller"}
         </span>
         <Clock />
+        {/* Your profile (D-149). */}
+        <button type="button" className="bp-round bp-profile-button" data-bp-focus aria-label="Your profile" onClick={() => void navigate({ to: "/bp", search: { screen: "profile" } })}>
+          <BpAvatar />
+        </button>
         <button type="button" className="bp-round" data-bp-focus aria-label="Menu" onClick={() => setMenu(true)}>
           <Settings2 size={24} />
         </button>
@@ -930,11 +1007,12 @@ export function BigPicturePage() {
         {screen === "item" && search.id != null && <ItemScreen id={search.id} />}
         {screen === "search" && <SearchScreen />}
         {screen === "online" && search.id != null && <OnlineScreen id={search.id} />}
-        {screen === "arcade" && <ArcadeScreen />}
+        {screen === "arcade" && <ArcadeScreen scope={search.scope} />}
         {screen === "music" && <NowPlayingScreen />}
         {screen === "game" && search.id != null && <GameScreen id={search.id} />}
         {screen === "achievements" && <AchievementsScreen />}
         {screen === "year" && <YearScreen year={search.id ?? new Date().getFullYear()} />}
+        {screen === "profile" && <BpProfileScreen />}
       </main>
       <footer className="bp-hints">
         <span>

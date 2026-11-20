@@ -22,6 +22,8 @@ import { OnlineServicesPanel } from "../online/OnlineServices";
 const LOOKS: { value: Look; name: string }[] = [
   { value: "breeze", name: "Breeze" },
   { value: "cinematic", name: "Cinematic" },
+  { value: "aero", name: "Frutiger Aero" },
+  { value: "minimal", name: "Minimal" },
 ];
 const PALETTES: { value: Palette; name: string }[] = [
   { value: "breeze", name: "Sky" },
@@ -156,7 +158,7 @@ export function SettingsPage() {
           <>
             <section className="panel">
               <h2>Appearance</h2>
-              <Setting title="Style" text="Breeze is Digitify's own bright, rounded style. Cinematic is darker and film-like, with glassy panels and amber highlights.">
+              <Setting title="Style" text="Breeze is Digitify's own bright, rounded style. Cinematic is darker and film-like, with glassy panels and amber highlights. Frutiger Aero is sky, water and glass, with glossy aqua buttons. Minimal is calm and flat, like a game launcher.">
                 <div className="look-picker" role="group" aria-label="Style">
                   {LOOKS.map((look) => (
                     <button key={look.value} type="button" className="look-card" aria-pressed={preferences.look === look.value} onClick={() => chooseLook(look.value)}>
@@ -180,7 +182,7 @@ export function SettingsPage() {
               )}
               {/* Midnight is only dark, so there's no theme to pick. */}
               {!midnight && (
-              <Setting title="Theme" text="Light by default; night keeps the same layout in darker colors.">
+              <Setting title="Theme" text="Night by default; light keeps the same layout in brighter colors, or follow your system.">
                 <div className="segmented" role="group" aria-label="Theme">
                   {(
                     [
@@ -263,16 +265,16 @@ export function SettingsPage() {
                 </select>
               </Setting>
               <Setting
-                title="Light mode for slower computers"
+                title="Performance mode for slower computers"
                 text="Turns off blurred backgrounds, reflections, heavy shadows, glows and animations, and draws fewer covers ahead, so Digitify stays smooth on older or low-power PCs."
               >
-                <Switch checked={preferences.lightMode} label="Light mode for slower computers" onChange={(lightMode) => update(lightMode ? { lightMode } : { lightMode, autoLightMode: false })} />
+                <Switch checked={preferences.lightMode} label="Performance mode for slower computers" onChange={(lightMode) => update(lightMode ? { lightMode } : { lightMode, autoLightMode: false })} />
               </Setting>
               <Setting
-                title="Turn light mode on by itself"
-                text="When this computer struggles to keep up with Digitify's effects, light mode turns on by itself and a notice says so. Turning light mode off by hand stops this."
+                title="Turn performance mode on by itself"
+                text="When this computer struggles to keep up with Digitify's effects, performance mode turns on by itself and a notice says so. Turning performance mode off by hand stops this."
               >
-                <Switch checked={preferences.autoLightMode} label="Turn light mode on by itself" onChange={(autoLightMode) => update({ autoLightMode })} />
+                <Switch checked={preferences.autoLightMode} label="Turn performance mode on by itself" onChange={(autoLightMode) => update({ autoLightMode })} />
               </Setting>
             </section>
 

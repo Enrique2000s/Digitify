@@ -12,6 +12,41 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.9.0",
+    date: "2026-11-20",
+    added: [
+      { icon: "monitor", title: "Your profile", text: "Your picture in the title bar opens your own page: a banner and picture of your choosing, your name and a line about you, and what your library says about you. Share it as a picture made on your computer; see it in Big Picture too." },
+      { icon: "monitor", title: "Frutiger Aero and Minimal", text: "Two new styles in Settings: sky, water and glass with glossy aqua buttons, or calm and flat like a game launcher. Each in light and dark." },
+      { icon: "library", title: "The Digitify Manual", text: "A designed guide to everything Digitify does, waiting in Books. It updates itself; deleted, Books › Add brings it back." },
+      { icon: "gamepad", title: "Collections, their own screen", text: "Arcade's Collections opens a screen with a Back to all games. Favorites is now a collection, always first." },
+      { icon: "gamepad", title: "Sort by console, mark as completed", text: "Sort Arcade by console, each under its own heading, and mark the games you've finished with a green seal." },
+      { icon: "gamepad", title: "Collections in Big Picture", text: "Library's and Arcade's collections have their own tab in Big Picture." },
+      { icon: "image", title: "Your picture, your way", text: "Move and zoom your profile picture and banner, and frame your picture as a circle, rounded square or hexagon with a rainbow, accent, gold or no ring." },
+      { icon: "library", title: "Long names slide", text: "A name too long for its card slides to show the rest while you point at it." },
+    ],
+    fixed: [
+      "Epic Games' covers fill their boxes, with no bands.",
+      "A Library collection's window centers its items.",
+      "Smart lists are gone, for less clutter: collections do the job.",
+      "Light mode for slower computers is now Performance mode, so it isn't mistaken for the light theme.",
+      "The manual has a cover of its own, shown whole in Books.",
+      "Frutiger Aero's bubbles float, and its slider knobs are solid.",
+      "No more line under the profile's banner as the page opens, and sliding names no longer fade at their ends.",
+    ],
+  },
+  {
+    version: "0.8.0",
+    date: "2026-11-20",
+    added: [
+      { icon: "gamepad", title: "Collections in Arcade", text: "A Collections button beside Emulators & folders: make your own and put games in them from a game's panel or by selecting several, or make dynamic ones that fill themselves by words in the name, consoles and launchers, played or not, favorites and your rating." },
+      { icon: "image", title: "Cover search needn't be exact", text: "Find covers looks for any of the words you type, the closest games first, and says which game each cover is of." },
+      { icon: "gamepad", title: "An emulator for one game", text: "A game's panel can choose the emulator it plays in, without changing its console's." },
+      { icon: "monitor", title: "Badges your way", text: "Settings › Arcade: games' badges with their logo and name, the logo alone, or none." },
+      { icon: "image", title: "Boxes the right shape", text: "Each console's games have its real box shape (Nintendo DS and 3DS boxes are wider than tall), and a cover of another shape shows whole, never cut." },
+    ],
+    fixed: ["Escape in a game panel's menus no longer closes the whole panel."],
+  },
+  {
     version: "0.7.1",
     date: "2026-11-19",
     added: [

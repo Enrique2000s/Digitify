@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { DropdownMenu } from "radix-ui";
 import { useNavigate } from "@tanstack/react-router";
-import { AppWindow, BookImage, ChevronRight, Clapperboard, Disc3, FilePlus, FolderPlus, Link2 } from "lucide-react";
-import type { Category } from "../lib/api";
+import { AppWindow, BookImage, BookMarked, ChevronRight, Clapperboard, Disc3, FilePlus, FolderPlus, Link2 } from "lucide-react";
+import { api, type Category } from "../lib/api";
 import { useOpenBuilder, useOpenImportUrl } from "../app/catalog";
 import { useImporter } from "../lib/importer";
 import { useCategories } from "../lib/queries";
@@ -45,6 +45,20 @@ function CategoryItems({ category, onFromVideos }: { category: Category; onFromV
       {disc && (
         <DropdownMenu.Item className="menu-item" onSelect={() => void navigate({ to: "/discs" })}>
           <Disc3 size={17} /> From a disc…
+        </DropdownMenu.Item>
+      )}
+      {/* The manual that comes with Digitify (D-149): back if it was deleted, opened if it's here. */}
+      {category.key === "books" && (
+        <DropdownMenu.Item
+          className="menu-item"
+          onSelect={() =>
+            void api.manualAdd().then(
+              (id) => navigate({ to: "/item/$id", params: { id: String(id) } }),
+              () => undefined,
+            )
+          }
+        >
+          <BookMarked size={17} /> Digitify Manual
         </DropdownMenu.Item>
       )}
     </>

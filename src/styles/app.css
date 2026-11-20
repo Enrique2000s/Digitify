@@ -708,7 +708,6 @@ span.music-play {
 }
 .marquee.moving {
   text-overflow: clip;
-  mask-image: linear-gradient(90deg, transparent, #000 6px, #000 calc(100% - 6px), transparent);
 }
 .marquee-inner {
   display: inline-block;
@@ -2132,6 +2131,20 @@ span.music-play {
   --p-bar: #1f2228;
   --p-card: #2b2e35;
   --p-accent: #e0a43a;
+  --p-radius: 2px;
+}
+.preview-aero {
+  --p-bg: radial-gradient(circle at 78% 70%, transparent 0 9px, rgba(255, 255, 255, 0.75) 10px, transparent 12px), radial-gradient(ellipse at 10% 0%, #ffffff, transparent 60%), linear-gradient(180deg, #8fd3ff 0%, #d6f1ff 60%, #c8f1e6 100%);
+  --p-bar: linear-gradient(180deg, #ffffff 0%, rgba(255, 255, 255, 0.55) 50%, rgba(220, 242, 255, 0.7) 51%);
+  --p-card: rgba(255, 255, 255, 0.7);
+  --p-accent: linear-gradient(180deg, #b8e7ff 0%, #0a9fe0 52%, #00c2b0 100%);
+  --p-radius: 6px;
+}
+.preview-minimal {
+  --p-bg: #15181d;
+  --p-bar: #22272f;
+  --p-card: #2b313a;
+  --p-accent: #2f8fe8;
   --p-radius: 2px;
 }
 .preview-sunset {
@@ -5478,6 +5491,12 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
 .cover-choice-source {
   font-size: 13px;
   font-weight: 800;
+  /* A search's covers say which game they're of (D-148): two lines at most. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 .cover-choice-size {
   font-size: 12px;
@@ -5613,4 +5632,62 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
   gap: 8px;
   font-weight: 700;
   color: var(--muted);
+}
+
+/* D-148: a badge with its logo alone. */
+.arcade-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.arcade-badge.logo-only {
+  padding: 4px 6px;
+}
+.arcade-badge.logo-only .platform-logo {
+  width: 15px;
+  height: 15px;
+}
+
+/* D-148: a cover of another shape than its box shows whole, over a blur of itself. */
+.arcade-cover-whole {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.arcade-cover-whole .arcade-cover-back {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(14px) saturate(1.15) brightness(0.62);
+  transform: scale(1.2);
+}
+.arcade-cover-whole > img.arcade-cover-img:not(.arcade-cover-back) {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+:root[data-perf="light"] .arcade-cover-whole .arcade-cover-back {
+  filter: brightness(0.45);
+}
+
+/* D-150: a name on a card that doesn't fit ends in "…", and slides to show the rest while its card
+   is pointed at, has the keyboard, or is Big Picture's selection. */
+.marquee.on-hover .marquee-inner {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+.marquee.on-hover.moving .marquee-inner {
+  animation: none;
+}
+:is(.card, .arcade-tile, .bp-tile, .arcade-collection-card, .bp-collection):is(:hover, :focus-visible, :focus-within, .bp-selected) .marquee.on-hover.moving .marquee-inner {
+  max-width: none;
+  overflow: visible;
+  animation: marquee var(--duration, 6s) linear infinite;
 }

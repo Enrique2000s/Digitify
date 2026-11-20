@@ -130,6 +130,11 @@ function checkAchievements(): Promise<Achievement[]> {
   });
 }
 
+/** The achievements, checked as everywhere else (new ones announced), for the profile too (D-149). */
+export function useAchievements() {
+  return useQuery({ queryKey: ["achievements"], queryFn: checkAchievements, staleTime: 60_000 });
+}
+
 /** Statistics' achievements (D-093): how many are reached, the latest, and the way to their screen. */
 export function AchievementsSummary({ bigPicture = false }: { bigPicture?: boolean }) {
   const navigate = useNavigate();

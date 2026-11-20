@@ -1427,3 +1427,232 @@ html.bp-mode .pv-side {
   gap: 6px;
   color: #f6c453;
 }
+
+/* D-149: collections in Big Picture, Library's and Arcade's: big cards with a few covers. */
+.bp-collections {
+  gap: 34px 28px;
+}
+.bp-collection {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+  width: 240px;
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.bp .bp-collection.bp-selected {
+  box-shadow: none;
+  transform: translateY(-6px);
+}
+.bp-collage {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 4px;
+  width: 240px;
+  height: 240px;
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--bp-panel);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.5);
+}
+.bp-collection.bp-selected .bp-collage {
+  box-shadow: 0 0 0 4px var(--bp-ring), 0 0 36px color-mix(in srgb, var(--bp-ring) 55%, transparent), 0 16px 34px rgba(0, 0, 0, 0.5);
+}
+.bp-collage img {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  object-fit: cover;
+}
+.bp-collage.n1 img {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+}
+.bp-collage.n2 img,
+.bp-collage.n3 img:first-child {
+  grid-row: 1 / -1;
+}
+.bp-collage-empty {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  place-items: center;
+  color: var(--bp-muted);
+}
+.bp-collection-name {
+  overflow: hidden;
+  font-size: 21px;
+  font-weight: 900;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.bp-collection-detail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--bp-muted);
+  font-weight: 700;
+}
+.bp-collection-chip {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-bright) 22%, transparent);
+  color: var(--accent-bright);
+  font-size: 13px;
+  font-weight: 800;
+}
+.bp-collection-head {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin: 0 6px 14px;
+}
+.bp-collection-head h2 {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 900;
+}
+.bp-collection-head span {
+  color: var(--bp-muted);
+  font-size: 18px;
+  font-weight: 700;
+}
+/* The Console sort's headings (D-149). */
+.bp-section {
+  display: flex;
+  flex: 0 0 100%;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 -8px;
+  font-size: 24px;
+  font-weight: 900;
+}
+.bp-section:first-child {
+  margin-top: 0;
+}
+.bp-section::after {
+  content: "";
+  flex: 1;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.14);
+}
+.bp-section-logo {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+
+/* D-149: your profile in Big Picture, and your picture in its top bar. */
+.bp-profile-button {
+  padding: 0;
+  overflow: hidden;
+}
+.bp-profile-button .profile-avatar {
+  width: 100% !important;
+  height: 100% !important;
+  font-size: 17px !important;
+}
+.bp-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+.bp-profile-banner {
+  height: 260px;
+  margin: 0 6px;
+  overflow: hidden;
+  border-radius: 26px;
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.45);
+}
+.bp-profile-banner .profile-banner-drift img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.bp-profile-head {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 30px;
+  margin: -120px 0 0 48px;
+}
+.bp-profile-head h1 {
+  margin: 0;
+  font-size: 54px;
+  font-weight: 900;
+  text-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+}
+.bp-profile-head p {
+  margin: 4px 0 0;
+  color: var(--bp-muted);
+  font-size: 22px;
+  font-weight: 700;
+}
+.bp-profile-since {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-bright) 22%, transparent);
+  color: var(--accent-bright);
+  font-size: 16px;
+  font-weight: 800;
+}
+.bp-profile-figures {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 20px;
+  margin: 0 6px;
+}
+.bp-profile-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 22px;
+  border-radius: 22px;
+  background: var(--bp-panel);
+  animation: profile-rise 0.5s var(--ease) both;
+}
+.bp-profile-figure svg {
+  color: var(--accent-bright);
+}
+.bp-profile-figure strong {
+  font-size: 36px;
+  font-weight: 900;
+}
+.bp-profile-figure span {
+  color: var(--bp-muted);
+  font-size: 16px;
+  font-weight: 800;
+}
+.bp-profile-shelf {
+  display: flex;
+  align-items: flex-end;
+  gap: 26px;
+  padding: 10px 6px 16px;
+  overflow-x: auto;
+}
+.bp-profile-medals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 0 6px;
+}
+.bp-profile-medal {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-radius: 18px;
+  background: var(--bp-panel);
+  font-size: 18px;
+}

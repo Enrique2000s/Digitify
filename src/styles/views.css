@@ -447,77 +447,6 @@
   font-stretch: 118%;
 }
 
-/* ---------------------------------------------------------------- smart shelves */
-
-.smart-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.smart-match,
-.smart-options {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 18px;
-  font-weight: 800;
-}
-.smart-match .select,
-.smart-options .select {
-  width: auto;
-}
-.smart-options label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.smart-rules {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--field);
-}
-.smart-rule {
-  display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(130px, 1fr) minmax(180px, 1.6fr) auto;
-  align-items: center;
-  gap: 8px;
-}
-.smart-pair {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 800;
-  color: var(--muted);
-}
-.smart-pair .input {
-  min-width: 0;
-}
-.smart-none {
-  color: var(--muted);
-  font-weight: 700;
-}
-.smart-add {
-  align-self: flex-start;
-}
-.smart-limit {
-  width: 90px;
-}
-.smart-count {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-right: auto;
-  color: var(--accent-text);
-  font-weight: 800;
-}
-.smart-count.error {
-  color: var(--danger);
-}
-
 /* ---------------------------------------------------------------- Home: customizing */
 
 .home-edit-notice {
@@ -4020,6 +3949,8 @@ a.mini-player-open {
 .collection-window-grid {
   display: flex;
   flex-wrap: wrap;
+  /* Centered in the window, not against its left side (D-149). */
+  justify-content: center;
   align-items: flex-end;
   gap: 22px;
 }
@@ -4322,4 +4253,999 @@ a.mini-player-open {
 }
 .perf-notice .btn {
   flex: none;
+}
+
+/* D-148: Arcade's collections, as cards: a few covers, the name, how many games. */
+.arcade-collections {
+  margin-top: 4px;
+}
+.arcade-collections-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+  margin: 6px 0 22px;
+}
+.arcade-collections-head h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 900;
+}
+.arcade-collections-head p {
+  margin: 4px 0 0;
+}
+.arcade-collections-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.arcade-collection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 24px 22px;
+}
+.arcade-collection-card {
+  position: relative;
+  min-width: 0;
+}
+.arcade-collection-open {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.arcade-collage {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 3px;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--raised);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  transition:
+    transform 0.2s var(--ease),
+    box-shadow 0.2s var(--ease);
+}
+.arcade-collage.n1 .arcade-collage-cell {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+}
+.arcade-collage.n2 .arcade-collage-cell,
+.arcade-collage.n3 .arcade-collage-cell:first-child {
+  grid-row: 1 / -1;
+}
+.arcade-collage-cell {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.arcade-collage-cell > * {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.arcade-collage-cell .arcade-cover-img {
+  object-fit: cover;
+}
+.arcade-collage-cell .arcade-cover-console {
+  display: none;
+}
+.arcade-collage-empty {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  place-items: center;
+  color: var(--muted);
+}
+.arcade-collection-open:hover .arcade-collage,
+.arcade-collection-open:focus-visible .arcade-collage {
+  transform: translateY(-3px);
+  box-shadow: var(--glow);
+}
+.arcade-collection-open:focus-visible {
+  outline: none;
+}
+.arcade-collection-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 0 2px;
+}
+.arcade-collection-text strong {
+  overflow: hidden;
+  font-size: 15.5px;
+  font-weight: 900;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.arcade-collection-text > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.arcade-collection-more {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease);
+}
+.arcade-collection-card:hover .arcade-collection-more,
+.arcade-collection-more:focus-visible,
+.arcade-collection-more[data-state="open"] {
+  opacity: 1;
+}
+.arcade-dynamic-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-bright) 16%, transparent);
+  color: var(--accent-text);
+  font-size: 11.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+/* One collection open: its bar stands where the console views are. */
+.arcade-collection-bar {
+  display: flex;
+  flex: 1 1 320px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.arcade-collection-bar h2 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 20px;
+  font-weight: 900;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.arcade-collection-bar .count {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  min-width: 24px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.arcade-collection-bar > .btn {
+  flex: none;
+}
+/* Making one: its name, and a dynamic one's filters. */
+.collection-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.collection-words {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.collection-words .input {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.collection-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip-toggle {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--gloss);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.chip-toggle[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-bright) 18%, transparent);
+  color: var(--accent-text);
+}
+.collection-row {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 14px 22px;
+}
+.collection-row .field {
+  flex: none;
+}
+.collection-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  font-weight: 800;
+}
+.collection-count {
+  margin-right: auto;
+  font-weight: 800;
+}
+.collection-menu {
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+}
+.arcade-emulator-pick {
+  width: auto;
+  max-width: 100%;
+}
+.arcade-panel-facts dd small {
+  display: block;
+  margin-top: 4px;
+}
+
+/* D-149: the collections' own screen, with its Back to the games. */
+.arcade-collections-title {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.arcade-collections-back {
+  margin: 0 0 6px -10px;
+}
+.arcade-collections-hint {
+  margin: -8px 0 18px;
+}
+.arcade-head-actions .btn[aria-current="page"] {
+  box-shadow: var(--glow);
+}
+.arcade-dynamic-chip.favorites {
+  background: color-mix(in srgb, #ff5a7a 18%, transparent);
+  color: #ff5a7a;
+}
+:root[data-theme="light"] .arcade-dynamic-chip.favorites {
+  color: #d6304f;
+}
+
+/* Under their headings the games start at the left, as shelves do. */
+.arcade-grid.by-section {
+  justify-content: flex-start;
+}
+/* D-149: the Console sort's headings: a console's or launcher's symbol, name and count, and a line
+   across the grid. */
+.arcade-grid > .arcade-section {
+  display: flex;
+  flex: 0 0 100%;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 -6px;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 900;
+}
+.arcade-grid > .arcade-section:first-child {
+  margin-top: 0;
+}
+.arcade-section::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  margin-left: 6px;
+  background: var(--line-strong);
+}
+.arcade-section-logo {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  opacity: 0.85;
+}
+.arcade-section .count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* D-149: a game marked as completed: a green seal on its box, the heart beside it. */
+.arcade-completed {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #1f9d55;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+.arcade-completed ~ .arcade-fav {
+  right: 36px;
+}
+.bp-tile-art .arcade-completed {
+  top: 12px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+}
+.bp-tile-art .arcade-completed ~ .arcade-fav {
+  right: 50px;
+}
+.arcade-complete-btn[aria-pressed="true"] {
+  border-color: #1f9d55;
+  color: #1f9d55;
+}
+:root[data-theme="dark"] .arcade-complete-btn[aria-pressed="true"] {
+  color: #4ade80;
+}
+
+/* ---------------------------------------------------------------- the personal profile (D-149) */
+
+@keyframes profile-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+@keyframes profile-drift {
+  from {
+    transform: scale(1.04) translateX(-1%);
+  }
+  to {
+    transform: scale(1.1) translateX(1%);
+  }
+}
+@keyframes profile-turn {
+  to {
+    transform: rotate(1turn);
+  }
+}
+@keyframes profile-grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+@keyframes profile-sky {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 100% 50%;
+  }
+}
+.profile-page {
+  padding-top: 12px;
+}
+.profile-hero {
+  position: relative;
+  margin: 4px 0 26px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 26px;
+  background: var(--panel);
+  box-shadow: var(--raise);
+  animation: profile-rise 0.5s var(--ease) both;
+}
+.profile-banner {
+  position: relative;
+  height: 250px;
+  overflow: hidden;
+  background: var(--panel);
+}
+.profile-banner-drift {
+  display: block;
+  width: 100%;
+  /* The picture stops short of the banner's bottom, which is plain panel: while the page arrives its
+     layers can shift a pixel, and the picture's last row showed there as a line (D-151). */
+  height: calc(100% - 12px);
+  overflow: hidden;
+  animation: profile-drift 26s ease-in-out infinite alternate;
+}
+.profile-banner-drift img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* The picture fades into the panel completely, a little before the bottom, so its last row never
+   shows as a line where the banner ends (D-151; it showed while the page arrived). */
+.profile-banner::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: 1;
+  background: linear-gradient(180deg, transparent 38%, var(--panel) 88%, var(--panel) 100%);
+  transform: translateZ(0);
+}
+.profile-banner-default {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(circle at 18% 30%, rgba(255, 255, 255, 0.22) 0 70px, transparent 71px),
+    radial-gradient(circle at 70% 70%, rgba(255, 255, 255, 0.14) 0 110px, transparent 111px),
+    radial-gradient(circle at 88% 20%, rgba(255, 255, 255, 0.12) 0 50px, transparent 51px),
+    linear-gradient(120deg, var(--accent-bright), #5b3cc4, #e0478a, var(--accent-bright));
+  background-size:
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    300% 300%;
+  animation: profile-sky 18s ease-in-out infinite alternate;
+}
+.profile-hero-body {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 18px 26px;
+  margin-top: -86px;
+  padding: 0 30px 26px;
+}
+.profile-avatar {
+  --hex: polygon(25% 3%, 75% 3%, 99% 50%, 75% 97%, 25% 97%, 1% 50%);
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 900;
+  isolation: isolate;
+}
+.profile-avatar-face {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--accent-bright), #5b3cc4);
+}
+.profile-avatar-face img,
+.profile-avatar-initials {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  line-height: 1;
+}
+/* The frame's shape (D-150). */
+.profile-avatar[data-shape="rounded"] {
+  border-radius: 26%;
+}
+.profile-avatar[data-shape="hexagon"] {
+  border-radius: 0;
+}
+.profile-avatar[data-shape="hexagon"] .profile-avatar-face {
+  clip-path: var(--hex);
+}
+/* Its ring: turning colours, the accent, gold, or none. */
+.profile-avatar.ring {
+  filter: drop-shadow(0 14px 26px rgba(0, 0, 0, 0.32));
+}
+.profile-avatar.ring::before {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  z-index: -1;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, var(--accent-bright), #8b5cf6, #e0478a, #f2b33d, var(--accent-bright));
+  animation: profile-turn 7s linear infinite;
+}
+.profile-avatar.ring::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  z-index: -1;
+  border-radius: 50%;
+  background: var(--panel);
+}
+.profile-avatar.ring[data-ring="accent"]::before {
+  background: var(--accent-bright);
+  animation: none;
+}
+.profile-avatar.ring[data-ring="gold"]::before {
+  background: linear-gradient(135deg, #fff1a8 0%, #e2b23c 30%, #9c6a10 55%, #f6d77a 80%, #c8921f 100%);
+  animation: none;
+}
+.profile-avatar.ring[data-shape="rounded"]::before {
+  border-radius: calc(26% + 7px);
+  animation: none;
+}
+.profile-avatar.ring[data-shape="rounded"]::after {
+  border-radius: calc(26% + 2px);
+}
+.profile-avatar.ring[data-shape="hexagon"]::before,
+.profile-avatar.ring[data-shape="hexagon"]::after {
+  border-radius: 0;
+  clip-path: var(--hex);
+  animation: none;
+}
+/* Rounded and hexagon rings can't turn (they'd spin their corners): their colours flow instead. */
+.profile-avatar.ring[data-ring="rainbow"]:is([data-shape="rounded"], [data-shape="hexagon"])::before {
+  background: linear-gradient(120deg, var(--accent-bright), #8b5cf6, #e0478a, #f2b33d, var(--accent-bright));
+  background-size: 300% 300%;
+  animation: profile-sky 6s ease-in-out infinite alternate;
+}
+.profile-identity {
+  flex: 1 1 360px;
+  min-width: 0;
+  padding-bottom: 4px;
+}
+.profile-identity h1 {
+  margin: 0;
+  overflow: hidden;
+  font-size: clamp(30px, 3.4vw, 46px);
+  line-height: 1.1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.profile-motto {
+  margin: 6px 0 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+.profile-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.profile-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-bright) 14%, transparent);
+  color: var(--accent-text);
+  font-size: 12.5px;
+  font-weight: 800;
+}
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-bottom: 6px;
+}
+.profile-loading {
+  padding: 30px 4px;
+}
+.profile-body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+/* The gaps space the panels; no extra margin between two. */
+.profile-body .panel + .panel {
+  margin-top: 0;
+}
+.profile-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 16px;
+}
+.profile-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 18px 16px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--panel);
+  box-shadow: var(--raise-sm);
+  animation: profile-rise 0.55s var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 70ms + 120ms);
+}
+.profile-figure-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent-bright) 16%, transparent);
+  color: var(--accent-text);
+}
+.profile-figure strong {
+  font-size: 32px;
+  font-weight: 900;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.profile-figure strong small {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 800;
+}
+.profile-figure > span:last-child {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.profile-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 22px;
+}
+.profile-section {
+  animation: profile-rise 0.55s var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 80ms + 300ms);
+}
+.profile-section h2 {
+  margin: 0 0 6px;
+}
+.profile-section h3 {
+  margin: 18px 0 6px;
+  font-size: 14px;
+}
+.profile-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.profile-bars {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.profile-bars li {
+  display: grid;
+  grid-template-columns: 110px 1fr 70px;
+  align-items: center;
+  gap: 12px;
+}
+.profile-bar-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+}
+.profile-bar-track {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--track);
+}
+.profile-bar-track span {
+  display: block;
+  height: 100%;
+  min-width: 12px;
+  border-radius: 999px;
+  transform-origin: left;
+  animation: profile-grow 1s var(--ease) both 0.45s;
+}
+.profile-bar-value {
+  color: var(--muted);
+  font-weight: 800;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.profile-categories {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.profile-categories a {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--raised);
+  color: inherit;
+  text-decoration: none;
+}
+.profile-categories a:hover {
+  border-color: var(--accent-bright);
+}
+.profile-categories a svg {
+  grid-row: 1 / 3;
+  color: var(--accent-text);
+}
+.profile-categories strong {
+  font-size: 18px;
+  font-weight: 900;
+}
+.profile-categories span {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.profile-artists {
+  margin: 0;
+  font-weight: 700;
+}
+.profile-shelf {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  margin: 14px 0 0;
+  padding: 0 0 6px;
+  overflow-x: auto;
+  list-style: none;
+}
+.profile-shelf li {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  animation: profile-rise 0.5s var(--ease) both;
+  animation-delay: calc(var(--n, 0) * 60ms + 450ms);
+}
+.profile-shelf-art {
+  display: block;
+  height: 150px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--raised);
+  box-shadow: var(--cover-shadow);
+  transition: transform 0.2s var(--ease);
+}
+.profile-shelf-art:hover {
+  transform: translateY(-4px);
+}
+.profile-shelf strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13.5px;
+}
+.profile-shelf span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.profile-shelf span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.profile-achievement-meter {
+  display: block;
+  height: 10px;
+  margin: 10px 0 16px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--track);
+}
+.profile-achievement-meter span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--bar);
+  transform-origin: left;
+  animation: profile-grow 1.1s var(--ease) both 0.6s;
+}
+.profile-medals {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.profile-medals li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--raised);
+}
+.profile-medals .achievement-medal {
+  grid-row: 1 / 3;
+}
+.profile-medals strong {
+  font-size: 13.5px;
+}
+.profile-medals li > span:last-child {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+/* Editing it. */
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.profile-edit-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.profile-edit-banner {
+  display: block;
+  width: 220px;
+  height: 68px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--raised);
+}
+.profile-edit-banner img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.profile-edit-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.profile-cover-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  max-height: min(60vh, 560px);
+  overflow-y: auto;
+  padding: 4px;
+}
+.profile-cover-choice {
+  flex: none;
+  height: 150px;
+  aspect-ratio: var(--a, 0.7);
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: var(--raised);
+  cursor: pointer;
+}
+.profile-cover-choice:hover,
+.profile-cover-choice:focus-visible {
+  border-color: var(--accent-bright);
+}
+.profile-cover-choice img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+/* Sharing it. */
+.profile-share-preview {
+  display: grid;
+  place-items: center;
+  min-height: 300px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--raised);
+}
+.profile-share-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: var(--cover-shadow);
+}
+.profile-share-note {
+  margin-right: auto;
+  color: var(--muted);
+  font-weight: 700;
+}
+/* The title bar's picture. */
+.profile-button {
+  padding: 0;
+  overflow: hidden;
+}
+.profile-button .profile-avatar {
+  width: 100% !important;
+  height: 100% !important;
+  font-size: 13px !important;
+}
+.profile-button[aria-current="page"] {
+  box-shadow: 0 0 0 2px var(--accent-bright);
+}
+
+/* D-150: moving a picture in its frame. */
+.profile-frame-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.picture-adjuster {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.picture-adjuster-frame {
+  position: relative;
+  overflow: hidden;
+  background: var(--raised);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  box-shadow: 0 0 0 3px var(--accent-bright), var(--raise);
+}
+.picture-adjuster-frame:active {
+  cursor: grabbing;
+}
+.picture-adjuster-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.picture-adjuster-frame.avatar {
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+}
+.picture-adjuster-frame.avatar[data-shape="rounded"] {
+  border-radius: 26%;
+}
+.picture-adjuster-frame.avatar[data-shape="hexagon"] {
+  border-radius: 0;
+  clip-path: polygon(25% 3%, 75% 3%, 99% 50%, 75% 97%, 25% 97%, 1% 50%);
+}
+.picture-adjuster-frame.banner {
+  width: min(100%, 720px);
+  aspect-ratio: 1800 / 250;
+  border-radius: 16px;
+}
+.picture-adjuster-zoom {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(100%, 420px);
+  font-weight: 800;
+}
+.picture-adjuster-zoom input {
+  flex: 1;
+}
+.picture-adjuster .hint {
+  margin: 0;
+  text-align: center;
 }

@@ -81,7 +81,7 @@ export function PerfWatch() {
         <Gauge size={22} />
       </span>
       <div>
-        <strong>Light mode is on</strong>
+        <strong>Performance mode is on</strong>
         <span>This computer was struggling to keep up, so Digitify turned off its heavier effects and animations. Settings › General can turn it back off.</span>
       </div>
       <button

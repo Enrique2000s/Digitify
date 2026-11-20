@@ -41,11 +41,12 @@ Digitify.exe (Tauri 2)
 | `library` | Catalog queries (views, dashboard, details, full-text search, "select all" ids) and edits (items, people, physical copies, favorites, artwork, removal) |
 | `organize` | Nested collections (tree queries with recursive CTEs, moving without cycles, deleting by moving contents up), tags (merge on rename, pruned when unused), and bulk edits applied in one transaction, limited to what fits every selected item (`bulk_actions`, D-027) |
 | `autostart` | Starting Digitify at sign-in: the user's Run key on Windows, a freedesktop autostart entry on Linux (D-047) |
-| `smart` | Smart lists: saved rules run as library queries (D-051) |
 | `check` | Library check: missing files and duplicates (D-057) |
 | `media` | System media controls through `souvlaki`: Windows' media overlay, Linux's MPRIS; reports what's playing and turns its buttons into `media-key` events (D-058) |
 | `tray` | The tray icon and its menu, and keeping the window hidden when closed (D-059) |
 | `history` | The imports history (D-137): each link entry's and each file import's outcome, kept in the library until cleared |
+| `profile` | The personal profile (D-149): name, line, picture and banner in `<config>/profile`, the share card's PNG saved where chosen |
+| `manual` | The built-in manual (D-149): put in Books once, replaced by a newer edition, left gone when deleted (state in the library's `settings`) |
 | `films` | Videos into Movies & Series (D-135): as movies, or as a series' episodes |
 | `watched` | Watched folders: a look every 2 minutes that imports new files into each folder's category (D-060) |
 | `year` | Your year, achievements and the activity calendar, from the activity records (D-065…D-067) |
@@ -76,7 +77,7 @@ Big Picture's players (D-071) share `features/bigpicture/consoleControls.tsx`: `
 | `stats` | Recorded time (`activity`: day, item, read/watch/listen, seconds) and Home's statistics |
 | `music` | The music player (D-020): a second, audio-only mpv whose playlist is the queue (gapless), tracks and artists, favorites, playlists, recently played, track edits |
 | `pictures` | Photos (D-033): EXIF details, upright thumbnails with the viewer's turn and mirror, the file behind a photo, album covers |
-| `arcade` | Arcade (D-034, D-035, D-101, D-106, D-107, D-111, D-112): `mod.rs` holds the one list of which emulators play each console (`PLAYS`); `detect` finds Dolphin, Project64, RMG, DuckStation, PCSX2, RPCS3, melonDS, DeSmuME, Mesen, FCEUX, Nestopia, Snes9x, ZSNES, mGBA, Kega Fusion, nullDC, Flycast, PPSSPP, Azahar, Cemu, Ryujinx, xemu, Xenia, ares and RetroArch and reads their game folders (or Arcade's own per emulator); `games` recognizes discs and ROMs by their headers (GameCube/Wii discs, N64 and DS ROMs, PlayStation discs by `SYSTEM.CNF`, PlayStation 3 folders by PARAM.SFO) and names libretro box art; `retroarch` reads RetroArch's playlists and box art; `stores` reads the installed games of Steam, Epic Games, the Xbox app, GOG, itch.io (its `butler.db`, read-only) and Heroic, `icons` reads the emulators' own icons, `sgdb` asks SteamGridDB (with the user's key), `artsources` keeps LaunchBox's index and asks Nintendo's store and the Microsoft Store, and `launchers` reads those of Ubisoft Connect, the EA app, Battle.net, the Rockstar Games Launcher, the Riot Client, Amazon Games and Lutris (registry, installer data, their databases, read-only); programs added by hand start by themselves; play time per day goes to `arcade_activity` for the statistics (D-041); scanning, covers (Dolphin's cache, GameTDB, libretro-thumbnails), selecting, custom order, launching with play time while the window hides |
+| `arcade` | Arcade (D-034, D-035, D-101, D-106, D-107, D-111, D-112): `mod.rs` holds the one list of which emulators play each console (`PLAYS`); `detect` finds Dolphin, Project64, RMG, DuckStation, PCSX2, RPCS3, melonDS, DeSmuME, Mesen, FCEUX, Nestopia, Snes9x, ZSNES, mGBA, Kega Fusion, nullDC, Flycast, PPSSPP, Azahar, Cemu, Ryujinx, xemu, Xenia, ares and RetroArch and reads their game folders (or Arcade's own per emulator); `games` recognizes discs and ROMs by their headers (GameCube/Wii discs, N64 and DS ROMs, PlayStation discs by `SYSTEM.CNF`, PlayStation 3 folders by PARAM.SFO) and names libretro box art; `retroarch` reads RetroArch's playlists and box art; `stores` reads the installed games of Steam, Epic Games, the Xbox app, GOG, itch.io (its `butler.db`, read-only) and Heroic, `icons` reads the emulators' own icons, `sgdb` asks SteamGridDB (with the user's key), `artsources` keeps LaunchBox's index, libretro-thumbnails' list of boxes per console and the searching by words (D-148), and asks Nintendo's store and the Microsoft Store, `collections` keeps Arcade's collections (`arcade_collections`, `arcade_collection_games`; a dynamic one's rules as JSON, applied by the app, D-148), and `launchers` reads those of Ubisoft Connect, the EA app, Battle.net, the Rockstar Games Launcher, the Riot Client, Amazon Games and Lutris (registry, installer data, their databases, read-only); programs added by hand start by themselves; play time per day goes to `arcade_activity` for the statistics (D-041); scanning, covers (Dolphin's cache, GameTDB, libretro-thumbnails), selecting, custom order, launching with play time while the window hides |
 | `localhost` | Linux: the loopback page hosting YouTube's player (D-032) |
 | `dev` | Phase 0 video lab harness (Settings › Developer) |
 
@@ -179,6 +180,8 @@ Only resources registered in the library are served. Paths never come straight f
 | `%LOCALAPPDATA%\com.digitify.desktop\` | `config.json` (library path, preferences), WebView2 profile, `logs\` |
 
 ## Helper engines
+The built-in manual (D-149) is written in `docs/manual/manual.html` and built by `npm run manual` (`scripts/build-manual.mjs`: the app's lucide icons and Nunito font, printed to `src-tauri/resources/manual/Digitify-Manual.pdf` by Edge or Chrome without a window); the PDF is committed and carried by the installers.
+
 `scripts/fetch-deps.ps1` downloads pinned builds, verifies their SHA-256 hashes and refuses any build that contains DVD/Blu-ray decryption code (D-007). Binaries live in `src-tauri/binaries/` (git-ignored) and are copied next to the app at build time.
 
 | Engine | Pinned build | Notes |

@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { Marquee } from "./Marquee";
 import { Link } from "@tanstack/react-router";
 import { itemPath } from "../lib/routes";
 import { Check, Cloud, Star } from "lucide-react";
@@ -52,7 +53,9 @@ export const MediaCard = memo(function MediaCard({ item, width, index, transitio
           </span>
         )}
       </div>
-      <div className="card-title">{item.title}</div>
+      <div className="card-title">
+        <Marquee hover text={item.title} />
+      </div>
       {/* Always one line, so cards with and without a year line up. */}
       <div className="card-sub">{subtitle || "\u00a0"}</div>
     </Link>

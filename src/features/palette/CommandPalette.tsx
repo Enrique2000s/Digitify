@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Dialog as RadixDialog } from "radix-ui";
-import { Award, CornerDownLeft, FilePlus, FolderPlus, Gamepad2, Home, Joystick, LibraryBig, Link as LinkIcon, Monitor, Moon, Music, Search, Settings, Disc3, ListFilter } from "lucide-react";
+import { Award, CornerDownLeft, FilePlus, FolderPlus, Gamepad2, Home, Joystick, LibraryBig, Link as LinkIcon, Monitor, Moon, Music, Search, Settings, Disc3 } from "lucide-react";
 import { api, artworkUrl, type ArcadeGame, type ItemCard } from "../../lib/api";
 import { useCategories } from "../../lib/queries";
 import { usePreferences } from "../../lib/preferences";
@@ -74,7 +74,6 @@ export function CommandPalette() {
     staleTime: 10_000,
   });
   const games = useQuery({ queryKey: ["arcade-games"], queryFn: api.arcadeGames, enabled: open });
-  const smartLists = useQuery({ queryKey: ["smart-lists"], queryFn: api.smartLists, enabled: open });
 
   const go = (fn: () => void) => () => {
     setOpen(false);
@@ -96,15 +95,6 @@ export function CommandPalette() {
           run: go(() => void navigate({ to: "/library/$scope", params: { scope: c.key } })),
         })),
       { id: "arcade", group: "Go to", label: "Arcade", hint: "Games", icon: <Joystick size={17} />, words: "games play", run: go(() => void navigate({ to: "/arcade" })) },
-      { id: "smart", group: "Go to", label: "Smart lists", hint: "Library", icon: <ListFilter size={17} />, run: go(() => void navigate({ to: "/smart" })) },
-      ...(smartLists.data ?? []).map<Entry>((l) => ({
-        id: `smart-${l.id}`,
-        group: "Go to",
-        label: l.name,
-        hint: "Smart list",
-        icon: <ListFilter size={17} />,
-        run: go(() => void navigate({ to: "/smart/$id", params: { id: String(l.id) } })),
-      })),
       { id: "achievements", group: "Go to", label: "Achievements", hint: "Statistics", icon: <Award size={17} />, words: "medals stats", run: go(() => void navigate({ to: "/achievements" })) },
       { id: "discs", group: "Go to", label: "Discs", hint: "CDs, DVDs and Blu-rays", icon: <Disc3 size={17} />, run: go(() => void navigate({ to: "/discs" })) },
       { id: "settings", group: "Go to", label: "Settings", icon: <Settings size={17} />, words: "preferences options", run: go(() => void navigate({ to: "/settings" })) },
@@ -125,13 +115,12 @@ export function CommandPalette() {
     ];
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categories.data, smartLists.data, resolvedTheme, ambient.musicOn, preferences.look]);
+  }, [categories.data, resolvedTheme, ambient.musicOn, preferences.look]);
 
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const entries: Entry[] = [
-    // With nothing typed, every place to go (D-088): Home, each category, Arcade and the rest; each
-    // smart list shows when its name is typed.
-    ...(words.length ? fixed.filter((e) => matches(e, words)) : fixed.filter((e) => e.group === "Go to" && !e.id.startsWith("smart-"))),
+    // With nothing typed, every place to go (D-088): Home, each category, Arcade and the rest.
+    ...(words.length ? fixed.filter((e) => matches(e, words)) : fixed.filter((e) => e.group === "Go to")),
     ...(words.length
       ? (items.data?.items ?? []).map<Entry>((item: ItemCard) => ({
           id: `item-${item.id}`,

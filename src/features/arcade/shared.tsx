@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, ARCADE_CONSOLES, artworkUrl, errorText, onLinux, type ArcadeConsole, type ArcadeGame, type ArcadePlatform, type ArcadeStore } from "../../lib/api";
 import { usePreferences, type ArcadeFilter, type ArcadePreferences } from "../../lib/preferences";
+import { hasPlatformLogo, PlatformLogo } from "./logos";
 
 export const PLATFORM_NAMES: Record<ArcadePlatform, string> = {
   gamecube: "GameCube",
@@ -85,34 +86,44 @@ export const STORE_NAMES: Record<ArcadeStore, string> = {
 
 /** Box art proportions: disc cases are tall, Nintendo 64 and Super Nintendo boxes wide, PlayStation's
  *  jewel cases and handheld boxes about square, PC capsules 2:3. */
+/** The shape of a store's own cover art (D-149): Steam's library capsules are 600 × 900, Epic's
+ *  (and Heroic's) 3 : 4, GOG's vertical covers 342 × 482; the others as Steam's. */
+const STORE_ASPECT: Partial<Record<ArcadeStore, number>> = { epic: 0.75, heroic: 0.75, gog: 0.71 };
+
+/** A game's box shape: its store's cover for a PC game, its console's box for the others. */
+export function gameAspect(game: Pick<ArcadeGame, "platform" | "store">): number {
+  return game.platform === "pc" ? (game.store && STORE_ASPECT[game.store]) || PLATFORM_ASPECT.pc : PLATFORM_ASPECT[game.platform];
+}
+
+// Each console's box art shape (width ÷ height), measured on libretro-thumbnails' US boxes (D-148).
 export const PLATFORM_ASPECT: Record<ArcadePlatform, number> = {
   gamecube: 0.71,
   wii: 0.71,
   n64: 1.38,
   ps1: 1,
-  ps2: 0.7,
+  ps2: 0.71,
   ps3: 0.86,
-  ds: 0.9,
-  nes: 0.72,
-  snes: 1.38,
+  ds: 1.12,
+  nes: 0.7,
+  snes: 1.41,
   gb: 1,
   gbc: 1,
   gba: 1,
-  "3ds": 0.88,
-  sms: 0.72,
+  "3ds": 1.13,
+  sms: 0.71,
   genesis: 0.7,
-  segacd: 1,
-  gamegear: 0.72,
-  saturn: 0.62,
+  segacd: 0.6,
+  gamegear: 0.71,
+  saturn: 0.63,
   dreamcast: 1,
   psp: 0.58,
   pce: 1,
   wiiu: 0.71,
   switch: 0.62,
-  ogxbox: 0.7,
-  x360: 0.7,
+  ogxbox: 0.71,
+  x360: 0.71,
   arcade: 0.75,
-  atari2600: 0.72,
+  atari2600: 0.73,
   other: 0.75,
   pc: 0.667,
 };
@@ -127,6 +138,21 @@ export function badgeOf(game: ArcadeGame): string {
   // Epic Games by its full name (D-122); the longer names shortened.
   const short: Partial<Record<ArcadeStore, string>> = { ubisoft: "Ubisoft", ea: "EA", amazon: "Amazon", rockstar: "Rockstar", riot: "Riot" };
   return game.platform === "pc" && game.store ? (short[game.store] ?? STORE_NAMES[game.store]) : PLATFORM_SHORT[game.platform];
+}
+
+/** A game's badge on its box, as Settings › Arcade says (D-148): its console's or store's logo and
+ *  name, the logo alone (the name where there's no logo), or none. */
+export function GameBadge({ game }: { game: ArcadeGame }) {
+  const { preferences } = usePreferences();
+  const style = preferences.arcade.badge;
+  if (style === "none") return null;
+  const logoOnly = style === "logo" && hasPlatformLogo(game);
+  return (
+    <span className={`arcade-badge${logoOnly ? " logo-only" : ""}`} data-platform={game.platform} data-store={game.store ?? undefined} title={logoOnly ? badgeOf(game) : undefined}>
+      <PlatformLogo game={game} />
+      {logoOnly ? <span className="sr-only">{badgeOf(game)}</span> : badgeOf(game)}
+    </span>
+  );
 }
 
 /** Arcade's views (D-038), with what each one holds. */
@@ -192,7 +218,7 @@ export function filterAvailable(filter: ArcadeFilter): boolean {
 }
 
 /** Views that are always there; a store's or console's view shows only once it has a game (D-101). */
-const ALWAYS: ArcadeFilter[] = ["all", "all-pc", "all-roms", "favorites"];
+const ALWAYS: ArcadeFilter[] = ["all", "all-pc", "all-roms"];
 
 /** The store and console views that have at least one game; `null` while games are loading. */
 export function filledFilters(games: ArcadeGame[] | undefined): Set<ArcadeFilter> | null {
@@ -238,6 +264,7 @@ export const SORTS: { key: ArcadePreferences["sort"]; label: string }[] = [
   { key: "most", label: "Most played" },
   { key: "added", label: "Recently added" },
   { key: "rating", label: "Your rating" },
+  { key: "console", label: "Console" },
   { key: "custom", label: "Custom order" },
 ];
 
@@ -274,31 +301,43 @@ export function useArcade() {
   return { status, games, starting, notSeen, clearNotSeen: () => setNotSeen(null) };
 }
 
-/** The games shown, filtered, searched and sorted as the preferences say. */
-export function useShownGames(games: ArcadeGame[] | undefined, search: string) {
+/** The view a game belongs to: its store's (Others for a program added by hand) or its console's. */
+export function consoleKey(game: Pick<ArcadeGame, "platform" | "store">): ArcadeFilter {
+  return game.platform === "pc" ? (game.store ?? "others") : game.platform;
+}
+
+/** The games shown, filtered, searched and sorted as the preferences say; `scope` (a collection's,
+ *  D-148) takes the place of the console view. */
+export function useShownGames(games: ArcadeGame[] | undefined, search: string, scope: ((game: ArcadeGame) => boolean) | null = null) {
   const { preferences } = usePreferences();
-  const { sort } = preferences.arcade;
+  const { sort, filterOrder } = preferences.arcade;
   const { current: platform } = useArcadeFilters();
   return useMemo(() => {
     const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const list = (games ?? []).filter(
       (game) =>
         !game.missing &&
-        inFilter(game, platform) &&
+        (scope ? scope(game) : inFilter(game, platform)) &&
         words.every((word) => game.title.toLowerCase().includes(word) || game.gameId?.toLowerCase() === word),
     );
     const byTitle = (a: ArcadeGame, b: ArcadeGame) => a.title.localeCompare(b.title, undefined, { sensitivity: "base", numeric: true });
+    const place = (game: ArcadeGame) => {
+      const at = filterOrder.indexOf(consoleKey(game));
+      return at < 0 ? filterOrder.length : at;
+    };
     const sorters: Record<ArcadePreferences["sort"], (a: ArcadeGame, b: ArcadeGame) => number> = {
       title: byTitle,
       played: (a, b) => (b.lastPlayedAt ?? "").localeCompare(a.lastPlayedAt ?? "") || byTitle(a, b),
       most: (a, b) => b.playSeconds - a.playSeconds || byTitle(a, b),
       rating: (a, b) => (b.rating ?? 0) - (a.rating ?? 0) || byTitle(a, b),
+      // In the views' order (Settings › Arcade), then by title (D-149).
+      console: (a, b) => place(a) - place(b) || byTitle(a, b),
       added: (a, b) => b.addedAt.localeCompare(a.addedAt) || b.id - a.id,
       // Placed games first, in their places; the rest after, by title (D-035).
       custom: (a, b) => (a.position ?? Infinity) - (b.position ?? Infinity) || byTitle(a, b),
     };
     return [...list].sort(sorters[sort]);
-  }, [games, platform, sort, search]);
+  }, [games, platform, sort, search, scope, filterOrder]);
 }
 
 /** Arcade's games that match a search (D-105): every word in the title, the console, the store or the game's ID. */
@@ -359,12 +398,34 @@ export function lastPlayed(at: string | null): string | null {
   return date.toLocaleDateString(undefined, { dateStyle: "medium" });
 }
 
-/** A game's box art, or a drawn box with its title and console when it has none. */
-export function GameCover({ game, size = "thumb" }: { game: ArcadeGame; size?: "thumb" | "cover" }) {
+/**
+ * A game's box art, or a drawn box with its title and console when it has none. A cover of another
+ * shape than its console's box (another region's, a store's square art) shows whole, over a blur of
+ * itself, never cut (D-148); `fill` covers the space anyway (a collage, a backdrop).
+ */
+export function GameCover({ game, size = "thumb", fill = false }: { game: ArcadeGame; size?: "thumb" | "cover"; fill?: boolean }) {
   const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [game.coverKey]);
+  const [whole, setWhole] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+    setWhole(false);
+  }, [game.coverKey]);
   if (game.coverKey && !failed) {
-    return <img className="arcade-cover-img" src={artworkUrl(game.coverKey, size)} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setFailed(true)} />;
+    const src = artworkUrl(game.coverKey, size);
+    if (whole) {
+      return (
+        <span className="arcade-cover-whole">
+          <img className="arcade-cover-back" src={src} alt="" aria-hidden draggable={false} />
+          <img className="arcade-cover-img" src={src} alt="" decoding="async" draggable={false} onError={() => setFailed(true)} />
+        </span>
+      );
+    }
+    const measure = (event: React.SyntheticEvent<HTMLImageElement>) => {
+      if (fill) return;
+      const { naturalWidth: width, naturalHeight: height } = event.currentTarget;
+      if (width > 0 && height > 0) setWhole(Math.abs(width / height / gameAspect(game) - 1) > 0.06);
+    };
+    return <img className="arcade-cover-img" src={src} alt="" loading="lazy" decoding="async" draggable={false} onLoad={measure} onError={() => setFailed(true)} />;
   }
   return (
     <span className="arcade-cover-blank" data-platform={game.platform} data-store={game.store ?? undefined}>

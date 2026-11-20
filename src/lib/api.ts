@@ -292,7 +292,7 @@ export interface QueryParams {
   custom?: string | null;
   /** Only items of this kind of category (photos for the image viewer, D-033). */
   handler?: Handler | null;
-  /** Smart lists' rules (D-051). */
+  /** By progress, year, when added and rating (the library query's filters, D-051). */
   progress?: "unstarted" | "inProgress" | "finished" | null;
   yearFrom?: number | null;
   yearTo?: number | null;
@@ -303,9 +303,6 @@ export interface QueryParams {
   offset: number;
   limit: number;
 }
-
-/** A smart list's rules: the fields of a library query it keeps (D-051). */
-export type SmartQuery = Pick<QueryParams, "category" | "tag" | "favorites" | "ownership" | "progress" | "yearFrom" | "yearTo" | "addedDays" | "minRating">;
 
 /** How automatic backups went last (D-056). */
 export interface AutoBackupStatus {
@@ -334,12 +331,6 @@ export interface WatchedFolder {
   path: string;
   category: string;
   missing: boolean;
-}
-
-export interface SmartList {
-  id: number;
-  name: string;
-  query: SmartQuery;
 }
 
 export interface QueryResult {
@@ -856,7 +847,6 @@ export const api = {
   arcadeSetReview: (id: number, rating: number | null, note: string | null) => invoke<void>("arcade_set_review", { id, rating, note }),
   itemSetReview: (id: number, rating: number | null, note: string | null) => invoke<void>("item_set_review", { id, rating, note }),
   laterSet: (ids: number[], later: boolean) => invoke<void>("later_set", { ids, later }),
-  smartLists: () => invoke<SmartList[]>("smart_lists"),
   backupAutoStatus: () => invoke<AutoBackupStatus>("backup_auto_status"),
   backupAutoNow: () => invoke<AutoBackupStatus>("backup_auto_now"),
   libraryCheck: () => invoke<LibraryCheck>("library_check"),
@@ -865,8 +855,6 @@ export const api = {
   watchedSetCategory: (id: number, category: string) => invoke<void>("watched_set_category", { id, category }),
   watchedRemove: (id: number) => invoke<void>("watched_remove", { id }),
   watchedLookNow: () => invoke<number>("watched_look_now"),
-  smartListSave: (id: number | null, name: string, query: SmartQuery) => invoke<number>("smart_list_save", { id, name, query }),
-  smartListDelete: (id: number) => invoke<void>("smart_list_delete", { id }),
   arcadeForget: (id: number) => invoke<void>("arcade_forget", { id }),
   arcadeReveal: (id: number) => invoke<void>("arcade_reveal", { id }),
   /** Starts the game in its emulator; `n64` picks Project64 or RMG for Nintendo 64 games. */
@@ -885,6 +873,30 @@ export const api = {
   /** Sets an emulator aside, or uses it again (D-117). */
   arcadeIgnoreEmulator: (emulator: ArcadeEmulator, ignored: boolean) => invoke<void>("arcade_ignore_emulator", { emulator, ignored }),
   /** Every cover found for a game, to choose from (D-118). */
+  /** The manual that comes with Digitify (D-149): put in Books, kept up to date, or left gone. */
+  manualSync: () => invoke<void>("manual_sync"),
+  /** Books › Add › Digitify Manual: back in Books (or the one there); gives its item. */
+  manualAdd: () => invoke<number>("manual_add"),
+  profile: () => invoke<Profile>("profile_get"),
+  profileSetText: (name: string, motto: string) => invoke<void>("profile_set_text", { name, motto }),
+  /** A picture of the user's (`path`) or a library cover (`artwork`) as the profile's picture or banner. */
+  profileSetImage: (kind: "avatar" | "banner", source: { path?: string; artwork?: string }) => invoke<void>("profile_set_image", { kind, path: source.path ?? null, artwork: source.artwork ?? null }),
+  profileClearImage: (kind: "avatar" | "banner") => invoke<void>("profile_clear_image", { kind }),
+  profileSetView: (kind: "avatar" | "banner", view: ProfileView) => invoke<void>("profile_set_view", { kind, view }),
+  profileSetFrame: (shape: Profile["shape"], ring: Profile["ring"]) => invoke<void>("profile_set_frame", { shape, ring }),
+  /** The share card's PNG, sent as it is (not as JSON), saved where the user chose. */
+  profileSavePng: (path: string, png: Uint8Array) => trackBusy("profile_save_png", callCore<void>("profile_save_png", png, { headers: { path: encodeURIComponent(path) } })),
+  arcadeCollections: () => invoke<ArcadeCollection[]>("arcade_collections"),
+  arcadeCollectionCreate: (name: string, rules: ArcadeCollectionRules | null, games: number[] = []) => invoke<number>("arcade_collection_create", { name, rules, games }),
+  arcadeCollectionUpdate: (id: number, name: string, rules: ArcadeCollectionRules | null) => invoke<void>("arcade_collection_update", { id, name, rules }),
+  arcadeCollectionDelete: (id: number) => invoke<void>("arcade_collection_delete", { id }),
+  arcadeCollectionAdd: (id: number, games: number[]) => invoke<number>("arcade_collection_add", { id, games }),
+  arcadeCollectionRemove: (id: number, games: number[]) => invoke<number>("arcade_collection_remove", { id, games }),
+  arcadeCollectionsReorder: (ids: number[]) => invoke<void>("arcade_collections_reorder", { ids }),
+  /** A game's own emulator (D-148); null goes back to its console's. */
+  arcadeSetGameEmulator: (id: number, emulator: ArcadeEmulator | null) => invoke<void>("arcade_set_game_emulator", { id, emulator }),
+  /** Marks games as completed or not (D-149). */
+  arcadeSetCompleted: (ids: number[], completed: boolean) => invoke<void>("arcade_set_completed", { ids, completed }),
   arcadeCoverChoices: (id: number, search?: string) => invoke<ArcadeCoverChoice[]>("arcade_cover_choices", { id, search: search ?? null }),
   arcadeChooseCover: (id: number, index: number) => invoke<void>("arcade_choose_cover", { id, index }),
   /** Adds a PC game by its program (D-107); returns its id. */
@@ -1105,6 +1117,56 @@ export interface ArcadeGame {
   store: ArcadeStore | null;
   /** From RetroArch's playlists: RetroArch starts it with its core (D-101). */
   retroarch: boolean;
+  /** The emulator this game starts in, over its console's (D-148). */
+  emulator: ArcadeEmulator | null;
+  /** When it was marked as completed (D-149). */
+  completedAt: string | null;
+}
+
+/** The personal profile (D-149): kept on this computer; the pictures come as data URLs. */
+export interface Profile {
+  name: string;
+  motto: string;
+  avatar: string | null;
+  banner: string | null;
+  /** How each picture sits in its frame (D-150). */
+  avatarView: ProfileView;
+  bannerView: ProfileView;
+  /** The picture's frame (D-150). */
+  shape: "circle" | "rounded" | "hexagon";
+  ring: "rainbow" | "accent" | "gold" | "none";
+}
+
+/** A picture in its frame (D-150): zoomed in 1 to 4 times, around a point 0 to 100 % across and down. */
+export interface ProfileView {
+  zoom: number;
+  x: number;
+  y: number;
+}
+
+/** A dynamic collection's filters (D-148); a game is in it when it passes every one that's set. */
+export interface ArcadeCollectionRules {
+  /** Words (or "phrases" in quotes) the name has: all of them, or any. */
+  include: string;
+  match: "all" | "any";
+  /** Words the name doesn't have. */
+  exclude: string;
+  /** Consoles and launchers (Arcade's view keys); none means any. */
+  views: string[];
+  played: "any" | "played" | "never";
+  /** Marked as completed or not (D-149). */
+  completed: "any" | "yes" | "no";
+  favorites: boolean;
+  minRating: number | null;
+}
+
+/** An Arcade collection (D-148): the player's own, with its games, or dynamic, with its filters. */
+export interface ArcadeCollection {
+  id: number;
+  name: string;
+  dynamic: boolean;
+  rules: Partial<ArcadeCollectionRules> | null;
+  games: number[];
 }
 
 export interface ArcadeScanReport {

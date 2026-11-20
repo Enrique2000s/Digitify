@@ -1,19 +1,25 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useSearch } from "@tanstack/react-router";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Marquee } from "../../components/Marquee";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { ReviewPanel } from "../../components/Review";
 import { createPortal } from "react-dom";
 import { DropdownMenu } from "radix-ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { AppWindow, Check, CheckCircle2, ChevronDown, CircleSlash, ChevronLeft, ChevronRight, CircleAlert, Clock, FolderOpen, FolderPlus, Heart, ImageDown, ImagePlus, Joystick, ListChecks, LoaderCircle, Pencil, Play, RefreshCw, RotateCcw, Search, Settings2, Trash, X } from "lucide-react";
+import { BadgeCheck, AppWindow, Check, CheckCircle2, ChevronDown, CircleSlash, ChevronLeft, ChevronRight, CircleAlert, Clock, FolderOpen, FolderPlus, Heart, ImageDown, ImagePlus, Joystick, Layers, ListChecks, LoaderCircle, Pencil, Play, RefreshCw, RotateCcw, Search, Settings2, Trash, X } from "lucide-react";
 import { api, errorText, onLinux, type ArcadeConsole, type ArcadeEmulator, type ArcadeEmulatorStatus, type ArcadeFolder, type ArcadeGame, type ArcadeStatus } from "../../lib/api";
 import type { ArcadeFilter } from "../../lib/preferences";
 import { usePreferences, type ArcadePreferences } from "../../lib/preferences";
 import { GridDragProvider, useGridDragProps } from "../../lib/gridDrag";
 import { CardSizeSlider, Dialog, Switch } from "../../components/common";
-import { badgeOf, consoleOf, FILTER_LABELS, inFilter, GameCover, lastPlayed, PLATFORM_ASPECT, PLATFORM_NAMES, playTime, reorderWithin, SORTS, useArcade, useArcadeFilters, useLaunch, useShownGames, addProgramGame } from "./shared";
-import { EmulatorMark, LogoMark, PlatformLogo } from "./logos";
+import { consoleKey, consoleOf, GameBadge, gameAspect, FILTER_LABELS, inFilter, GameCover, lastPlayed, PLATFORM_NAMES, playTime, reorderWithin, SORTS, useArcade, useArcadeFilters, useLaunch, useShownGames, addProgramGame } from "./shared";
+import { EmulatorMark, LogoMark } from "./logos";
 import { CoverPicker } from "./CoverPicker";
+import { belongsTo, CollectionBar, CollectionMenu, CollectionsBoard, FAVORITES, FAVORITES_ID, useCollections } from "./Collections";
+
+/** What Arcade shows (D-148, D-149): its games, the collections (their own screen, with a Back to
+ *  the games), or one collection (Favorites is 0); in the address, so Back goes where it came from. */
+type Board = "games" | "collections" | number;
 
 /** `/arcade` (D-034, D-035, D-037): the games of the emulators and stores on this computer, started the way they start. */
 export function ArcadePage() {
@@ -21,7 +27,8 @@ export function ArcadePage() {
   const { preferences, update } = usePreferences();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const opened = useSearch({ strict: false }) as { game?: number };
+  const opened = useSearch({ strict: false }) as { game?: number; board?: string; collection?: number };
+  const navigate = useNavigate();
   const [selected, setSelected] = useState<number | null>(opened.game ?? null);
   useEffect(() => {
     if (opened.game != null) setSelected(opened.game);
@@ -33,10 +40,32 @@ export function ArcadePage() {
   const [picked, setPicked] = useState<ReadonlySet<number>>(new Set());
   const [covering, setCovering] = useState<ArcadeGame[] | null>(null);
   const { launch, error, clearError } = useLaunch();
-  const shown = useShownGames(games.data, search);
+  const collections = useCollections();
+  const board: Board = opened.collection != null ? opened.collection : opened.board === "collections" ? "collections" : "games";
+  const setBoard = (next: Board) => {
+    setSearch("");
+    setSelecting(false);
+    setPicked(new Set());
+    void navigate({ to: "/arcade", search: next === "games" ? {} : next === "collections" ? { board: "collections" } : { collection: next } });
+  };
+  const collection = board === FAVORITES_ID ? FAVORITES : typeof board === "number" ? collections.data?.find((c) => c.id === board) : undefined;
+  // A collection that's gone (deleted) goes back to the collections.
+  useEffect(() => {
+    if (typeof board === "number" && collections.isSuccess && !collection) setBoard("collections");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [board, collections.isSuccess, collection]);
+  const scope = useMemo(() => (collection ? belongsTo(collection) : null), [collection]);
+  const shown = useShownGames(games.data, search, scope);
+  // The Console sort puts each console's and launcher's games under its name (D-149).
+  const bySection = preferences.arcade.sort === "console";
+  const sectionCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (bySection) for (const g of shown) counts.set(consoleKey(g), (counts.get(consoleKey(g)) ?? 0) + 1);
+    return counts;
+  }, [bySection, shown]);
   const view = useArcadeFilters();
   // Games pop in when the view, sort or search changes, like the library's items (D-041).
-  const stageKey = `${view.current}:${preferences.arcade.sort}:${search.trim()}`;
+  const stageKey = `${collection ? `c${collection.id}` : view.current}:${preferences.arcade.sort}:${search.trim()}`;
   const [entering, setEntering] = useState(true);
   useEffect(() => {
     setEntering(true);
@@ -147,6 +176,10 @@ export function ArcadePage() {
               <LoaderCircle size={16} className="spin" /> Looking for games…
             </span>
           )}
+          {/* Goes to the collections' own screen (D-149), which has its Back to the games. */}
+          <button type="button" className="btn arcade-collections-button" aria-current={board !== "games" ? "page" : undefined} onClick={() => board !== "collections" && setBoard("collections")}>
+            <Layers size={16} /> Collections
+          </button>
           <button type="button" className="btn glow-when-on" aria-pressed={showSetup} onClick={() => setSetup(!showSetup)}>
             <Settings2 size={16} /> Emulators & folders
           </button>
@@ -200,8 +233,15 @@ export function ArcadePage() {
 
       {showSetup && status.data && <Setup status={status.data} onChanged={refresh} onAddProgram={() => void addProgram()} />}
 
+      {board === "collections" && <CollectionsBoard games={games.data} onOpen={(id) => setBoard(id)} onBack={() => setBoard("games")} />}
+      {board !== "collections" && (
+      <>
       <div className="arcade-toolbar">
-        <ViewStrip filters={view.filters} current={view.current} onChoose={view.choose} games={games.data} />
+        {collection ? (
+          <CollectionBar collection={collection} count={shown.length} games={games.data} onBack={() => setBoard("collections")} />
+        ) : (
+          <ViewStrip filters={view.filters} current={view.current} onChoose={view.choose} games={games.data} />
+        )}
         {/* Find, Size, Select and Sort: the same tools, in the same order, as the Library's (D-044). */}
         <div className="view-tools">
         <label className="arcade-search">
@@ -225,14 +265,18 @@ export function ArcadePage() {
         </label>
         </div>
       </div>
-      {canArrange && shown.length > 1 && <p className="arcade-hint">Drag the games into the order you like{view.current === "all" && !search.trim() ? "" : "; the others keep their places"}.</p>}
+      {canArrange && shown.length > 1 && <p className="arcade-hint">Drag the games into the order you like{view.current === "all" && !search.trim() && !collection ? "" : "; the others keep their places"}.</p>}
 
       {games.data && shown.length === 0 ? (
         <div className="empty arcade-empty">
           <Joystick size={40} strokeWidth={1.8} />
-          <h2>{games.data.length === 0 ? "No games yet" : "No games here"}</h2>
+          <h2>{games.data.length === 0 ? "No games yet" : collection && !search.trim() ? "Nothing in this collection yet" : "No games here"}</h2>
           <p>
-            {games.data.length === 0
+            {collection && games.data.length > 0 && !search.trim()
+              ? collection.dynamic
+                ? "No game passes its filters right now. Edit filters to change them; games that pass later show up by themselves."
+                : "Put games in it from a game's panel (Collections), or select several in Arcade and use Add to collection."
+              : games.data.length === 0
               ? anyEmulator
                 ? "Arcade looks in the game folders set up in your emulators, and in folders you add here. Check them in Emulators & folders, then Look for games in its Folders & covers tab."
                 : `Install an emulator Arcade knows (Emulators & folders lists them) or games from a store (Steam, itch.io${onLinux ? ", Heroic or Lutris" : ", Epic Games, Xbox, GOG, Ubisoft Connect, the EA app, Battle.net or Amazon Games"}), point Arcade to your emulators in Emulators & folders, or add a game by its program.`
@@ -241,21 +285,25 @@ export function ArcadePage() {
         </div>
       ) : (
         <GridDragProvider value={drag}>
-          <div key={stageKey} className={`arcade-grid${selecting ? " selecting" : ""}${canArrange ? " arranging-in-place" : ""}${entering ? " entering" : ""}`} style={{ ["--card" as string]: `${preferences.cardSize}px` }}>
+          <div key={stageKey} className={`arcade-grid${selecting ? " selecting" : ""}${canArrange ? " arranging-in-place" : ""}${entering ? " entering" : ""}${bySection ? " by-section" : ""}`} style={{ ["--card" as string]: `${preferences.cardSize}px` }}>
             {shown.map((g, index) => (
-              <GameTile
-                key={g.id}
-                index={index}
-                game={g}
-                running={status.data?.running === g.id}
-                selecting={selecting}
-                checked={picked.has(g.id)}
-                onOpen={() => (selecting ? toggle(g.id) : setSelected(g.id))}
-                onPlay={() => void launch(g)}
-              />
+              <Fragment key={g.id}>
+                {bySection && (index === 0 || consoleKey(shown[index - 1]) !== consoleKey(g)) && <ConsoleHeading view={consoleKey(g)} count={sectionCounts.get(consoleKey(g)) ?? 0} />}
+                <GameTile
+                  index={index}
+                  game={g}
+                  running={status.data?.running === g.id}
+                  selecting={selecting}
+                  checked={picked.has(g.id)}
+                  onOpen={() => (selecting ? toggle(g.id) : setSelected(g.id))}
+                  onPlay={() => void launch(g)}
+                />
+              </Fragment>
             ))}
           </div>
         </GridDragProvider>
+      )}
+      </>
       )}
 
       {selecting && (
@@ -268,6 +316,8 @@ export function ArcadePage() {
           onNotice={setNotice}
           onChanged={refresh}
           onFindCovers={() => setCovering((games.data ?? []).filter((g) => picked.has(g.id)))}
+          games={games.data}
+          inCollection={collection && !collection.dynamic ? collection.id : null}
         />
       )}
       {covering && (
@@ -280,6 +330,17 @@ export function ArcadePage() {
         />
       )}
       {game && !selecting && <GamePanel game={game} running={status.data?.running ?? null} onClose={() => setSelected(null)} onPlay={() => void launch(game)} />}
+    </div>
+  );
+}
+
+/** A console's or launcher's heading in the Console sort (D-149): its symbol, its name, how many games, and a line. */
+function ConsoleHeading({ view, count }: { view: ArcadeFilter; count: number }) {
+  return (
+    <div className="arcade-section" role="heading" aria-level={2}>
+      <LogoMark name={view === "others" ? "pc" : view} size={18} className="arcade-section-logo" />
+      <span className="arcade-section-name">{FILTER_LABELS[view]}</span>
+      <span className="count">{count.toLocaleString()}</span>
     </div>
   );
 }
@@ -414,21 +475,23 @@ function ViewStrip({ filters, current, onChoose, games }: { filters: ArcadeFilte
 export function GameTile({ game, index, running, selecting, checked, onOpen, onPlay }: { game: ArcadeGame; index: number; running: boolean; selecting: boolean; checked: boolean; onOpen: () => void; onPlay: () => void }) {
   const drag = useGridDragProps(game.id);
   return (
-    <div className={`arcade-tile${running ? " running" : ""}${checked ? " checked" : ""}`} data-platform={game.platform} style={{ ["--i" as string]: index, ["--aspect" as string]: PLATFORM_ASPECT[game.platform] }} {...drag}>
+    <div className={`arcade-tile${running ? " running" : ""}${checked ? " checked" : ""}`} data-platform={game.platform} style={{ ["--i" as string]: index, ["--aspect" as string]: gameAspect(game) }} {...drag}>
       <button
         type="button"
         className="arcade-tile-art"
-        style={{ aspectRatio: PLATFORM_ASPECT[game.platform] }}
+        style={{ aspectRatio: gameAspect(game) }}
         onClick={onOpen}
         aria-label={`${game.title}, ${consoleOf(game)}`}
         aria-pressed={selecting ? checked : undefined}
         data-blip
       >
         <GameCover game={game} />
-        <span className="arcade-badge" data-platform={game.platform} data-store={game.store ?? undefined}>
-          <PlatformLogo game={game} />
-          {badgeOf(game)}
-        </span>
+        <GameBadge game={game} />
+        {game.completedAt && (
+          <span className="arcade-completed" title="Completed">
+            <BadgeCheck size={15} strokeWidth={2.4} aria-label="Completed" />
+          </span>
+        )}
         {game.isFavorite && <Heart className="arcade-fav" size={16} fill="currentColor" aria-label="Favorite" />}
         {selecting && <span className={`card-check${checked ? " on" : ""}`} aria-hidden>{checked && <Check size={15} strokeWidth={3.2} />}</span>}
       </button>
@@ -438,7 +501,9 @@ export function GameTile({ game, index, running, selecting, checked, onOpen, onP
         </button>
       )}
       <div className="arcade-tile-text">
-        <strong title={game.title}>{game.title}</strong>
+        <strong>
+          <Marquee hover text={game.title} />
+        </strong>
         <span>{game.playSeconds > 0 ? `${consoleOf(game)} · ${playTime(game.playSeconds)}` : consoleOf(game)}</span>
       </div>
     </div>
@@ -502,10 +567,15 @@ function BulkBar({
   onNotice,
   onChanged,
   onFindCovers,
+  games,
+  inCollection,
 }: {
   ids: number[];
   total: number;
   onFindCovers: () => void;
+  games: ArcadeGame[] | undefined;
+  /** The collection of the player's own that's open, if one is (D-148). */
+  inCollection: number | null;
   onSelectAll: () => void;
   onClear: () => void;
   onDone: () => void;
@@ -513,6 +583,7 @@ function BulkBar({
   onChanged: () => void;
 }) {
   const { preferences } = usePreferences();
+  const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const run = async (action: () => Promise<unknown>, done?: string) => {
@@ -565,6 +636,46 @@ function BulkBar({
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button type="button" className="btn btn-sm" disabled={none || busy}>
+              <BadgeCheck size={15} /> Completed <ChevronDown size={13} />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content className="menu" side="top" align="center" sideOffset={10}>
+              <DropdownMenu.Item className="menu-item" onSelect={() => void run(() => api.arcadeSetCompleted(ids, true), `${ids.length} marked as completed`)}>
+                <BadgeCheck size={17} /> Mark as completed
+              </DropdownMenu.Item>
+              <DropdownMenu.Item className="menu-item" onSelect={() => void run(() => api.arcadeSetCompleted(ids, false), `${ids.length} not completed`)}>
+                <X size={17} /> Not completed
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+        <CollectionMenu ids={ids} games={games} onNotice={onNotice} side="top">
+          <button type="button" className="btn btn-sm" disabled={none || busy}>
+            <Layers size={15} /> Add to collection <ChevronDown size={13} />
+          </button>
+        </CollectionMenu>
+        {inCollection != null && (
+          <button
+            type="button"
+            className="btn btn-sm"
+            disabled={none || busy}
+            onClick={() =>
+              void run(async () => {
+                // Out of Favorites is no longer a favorite (D-149).
+                const removed = inCollection === FAVORITES_ID ? (await api.arcadeSetFavoriteMany(ids, false), ids.length) : await api.arcadeCollectionRemove(inCollection, ids);
+                await queryClient.invalidateQueries({ queryKey: ["arcade-collections"] });
+                onClear();
+                onNotice(`${removed} ${removed === 1 ? "game" : "games"} taken out of the collection`);
+              })
+            }
+          >
+            <X size={15} /> Take out of collection
+          </button>
+        )}
         <button type="button" className="btn btn-sm btn-danger" disabled={none || busy} onClick={() => setConfirming(true)}>
           <Trash size={15} /> Remove from Digitify
         </button>
@@ -624,7 +735,8 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
     }
   };
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && naming == null && onClose();
+    // Escape in one of its menus or dialogs closes that, not the panel.
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && naming == null && !document.querySelector("[role=menu], [role=dialog]") && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, naming]);
@@ -639,7 +751,11 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
   };
   const pc = game.platform === "pc";
   const status = useQuery({ queryKey: ["arcade-status"], queryFn: api.arcadeStatus });
+  const games = useQuery({ queryKey: ["arcade-games"], queryFn: api.arcadeGames });
   const emulator = pc ? consoleOf(game) : playsIn(game, preferences.arcade, status.data);
+  // The emulators found that play its console, to pick one for this game alone (D-148).
+  const players = (status.data?.consoles.find((c) => c.key === game.platform)?.players ?? []).filter((key) => status.data?.emulators.find((e) => e.key === key)?.found);
+  const consoleDefault = playsIn({ ...game, emulator: null }, preferences.arcade, status.data);
   const played = lastPlayed(game.lastPlayedAt);
   // On the page's own layer, so it stays put however the page scrolls.
   return createPortal(
@@ -648,7 +764,7 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
         <button type="button" className="round-btn arcade-panel-close" aria-label="Close" onClick={onClose}>
           <X size={17} />
         </button>
-        <div className="arcade-panel-art" style={{ aspectRatio: PLATFORM_ASPECT[game.platform] }}>
+        <div className="arcade-panel-art" style={{ aspectRatio: gameAspect(game) }}>
           <GameCover game={game} size="cover" />
         </div>
         {naming == null ? (
@@ -699,6 +815,36 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
               <dd>{played}</dd>
             </div>
           )}
+          {game.completedAt && (
+            <div>
+              <dt>
+                <BadgeCheck size={14} /> Completed
+              </dt>
+              <dd>{new Date(game.completedAt).toLocaleDateString(undefined, { dateStyle: "medium" })}</dd>
+            </div>
+          )}
+          {!pc && !game.retroarch && players.length > 0 && (
+            <div>
+              <dt>Plays in</dt>
+              <dd>
+                <select
+                  className="input arcade-emulator-pick"
+                  aria-label="Emulator for this game"
+                  value={game.emulator ?? ""}
+                  onChange={(event) => void run(() => api.arcadeSetGameEmulator(game.id, (event.target.value || null) as ArcadeEmulator | null))}
+                >
+                  <option value="">{`${PLATFORM_NAMES[game.platform]}'s emulator (${consoleDefault})`}</option>
+                  {players.map((key) => (
+                    <option key={key} value={key}>
+                      {status.data?.emulators.find((e) => e.key === key)?.name ?? key}
+                    </option>
+                  ))}
+                  {game.emulator && !players.includes(game.emulator) && <option value={game.emulator}>{`${game.emulator} (not found)`}</option>}
+                </select>
+                <small className="muted">Only this game; the console's other games keep theirs.</small>
+              </dd>
+            </div>
+          )}
           {(!pc || !game.store) && (
             <div>
               <dt>{pc ? "Program" : "File"}</dt>
@@ -712,6 +858,9 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
         <div className="arcade-panel-actions">
           <button type="button" className="btn" aria-pressed={game.isFavorite} onClick={() => void run(() => api.arcadeSetFavorite(game.id, !game.isFavorite))}>
             <Heart size={16} fill={game.isFavorite ? "currentColor" : "none"} /> {game.isFavorite ? "Favorite" : "Add to favorites"}
+          </button>
+          <button type="button" className="btn arcade-complete-btn" aria-pressed={!!game.completedAt} onClick={() => void run(() => api.arcadeSetCompleted([game.id], !game.completedAt))}>
+            <BadgeCheck size={16} /> {game.completedAt ? "Completed" : "Mark as completed"}
           </button>
           {/* One menu for its cover (D-121): covers found to choose from, a picture of yours, or its own back. */}
           <DropdownMenu.Root>
@@ -734,6 +883,11 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
+          <CollectionMenu ids={[game.id]} games={games.data}>
+            <button type="button" className="btn">
+              <Layers size={16} /> Collections <ChevronDown size={14} />
+            </button>
+          </CollectionMenu>
           <button type="button" className="btn" onClick={() => void run(() => api.arcadeReveal(game.id))}>
             <FolderOpen size={16} /> {pc ? "Show folder" : "Show file"}
           </button>
@@ -1033,6 +1187,8 @@ function playsIn(game: ArcadeGame, arcade: ArcadePreferences, status: ArcadeStat
   if (game.retroarch) return "RetroArch";
   const players = status?.consoles.find((c) => c.key === game.platform)?.players ?? [];
   const found = players.filter((key) => status?.emulators.find((e) => e.key === key)?.found);
+  // Its own emulator first (D-148).
+  if (game.emulator) return status?.emulators.find((e) => e.key === game.emulator)?.name ?? game.emulator;
   const chosen = arcade.playsIn[game.platform as ArcadeConsole];
   const key = chosen && found.includes(chosen) ? chosen : (found[0] ?? players[0]);
   return status?.emulators.find((e) => e.key === key)?.name ?? "its emulator";

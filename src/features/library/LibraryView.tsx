@@ -905,7 +905,7 @@ export function LibraryView({
   empty,
   back,
 }: {
-  /** A Back above everything, for views opened from another (a smart list, D-138). */
+  /** A Back above everything, for views opened from another (D-138). */
   back?: ReactNode;
   viewKey: string;
   base: Omit<QueryParams, "offset" | "limit">;

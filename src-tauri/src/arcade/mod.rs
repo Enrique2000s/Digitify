@@ -11,6 +11,7 @@
 //! ID (the one online exception here, like Import from URL, D-028).
 
 mod artsources;
+pub mod collections;
 mod detect;
 mod games;
 mod icons;
@@ -781,7 +782,7 @@ fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], 
                             None => continue,
                         }
                     } else if let Some(title) = url.strip_prefix("ms:") {
-                        match artsources::msstore_covers(title, 1).into_iter().next() {
+                        match artsources::msstore_covers(title, 1, false).into_iter().next() {
                             Some((_, found)) => found,
                             None => continue,
                         }
@@ -913,7 +914,8 @@ enum CoverSource {
 /// computer (the launcher's, Dolphin's, RetroArch's, a PlayStation 3 game's icon), then online
 /// (GameTDB, libretro-thumbnails, the stores; Steam's store by name, a few close matches).
 /// `search` (D-146), when given, is the name looked up instead of the game's title.
-fn cover_sources(library: &Library, id: i64, search: Option<&str>, sgdb_key: Option<&str>, launchbox: Option<&Path>) -> AppResult<Vec<(String, CoverSource)>> {
+/// A search also finds the names that only have some of its words (D-148), each labelled with its name.
+fn cover_sources(library: &Library, id: i64, search: Option<&str>, sgdb_key: Option<&str>, launchbox: Option<&Path>, cache: Option<&Path>) -> AppResult<Vec<(String, CoverSource)>> {
     type Row = (Option<String>, String, String, String, Option<String>, Option<String>, Option<String>);
     let (game_id, platform, path, title, store, store_key, system): Row = library
         .db
@@ -923,6 +925,7 @@ fn cover_sources(library: &Library, id: i64, search: Option<&str>, sgdb_key: Opt
             })?)
         })?;
     let title = search.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).unwrap_or(title);
+    let fuzzy = search.is_some();
     let mut out: Vec<(String, CoverSource)> = Vec::new();
     if platform == "pc" {
         let art = store_art_now().get(&path).cloned().unwrap_or_default();
@@ -934,15 +937,16 @@ fn cover_sources(library: &Library, id: i64, search: Option<&str>, sgdb_key: Opt
             _ => {}
         }
         if store.as_deref() != Some("steam") {
-            for (name, app) in stores::steam_search_all(&title).into_iter().take(3) {
+            for (name, app) in stores::steam_search_all(&title).into_iter().take(if fuzzy { 6 } else { 3 }) {
                 out.extend(stores::steam_cover_urls(&app).into_iter().take(2).map(|u| (format!("Steam · {name}"), CoverSource::Url(u))));
             }
         }
         // LaunchBox and the Microsoft Store, by name (D-131).
         if let Some(db) = launchbox {
-            out.extend(artsources::launchbox_covers(db, &title, artsources::launchbox_platforms("pc"), 4).into_iter().map(|(label, u)| (label, CoverSource::Url(u))));
+            let found = if fuzzy { artsources::launchbox_by_words(db, &title, artsources::launchbox_platforms("pc"), 6, 2) } else { artsources::launchbox_covers(db, &title, artsources::launchbox_platforms("pc"), 4) };
+            out.extend(found.into_iter().map(|(label, u)| (label, CoverSource::Url(u))));
         }
-        out.extend(artsources::msstore_covers(&title, 3).into_iter().map(|(label, u)| (label, CoverSource::Url(u))));
+        out.extend(artsources::msstore_covers(&title, 3, fuzzy).into_iter().map(|(label, u)| (label, CoverSource::Url(u))));
         if let Some(key) = sgdb_key {
             match (store.as_deref(), store_key.as_deref()) {
                 (Some("steam"), Some(app)) => out.extend(sgdb::steam_grids(key, app, 6).into_iter().map(|u| ("SteamGridDB".to_string(), CoverSource::Url(u)))),
@@ -985,15 +989,25 @@ fn cover_sources(library: &Library, id: i64, search: Option<&str>, sgdb_key: Opt
     out.extend(gametdb_urls(&platform, game_id.as_deref()).into_iter().map(|u| ("GameTDB".to_string(), CoverSource::Url(u))));
     if let Some(collection) = collection {
         out.extend(names.iter().map(|name| ("libretro".to_string(), CoverSource::Url(games::libretro_url(&collection, name)))));
+        // By its words, among every box libretro has for the console (D-148).
+        if let (true, Some(cache)) = (fuzzy, cache) {
+            let index = artsources::libretro_index(cache, &collection);
+            for name in artsources::best_by_words(index.iter().map(String::as_str), &title, 8) {
+                if !names.iter().any(|n| n.eq_ignore_ascii_case(&name)) {
+                    out.push((format!("libretro · {name}"), CoverSource::Url(games::libretro_url(&collection, &name))));
+                }
+            }
+        }
     }
     // By the game's name too, not only its ID (D-128, D-131): LaunchBox, Nintendo's store, the
     // Microsoft Store, SteamGridDB.
     if let Some(db) = launchbox {
-        out.extend(artsources::launchbox_covers(db, &title, artsources::launchbox_platforms(&platform), 6).into_iter().map(|(label, u)| (label, CoverSource::Url(u))));
+        let found = if fuzzy { artsources::launchbox_by_words(db, &title, artsources::launchbox_platforms(&platform), 6, 2) } else { artsources::launchbox_covers(db, &title, artsources::launchbox_platforms(&platform), 6) };
+        out.extend(found.into_iter().map(|(label, u)| (label, CoverSource::Url(u))));
     }
-    out.extend(artsources::eshop_covers(&platform, &title, 3).into_iter().map(|(label, u)| (label, CoverSource::Url(u))));
+    out.extend(artsources::eshop_covers(&platform, &title, 3, fuzzy).into_iter().map(|(label, u)| (label, CoverSource::Url(u))));
     if platform == "ogxbox" || platform == "x360" {
-        out.extend(artsources::msstore_covers(&title, 3).into_iter().map(|(label, u)| (label, CoverSource::Url(u))));
+        out.extend(artsources::msstore_covers(&title, 3, fuzzy).into_iter().map(|(label, u)| (label, CoverSource::Url(u))));
     }
     if let Some(key) = sgdb_key {
         out.extend(sgdb_by_name(key, &title));
@@ -1022,7 +1036,7 @@ pub struct CoverChoice {
     pub height: u32,
 }
 
-fn base64(bytes: &[u8]) -> String {
+pub(crate) fn base64(bytes: &[u8]) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
@@ -1046,13 +1060,15 @@ fn base64(bytes: &[u8]) -> String {
 pub async fn arcade_cover_choices(app: AppHandle, state: State<'_, AppState>, arcade: State<'_, ArcadeState>, id: i64, search: Option<String>) -> AppResult<Vec<CoverChoice>> {
     let library = state.library()?;
     let key = state.config.get().steamgriddb_key.filter(|k| !k.trim().is_empty());
-    let launchbox = art_cache(&app).map(|c| artsources::launchbox_db_path(&c)).filter(|db| db.is_file());
+    let cache = art_cache(&app);
+    let launchbox = cache.as_ref().map(|c| artsources::launchbox_db_path(c)).filter(|db| db.is_file());
+    let (most_sources, most_kept) = if search.is_some() { (80, 30) } else { (40, 12) };
     let found: Vec<(String, Vec<u8>)> = crate::library::blocking(move || {
-        let sources = cover_sources(&library, id, search.as_deref(), key.as_deref(), launchbox.as_deref())?;
+        let sources = cover_sources(&library, id, search.as_deref(), key.as_deref(), launchbox.as_deref(), cache.as_deref())?;
         let fetched: Vec<Option<(String, Vec<u8>)>> = std::thread::scope(|scope| {
             let handles: Vec<_> = sources
                 .into_iter()
-                .take(40)
+                .take(most_sources)
                 .map(|(source, from)| {
                     scope.spawn(move || {
                         let bytes = match from {
@@ -1066,7 +1082,7 @@ pub async fn arcade_cover_choices(app: AppHandle, state: State<'_, AppState>, ar
             handles.into_iter().map(|h| h.join().ok().flatten()).collect()
         });
         let mut seen = HashSet::new();
-        Ok(fetched.into_iter().flatten().filter(|(_, bytes)| seen.insert(blake3::hash(bytes))).take(12).collect())
+        Ok(fetched.into_iter().flatten().filter(|(_, bytes)| seen.insert(blake3::hash(bytes))).take(most_kept).collect())
     })
     .await?;
     let mut choices = Vec::new();
@@ -1095,7 +1111,7 @@ pub async fn arcade_choose_cover(app: AppHandle, state: State<'_, AppState>, arc
     let (source, bytes) = chosen.ok_or_else(|| AppError::msg("Those covers aren't there anymore; look for them again."))?;
     let source = match source.as_str() {
         "GameTDB" => "gametdb",
-        "libretro" => "libretro",
+        s if s.starts_with("libretro") => "libretro",
         "RetroArch" => "retroarch",
         "Dolphin" => "dolphin",
         "GOG" => "gog",
@@ -1154,6 +1170,10 @@ pub struct GameCard {
     pub store: Option<String>,
     /// From RetroArch's playlists: RetroArch starts it, with its core (D-101).
     pub retroarch: bool,
+    /// The emulator this game starts in, over its console's (D-148).
+    pub emulator: Option<String>,
+    /// When the player marked it as completed (D-149).
+    pub completed_at: Option<String>,
 }
 
 #[tauri::command]
@@ -1163,7 +1183,7 @@ pub async fn arcade_games(state: State<'_, AppState>) -> AppResult<Vec<GameCard>
             let rows = conn
                 .prepare(
                     "SELECT id, title, platform, game_id, path, size, cover_key, cover_color, is_favorite, play_seconds + extra_seconds, play_count, \
-                     last_played_at, added_at, missing, position, store, extra_seconds, rating, note, system IS NOT NULL FROM arcade_games WHERE hidden = 0 ORDER BY sort_title, id",
+                     last_played_at, added_at, missing, position, store, extra_seconds, rating, note, system IS NOT NULL, emulator, completed_at FROM arcade_games WHERE hidden = 0 ORDER BY sort_title, id",
                 )?
                 .query_map([], |row| {
                     Ok(GameCard {
@@ -1187,6 +1207,8 @@ pub async fn arcade_games(state: State<'_, AppState>) -> AppResult<Vec<GameCard>
                         rating: row.get(17)?,
                         note: row.get(18)?,
                         retroarch: row.get(19)?,
+                        emulator: row.get(20)?,
+                        completed_at: row.get(21)?,
                     })
                 })?
                 .collect::<Result<_, _>>()?;
@@ -1201,6 +1223,49 @@ pub async fn arcade_set_favorite(state: State<'_, AppState>, id: i64, favorite: 
     with_library(&state, move |library| {
         library.db.with(|conn| {
             conn.execute("UPDATE arcade_games SET is_favorite = ?2 WHERE id = ?1", params![id, favorite])?;
+            Ok(())
+        })
+    })
+    .await
+}
+
+/// Marks games as completed, or not (D-149); a game marked again keeps its first date.
+#[tauri::command]
+pub async fn arcade_set_completed(state: State<'_, AppState>, ids: Vec<i64>, completed: bool) -> AppResult<()> {
+    with_library(&state, move |library| {
+        library.db.with(|conn| {
+            let tx = conn.transaction()?;
+            for id in &ids {
+                if completed {
+                    tx.execute("UPDATE arcade_games SET completed_at = coalesce(completed_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) WHERE id = ?1", [id])?;
+                } else {
+                    tx.execute("UPDATE arcade_games SET completed_at = NULL WHERE id = ?1", [id])?;
+                }
+            }
+            tx.commit()?;
+            Ok(())
+        })
+    })
+    .await
+}
+
+/// The emulator one game starts in (D-148), over its console's; none goes back to the console's.
+#[tauri::command]
+pub async fn arcade_set_game_emulator(state: State<'_, AppState>, id: i64, emulator: Option<String>) -> AppResult<()> {
+    with_library(&state, move |library| {
+        library.db.with(|conn| {
+            if let Some(key) = emulator.as_deref() {
+                let platform: String = conn
+                    .query_row("SELECT platform FROM arcade_games WHERE id = ?1", [id], |row| row.get(0))
+                    .optional()?
+                    .ok_or_else(|| AppError::msg("That game is no longer in Arcade."))?;
+                let console = Platform::parse(&platform).ok_or_else(|| AppError::msg("Only emulated games can choose an emulator."))?;
+                let chosen = Emulator::parse(key).ok_or_else(|| AppError::msg("That emulator isn't one Arcade knows."))?;
+                if !players(console).contains(&chosen) {
+                    return Err(AppError::msg(format!("{} doesn't play {} games.", chosen.name(), console.name())));
+                }
+            }
+            conn.execute("UPDATE arcade_games SET emulator = ?2 WHERE id = ?1", params![id, emulator])?;
             Ok(())
         })
     })
@@ -1490,13 +1555,13 @@ pub async fn arcade_launch(
         return Err(AppError::msg("A game is already running. Close it first."));
     }
     let library = state.library()?;
-    type Row = (String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>);
-    let (path, platform, store, launch, install_dir, core, system): Row = library
+    type Row = (String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>);
+    let (path, platform, store, launch, install_dir, core, system, own): Row = library
         .db
         .with(|conn| {
             Ok(conn
-                .query_row("SELECT path, platform, store, launch, install_dir, core, system FROM arcade_games WHERE id = ?1", [id], |row| {
-                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?))
+                .query_row("SELECT path, platform, store, launch, install_dir, core, system, emulator FROM arcade_games WHERE id = ?1", [id], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?))
                 })
                 .optional()?)
         })?
@@ -1528,7 +1593,13 @@ pub async fn arcade_launch(
         found
     } else {
         let console = Platform::parse(&platform).ok_or_else(|| AppError::msg("Arcade doesn't know which emulator plays this game."))?;
-        // The emulator chosen for this console (Emulators & folders › Consoles), else Arcade's order.
+        // The game's own emulator (D-148), else the one chosen for its console (Emulators & folders ›
+        // Consoles), else Arcade's order. The game's own has to be there: it was picked for it.
+        if let Some(own) = own.as_deref().and_then(Emulator::parse) {
+            if found(own).is_none() {
+                return Err(need(&format!("This game is set to play in {}, which isn't found.", own.name())));
+            }
+        }
         let chosen = choices
             .as_ref()
             .and_then(|c| c.get(&platform))
@@ -1539,7 +1610,8 @@ pub async fn arcade_launch(
                 _ => None,
             })
             .and_then(|key| Emulator::parse(&key));
-        let candidates: Vec<Emulator> = chosen.into_iter().chain(players(console).iter().copied()).filter(|e| e.available_here()).collect();
+        let own = own.as_deref().and_then(Emulator::parse);
+        let candidates: Vec<Emulator> = own.into_iter().chain(chosen).chain(players(console).iter().copied()).filter(|e| e.available_here()).collect();
         match candidates.iter().find_map(|e| found(*e)) {
             Some(found) => found,
             None => {

@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
+import { Marquee } from "../../components/Marquee";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Gamepad2, Heart, Info, Play } from "lucide-react";
+import { BadgeCheck, Gamepad2, Heart, Info, Play } from "lucide-react";
 import type { ArcadeGame, TileCover } from "../../lib/api";
 import { artworkUrl } from "../../lib/api";
-import { badgeOf, consoleOf, GameCover, lastPlayed, PLATFORM_ASPECT, playTime, useArcade, useLaunch } from "../arcade/shared";
-import { PlatformLogo } from "../arcade/logos";
+import { consoleOf, GameBadge, GameCover, lastPlayed, gameAspect, playTime, useArcade, useLaunch } from "../arcade/shared";
 
 /** Arcade's games for Home (D-041): recently played, favorites, one featured a day, and the tile's covers. */
 export function useHomeGames() {
@@ -34,23 +34,27 @@ const GAME_ART_HEIGHT = 200;
 
 /** A game in a Home row: its cover opens it in Arcade; ▶ starts it. */
 export function GameCard({ game, running, onPlay }: { game: ArcadeGame; running: boolean; onPlay: () => void }) {
-  const aspect = PLATFORM_ASPECT[game.platform];
+  const aspect = gameAspect(game);
   const when = lastPlayed(game.lastPlayedAt);
   return (
     <div className={`arcade-tile home-game${running ? " running" : ""}`} style={{ width: Math.round(GAME_ART_HEIGHT * aspect) }}>
       <Link to="/arcade" search={{ game: game.id }} className="arcade-tile-art" style={{ aspectRatio: aspect }} aria-label={`${game.title}, ${consoleOf(game)}`} data-blip>
         <GameCover game={game} />
-        <span className="arcade-badge" data-platform={game.platform} data-store={game.store ?? undefined}>
-          <PlatformLogo game={game} />
-          {badgeOf(game)}
-        </span>
+        <GameBadge game={game} />
+        {game.completedAt && (
+          <span className="arcade-completed" title="Completed">
+            <BadgeCheck size={15} strokeWidth={2.4} aria-label="Completed" />
+          </span>
+        )}
         {game.isFavorite && <Heart className="arcade-fav" size={16} fill="currentColor" aria-label="Favorite" />}
       </Link>
       <button type="button" className="arcade-play" aria-label={`Play ${game.title}`} title="Play" onClick={onPlay}>
         <Play size={18} fill="currentColor" />
       </button>
       <div className="arcade-tile-text">
-        <strong title={game.title}>{game.title}</strong>
+        <strong>
+          <Marquee hover text={game.title} />
+        </strong>
         <span>{game.playSeconds > 0 ? `${consoleOf(game)} · ${playTime(game.playSeconds)}${when ? ` · ${when}` : ""}` : consoleOf(game)}</span>
       </div>
     </div>
@@ -85,7 +89,7 @@ export function GameRow({ title, games, running, starting }: { title: ReactNode;
 export function FeaturedGame({ game, running }: { game: ArcadeGame; running: boolean }) {
   const { launch, error } = useLaunch();
   const navigate = useNavigate();
-  const aspect = PLATFORM_ASPECT[game.platform];
+  const aspect = gameAspect(game);
   const when = lastPlayed(game.lastPlayedAt);
   return (
     <section className="section" aria-label="Game of the day">

@@ -9,7 +9,8 @@ import { Dialog } from "../../components/common";
  * online. With several games it goes through them one by one ("Game 2 of 5"): a game with only one
  * cover found gets it without asking, one with none is passed; the rest show their covers to pick
  * one or skip. From a game's own panel the covers show even when there's only one. The name looked
- * up can be changed (D-146), for a game whose file name or title doesn't find its covers.
+ * up can be changed (D-146), for a game whose file name or title doesn't find its covers; a search
+ * doesn't need the exact name: games with any of its words show, those with most of them first (D-148).
  */
 export function CoverPicker({ games, onClose }: { games: ArcadeGame[]; onClose: (summary: string | null) => void }) {
   const queryClient = useQueryClient();
@@ -80,7 +81,8 @@ export function CoverPicker({ games, onClose }: { games: ArcadeGame[]; onClose: 
     event.preventDefault();
     const name = query.trim();
     if (!name || choices == null) return;
-    setSearched(name === game?.title ? null : name);
+    // A search looks by its words too (D-148): names with only some of them show, the closest first.
+    setSearched(name);
     // The same name again looks again.
     setTries((n) => n + 1);
   };
@@ -121,7 +123,7 @@ export function CoverPicker({ games, onClose }: { games: ArcadeGame[]; onClose: 
     >
       <form className="cover-search" role="search" onSubmit={search}>
         <Search size={16} aria-hidden />
-        <input className="input" aria-label="Name to look up" value={query} maxLength={160} onChange={(event) => setQuery(event.target.value)} placeholder="The game's name" />
+        <input className="input" aria-label="Name to look up" value={query} maxLength={160} onChange={(event) => setQuery(event.target.value)} placeholder="The game's name, or some words of it" />
         <button type="submit" className="btn btn-sm" disabled={!query.trim() || choices == null}>
           Search
         </button>

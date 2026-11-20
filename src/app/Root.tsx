@@ -58,6 +58,12 @@ export function Root() {
   useLibraryEvents();
   // A page's Back is the one way back (D-138): no mouse side buttons or Alt+←/→.
   useEffect(() => blockHistoryKeys(), []);
+  // The manual that comes with Digitify (D-149), once a library is open: added the first time,
+  // replaced by a newer one, or left gone if it was deleted.
+  const libraryReady = status.data?.libraryOpen ?? false;
+  useEffect(() => {
+    if (libraryReady) void api.manualSync().catch(() => undefined);
+  }, [libraryReady]);
 
   // Automated video-lab runs (DIGITIFY_POC=video:<path>) open the lab directly.
   useEffect(() => {

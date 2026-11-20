@@ -1,0 +1,1056 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Digitify Manual</title>
+    <!--
+      The manual that comes with Digitify (D-149). Built into a PDF by `npm run manual`
+      (scripts/build-manual.mjs): each i element with a data-icon becomes that icon from the app's own set,
+      {{FONT}}, {{VERSION}}, {{EDITION}} and {{DATE}} are filled in. Keep it in step with the app:
+      when a feature is added, changed or removed, change it here, raise VERSION in
+      src-tauri/src/manual.rs and run `npm run manual`.
+    -->
+    <style>
+      @font-face {
+        font-family: "Nunito";
+        src: url("{{FONT}}") format("woff2");
+        font-weight: 200 1000;
+      }
+      @page {
+        size: 280mm 175mm;
+        margin: 0;
+      }
+      * {
+        box-sizing: border-box;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: "Nunito", "Segoe UI", sans-serif;
+        color: #26323e;
+        font-size: 9.4pt;
+        line-height: 1.42;
+      }
+      .page {
+        position: relative;
+        width: 280mm;
+        height: 175mm;
+        overflow: hidden;
+        padding: 12mm 15mm 12mm;
+        background:
+          radial-gradient(ellipse 70% 55% at 100% 0%, color-mix(in srgb, var(--c, #1592d0) 10%, transparent), transparent 70%),
+          #f4f7fb;
+        break-after: page;
+      }
+      .page:last-child {
+        break-after: auto;
+      }
+      .chapter {
+        display: flex;
+        align-items: center;
+        gap: 4.5mm;
+        margin-bottom: 4mm;
+      }
+      .badge {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 13mm;
+        height: 13mm;
+        border-radius: 4mm;
+        background: linear-gradient(160deg, color-mix(in srgb, var(--c) 70%, white), var(--c));
+        color: #fff;
+        box-shadow: 0 2mm 5mm color-mix(in srgb, var(--c) 35%, transparent);
+      }
+      .badge .icon {
+        width: 7mm;
+        height: 7mm;
+      }
+      .num {
+        color: var(--c);
+        font-size: 8pt;
+        font-weight: 900;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 0;
+        color: #142130;
+        font-size: 23pt;
+        font-weight: 900;
+        line-height: 1.05;
+      }
+      .lead {
+        max-width: 225mm;
+        margin: 0 0 5mm;
+        color: #485868;
+        font-size: 10.6pt;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 3.6mm;
+      }
+      .grid.two {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .grid.four {
+        grid-template-columns: repeat(4, 1fr);
+      }
+      .span2 {
+        grid-column: span 2;
+      }
+      .card {
+        padding: 3.6mm 4.2mm;
+        border: 0.3mm solid #e0e7ef;
+        border-radius: 4mm;
+        background: #ffffff;
+        box-shadow: 0 1mm 3mm rgba(30, 60, 90, 0.06);
+      }
+      .card h3 {
+        display: flex;
+        align-items: center;
+        gap: 2mm;
+        margin: 0 0 1.2mm;
+        color: #142130;
+        font-size: 10.4pt;
+        font-weight: 900;
+      }
+      .card h3 .icon {
+        flex: none;
+        width: 4.6mm;
+        height: 4.6mm;
+        color: var(--c);
+      }
+      .card p {
+        margin: 0;
+        color: #47566a;
+      }
+      .card p + p {
+        margin-top: 1.2mm;
+      }
+      .card ul {
+        margin: 0.6mm 0 0;
+        padding-left: 4mm;
+        color: #47566a;
+      }
+      .card li + li {
+        margin-top: 0.4mm;
+      }
+      b,
+      strong {
+        color: #142130;
+        font-weight: 800;
+      }
+      .path {
+        color: #142130;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+      kbd {
+        display: inline-block;
+        padding: 0 1.4mm;
+        border: 0.3mm solid #cfdae6;
+        border-radius: 1.2mm;
+        background: #edf2f7;
+        color: #142130;
+        font-family: inherit;
+        font-size: 7.8pt;
+        font-weight: 900;
+        line-height: 1.5;
+      }
+      .tip {
+        display: flex;
+        align-items: flex-start;
+        gap: 2.4mm;
+        margin-top: 3.6mm;
+        padding: 3mm 4mm;
+        border-radius: 3.5mm;
+        background: color-mix(in srgb, var(--c) 10%, white);
+        color: #2c3c4d;
+      }
+      .tip .icon {
+        flex: none;
+        width: 4.6mm;
+        height: 4.6mm;
+        color: var(--c);
+      }
+      .footer {
+        position: absolute;
+        right: 15mm;
+        bottom: 6mm;
+        left: 15mm;
+        display: flex;
+        justify-content: space-between;
+        color: #8796a6;
+        font-size: 7.4pt;
+        font-weight: 800;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      td {
+        padding: 0.8mm 0;
+        border-bottom: 0.25mm solid #edf1f5;
+        color: #47566a;
+        vertical-align: top;
+      }
+      td:last-child {
+        text-align: right;
+        white-space: nowrap;
+      }
+      .card h4 {
+        margin: 2mm 0 0.6mm;
+        color: var(--c);
+        font-size: 7.8pt;
+        font-weight: 900;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.4mm;
+        margin-top: 1.2mm;
+      }
+      .chip {
+        padding: 0.3mm 2.4mm;
+        border-radius: 9mm;
+        background: #edf2f7;
+        color: #33465a;
+        font-size: 7.8pt;
+        font-weight: 800;
+      }
+
+      /* The cover. */
+      .cover {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 0 24mm;
+        background:
+          radial-gradient(circle at 82% 22%, rgba(255, 255, 255, 0.16) 0 22mm, transparent 22.3mm),
+          radial-gradient(circle at 92% 78%, rgba(255, 255, 255, 0.1) 0 34mm, transparent 34.3mm),
+          radial-gradient(circle at 64% 92%, rgba(255, 255, 255, 0.08) 0 14mm, transparent 14.3mm),
+          radial-gradient(ellipse 80% 70% at 0% 100%, rgba(224, 71, 138, 0.55), transparent 70%),
+          linear-gradient(130deg, #0e1b2c 0%, #12406a 48%, #1592d0 100%);
+        color: #fff;
+      }
+      .cover .logo {
+        width: 26mm;
+        height: 26mm;
+        margin-bottom: 9mm;
+        filter: drop-shadow(0 3mm 6mm rgba(0, 0, 0, 0.35));
+      }
+      .cover h1 {
+        color: #fff;
+        font-size: 50pt;
+        letter-spacing: -0.01em;
+      }
+      .cover .tag {
+        max-width: 150mm;
+        margin: 4mm 0 10mm;
+        color: rgba(240, 247, 255, 0.86);
+        font-size: 15pt;
+        font-weight: 700;
+      }
+      .cover .edition {
+        display: flex;
+        gap: 3mm;
+      }
+      .cover .edition span {
+        padding: 1.2mm 4mm;
+        border-radius: 9mm;
+        background: rgba(255, 255, 255, 0.14);
+        color: #fff;
+        font-size: 9pt;
+        font-weight: 800;
+      }
+      .cover .shelf {
+        position: absolute;
+        right: 24mm;
+        bottom: 26mm;
+        display: flex;
+        align-items: flex-end;
+        gap: 3.5mm;
+      }
+      .cover .shelf span {
+        display: block;
+        width: 15mm;
+        border-radius: 2.5mm;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.12));
+        box-shadow: 0 3mm 6mm rgba(0, 0, 0, 0.25);
+      }
+
+      /* Contents. */
+      .contents {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .contents li {
+        display: flex;
+        align-items: center;
+        gap: 3mm;
+        padding: 1.5mm 0;
+        border-bottom: 0.25mm solid #e6ecf2;
+      }
+      .contents .dot {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 7mm;
+        height: 7mm;
+        border-radius: 2.2mm;
+        background: var(--d);
+        color: #fff;
+      }
+      .contents .dot .icon {
+        width: 4mm;
+        height: 4mm;
+      }
+      .contents strong {
+        flex: 1;
+      }
+      .contents span {
+        color: #7b8b9b;
+        font-weight: 800;
+      }
+      .looks {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 2.4mm;
+        margin-top: 1.6mm;
+      }
+      .look {
+        height: 15mm;
+        border-radius: 2.5mm;
+        box-shadow: inset 0 0 0 0.3mm rgba(0, 0, 0, 0.12);
+      }
+      .look-label {
+        margin-top: 0.8mm;
+        color: #33465a;
+        font-size: 7.6pt;
+        font-weight: 800;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 1 · Cover -->
+    <section class="page cover">
+      <svg class="logo" viewBox="0 0 34 34" aria-hidden="true">
+        <rect x="1" y="1" width="32" height="32" rx="11" fill="#2aa7e6" />
+        <path d="M12 1h10a11 11 0 0 1 11 11v3H1v-3A11 11 0 0 1 12 1z" fill="#ffffff" opacity="0.22" />
+        <rect x="9" y="10" width="4" height="15" rx="2" fill="#ffffff" />
+        <rect x="14.5" y="12.5" width="4" height="12.5" rx="2" fill="#ffffff" />
+        <circle cx="24" cy="20.5" r="4.4" fill="none" stroke="#ffffff" stroke-width="2.6" />
+      </svg>
+      <h1>Digitify Manual</h1>
+      <p class="tag">Your whole media collection and all your games, in one place. Everything you can do, in plain words.</p>
+      <div class="edition"><span>Digitify {{VERSION}}</span><span>Edition {{EDITION}}</span><span>{{DATE}}</span></div>
+      <div class="shelf" aria-hidden="true">
+        <span style="height: 34mm"></span><span style="height: 46mm"></span><span style="height: 28mm; width: 24mm"></span><span style="height: 40mm"></span><span style="height: 52mm"></span>
+      </div>
+    </section>
+
+    <!-- 2 · Welcome and contents -->
+    <section class="page" style="--c: #1592d0">
+      <div class="chapter">
+        <span class="badge"><i data-icon="book-open"></i></span>
+        <div>
+          <div class="num">Welcome</div>
+          <h1>Hello, and welcome to Digitify</h1>
+        </div>
+      </div>
+      <div class="grid two" style="grid-template-columns: 1.05fr 1fr; gap: 7mm">
+        <div>
+          <p class="lead" style="margin-bottom: 4mm">
+            Digitify keeps two things in one app: a <b>Library</b> for your books, comics, manga, music, videos, pictures, movies and series, with its own readers and players, and <b>Arcade</b>, a
+            launcher for all your games, from your PC stores and your emulators.
+          </p>
+          <div class="card">
+            <h3><i data-icon="shield-check"></i> Yours, and only yours</h3>
+            <p>
+              Everything lives on your own computer. No account, no cloud, no tracking: Digitify goes online only when you ask it to, to bring something in from a link or to look for covers.
+            </p>
+          </div>
+          <div class="card" style="margin-top: 3.6mm">
+            <h3><i data-icon="book-marked"></i> About this manual</h3>
+            <p>
+              It lives in <span class="path">Library › Books</span> like any book: read it, mark it, or delete it. It updates itself when Digitify brings a new one. Deleted it? <span class="path">Books › Add › Digitify Manual</span>
+              brings it back.
+            </p>
+          </div>
+          <div class="tip"><i data-icon="command"></i><span>Lost? Press <kbd>Ctrl</kbd> + <kbd>K</kbd> anywhere and type what you're looking for: a page, a setting, a game, a song.</span></div>
+        </div>
+        <ul class="contents">
+          <li style="--d: #1592d0"><span class="dot"><i data-icon="rocket"></i></span><strong>Getting started</strong><span>3</span></li>
+          <li style="--d: #0e9f8a"><span class="dot"><i data-icon="house"></i></span><strong>Home</strong><span>4</span></li>
+          <li style="--d: #2f6fe0"><span class="dot"><i data-icon="library-big"></i></span><strong>Library: your collection</strong><span>5</span></li>
+          <li style="--d: #2f6fe0"><span class="dot"><i data-icon="folder-open"></i></span><strong>Library: items, collections, pictures</strong><span>6</span></li>
+          <li style="--d: #d9472b"><span class="dot"><i data-icon="link"></i></span><strong>From links, and downloads</strong><span>7</span></li>
+          <li style="--d: #b44fd8"><span class="dot"><i data-icon="play"></i></span><strong>Players and readers</strong><span>8</span></li>
+          <li style="--d: #7c4dff"><span class="dot"><i data-icon="joystick"></i></span><strong>Arcade: your games</strong><span>9</span></li>
+          <li style="--d: #7c4dff"><span class="dot"><i data-icon="layers"></i></span><strong>Arcade: covers, collections, play</strong><span>10</span></li>
+          <li style="--d: #0b8fb0"><span class="dot"><i data-icon="tv-minimal"></i></span><strong>Big Picture</strong><span>11</span></li>
+          <li style="--d: #e0478a"><span class="dot"><i data-icon="user-round"></i></span><strong>Your profile</strong><span>12</span></li>
+          <li style="--d: #e08a1f"><span class="dot"><i data-icon="palette"></i></span><strong>Make it yours</strong><span>13</span></li>
+          <li style="--d: #4b5d70"><span class="dot"><i data-icon="keyboard"></i></span><strong>Find anything, faster</strong><span>14</span></li>
+          <li style="--d: #1f9d55"><span class="dot"><i data-icon="shield-check"></i></span><strong>Safe, private and sound</strong><span>15</span></li>
+        </ul>
+      </div>
+      <div class="footer"><span>Digitify Manual</span><span>2</span></div>
+    </section>
+
+    <!-- 3 · Getting started -->
+    <section class="page" style="--c: #1592d0">
+      <div class="chapter">
+        <span class="badge"><i data-icon="rocket"></i></span>
+        <div>
+          <div class="num">Chapter 1</div>
+          <h1>Getting started</h1>
+        </div>
+      </div>
+      <p class="lead">The bar across the top takes you everywhere. Each page has its own <b>Back</b> button, top left, to return where you were.</p>
+      <div class="grid">
+        <div class="card">
+          <h3><i data-icon="house"></i> Home, Library, Arcade</h3>
+          <p><b>Home</b> shows what to continue and what's new. <b>Library</b> holds your media, category by category. <b>Arcade</b> holds your games.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="search"></i> Search</h3>
+          <p>Type in the search box (<kbd>Ctrl</kbd> + <kbd>F</kbd>) to find media and games together on one screen, both or one at a time.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="music-2"></i> Music, always at hand</h3>
+          <p>The music pill plays your library's music or Digitify's own menu music; once playing it becomes a small player. Click it to open <b>Now playing</b>.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="gamepad-2"></i> Big Picture</h3>
+          <p>The controller button turns Digitify into a full-screen TV interface for a controller. See chapter 7.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="download"></i> Downloads and imports</h3>
+          <p>The download button shows what's coming in from links and files, and the history of everything that came in, with retry for what failed.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="user-round"></i> Your profile, and Settings</h3>
+          <p>Your picture opens your <b>profile</b> (chapter 8). The gear opens <b>Settings</b> (<kbd>Ctrl</kbd> + <kbd>,</kbd>), sorted in tabs.</p>
+        </div>
+        <div class="card span2">
+          <h3><i data-icon="folder-plus"></i> Adding your media</h3>
+          <p>
+            Open a category (say <span class="path">Library › Books</span>) and press <b>Add</b>: pick files or whole folders. Each category takes only its own kind of media, so nothing lands in the wrong
+            place. Choose to <b>keep files where they are</b> or <b>copy them into the library folder</b>. Covers, titles, authors and more are read from the files; the same file twice is recognized
+            and skipped. You can also drop files onto the window.
+          </p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="folder-input"></i> Watched folders</h3>
+          <p>Point Digitify at a folder in <span class="path">Settings › Library</span> and whatever lands in it later is added by itself.</p>
+        </div>
+      </div>
+      <div class="footer"><span>Getting started</span><span>3</span></div>
+    </section>
+
+    <!-- 4 · Home -->
+    <section class="page" style="--c: #0e9f8a">
+      <div class="chapter">
+        <span class="badge"><i data-icon="house"></i></span>
+        <div>
+          <div class="num">Chapter 2</div>
+          <h1>Home</h1>
+        </div>
+      </div>
+      <p class="lead">Home greets you with what matters now: where you left off, what's new, your games and how you're doing.</p>
+      <div class="grid">
+        <div class="card">
+          <h3><i data-icon="history"></i> Continue and Up next</h3>
+          <p>What you were watching, reading or playing, ready to resume; and what comes next in a series. When Digitify opens it offers to <b>continue where you left off</b>.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="heart"></i> Rows of your library</h3>
+          <p>Recently added, favorites, "Because you liked" (from your own library), and your Arcade games: recently played and a game of the day.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="layout-grid"></i> Make Home yours</h3>
+          <p>Choose which sections show and put them in your order. A photo can even be Home's background.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="clock"></i> Statistics</h3>
+          <p>Time spent reading, watching, listening and playing, the last two weeks day by day, monthly goals, your most played artists and games.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="flame"></i> Streaks and the calendar</h3>
+          <p>Every day with some activity keeps your streak going. The activity calendar shows your whole year at a glance.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="trophy"></i> Achievements</h3>
+          <p>They arrive by themselves as you read, watch, listen and play, each with its levels. See them all on their own screen.</p>
+        </div>
+        <div class="card span2">
+          <h3><i data-icon="calendar-heart"></i> Your year in Digitify</h3>
+          <p>A look back at your year: hours per activity, what you finished, your best month and day, your longest streak, your top games, items and artists.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="eye"></i> Everything view</h3>
+          <p>Turn on <span class="path">Settings › Library › Show Everything</span> for one view of your whole library at once.</p>
+        </div>
+      </div>
+      <div class="footer"><span>Home</span><span>4</span></div>
+    </section>
+
+    <!-- 5 · Library: your collection -->
+    <section class="page" style="--c: #2f6fe0">
+      <div class="chapter">
+        <span class="badge"><i data-icon="library-big"></i></span>
+        <div>
+          <div class="num">Chapter 3</div>
+          <h1>Library: your collection</h1>
+        </div>
+      </div>
+      <p class="lead">Pictures, Books, Comics, Manga, Music, Videos, and Movies &amp; Series: each category in its own place. Reorder or hide categories in Settings.</p>
+      <div class="grid">
+        <div class="card">
+          <h3><i data-icon="layers"></i> Media, Collections, Favorites</h3>
+          <p>Each category has three tabs: all its <b>media</b>, its <b>collections</b> (folders of your own; Music has playlists) and your <b>favorites</b>.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="layout-grid"></i> Five ways to look</h3>
+          <p><b>Grid</b>, <b>Shelf</b> (wood, glass or metal), <b>List</b>, <b>Detailed</b> and a 3D <b>Carousel</b>. The <b>Size</b> slider makes covers bigger or smaller.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="arrow-up-down"></i> Sort and filter</h3>
+          <p>By title, date added, year, creator, duration, or <b>your own order</b>: drag covers into place. Filter by <b>Digital</b> or <b>Online</b> in Music and Videos.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="list-checks"></i> Select several</h3>
+          <p>Press <b>Select</b>, tick items (<kbd>Ctrl</kbd> + <kbd>A</kbd> for all) and edit them together: cover, cover shape, favorite, move into a collection, add to a playlist.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="music-2"></i> Music</h3>
+          <p>Tracks, Albums, Artists and Playlists, each a tab. A music video added to Music comes in as its sound (an MP3), with a frame as its cover.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="film"></i> Videos and Movies &amp; Series</h3>
+          <p>A series keeps its episodes together, by season. <span class="path">Movies &amp; Series › Add › From Videos</span> turns videos you have into movies or episodes.</p>
+        </div>
+        <div class="card span2">
+          <h3><i data-icon="book-open"></i> Books, Comics and Manga</h3>
+          <p>
+            Ebooks (EPUB and more), PDFs, and comics or manga as archives (CBZ, CBR, CB7, CBT) or folders of images. No file? <b>Add › Book from images</b> (or Comic, or Manga) makes one from pictures you
+            put in order.
+          </p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="disc-3"></i> Discs</h3>
+          <p>Play and rip audio CDs, play and import home-made DVDs and Blu-rays. Copy-protected discs are recognized and left alone.</p>
+        </div>
+      </div>
+      <div class="footer"><span>Library</span><span>5</span></div>
+    </section>
+
+    <!-- 6 · Library: items, collections, pictures -->
+    <section class="page" style="--c: #2f6fe0">
+      <div class="chapter">
+        <span class="badge"><i data-icon="folder-open"></i></span>
+        <div>
+          <div class="num">Chapter 3, continued</div>
+          <h1>Items, collections and pictures</h1>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="card span2">
+          <h3><i data-icon="image"></i> An item's page</h3>
+          <p>
+            Open anything to see its cover big, its details and its <b>Play</b> or <b>Read</b> button. Give it your stars and notes, change its cover or its shape, mark it as a favorite, or move it into a
+            collection with <b>Organize › Move</b>. The arrows at the top step to the previous and next item of the list you came from, going round at the ends.
+          </p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="folder-open"></i> Collections</h3>
+          <p>Folders of your own inside a category. A collection opens in a window over the category, with Rename and Delete; deleting it never deletes its items.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="music-2"></i> Playlists</h3>
+          <p>Music's collections. Play one in order or shuffled; add songs from their menu or by selecting several.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="image"></i> Pictures</h3>
+          <p>Photos stay in their albums (from their folders), shown whole in justified rows, with their EXIF details. An album can take any photo as its cover.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="eye"></i> The image viewer</h3>
+          <p>Zoom, slideshow, photo info, turn and mirror. Step through an album with the arrows.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="star"></i> Ratings and notes</h3>
+          <p>Your own stars and a note on anything: what you thought, where you left off, who borrowed it.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="link"></i> Open on</h3>
+          <p>Items that came from a website keep a button to open them there.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="scan-search"></i> Library check</h3>
+          <p>Finds files that went missing (an unplugged drive) and duplicates. In <span class="path">Settings › Library</span>.</p>
+        </div>
+      </div>
+      <div class="footer"><span>Library</span><span>6</span></div>
+    </section>
+
+    <!-- 7 · From links -->
+    <section class="page" style="--c: #d9472b">
+      <div class="chapter">
+        <span class="badge"><i data-icon="link"></i></span>
+        <div>
+          <div class="num">Chapter 4</div>
+          <h1>From links, and downloads</h1>
+        </div>
+      </div>
+      <p class="lead">Music and Videos each have <b>Add › From a link</b>. Paste a link and choose what to bring in: downloaded to keep and play offline, or saved online to play on the site.</p>
+      <div class="grid">
+        <div class="card">
+          <h3><i data-icon="download"></i> Many sites</h3>
+          <p>YouTube, YouTube Music, SoundCloud, Bandcamp, Twitch, Dailymotion and many more, through yt-dlp, which comes with Digitify.</p>
+          <div class="chips"><span class="chip">Video quality</span><span class="chip">MKV or MP4</span><span class="chip">MP3, M4A or original sound</span></div>
+        </div>
+        <div class="card">
+          <h3><i data-icon="music-2"></i> As sound, or as video</h3>
+          <p>From Music's menu a link comes in as sound; from Videos' menu, as video. Downloaded items are plain files, like your own.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="layers"></i> Playlists and channels</h3>
+          <p>
+            Listed <b>25 at a time</b>: pick a section, and come back with the same link for the next. Videos go into a <b>collection</b> and songs into a <b>playlist</b> named after it, which later sections
+            join.
+          </p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="wifi-off"></i> Saved online</h3>
+          <p>An online item plays in the site's own player, and can be downloaded later from its page. Spotify links are always online (their music is protected).</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="history"></i> Downloads and imports</h3>
+          <p>The title bar's download button: progress and cancel for what's coming in, and the history of what came in, from links and files, with retry. Clear it any time.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="cpu"></i> Keeping yt-dlp fresh</h3>
+          <p>Sites change; <b>Update yt-dlp</b> in <span class="path">Settings › Library › Online services</span> fetches the newest one.</p>
+        </div>
+      </div>
+      <div class="tip"><i data-icon="shield-check"></i><span>Digitify only downloads what you ask for, and never works around copy protection.</span></div>
+      <div class="footer"><span>From links</span><span>7</span></div>
+    </section>
+
+    <!-- 8 · Players and readers -->
+    <section class="page" style="--c: #b44fd8">
+      <div class="chapter">
+        <span class="badge"><i data-icon="play"></i></span>
+        <div>
+          <div class="num">Chapter 5</div>
+          <h1>Players and readers</h1>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="card span2">
+          <h3><i data-icon="clapperboard"></i> The video player</h3>
+          <p>
+            Subtitles, audio tracks, chapters and bookmarks; films and series resume where you stopped, and next and previous follow the list you came from. Press <b>Back</b> and the video keeps playing in a
+            <b>corner</b> while you browse: drag it to any corner, click it to make it big again.
+          </p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="keyboard"></i> Video keys</h3>
+          <p><kbd>Space</kbd> play or pause · <kbd>←</kbd> <kbd>→</kbd> 5 s · <kbd>Shift</kbd> + arrows 30 s · <kbd>↑</kbd> <kbd>↓</kbd> volume · <kbd>M</kbd> mute · <kbd>C</kbd> subtitles · <kbd>F</kbd> full screen</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="headphones"></i> Music</h3>
+          <p>A queue, playlists, shuffle and repeat, a mini player in the title bar and a <b>Now playing</b> page. Media keys and the system's media controls work too.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="music-2"></i> Menu music</h3>
+          <p>Digitify's own calm theme, or your music, playing quietly while you browse. Turn it on or off from the music pill.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="clock"></i> Sleep timer</h3>
+          <p>Stops the music after a while, for falling asleep to an album.</p>
+        </div>
+        <div class="card span2">
+          <h3><i data-icon="book-open"></i> The readers</h3>
+          <p>
+            Ebooks with your choice of text size, PDFs, and comics and manga with page-turn effects and <b>right-to-left</b> reading for manga. Bookmarks with <kbd>B</kbd>, full screen with <kbd>F</kbd>, and a
+            <b>night filter</b> that warms the screen for reading late.
+          </p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="disc-3"></i> Discs</h3>
+          <p>A disc in the drive shows the disc button in the title bar: play it, rip a CD into Music, or import a home-made DVD.</p>
+        </div>
+      </div>
+      <div class="footer"><span>Players and readers</span><span>8</span></div>
+    </section>
+
+    <!-- 9 · Arcade: your games -->
+    <section class="page" style="--c: #7c4dff">
+      <div class="chapter">
+        <span class="badge"><i data-icon="joystick"></i></span>
+        <div>
+          <div class="num">Chapter 6</div>
+          <h1>Arcade: your games</h1>
+        </div>
+      </div>
+      <p class="lead">Arcade finds the games already on your computer and starts each one the way it always starts, with its own settings, counting the time you play.</p>
+      <div class="grid">
+        <div class="card">
+          <h3><i data-icon="monitor"></i> PC stores</h3>
+          <p>Steam, Epic Games, Xbox, GOG, Ubisoft Connect, the EA app, Battle.net, Rockstar, Riot, Amazon Games and itch.io; Heroic and Lutris on Linux.</p>
+        </div>
+        <div class="card span2">
+          <h3><i data-icon="gamepad-2"></i> Emulators</h3>
+          <p>
+            Dolphin, Project64, RMG, DuckStation, PCSX2, RPCS3, PPSSPP, melonDS, DeSmuME, Azahar, Cemu, Ryujinx, xemu, Xenia, Mesen, FCEUX, Nestopia, Snes9x, ZSNES, mGBA, Kega Fusion, Flycast, nullDC,
+            ares, and RetroArch's playlists. No games, BIOS or emulators come with Digitify: it uses the ones you have.
+          </p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="settings"></i> Emulators &amp; folders</h3>
+          <p>Four tabs: <b>Launchers</b>, <b>Emulators</b> (point to a portable one, or set one aside with Don't use), <b>Consoles</b> (which emulator plays each) and <b>Folders &amp; covers</b>.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="scan-search"></i> Look for games</h3>
+          <p>In <span class="path">Emulators &amp; folders › Folders &amp; covers</span>, beside the folders it searches. Arcade looks by itself the first time.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="folder-plus"></i> Any game by its program</h3>
+          <p><b>Add a game…</b> takes any game's program; it shows in the <b>Others</b> view and starts by itself.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="layout-grid"></i> Views</h3>
+          <p>PC games, ROM games, each store, and each maker's consoles in one menu. Reorder or hide views in <span class="path">Settings › Arcade</span>.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="arrow-up-down"></i> Sorts</h3>
+          <p>Title, recently played, most played, recently added, your rating, your own order, and <b>Console</b>: each console and launcher under its own heading.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="image"></i> Boxes the right shape</h3>
+          <p>Every console's games have its real box shape; a cover of another shape (another region's) shows whole, never cut.</p>
+        </div>
+      </div>
+      <div class="footer"><span>Arcade</span><span>9</span></div>
+    </section>
+
+    <!-- 10 · Arcade: covers, collections, play -->
+    <section class="page" style="--c: #7c4dff">
+      <div class="chapter">
+        <span class="badge"><i data-icon="layers"></i></span>
+        <div>
+          <div class="num">Chapter 6, continued</div>
+          <h1>Covers, collections and play</h1>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="card span2">
+          <h3><i data-icon="gamepad-2"></i> A game's panel</h3>
+          <p>
+            Click a game for its panel: <b>Play</b>, time played (add time played elsewhere), your review, and <b>Plays in</b>, to pick the emulator for that game alone. <b>Mark as completed</b> gives its box
+            a green seal. <b>Collections</b> puts it in yours; <b>Cover</b> finds another cover or takes a picture of yours.
+          </p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="image-down"></i> Find covers</h3>
+          <p>Every cover found to choose from. Not the right one? Type <b>any words</b> of the name (no need to be exact) and search again.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="layers"></i> Collections</h3>
+          <p><b>Collections</b>, beside Emulators &amp; folders, opens your collections, with a Back to all games. <b>Favorites</b> is always first.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="list-filter"></i> Dynamic collections</h3>
+          <p>They fill themselves: words in the name (or not), consoles and launchers, played or not, completed or not, favorites, your rating.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="image-down"></i> More covers</h3>
+          <p>
+            Download <b>LaunchBox's database</b> once in <span class="path">Settings › Arcade</span>: it knows other names too (Animal Forest is Doubutsu no Mori). A SteamGridDB key adds even more.
+          </p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="clock"></i> While a game runs</h3>
+          <p>Digitify stays open and silences its music, hides until the game ends, or closes: your choice in <span class="path">Settings › Arcade</span>.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="badge-check"></i> Badges</h3>
+          <p>Each box's tag shows its console's logo and name, the logo alone, or nothing: <span class="path">Settings › Arcade › Games' badges</span>.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="list-checks"></i> Select several</h3>
+          <p>Favorite, completed, covers, add to a collection, or remove from Digitify (files and installs stay).</p>
+        </div>
+      </div>
+      <div class="footer"><span>Arcade</span><span>10</span></div>
+    </section>
+
+    <!-- 11 · Big Picture -->
+    <section class="page" style="--c: #0b8fb0">
+      <div class="chapter">
+        <span class="badge"><i data-icon="tv-minimal"></i></span>
+        <div>
+          <div class="num">Chapter 7</div>
+          <h1>Big Picture</h1>
+        </div>
+      </div>
+      <p class="lead">A full-screen interface for the TV and a controller (Xbox or PlayStation), or the mouse. Enter it with the controller button in the title bar.</p>
+      <div class="grid">
+        <div class="card">
+          <h3><i data-icon="gamepad-2"></i> The buttons</h3>
+          <table>
+            <tr><td>Select</td><td><kbd>A</kbd></td></tr>
+            <tr><td>Back</td><td><kbd>B</kbd></td></tr>
+            <tr><td>Search</td><td><kbd>Y</kbd></td></tr>
+            <tr><td>Previous and next tab</td><td><kbd>LB</kbd> <kbd>RB</kbd></td></tr>
+            <tr><td>Favorite</td><td><kbd>View</kbd></td></tr>
+            <tr><td>Menu</td><td><kbd>Menu</kbd></td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h3><i data-icon="library-big"></i> Its screens</h3>
+          <p>Its own Home, the Library by category, Arcade by console, and Search with an on-screen keyboard. Library and Arcade each have a <b>Collections</b> tab.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="joystick"></i> Games</h3>
+          <p>A game opens its own screen first, with <b>Play</b>; achievements and your year open inside Big Picture too.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="headphones"></i> Music and players</h3>
+          <p>A Now playing screen for music, and players and readers in Big Picture's own look, button by button.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="mouse-pointer-2"></i> A cursor, if you like</h3>
+          <p>Prefer pointing? Choose the cursor in Big Picture's menu and move it with the stick.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="user-round"></i> Your profile</h3>
+          <p>Your picture in the top bar opens your profile, big.</p>
+        </div>
+      </div>
+      <div class="footer"><span>Big Picture</span><span>11</span></div>
+    </section>
+
+    <!-- 12 · Your profile -->
+    <section class="page" style="--c: #e0478a">
+      <div class="chapter">
+        <span class="badge"><i data-icon="user-round"></i></span>
+        <div>
+          <div class="num">Chapter 8</div>
+          <h1>Your profile</h1>
+        </div>
+      </div>
+      <p class="lead">Your own page in Digitify, kept on this computer with no account. Open it from your picture in the title bar.</p>
+      <div class="grid">
+        <div class="card">
+          <h3><i data-icon="user-pen"></i> Edit profile</h3>
+          <p>Your name, a line about you, your <b>picture</b> and a <b>banner</b> (a picture of yours, or a cover from your games and library). <b>Adjust</b> moves and zooms each; the <b>frame</b> is a circle, rounded square or hexagon, with a rainbow, accent, gold or no ring.</p>
+        </div>
+        <div class="card span2">
+          <h3><i data-icon="trophy"></i> What it shows</h3>
+          <p>
+            How much your library holds and in which categories, your games and the hours you've played, how many you've completed, this year's time reading, watching, listening and playing, your best
+            streak, your most played and completed games, and your achievements.
+          </p>
+        </div>
+        <div class="card span2">
+          <h3><i data-icon="share-2"></i> Share as image</h3>
+          <p>
+            Turns your profile into one picture: your banner, picture and name, your big numbers, your most played games and your year so far, signed "Made with Digitify". <b>Save PNG</b> or <b>Copy</b>
+            it, and send it to anyone: it's just a picture, with no account and no link.
+          </p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="shield-check"></i> Private by design</h3>
+          <p>Nothing about your profile leaves your computer unless you send its picture yourself.</p>
+        </div>
+      </div>
+      <div class="footer"><span>Your profile</span><span>12</span></div>
+    </section>
+
+    <!-- 13 · Make it yours -->
+    <section class="page" style="--c: #e08a1f">
+      <div class="chapter">
+        <span class="badge"><i data-icon="palette"></i></span>
+        <div>
+          <div class="num">Chapter 9</div>
+          <h1>Make it yours</h1>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="card span2">
+          <h3><i data-icon="brush"></i> Four styles</h3>
+          <p>In <span class="path">Settings › General › Appearance</span>, each in light or dark:</p>
+          <div class="looks">
+            <div>
+              <div class="look" style="background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.6) 0 2px, transparent 2px 7px), #edf1f5"></div>
+              <div class="look-label">Breeze: bright and glossy</div>
+            </div>
+            <div>
+              <div class="look" style="background: radial-gradient(ellipse at 50% -20%, rgba(224, 164, 58, 0.35), transparent 70%), #0c0d10"></div>
+              <div class="look-label">Cinematic: dark glass, amber</div>
+            </div>
+            <div>
+              <div class="look" style="background: radial-gradient(circle at 78% 70%, transparent 0 9px, rgba(255, 255, 255, 0.8) 10px, transparent 12px), linear-gradient(180deg, #8fd3ff, #d6f1ff 60%, #c8f1e6)"></div>
+              <div class="look-label">Frutiger Aero: sky and glass</div>
+            </div>
+            <div>
+              <div class="look" style="background: #15181d; box-shadow: inset 0 3mm 0 #22272f"></div>
+              <div class="look-label">Minimal: calm and flat</div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h3><i data-icon="sun-moon"></i> Light or dark</h3>
+          <p>Dark, light, or following your system. Breeze adds palettes: Sky, Sunset, Midnight and High contrast.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="palette"></i> Colors</h3>
+          <p>Pick any accent color, or give each section its own.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="monitor"></i> Performance mode</h3>
+          <p>For slower computers (not the light theme): no blur, no heavy shadows, no animations. Digitify turns it on by itself when your computer struggles, and tells you.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="music-2"></i> Sounds and motion</h3>
+          <p>Soft interface sounds, and animations you can reduce or turn off.</p>
+        </div>
+        <div class="card span2">
+          <h3><i data-icon="settings"></i> Around your desktop</h3>
+          <p>
+            Start with your computer, open maximized or at a regular size, keep an icon by the clock (and keep running there quietly when closed), and only one Digitify open at a time.
+          </p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="keyboard"></i> Keys of your own</h3>
+          <p>Change any shortcut in <span class="path">Settings › Keyboard</span>.</p>
+        </div>
+      </div>
+      <div class="footer"><span>Make it yours</span><span>13</span></div>
+    </section>
+
+    <!-- 14 · Find anything -->
+    <section class="page" style="--c: #4b5d70">
+      <div class="chapter">
+        <span class="badge"><i data-icon="keyboard"></i></span>
+        <div>
+          <div class="num">Chapter 10</div>
+          <h1>Find anything, faster</h1>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="card">
+          <h3><i data-icon="command"></i> The command palette</h3>
+          <p><kbd>Ctrl</kbd> + <kbd>K</kbd> finds anything: places, categories, settings, items and games. Type a few letters and press <kbd>Enter</kbd>.</p>
+          <h4>Everywhere</h4>
+          <table>
+            <tr><td>Search the library</td><td><kbd>Ctrl</kbd> + <kbd>F</kbd></td></tr>
+            <tr><td>Command palette</td><td><kbd>Ctrl</kbd> + <kbd>K</kbd></td></tr>
+            <tr><td>Home</td><td><kbd>Alt</kbd> + <kbd>Home</kbd></td></tr>
+            <tr><td>Settings</td><td><kbd>Ctrl</kbd> + <kbd>,</kbd></td></tr>
+            <tr><td>Play or pause music</td><td><kbd>Ctrl</kbd> + <kbd>P</kbd></td></tr>
+            <tr><td>Next, previous track</td><td><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>→</kbd> <kbd>←</kbd></td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h3><i data-icon="book-open"></i> Reading</h3>
+          <table>
+            <tr><td>Next page</td><td><kbd>↓</kbd> <kbd>PgDn</kbd> <kbd>Space</kbd></td></tr>
+            <tr><td>Previous page</td><td><kbd>↑</kbd> <kbd>PgUp</kbd></td></tr>
+            <tr><td>Page right, left</td><td><kbd>→</kbd> <kbd>←</kbd></td></tr>
+            <tr><td>First, last page</td><td><kbd>Home</kbd> <kbd>End</kbd></td></tr>
+            <tr><td>Bigger, smaller text</td><td><kbd>+</kbd> <kbd>-</kbd></td></tr>
+            <tr><td>Actual size</td><td><kbd>0</kbd></td></tr>
+            <tr><td>Bookmark</td><td><kbd>B</kbd></td></tr>
+            <tr><td>Full screen</td><td><kbd>F</kbd> <kbd>F11</kbd></td></tr>
+            <tr><td>Close</td><td><kbd>Esc</kbd></td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h3><i data-icon="clapperboard"></i> Watching</h3>
+          <table>
+            <tr><td>Play or pause</td><td><kbd>Space</kbd> <kbd>K</kbd></td></tr>
+            <tr><td>Back, forward 5 s</td><td><kbd>←</kbd> <kbd>→</kbd></td></tr>
+            <tr><td>Back, forward 30 s</td><td><kbd>Shift</kbd> + <kbd>←</kbd> <kbd>→</kbd></td></tr>
+            <tr><td>Volume</td><td><kbd>↑</kbd> <kbd>↓</kbd></td></tr>
+            <tr><td>Mute</td><td><kbd>M</kbd></td></tr>
+            <tr><td>Next subtitles</td><td><kbd>C</kbd></td></tr>
+            <tr><td>Next episode</td><td><kbd>Shift</kbd> + <kbd>N</kbd></td></tr>
+            <tr><td>Full screen</td><td><kbd>F</kbd> <kbd>F11</kbd></td></tr>
+          </table>
+          <h4>Selecting</h4>
+          <table>
+            <tr><td>Select everything</td><td><kbd>Ctrl</kbd> + <kbd>A</kbd></td></tr>
+            <tr><td>Stop selecting</td><td><kbd>Esc</kbd></td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="footer"><span>Find anything</span><span>14</span></div>
+    </section>
+
+    <!-- 15 · Safe, private and sound -->
+    <section class="page" style="--c: #1f9d55">
+      <div class="chapter">
+        <span class="badge"><i data-icon="shield-check"></i></span>
+        <div>
+          <div class="num">Chapter 11</div>
+          <h1>Safe, private and sound</h1>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="card">
+          <h3><i data-icon="hard-drive"></i> Backups</h3>
+          <p>Automatic backups of your library, daily, weekly or monthly, to another drive: <span class="path">Settings › Library</span>.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="scan-search"></i> Library check</h3>
+          <p>Finds missing files and duplicates, and helps you put things right. Nothing is ever deleted without asking you first.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="wifi-off"></i> Offline first</h3>
+          <p>Digitify works without the internet. It goes online only to bring in links, update yt-dlp, and look for covers when you ask.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="shield-check"></i> No accounts, no tracking</h3>
+          <p>No sign-in, no ads, no telemetry. Optional keys for some services are yours, kept on your computer (<span class="path">Settings › Library › Online services</span>).</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="trophy"></i> Achievements notices</h3>
+          <p>A small notice appears when you reach a new achievement; see them all on their screen.</p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="book-marked"></i> This manual</h3>
+          <p>Deleted it? <span class="path">Books › Add › Digitify Manual</span> brings it back. It always describes the Digitify you have.</p>
+        </div>
+        <div class="card span2">
+          <h3><i data-icon="gamepad-2"></i> A game doesn't start?</h3>
+          <p>
+            Check that its emulator is found in <span class="path">Arcade › Emulators &amp; folders</span>, or point Arcade to it there. A game set to play in a particular emulator needs that one installed;
+            in its panel, <b>Plays in</b>'s first choice goes back to its console's emulator. Missing covers? <b>Find missing covers</b> in Folders &amp; covers, or Find covers in the game's panel.
+          </p>
+        </div>
+        <div class="card">
+          <h3><i data-icon="history"></i> Something didn't come in?</h3>
+          <p>The download button's history says why, and has <b>Retry</b>.</p>
+        </div>
+      </div>
+      <div class="tip"><i data-icon="heart"></i><span>Thank you for using Digitify. Enjoy your collection, and your games.</span></div>
+      <div class="footer"><span>Safe, private and sound</span><span>15</span></div>
+    </section>
+  </body>
+</html>

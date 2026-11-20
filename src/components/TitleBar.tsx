@@ -2,6 +2,7 @@ import { useLibraryScope } from "../lib/queries";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { ProfileButton } from "../features/profile/ProfileButton";
 import { ImportsButton } from "../features/online/History";
 import { Disc3, Gamepad2, House, Joystick, LibraryBig, Search, Settings } from "lucide-react";
 import { enterBigPicture, useBigPicture } from "../lib/bigpicture";
@@ -211,6 +212,8 @@ export function TitleBar({ searchEnabled }: { searchEnabled: boolean }) {
         )}
         {/* Downloads and imports, from anywhere (D-145). */}
         {searchEnabled && <ImportsButton />}
+        {/* Your profile (D-149), beside Downloads. */}
+        {searchEnabled && <ProfileButton />}
         {searchEnabled && (
           <Link to="/settings" className="round-btn" aria-label="Settings" title="Settings">
             <Settings size={18} strokeWidth={2.4} />

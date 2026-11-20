@@ -24,6 +24,7 @@ mod history;
 mod import;
 mod library;
 mod library_folder;
+mod manual;
 mod media;
 mod localhost;
 mod media_protocol;
@@ -35,10 +36,10 @@ mod pages;
 mod pdf;
 mod pictures;
 mod player;
+mod profile;
 mod reshape;
 mod series;
 mod setup;
-mod smart;
 mod stats;
 mod tools;
 mod tray;
@@ -222,9 +223,6 @@ pub fn run() {
             library::later_set,
             library::resume_get,
             tray::app_quit,
-            smart::smart_lists,
-            smart::smart_list_save,
-            smart::smart_list_delete,
             library::item_set_cover,
             library::items_set_cover,
             library::item_set_backdrop,
@@ -277,6 +275,24 @@ pub fn run() {
             arcade::arcade_set_review,
             arcade::arcade_rename,
             arcade::arcade_reorder,
+            arcade::arcade_set_game_emulator,
+            arcade::arcade_set_completed,
+            profile::profile_get,
+            manual::manual_sync,
+            manual::manual_add,
+            profile::profile_set_text,
+            profile::profile_set_view,
+            profile::profile_set_frame,
+            profile::profile_set_image,
+            profile::profile_clear_image,
+            profile::profile_save_png,
+            arcade::collections::arcade_collections,
+            arcade::collections::arcade_collection_create,
+            arcade::collections::arcade_collection_update,
+            arcade::collections::arcade_collection_delete,
+            arcade::collections::arcade_collection_add,
+            arcade::collections::arcade_collection_remove,
+            arcade::collections::arcade_collections_reorder,
             library::custom_order_slots,
             arcade::arcade_unhide,
             online::online_import,

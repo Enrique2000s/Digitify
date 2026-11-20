@@ -20,3 +20,4 @@ samples/
 .idea/
 .DS_Store
 Thumbs.db
+target-manual/
