@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { DropdownMenu } from "radix-ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { BadgeCheck, AppWindow, Check, CheckCircle2, ChevronDown, CircleSlash, ChevronLeft, ChevronRight, CircleAlert, Clock, FolderOpen, FolderPlus, Heart, ImageDown, ImagePlus, Joystick, Layers, ListChecks, LoaderCircle, Pencil, Play, RefreshCw, RotateCcw, Search, Settings2, Trash, X } from "lucide-react";
+import { BadgeCheck, AppWindow, Info, Check, CheckCircle2, ChevronDown, CircleSlash, ChevronLeft, ChevronRight, CircleAlert, Clock, FolderOpen, FolderPlus, Heart, ImageDown, ImagePlus, Joystick, Layers, ListChecks, LoaderCircle, Pencil, Play, RefreshCw, RotateCcw, Search, Settings2, Trash, X } from "lucide-react";
 import { api, errorText, onLinux, type ArcadeConsole, type ArcadeEmulator, type ArcadeEmulatorStatus, type ArcadeFolder, type ArcadeGame, type ArcadeStatus } from "../../lib/api";
 import type { ArcadeFilter } from "../../lib/preferences";
 import { usePreferences, type ArcadePreferences } from "../../lib/preferences";
@@ -279,7 +279,7 @@ export function ArcadePage() {
               : games.data.length === 0
               ? anyEmulator
                 ? "Arcade looks in the game folders set up in your emulators, and in folders you add here. Check them in Emulators & folders, then Look for games in its Folders & covers tab."
-                : `Install an emulator Arcade knows (Emulators & folders lists them) or games from a store (Steam, itch.io${onLinux ? ", Heroic or Lutris" : ", Epic Games, Xbox, GOG, Ubisoft Connect, the EA app, Battle.net or Amazon Games"}), point Arcade to your emulators in Emulators & folders, or add a game by its program.`
+                : `Install an emulator Arcade knows (Emulators & folders lists them) or games from a store (Steam, itch.io, Minecraft${onLinux ? ", Heroic or Lutris" : ", Epic Games, Xbox, GOG, Ubisoft Connect, the EA app, Battle.net or Amazon Games"}), point Arcade to your emulators in Emulators & folders, or add a game by its program.`
               : "Nothing matches this console or search."}
           </p>
         </div>
@@ -764,7 +764,7 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
         <button type="button" className="round-btn arcade-panel-close" aria-label="Close" onClick={onClose}>
           <X size={17} />
         </button>
-        <div className="arcade-panel-art" style={{ aspectRatio: gameAspect(game) }}>
+        <div className="arcade-panel-art" style={{ aspectRatio: gameAspect(game), ["--aspect" as string]: gameAspect(game) }}>
           <GameCover game={game} size="cover" />
         </div>
         {naming == null ? (
@@ -791,6 +791,15 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
         <button type="button" className="btn btn-primary arcade-panel-play" disabled={running != null} onClick={onPlay}>
           <Play size={17} fill="currentColor" /> {running === game.id ? "Playing…" : "Play"}
         </button>
+        {game.path === "store://minecraft/java" && (
+          // Mojang's launcher can't be asked to start the game itself (D-155); Prism Launcher's instances can.
+          <p className="arcade-panel-note">
+            <Info size={15} aria-hidden />
+            <span>
+              Play opens the Minecraft Launcher, where you press Play. To start Minecraft straight away, use <b>Prism Launcher</b>: sign in there once with your Microsoft account, and each of its instances shows here and starts directly.
+            </span>
+          </p>
+        )}
         <dl className="arcade-panel-facts">
           <div>
             <dt>

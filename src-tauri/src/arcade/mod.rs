@@ -16,6 +16,9 @@ mod detect;
 mod games;
 mod icons;
 mod launchers;
+mod minecraft;
+#[cfg(windows)]
+mod registry;
 mod retroarch;
 mod sgdb;
 mod stores;
@@ -501,7 +504,15 @@ fn scan(app: &AppHandle, library: &std::sync::Arc<Library>, download_covers: boo
             continue;
         }
         let walker = WalkDir::new(&folder).follow_links(false).max_depth(looking.depth(recursive));
-        for entry in walker.into_iter().filter_map(Result::ok) {
+        // Windows' own folders on a drive (its recycle bin, restore points) hold no games and are slow
+        // to go through (D-152).
+        let skipped = |entry: &walkdir::DirEntry| {
+            entry.depth() > 0 && entry.file_type().is_dir() && {
+                let name = entry.file_name().to_string_lossy();
+                name.starts_with('$') || name.eq_ignore_ascii_case("System Volume Information")
+            }
+        };
+        for entry in walker.into_iter().filter_entry(|e| !skipped(e)).filter_map(Result::ok) {
             if entry.file_type().is_file() && looking.wants(&games::extension(entry.path())) && seen.insert(entry.path().to_path_buf()) {
                 files.push((entry.into_path(), looking.hint));
             }
@@ -671,7 +682,12 @@ fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], 
         // it; Steam's by app id).
         if platform == "pc" {
             let art = store_art.get_or_insert_with(store_art_now).get(&path).cloned().unwrap_or_default();
-            if let Some(bytes) = art.0.and_then(|p| std::fs::read(p).ok()) {
+            // Minecraft (D-153): its box art by the edition's name (an instance is Java Edition); its
+            // package's square logo only when none is found.
+            let minecraft = store.as_deref() == Some("minecraft");
+            let title = if minecraft { minecraft::cover_title(store_key.as_deref().unwrap_or_default()).to_string() } else { title };
+            let (local, logo) = if minecraft { (None, art.0) } else { (art.0, None) };
+            if let Some(bytes) = local.and_then(|p| std::fs::read(p).ok()) {
                 if set_cover(library, id, &bytes, "store").is_ok() {
                     continue;
                 }
@@ -685,7 +701,7 @@ fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], 
                     _ => {}
                 }
                 // Not from Steam: Steam's store may know the game by its name (D-108).
-                if store.as_deref() != Some("steam") {
+                if store.as_deref() != Some("steam") && !minecraft {
                     urls.push(format!("steam-search:{title}"));
                 }
                 // LaunchBox, when its database is here, and the Microsoft Store (D-131).
@@ -699,9 +715,12 @@ fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], 
                 if sgdb_key.is_some() {
                     urls.push(format!("sgdb:{title}"));
                 }
+                urls.extend(logo.as_ref().map(|p| format!("file:{}", p.display())));
                 if !urls.is_empty() {
                     queue.push((id, urls));
                 }
+            } else if let Some(bytes) = logo.and_then(|p| std::fs::read(p).ok()) {
+                let _ = set_cover(library, id, &bytes, "store");
             }
             continue;
         }
@@ -763,7 +782,9 @@ fn find_covers(app: &AppHandle, library: &std::sync::Arc<Library>, ids: &[i64], 
                 for url in urls {
                     // A picture on this computer, tried after the downloads (a PlayStation 3 game's icon).
                     if let Some(file) = url.strip_prefix("file:") {
-                        if std::fs::read(file).ok().is_some_and(|bytes| set_cover(&library, id, &bytes, "rpcs3").is_ok()) {
+                        // A PlayStation 3 game's ICON0.PNG, or a package's logo (Minecraft, D-153).
+                        let source = if file.to_lowercase().ends_with("icon0.png") { "rpcs3" } else { "store" };
+                        if std::fs::read(file).ok().is_some_and(|bytes| set_cover(&library, id, &bytes, source).is_ok()) {
                             let _ = app.emit("arcade-changed", ());
                             break;
                         }
@@ -1724,6 +1745,10 @@ fn launch_store_game(app: AppHandle, library: std::sync::Arc<Library>, id: i64, 
         }
         #[cfg(not(windows))]
         return Err(AppError::msg(format!("The Riot Client ({product}) is only on Windows.")));
+    } else if let Some(start) = launch.strip_prefix("minecraft:") {
+        // A Prism Launcher or MultiMC instance, started directly; the official launcher's Flatpak (D-153).
+        let start = minecraft::Start::parse(start).ok_or_else(|| AppError::msg("That Minecraft game's record isn't readable. Look for games again."))?;
+        start.command().map_err(AppError::msg)?.spawn().map_err(|e| AppError::msg(format!("Couldn't start Minecraft: {e}")))?;
     } else if let Some(program) = launch.strip_prefix("exe:") {
         // A program of its own (added by hand, D-107, or installed by itch.io): from its folder.
         let program = Path::new(program);
@@ -1818,20 +1843,22 @@ fn game_running(system: &mut sysinfo::System, dir: &Path) -> bool {
 }
 
 /// The PC game (if any) of `games` whose program runs now: one refresh of the process list, the
-/// programs and (on Linux, for Proton) their command lines. Cheap enough to run every few seconds.
+/// programs and their command lines (on Linux, for Proton; on Windows, Java's for Minecraft). Cheap enough to run every few seconds.
 fn running_among(system: &mut sysinfo::System, games: &[(i64, String)]) -> Option<i64> {
-    let what = if cfg!(windows) {
-        sysinfo::ProcessRefreshKind::nothing().with_exe(sysinfo::UpdateKind::OnlyIfNotSet)
-    } else {
-        sysinfo::ProcessRefreshKind::nothing().with_exe(sysinfo::UpdateKind::OnlyIfNotSet).with_cmd(sysinfo::UpdateKind::OnlyIfNotSet)
-    };
+    // Command lines too (read once per program): Java names the Minecraft instance it plays (D-153).
+    let what = sysinfo::ProcessRefreshKind::nothing().with_exe(sysinfo::UpdateKind::OnlyIfNotSet).with_cmd(sysinfo::UpdateKind::OnlyIfNotSet);
     system.refresh_processes_specifics(sysinfo::ProcessesToUpdate::All, true, what);
     let paths: Vec<(String, Vec<String>)> = system
         .processes()
         .values()
         // Crash reporters and anti-cheat helpers can outlive the game itself: they don't count.
         .filter(|p| !p.exe().and_then(|e| e.file_stem()).is_some_and(|n| helper_program(&n.to_string_lossy())))
-        .map(|p| (p.exe().map(|e| normalize(&e.display().to_string())).unwrap_or_default(), p.cmd().iter().map(|a| normalize(&a.to_string_lossy())).collect()))
+        .map(|p| {
+            // On Windows only Java's (Minecraft's) command line counts: other programs name folders freely.
+            let java = p.exe().and_then(|e| e.file_stem()).is_some_and(|n| n.to_string_lossy().to_lowercase().starts_with("java"));
+            let cmd = if cfg!(windows) && !java { Vec::new() } else { p.cmd().iter().map(|a| normalize(&a.to_string_lossy())).collect() };
+            (p.exe().map(|e| normalize(&e.display().to_string())).unwrap_or_default(), cmd)
+        })
         .collect();
     games.iter().find_map(|(id, dir)| {
         let wanted = format!("{}/", normalize(dir));

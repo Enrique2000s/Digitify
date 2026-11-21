@@ -211,7 +211,7 @@ export type ArcadeFilter = "all" | "all-pc" | "all-roms" | ArcadeStore | "others
 
 /** Their default order; "all" stands in for "all-pc" and "all-roms" when they're combined. */
 // Favorites is a collection now (D-149), not a view.
-export const ARCADE_FILTER_ORDER: ArcadeFilter[] = ["all-pc", "all-roms", "steam", "epic", "xbox", "gog", "ubisoft", "ea", "battlenet", "rockstar", "riot", "amazon", "itch", "heroic", "lutris", "others", ...ARCADE_CONSOLES];
+export const ARCADE_FILTER_ORDER: ArcadeFilter[] = ["all-pc", "all-roms", "steam", "epic", "xbox", "minecraft", "gog", "ubisoft", "ea", "battlenet", "rockstar", "riot", "amazon", "itch", "heroic", "lutris", "others", ...ARCADE_CONSOLES];
 
 export interface ArcadePreferences {
   downloadCovers: boolean;

@@ -56,12 +56,7 @@ pub(crate) fn reg_blocks(text: &str) -> Vec<RegBlock> {
 
 #[cfg(windows)]
 fn reg_query(key: &str, recursive: bool) -> String {
-    let mut command = crate::tools::command(Path::new("reg"));
-    command.args(["query", key]);
-    if recursive {
-        command.arg("/s");
-    }
-    command.output().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default()
+    super::registry::query(key, recursive)
 }
 
 /// Every program's uninstall entry (for this computer and this user).
@@ -238,10 +233,7 @@ pub(crate) fn ea(uninstall: &[RegBlock]) -> (Option<String>, Vec<StoreGame>) {
     let games = ea_games(&dirs, |key, value| {
         let key = key.replacen("HKEY_LOCAL_MACHINE", "HKLM", 1).replacen("HKEY_CURRENT_USER", "HKCU", 1);
         let wow = key.replacen("HKLM\\SOFTWARE\\", "HKLM\\SOFTWARE\\WOW6432Node\\", 1);
-        [key, wow].iter().find_map(|k| {
-            let output = crate::tools::command(Path::new("reg")).args(["query", k, "/v", value]).output().ok()?;
-            reg_blocks(&String::from_utf8_lossy(&output.stdout)).first()?.get(value).map(str::to_string)
-        })
+        [key, wow].iter().find_map(|k| super::registry::value(k, value).filter(|v| !v.is_empty()))
     });
     let app = env("ProgramFiles").map(|p| p.join("Electronic Arts").join("EA Desktop").join("EA Desktop").join("EADesktop.exe")).filter(|p| p.is_file());
     let found = app.or_else(|| launcher_dir(uninstall, "EA app")).map(|p| p.display().to_string()).or_else(|| (!games.is_empty()).then(|| "EA games".to_string()));

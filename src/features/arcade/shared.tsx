@@ -79,6 +79,7 @@ export const STORE_NAMES: Record<ArcadeStore, string> = {
   rockstar: "Rockstar Games",
   riot: "Riot Games",
   amazon: "Amazon Games",
+  minecraft: "Minecraft",
   itch: "itch.io",
   heroic: "Heroic",
   lutris: "Lutris",
@@ -170,6 +171,7 @@ export const FILTER_LABELS: Record<ArcadeFilter, string> = {
   rockstar: "Rockstar Games",
   riot: "Riot Games",
   amazon: "Amazon Games",
+  minecraft: "Minecraft",
   itch: "itch.io",
   heroic: "Heroic",
   lutris: "Lutris",
@@ -189,9 +191,11 @@ export function inFilter(game: ArcadeGame, filter: ArcadeFilter): boolean {
       return game.platform !== "pc";
     case "others":
       return game.platform === "pc" && !game.store;
+    // Minecraft's games are Xbox games too (D-154); Linux has no Xbox view, so there they keep their own.
+    case "xbox":
+      return game.store === "xbox" || (game.store === "minecraft" && !onLinux);
     case "steam":
     case "epic":
-    case "xbox":
     case "gog":
     case "ubisoft":
     case "ea":
@@ -199,6 +203,7 @@ export function inFilter(game: ArcadeGame, filter: ArcadeFilter): boolean {
     case "rockstar":
     case "riot":
     case "amazon":
+    case "minecraft":
     case "itch":
     case "heroic":
     case "lutris":
@@ -213,7 +218,7 @@ export function inFilter(game: ArcadeGame, filter: ArcadeFilter): boolean {
 /** Whether a view exists on this system (Epic and Xbox are Windows-only; Heroic is for Linux). */
 export function filterAvailable(filter: ArcadeFilter): boolean {
   if (["epic", "xbox", "gog", "ubisoft", "ea", "battlenet", "rockstar", "riot", "amazon"].includes(filter)) return !onLinux;
-  if (filter === "heroic" || filter === "lutris") return onLinux;
+  if (filter === "heroic" || filter === "lutris" || filter === "minecraft") return onLinux;
   return true;
 }
 
@@ -226,7 +231,7 @@ export function filledFilters(games: ArcadeGame[] | undefined): Set<ArcadeFilter
   const filled = new Set<ArcadeFilter>();
   for (const game of games) {
     if (game.missing) continue;
-    filled.add(game.platform === "pc" ? (game.store ?? "others") : game.platform);
+    filled.add(game.platform === "pc" ? (game.store === "minecraft" && !onLinux ? "xbox" : (game.store ?? "others")) : game.platform);
   }
   return filled;
 }

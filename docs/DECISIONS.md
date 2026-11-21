@@ -101,6 +101,38 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-156 · A game's cover whole in its panel
+- **Date:** 2026-11-21 · **Approved by:** project owner (reported the cover cut at the top of a game's panel)
+- **The cause:** the panel is a column that scrolls; when its contents were taller than the window (a note, several facts), the cover's box was squeezed shorter and its picture cut. Its box was also capped at 340 px high, which cut 20 px off a 2 : 3 cover.
+- **Now:** the cover's box is never squeezed (the panel scrolls instead), and a cover whose shape would make it taller than 340 px is shown narrower instead of cut.
+
+### D-155 · Java Edition says how to start Minecraft straight away
+- **Date:** 2026-11-21 · **Approved by:** project owner (asked for Java Edition to start directly; agreed to this note when that isn't possible)
+- **Why not directly:** Mojang's Minecraft Launcher has no way to be asked to start the game (its options open it; Quick Play's are the game's own). Starting Java without it needs the player's signed-in Microsoft account: Digitify would have to ask for it or read the launcher's encrypted sign-in, which it won't do (D-037: stores are only read), and an offline start isn't a legitimate way to play an account's game.
+- **The note:** Minecraft: Java Edition's panel says, under Play, that Play opens the Minecraft Launcher, and that Prism Launcher (signed in there once) has each of its instances show in Arcade and start directly (D-153).
+
+### D-154 · Minecraft's games in the Xbox view
+- **Date:** 2026-11-21 · **Approved by:** project owner (asked: Minecraft counts as Xbox games; sorted by console, the Xbox view shows Xbox's games and Minecraft's)
+- **On Windows:** Minecraft has no view of its own; its games (Java Edition, Bedrock, the Prism Launcher and MultiMC instances) are in the **Xbox** view, which shows once either has a game. Sorted by console, the Xbox view has an **Xbox** heading and a **Minecraft** heading under it; in the PC games and All views Minecraft comes right after Xbox. Its badge, its row in Launchers and collections by the Xbox view include them.
+- **On Linux,** which has no Xbox view, Minecraft keeps a view of its own.
+
+### D-153 · Minecraft in Arcade: Java Edition, Bedrock and each Prism Launcher or MultiMC instance
+- **Date:** 2026-11-21 · **Approved by:** project owner (asked for Minecraft Java; chose the official launcher plus Prism Launcher and MultiMC, Bedrock too, and a Minecraft launcher of its own with a grass block)
+- **A launcher of its own:** **Minecraft** in Emulators & folders › Launchers, a Minecraft view (on Windows, the Xbox view since D-154) and a green badge with a grass block drawn by Digitify (no maker's mark), on Windows and Linux. Only read, like the other stores (D-037); nothing of Minecraft's is changed.
+- **Minecraft: Java Edition:** Mojang's Minecraft Launcher, from the Xbox app's game folders, the Microsoft Store (its installed package, `Microsoft.4297127D64EC6`, read from the registry) or the older installer (`MinecraftLauncher.exe`); on Linux `minecraft-launcher` or its Flatpak. Starting it opens the launcher, where Play starts the game as always (signing in stays the launcher's). Its time counts while its Java runs from the launcher's data (the package's folder, or `~/.minecraft`).
+- **Minecraft for Windows (Bedrock):** from the Xbox app's game folders or the Microsoft Store (`Microsoft.MinecraftUWP`), started as the app it is. Neither is listed under Xbox any more.
+- **Prism Launcher and MultiMC:** each instance is a game ("Minecraft: Fabulously Optimized", its own name when it says Minecraft), started directly (`--launch <instance>`), from the instances folder their settings name. Prism Launcher installed (its uninstall entry, its usual folder, Scoop, portable beside its program) or on Linux in the PATH or as a Flatpak; MultiMC in a `MultiMC` folder in the usual places on Windows, or `~/.local/share/multimc` on Linux. A new Prism instance shows by itself. The time counts while Java plays the instance (its command line names the instance's folder; on Windows only Java's command line is read for this).
+- **Covers:** by the edition's name (an instance is Java Edition): the Microsoft Store, LaunchBox and SteamGridDB, as for other PC games; the package's own square logo only when none is found.
+- **Manual:** Arcade's PC stores name Minecraft (edition 3).
+
+### D-152 · Arcade stays quick: removing a folder and Look for games no longer wait
+- **Date:** 2026-11-20 · **Approved by:** project owner (a tester's report: removing a game folder took over a minute, Look for games never seemed to finish; "the app should run quickly, without freezing")
+- **The cause:** every time Arcade looked at its launchers (each refresh of Emulators & folders, so after removing or adding a folder, and every Look for games) it started Windows' `reg.exe` several times to read the programs installed (Ubisoft Connect, the EA app, Battle.net, GOG). Each start took seconds (5 s in all here, far more on a computer with many programs or an antivirus that checks each one).
+- **Read directly:** the registry is now read through Windows itself (`src-tauri/src/arcade/registry.rs`, read-only), in the same text `reg query` gave, so what each launcher reads is unchanged. Here: Arcade's refresh 5–6 s → 0.12 s; Look for games 5.7 s → 0.13 s; removing a folder (with its refresh) 0.12 s.
+- **Only this computer's drives:** the Xbox app's game folders were looked for on every letter from C: to Z:, every 20 seconds too; a network drive that's offline makes each look wait for it, a disc drive spins up. Now only the computer's disks and plugged-in USB drives (a card reader only with a card in it).
+- **Emulators' icons once:** an emulator whose icon Windows couldn't read had Windows PowerShell started again on every refresh; it's now tried once (until the program is updated), its initials shown instead.
+- **Windows' own folders skipped:** Look for games no longer goes through a drive's recycle bin (`$RECYCLE.BIN` and other `$` folders) or `System Volume Information`.
+
 ### D-151 · No line under the profile's banner, no faded ends on sliding names
 - **Date:** 2026-11-20 · **Approved by:** project owner (asked for both)
 - **The profile's banner:** while the page arrived, the banner's picture showed its last row as a line (or a gap) at its bottom: its layers moved a pixel apart during the entrance. The picture now stops 12 px short of the banner's bottom, which is plain panel, its shade turns solid panel colour before the bottom (on its own layer, under the name and picture), so nothing of the picture can show there.

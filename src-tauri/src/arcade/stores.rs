@@ -22,10 +22,11 @@ pub enum Store {
     Lutris,
     Rockstar,
     Riot,
+    Minecraft,
 }
 
 impl Store {
-    pub const ALL: [Store; 13] = [
+    pub const ALL: [Store; 14] = [
         Store::Steam,
         Store::Epic,
         Store::Xbox,
@@ -36,6 +37,7 @@ impl Store {
         Store::Rockstar,
         Store::Riot,
         Store::Amazon,
+        Store::Minecraft,
         Store::Itch,
         Store::Heroic,
         Store::Lutris,
@@ -56,6 +58,7 @@ impl Store {
             Store::Lutris => "lutris",
             Store::Rockstar => "rockstar",
             Store::Riot => "riot",
+            Store::Minecraft => "minecraft",
         }
     }
 
@@ -78,13 +81,14 @@ impl Store {
             Store::Lutris => "Lutris",
             Store::Rockstar => "Rockstar Games Launcher",
             Store::Riot => "Riot Client",
+            Store::Minecraft => "Minecraft",
         }
     }
 
     /// Whether it exists for this system.
     pub fn available_here(self) -> bool {
         match self {
-            Store::Steam | Store::Itch => true,
+            Store::Steam | Store::Itch | Store::Minecraft => true,
             Store::Epic | Store::Xbox | Store::Gog | Store::Ubisoft | Store::Ea | Store::BattleNet | Store::Amazon | Store::Rockstar | Store::Riot => cfg!(windows),
             Store::Heroic | Store::Lutris => cfg!(not(windows)),
         }
@@ -142,6 +146,10 @@ pub fn scan_all() -> Vec<StoreScan> {
                 Store::Lutris => super::launchers::lutris(),
                 #[allow(unreachable_patterns)]
                 Store::Ubisoft | Store::Ea | Store::BattleNet | Store::Amazon | Store::Lutris | Store::Rockstar | Store::Riot => (None, Vec::new()),
+                #[cfg(windows)]
+                Store::Minecraft => super::minecraft::scan(&uninstall),
+                #[cfg(not(windows))]
+                Store::Minecraft => super::minecraft::scan(),
                 Store::Steam => steam(),
                 Store::Epic => epic(),
                 Store::Xbox => xbox(),
@@ -190,6 +198,8 @@ fn watched_dirs() -> Vec<PathBuf> {
     }
     #[cfg(not(windows))]
     dirs.extend(heroic_dirs());
+    // Prism Launcher's instances (D-153): a new one shows by itself.
+    dirs.extend(super::minecraft::watched_dirs());
     dirs.extend(itch_db().and_then(|db| db.parent().map(Path::to_path_buf)));
     dirs.extend(super::launchers::watched_dirs());
     dirs
@@ -438,17 +448,10 @@ fn steam_roots() -> Vec<PathBuf> {
     }
 }
 
-/// A value from the registry, through `reg.exe` (read-only).
+/// A value from the registry (read-only).
 #[cfg(windows)]
 fn registry_value(key: &str, name: &str) -> Option<String> {
-    let output = crate::tools::command(Path::new("reg")).args(["query", key, "/v", name]).output().ok()?;
-    let text = String::from_utf8_lossy(&output.stdout);
-    text.lines().find_map(|line| {
-        let mut parts = line.trim().splitn(3, "    ");
-        let found = parts.next()?.trim();
-        let _kind = parts.next()?;
-        (found.eq_ignore_ascii_case(name)).then(|| parts.next().map(|v| v.trim().to_string())).flatten()
-    })
+    super::registry::value(key, name)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -469,9 +472,7 @@ fn gog_galaxy() -> Option<PathBuf> {
 /// own installers alike); downloadable content, which names the game it belongs to, is left out.
 #[cfg(windows)]
 fn gog() -> (Option<String>, Vec<StoreGame>) {
-    let output = crate::tools::command(Path::new("reg")).args(["query", GOG_GAMES, "/s"]).output();
-    let text = output.map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
-    let games = gog_games(&text);
+    let games = gog_games(&super::registry::query(GOG_GAMES, true));
     let found = gog_galaxy().map(|p| p.display().to_string()).or_else(|| (!games.is_empty()).then(|| "GOG games installed".to_string()));
     (found, games)
 }
@@ -861,8 +862,7 @@ pub(crate) fn epic_manifest(text: &str) -> Option<StoreGame> {
 #[cfg(windows)]
 fn xbox_roots() -> Vec<PathBuf> {
     let mut roots = Vec::new();
-    for letter in b'C'..=b'Z' {
-        let drive = PathBuf::from(format!("{}:\\", letter as char));
+    for drive in local_drives() {
         // `.GamingRoot` names the drive's game folders (UTF-16 after an 8-byte header).
         if let Ok(bytes) = std::fs::read(drive.join(".GamingRoot")) {
             if bytes.len() > 8 && &bytes[..4] == b"RGBX" {
@@ -877,6 +877,34 @@ fn xbox_roots() -> Vec<PathBuf> {
     dedupe(roots)
 }
 
+/// The drives on this computer that hold files: its disks and plugged-in USB drives. Network drives
+/// (one offline makes every look wait for it), disc drives and empty card readers are left out (D-152).
+#[cfg(windows)]
+fn local_drives() -> Vec<PathBuf> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives, GetVolumeInformationW};
+    const DRIVE_REMOVABLE: u32 = 2;
+    const DRIVE_FIXED: u32 = 3;
+    let wide = |text: &str| std::ffi::OsStr::new(text).encode_wide().chain(std::iter::once(0)).collect::<Vec<u16>>();
+    let mask = unsafe { GetLogicalDrives() };
+    (2..26u8)
+        .filter(|bit| mask & (1 << bit) != 0)
+        .map(|bit| format!("{}:\\", (b'A' + bit) as char))
+        .filter(|root| {
+            let root = wide(root);
+            match unsafe { GetDriveTypeW(root.as_ptr()) } {
+                DRIVE_FIXED => true,
+                // A card reader or USB stick only when something is in it.
+                DRIVE_REMOVABLE => unsafe {
+                    GetVolumeInformationW(root.as_ptr(), std::ptr::null_mut(), 0, std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut(), 0) != 0
+                },
+                _ => false,
+            }
+        })
+        .map(PathBuf::from)
+        .collect()
+}
+
 #[cfg(windows)]
 fn xbox() -> (Option<String>, Vec<StoreGame>) {
     let roots = xbox_roots();
@@ -888,12 +916,25 @@ fn xbox() -> (Option<String>, Vec<StoreGame>) {
         let Ok(entries) = std::fs::read_dir(root) else { continue };
         for entry in entries.filter_map(Result::ok) {
             let content = entry.path().join("Content");
-            if let Some(game) = xbox_game(&content) {
+            // Minecraft's launcher and Bedrock are Minecraft's own (D-153).
+            if let Some(game) = xbox_game(&content).filter(|g| !super::minecraft::is_minecraft_family(&g.key)) {
                 games.push(game);
             }
         }
     }
     (Some(roots.iter().map(|r| r.display().to_string()).collect::<Vec<_>>().join(", ")), games)
+}
+
+/// The Xbox app's install of a package `family` (Minecraft's, D-153), if it's in its folders.
+#[cfg(windows)]
+pub(crate) fn xbox_package(family: &str) -> Option<StoreGame> {
+    xbox_roots()
+        .iter()
+        .filter_map(|root| std::fs::read_dir(root).ok())
+        .flatten()
+        .filter_map(Result::ok)
+        .filter_map(|entry| xbox_game(&entry.path().join("Content")))
+        .find(|game| game.key.eq_ignore_ascii_case(family))
 }
 
 #[cfg(not(windows))]

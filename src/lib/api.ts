@@ -1012,7 +1012,7 @@ export type ArcadeConsole = (typeof ARCADE_CONSOLES)[number];
 /** Arcade (D-034): a console a game is for, or "pc". */
 export type ArcadePlatform = ArcadeConsole | "pc";
 /** The store a PC game came from (D-037). */
-export type ArcadeStore = "steam" | "epic" | "xbox" | "gog" | "ubisoft" | "ea" | "battlenet" | "rockstar" | "riot" | "amazon" | "itch" | "heroic" | "lutris";
+export type ArcadeStore = "steam" | "epic" | "xbox" | "gog" | "ubisoft" | "ea" | "battlenet" | "rockstar" | "riot" | "amazon" | "itch" | "heroic" | "lutris" | "minecraft";
 export type ArcadeEmulator =
   | "dolphin"
   | "project64"

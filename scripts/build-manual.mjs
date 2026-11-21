@@ -67,5 +67,6 @@ writeFileSync(
 );
 const cover = join(dirname(out), "Digitify-Manual-cover.png");
 execFileSync(browser, ["--headless=new", "--disable-gpu", "--hide-scrollbars", "--window-size=600,900", "--force-device-scale-factor=2", "--run-all-compositor-stages-before-draw", "--virtual-time-budget=8000", `--user-data-dir=${join(work, "profile")}`, `--screenshot=${cover}`, pathToFileURL(coverPage).href], { stdio: "inherit" });
-rmSync(work, { recursive: true, force: true });
+// Edge may still be closing its profile: a few tries.
+rmSync(work, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
 console.log(`Manual (edition ${edition}, Digitify ${version}) written to ${out}`);

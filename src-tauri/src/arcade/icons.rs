@@ -33,6 +33,13 @@ pub fn icons(found: &[(Emulator, Program)], cache: &Path) -> HashMap<&'static st
         let missing: Vec<&(Emulator, PathBuf, PathBuf)> = wanted.iter().filter(|(_, exe, png)| stale(exe, png)).collect();
         if !missing.is_empty() {
             extract_windows(&missing.iter().map(|(_, exe, png)| (exe.as_path(), png.as_path())).collect::<Vec<_>>());
+            // A program whose icon couldn't be read leaves an empty file, so Windows PowerShell isn't
+            // started again for it every time Arcade looks (D-152); its initials show instead.
+            for (_, _, png) in &missing {
+                if !png.is_file() {
+                    let _ = std::fs::write(png, b"");
+                }
+            }
         }
         for (emulator, _, png) in &wanted {
             if let Some(url) = data_url(png) {

@@ -12,6 +12,19 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.9.1",
+    date: "2026-11-21",
+    added: [
+      { icon: "gamepad", title: "Minecraft in Arcade", text: "Minecraft: Java Edition, Bedrock and each of your Prism Launcher or MultiMC instances show in Arcade with their covers, beside your Xbox games (in a view of their own on Linux). Start them from there and your play time counts; Prism Launcher's instances start the game straight away." },
+    ],
+    fixed: [
+      "Removing a game folder in Arcade is instant again, instead of taking up to a minute.",
+      "Look for games finishes in moments, instead of seeming to search forever.",
+      "Arcade no longer waits for network drives that are offline, or for disc drives.",
+      "A game's cover shows whole in its panel, however long the panel.",
+    ],
+  },
+  {
     version: "0.9.0",
     date: "2026-11-20",
     added: [

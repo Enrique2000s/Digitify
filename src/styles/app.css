@@ -4914,9 +4914,11 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
   right: 14px;
   z-index: 1;
 }
+/* The cover whole (D-156): never squeezed by a long panel (it scrolls instead), and narrower
+   rather than cut when its shape would make it taller than 340 px. */
 .arcade-panel-art {
-  width: min(100%, 240px);
-  max-height: 340px;
+  flex: none;
+  width: min(100%, 240px, calc(340px * var(--aspect, 0.667)));
   align-self: center;
   overflow: hidden;
   border-radius: 14px;
@@ -4931,6 +4933,28 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
   margin-top: -6px;
   color: var(--muted);
   font-weight: 700;
+}
+/* A note under Play (Minecraft: Java Edition, D-155). */
+.arcade-panel-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+.arcade-panel-note svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent-bright);
+}
+.arcade-panel-note b {
+  color: var(--text);
 }
 .arcade-panel-play {
   justify-content: center;
@@ -5432,6 +5456,9 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
 }
 .arcade-badge[data-store="lutris"] {
   background: rgba(240, 120, 30, 0.92);
+}
+.arcade-badge[data-store="minecraft"] {
+  background: rgba(62, 140, 50, 0.92);
 }
 .arcade-badge[data-platform="genesis"],
 .arcade-badge[data-platform="segacd"],
