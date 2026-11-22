@@ -425,11 +425,10 @@ fn record_source(conn: &Connection, item: i64, entry: &Entry, downloaded: bool) 
     Ok(())
 }
 
-/// A download taking an online-only item's place: the new item keeps its favorite mark, tags and
-/// (in the same category) collection, and the online-only one goes.
+/// A download taking an online-only item's place: the new item keeps its favorite mark and (in the
+/// same category) collection, and the online-only one goes.
 fn take_over(conn: &Connection, old: i64, new: i64) -> AppResult<()> {
     conn.execute("UPDATE items SET is_favorite = is_favorite OR (SELECT is_favorite FROM items WHERE id = ?1) WHERE id = ?2", params![old, new])?;
-    conn.execute("INSERT OR IGNORE INTO item_tags (item_id, tag_id) SELECT ?2, tag_id FROM item_tags WHERE item_id = ?1", params![old, new])?;
     conn.execute(
         "UPDATE items SET collection_id = (SELECT o.collection_id FROM items o WHERE o.id = ?1 AND o.category_id = items.category_id) \
          WHERE id = ?2 AND collection_id IS NULL",

@@ -17,6 +17,31 @@ pub fn find(name: &str) -> Option<PathBuf> {
     find_in(exe.parent()?, name)
 }
 
+/// A program on the system's PATH.
+pub fn find_on_path(name: &str) -> Option<PathBuf> {
+    let file = if cfg!(windows) { format!("{name}.exe") } else { name.to_string() };
+    std::env::var_os("PATH").and_then(|paths| std::env::split_paths(&paths).map(|p| p.join(&file)).find(|candidate| candidate.is_file()))
+}
+
+/// Text as Windows' wide strings want it: UTF-16, ending in a NUL.
+#[cfg(windows)]
+pub fn wide(text: &str) -> Vec<u16> {
+    text.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+/// Standard Base64, with padding (data URLs, PowerShell's encoded commands).
+pub fn base64(bytes: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let n = (u32::from(chunk[0]) << 16) | (u32::from(*chunk.get(1).unwrap_or(&0)) << 8) | u32::from(*chunk.get(2).unwrap_or(&0));
+        for (i, shift) in [18, 12, 6, 0].into_iter().enumerate() {
+            out.push(if i <= chunk.len() { TABLE[(n >> shift) as usize & 63] as char } else { '=' });
+        }
+    }
+    out
+}
+
 /// Like `find`, looking first in `dir` (the app's folder).
 pub fn find_in(dir: &Path, name: &str) -> Option<PathBuf> {
     let file = if cfg!(windows) { format!("{name}.exe") } else { name.to_string() };
@@ -27,11 +52,7 @@ pub fn find_in(dir: &Path, name: &str) -> Option<PathBuf> {
     if bundled.is_some() || cfg!(windows) {
         return bundled;
     }
-    std::env::var_os("PATH")
-        .map(|paths| std::env::split_paths(&paths).map(|p| p.join(&file)).collect::<Vec<_>>())
-        .unwrap_or_default()
-        .into_iter()
-        .find(|candidate| candidate.is_file())
+    find_on_path(name)
 }
 
 pub fn command(program: &Path) -> Command {
@@ -145,7 +166,6 @@ mod tests {
 pub fn open_link(target: &str) -> std::io::Result<()> {
     use windows_sys::Win32::UI::Shell::ShellExecuteW;
     use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
-    let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
     let (verb, target) = (wide("open"), wide(target));
     let result = unsafe { ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), target.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL) };
     if result as isize <= 32 {

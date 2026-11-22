@@ -9,8 +9,6 @@ export const keys = {
   categories: ["categories"] as const,
   dashboard: ["dashboard"] as const,
   item: (id: number) => ["item", id] as const,
-  tags: ["tags"] as const,
-  shelves: ["shelves"] as const,
   collections: (category: string, parent: number | null) => ["collections", category, parent] as const,
   collectionTree: (category: string) => ["collection-tree", category] as const,
 };
@@ -19,7 +17,6 @@ export const useAppStatus = () => useQuery({ queryKey: keys.status, queryFn: api
 export const useCategories = () => useQuery({ queryKey: keys.categories, queryFn: api.categories });
 export const useDashboard = () => useQuery({ queryKey: keys.dashboard, queryFn: api.dashboard });
 export const useItem = (id: number, enabled = true) => useQuery({ queryKey: keys.item(id), queryFn: () => api.item(id), enabled });
-export const useTags = () => useQuery({ queryKey: keys.tags, queryFn: api.tags });
 export const useCollections = (category: string, parent: number | null, enabled = true) =>
   useQuery({ queryKey: keys.collections(category, parent), queryFn: () => api.collections(category, parent), enabled });
 export const useCollectionTree = (category: string | null) =>
@@ -41,7 +38,7 @@ export function useLibraryVersion(): number {
 export function libraryChanged(queryClient: QueryClient) {
   libraryVersion++;
   versionListeners.forEach((listener) => listener());
-  for (const queryKey of [keys.categories, keys.dashboard, keys.tags, keys.shelves, ["item"], ["collections"], ["collection-tree"], ["tracks"], ["artists"], ["playlists"], ["episodes"], ["series"], ["chapters"], ["stats"], ["blurb"], ["shapes"]]) {
+  for (const queryKey of [keys.categories, keys.dashboard, ["item"], ["collections"], ["collection-tree"], ["tracks"], ["artists"], ["playlists"], ["episodes"], ["series"], ["chapters"], ["stats"], ["blurb"], ["shapes"]]) {
     void queryClient.invalidateQueries({ queryKey });
   }
 }

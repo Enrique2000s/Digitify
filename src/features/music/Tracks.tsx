@@ -5,18 +5,13 @@ import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import { DropdownMenu } from "radix-ui";
 import { AudioLines, Check, ChevronDown, ChevronUp, Disc3, GripVertical, Heart, ListEnd, ListMusic, ListPlus, MoreHorizontal, Pencil, Play, Plus, Shuffle, X } from "lucide-react";
 import { api, errorText, type Playlist, type Track, type TrackFilter } from "../../lib/api";
+import { duration } from "../../lib/format";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { usePlayAndShow } from "./playAndShow";
 import { Dialog, Field } from "../../components/common";
 import { arrayMove, useVirtualReorder } from "../../lib/reorder";
 
 const ROW = 46;
-
-export function duration(ms: number | null): string {
-  if (!ms) return "";
-  const s = Math.round(ms / 1000);
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-}
 
 export function shuffled<T>(list: T[]): T[] {
   const copy = [...list];

@@ -88,7 +88,7 @@ pub async fn activity_add(state: State<'_, AppState>, item: i64, kind: String, s
 }
 
 /// Every kind of activity, as `day, kind, seconds` rows: the library's and Arcade's.
-const ALL_ACTIVITY: &str = "(SELECT day, kind, seconds FROM activity UNION ALL SELECT day, 'play', seconds FROM arcade_activity)";
+pub(crate) const ALL_ACTIVITY: &str = "(SELECT day, kind, seconds FROM activity UNION ALL SELECT day, 'play', seconds FROM arcade_activity)";
 
 fn time_since(conn: &Connection, start: &str) -> AppResult<Time> {
     Ok(conn.query_row(
@@ -100,6 +100,17 @@ fn time_since(conn: &Connection, start: &str) -> AppResult<Time> {
         [],
         |row| Ok(Time { read: row.get(0)?, watch: row.get(1)?, listen: row.get(2)?, play: row.get(3)? }),
     )?)
+}
+
+/// The most played artists of the plays matching `filter` (on `pl`, the plays), most first: a
+/// track's own artist, or its item's. One query for the statistics, your year and your week.
+pub(crate) fn top_artists_sql(filter: &str, limit: u32) -> String {
+    format!(
+        "SELECT artist, count(*) AS n FROM (SELECT coalesce(json_extract(p.metadata, '$.artist'), \
+           (SELECT pe.name FROM item_people ip JOIN people pe ON pe.id = ip.person_id WHERE ip.item_id = p.item_id AND ip.role = 'artist' \
+            ORDER BY ip.position LIMIT 1)) AS artist FROM plays pl JOIN parts p ON p.id = pl.part_id WHERE {filter}) \
+         WHERE artist IS NOT NULL GROUP BY artist ORDER BY n DESC, artist LIMIT {limit}"
+    )
 }
 
 pub fn stats(conn: &Connection) -> AppResult<Stats> {
@@ -127,12 +138,7 @@ pub fn stats(conn: &Connection) -> AppResult<Stats> {
         .query_map([], |row| Ok(NamedCount { key: row.get::<_, i64>(0)?.to_string(), name: row.get(1)?, count: row.get(2)? }))?
         .collect::<Result<_, _>>()?;
     let top_artists = conn
-        .prepare(&format!(
-            "SELECT artist, count(*) AS n FROM (SELECT coalesce(json_extract(p.metadata, '$.artist'), \
-               (SELECT pe.name FROM item_people ip JOIN people pe ON pe.id = ip.person_id WHERE ip.item_id = p.item_id AND ip.role = 'artist' \
-                ORDER BY ip.position LIMIT 1)) AS artist FROM plays pl JOIN parts p ON p.id = pl.part_id WHERE pl.played_at >= {YEAR_UTC}) \
-             WHERE artist IS NOT NULL GROUP BY artist ORDER BY n DESC, artist LIMIT 5"
-        ))?
+        .prepare(&top_artists_sql(&format!("pl.played_at >= {YEAR_UTC}"), 5))?
         .query_map([], |row| Ok(NamedCount { key: row.get(0)?, name: row.get(0)?, count: row.get(1)? }))?
         .collect::<Result<_, _>>()?;
     let mut categories: Vec<NamedCount> = conn

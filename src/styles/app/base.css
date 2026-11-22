@@ -1,0 +1,465 @@
+/* Digitify interface styles (Breeze, decision D-016). Colors and shading come from tokens.css. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 600;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+/* The window itself never scrolls (D-165): "clip" rather than "hidden", so nothing (bringing a
+   game's box into sight, Aero's bubbles reaching past the edges) can push the whole app up. */
+html,
+body,
+#root,
+.app {
+  overflow: clip;
+}
+
+/* Video playback (Phase 0 lab): the page turns transparent so mpv's picture shows through. */
+html.video-mode,
+html.video-mode body,
+html.video-mode #root {
+  background: transparent;
+}
+
+/* A video in the corner (D-053), on Windows: the window shows through a hole in the page where the
+   picture is (mpv draws under the window); everything else stays as it is. */
+html.pip-mode:not(.on-linux),
+html.pip-mode:not(.on-linux) body {
+  background: transparent;
+}
+html.pip-mode:not(.on-linux) #root {
+  -webkit-mask:
+    linear-gradient(#000 0 0) 0 0 / 100% 100% no-repeat,
+    linear-gradient(#000 0 0) var(--pip-x, -10px) var(--pip-y, -10px) / var(--pip-w, 1px) var(--pip-h, 1px) no-repeat;
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* On Linux the video window sits above the page (D-031), so nothing needs to show through: black,
+   never the desktop behind the window. */
+html.video-mode.on-linux,
+html.video-mode.on-linux body,
+html.video-mode.on-linux #root {
+  background: #000;
+}
+
+:root[data-motion="off"] *,
+:root[data-motion="off"] *::before,
+:root[data-motion="off"] *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent-bright);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--accent-ring);
+}
+
+::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 4px solid transparent;
+  border-radius: var(--pill);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+}
+p {
+  margin: 0;
+}
+a {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.display {
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  line-height: 1.08;
+}
+
+.eyebrow {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------- buttons, fields, chips */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: var(--gloss);
+  color: var(--text);
+  font-weight: 800;
+  box-shadow: var(--raise-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: box-shadow var(--duration) var(--ease), transform 120ms var(--ease), filter var(--duration) var(--ease);
+}
+.btn > svg {
+  color: var(--accent-text);
+}
+.btn:hover {
+  box-shadow: 0 0 0 3px var(--accent-ring), var(--raise-sm);
+}
+.btn:active {
+  transform: translateY(1px) scale(0.985);
+  box-shadow: var(--inset-shadow);
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+  transform: none;
+  box-shadow: none;
+}
+.btn-primary {
+  border-color: var(--accent-edge);
+  background: var(--gel);
+  color: var(--accent-ink);
+  box-shadow: 0 6px 14px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+.btn-primary > svg {
+  color: inherit;
+}
+.btn-primary:hover {
+  box-shadow: 0 0 0 3px var(--accent-ring), 0 8px 18px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+.btn-ghost:hover {
+  background: var(--gloss);
+  border-color: var(--line);
+  box-shadow: var(--raise-sm);
+}
+.btn-danger,
+.btn-danger > svg {
+  color: var(--danger);
+}
+.btn-danger.solid {
+  border-color: #b3262e;
+  background: linear-gradient(180deg, #ff8f8f 0%, #e5484d 46%, #d93d43 62%, #bf2f35 100%);
+  color: #fff;
+}
+.btn-lg {
+  min-height: 48px;
+  padding: 0 24px;
+  font-size: 15.5px;
+}
+.btn-sm {
+  min-height: 32px;
+  padding: 0 13px;
+  font-size: 13px;
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--duration) var(--ease), color var(--duration) var(--ease), box-shadow var(--duration) var(--ease);
+}
+.icon-btn:hover {
+  background: var(--gloss);
+  border-color: var(--line);
+  box-shadow: var(--raise-sm);
+  color: var(--text);
+}
+.icon-btn[aria-pressed="true"] {
+  color: var(--accent-text);
+}
+
+/* Round gel buttons: window controls, history and settings in the header. */
+.round-btn {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--gloss);
+  color: var(--muted);
+  box-shadow: var(--raise-sm);
+  cursor: pointer;
+  transition: box-shadow var(--duration) var(--ease), color var(--duration) var(--ease), transform 120ms var(--ease);
+}
+.round-btn:hover,
+.round-btn[data-status="active"] {
+  color: var(--accent-text);
+  box-shadow: var(--glow-sm);
+}
+.round-btn:active {
+  transform: translateY(1px);
+  box-shadow: var(--inset-shadow);
+}
+.round-btn.lg {
+  width: 44px;
+  height: 44px;
+}
+.round-btn.close:hover {
+  border-color: #b3262e;
+  background: linear-gradient(180deg, #ff9a9a 0%, #e5484d 50%, #cf3a40 100%);
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.3);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.field > span {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--muted);
+}
+.input,
+.select,
+.textarea {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--field);
+  color: var(--text);
+  font-weight: 700;
+  box-shadow: var(--inset-shadow);
+  outline: none;
+  transition: border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease);
+}
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: var(--accent-bright);
+  box-shadow: var(--inset-shadow), 0 0 0 3px var(--accent-ring);
+}
+.select {
+  appearance: none;
+  padding-right: 36px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 19px) 52%, calc(100% - 14px) 52%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+.select option {
+  background: var(--panel);
+  color: var(--text);
+}
+.textarea {
+  min-height: 96px;
+  resize: vertical;
+  line-height: 1.5;
+}
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.field-row.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.hint {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: var(--gloss);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.chip.accent {
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.chip.warning {
+  border-color: transparent;
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.segmented {
+  display: inline-flex;
+  gap: 3px;
+  padding: 4px;
+  border-radius: var(--pill);
+  background: var(--track);
+  box-shadow: var(--inset-shadow);
+}
+.segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--pill);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: color var(--duration) var(--ease), background var(--duration) var(--ease);
+}
+.segmented button:hover {
+  color: var(--text);
+}
+.segmented button[aria-pressed="true"] {
+  border-color: var(--line);
+  background: var(--gloss);
+  color: var(--accent-text);
+  box-shadow: var(--raise-sm);
+}
+
+/* On/off switch: a gel knob in a rounded track. */
+.switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 54px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: var(--track);
+  box-shadow: var(--inset-shadow);
+  cursor: pointer;
+  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease);
+}
+.switch span {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--gloss);
+  box-shadow: 0 2px 5px rgba(30, 60, 90, 0.28);
+  transition: transform 220ms var(--spring);
+}
+.switch[aria-checked="true"] {
+  border-color: var(--accent-edge);
+  background: var(--gel);
+}
+.switch[aria-checked="true"] span {
+  transform: translateX(24px);
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 22px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: var(--pill);
+  background: linear-gradient(90deg, var(--accent-bright) var(--fill, 0%), var(--track) var(--fill, 0%));
+  box-shadow: var(--inset-shadow);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--gloss);
+  box-shadow: 0 2px 5px rgba(30, 60, 90, 0.3);
+  transition: box-shadow var(--duration) var(--ease);
+}
+input[type="range"]:hover::-webkit-slider-thumb,
+input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px var(--accent-ring), 0 2px 5px rgba(30, 60, 90, 0.3);
+}
+input[type="range"]:focus-visible {
+  outline: none;
+}
+
+input[type="radio"],
+input[type="checkbox"] {
+  accent-color: var(--accent-bright);
+}

@@ -1,5 +1,3 @@
-import type { Handler } from "./api";
-
 export const FORMAT_LABELS: Record<string, string> = {
   epub: "EPUB",
   pdf: "PDF",
@@ -66,28 +64,6 @@ export function formatLabel(code: string | null | undefined): string {
   if (!code) return "Unknown format";
   return FORMAT_LABELS[code] ?? code.toUpperCase();
 }
-
-/** Physical formats offered per kind of category, most common first. */
-export const PHYSICAL_FORMATS: Record<Handler, string[]> = {
-  book: ["hardcover", "paperback", "mass-market", "box-set", "other"],
-  comic: ["single-issue", "tpb", "tankobon", "hardcover", "omnibus", "box-set", "other"],
-  video: ["bluray", "uhd-bluray", "dvd", "bluray-3d", "vhs", "laserdisc", "box-set", "other"],
-  audio: ["cd", "vinyl", "cassette", "sacd", "box-set", "other"],
-  generic: ["other"],
-  image: ["print", "album", "other"],
-};
-
-export const CONDITIONS = ["Sealed", "Mint", "Like new", "Very good", "Good", "Fair", "Poor"];
-
-/** Main creator role per kind of category. */
-export const CREATOR_ROLE: Record<Handler, { role: string; label: string }> = {
-  book: { role: "author", label: "Author" },
-  comic: { role: "writer", label: "Writer" },
-  video: { role: "director", label: "Director" },
-  audio: { role: "artist", label: "Artist" },
-  generic: { role: "creator", label: "Creator" },
-  image: { role: "photographer", label: "Photographer" },
-};
 
 export const ROLE_LABELS: Record<string, string> = {
   author: "Author",

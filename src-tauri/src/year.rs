@@ -11,7 +11,7 @@ use crate::stats::NamedCount;
 use crate::AppState;
 
 /// Every kind of activity as `day, kind, seconds` rows: the library's and Arcade's.
-const ALL: &str = "(SELECT day, kind, seconds FROM activity UNION ALL SELECT day, 'play', seconds FROM arcade_activity)";
+use crate::stats::{top_artists_sql, ALL_ACTIVITY as ALL};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -96,11 +96,7 @@ pub fn review(conn: &Connection, year: i64) -> AppResult<YearReview> {
          WHERE substr(a.day, 1, 4) = ?1 GROUP BY i.id HAVING m > 0 ORDER BY m DESC LIMIT 5",
     )?;
     let top_artists = conn
-        .prepare(
-            "SELECT artist, count(*) AS n FROM (SELECT coalesce(json_extract(p.metadata, '$.artist'), \
-               (SELECT pe.name FROM item_people ip JOIN people pe ON pe.id = ip.person_id WHERE ip.item_id = p.item_id AND ip.role = 'artist' ORDER BY ip.position LIMIT 1)) AS artist \
-             FROM plays pl JOIN parts p ON p.id = pl.part_id WHERE substr(pl.played_at, 1, 4) = ?1) WHERE artist IS NOT NULL GROUP BY artist ORDER BY n DESC LIMIT 5",
-        )?
+        .prepare(&top_artists_sql("substr(pl.played_at, 1, 4) = ?1", 5))?
         .query_map([&y], |row| Ok(NamedCount { key: row.get(0)?, name: row.get(0)?, count: row.get(1)? }))?
         .collect::<Result<_, _>>()?;
     Ok(YearReview {
@@ -183,11 +179,7 @@ pub fn week(conn: &Connection) -> AppResult<WeekReview> {
     };
     // Plays, additions and finishes are kept in UTC: compared by their local day.
     let top_artists = conn
-        .prepare(
-            "SELECT artist, count(*) AS n FROM (SELECT coalesce(json_extract(p.metadata, '$.artist'), \
-               (SELECT pe.name FROM item_people ip JOIN people pe ON pe.id = ip.person_id WHERE ip.item_id = p.item_id AND ip.role = 'artist' ORDER BY ip.position LIMIT 1)) AS artist \
-             FROM plays pl JOIN parts p ON p.id = pl.part_id WHERE date(pl.played_at, 'localtime') BETWEEN ?1 AND ?2) WHERE artist IS NOT NULL GROUP BY artist ORDER BY n DESC LIMIT 3",
-        )?
+        .prepare(&top_artists_sql("date(pl.played_at, 'localtime') BETWEEN ?1 AND ?2", 3))?
         .query_map(params![start, end], |row| Ok(NamedCount { key: row.get(0)?, name: row.get(0)?, count: row.get(1)? }))?
         .collect::<Result<_, _>>()?;
     let previous = conn.query_row(&format!("SELECT coalesce(sum(seconds), 0) FROM {ALL} WHERE day >= ?1 AND day < ?2"), params![before, start], |row| row.get(0))?;

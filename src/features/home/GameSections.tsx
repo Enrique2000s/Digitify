@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { Marquee } from "../../components/Marquee";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { BadgeCheck, Gamepad2, Heart, Info, Play } from "lucide-react";
+import { Gamepad2, Info, Play } from "lucide-react";
 import type { ArcadeGame, TileCover } from "../../lib/api";
 import { artworkUrl } from "../../lib/api";
-import { consoleOf, GameBadge, GameCover, lastPlayed, gameAspect, playTime, useArcade, useLaunch } from "../arcade/shared";
+import { consoleOf, GameBadge, GameMarks, GameCover, lastPlayed, gameAspect, playTime, useArcade, useLaunch } from "../arcade/shared";
 
 /** Arcade's games for Home (D-041): recently played, favorites, one featured a day, and the tile's covers. */
 export function useHomeGames() {
@@ -41,16 +41,7 @@ export function GameCard({ game, running, onPlay }: { game: ArcadeGame; running:
       <Link to="/arcade" search={{ game: game.id }} className="arcade-tile-art" style={{ aspectRatio: aspect }} aria-label={`${game.title}, ${consoleOf(game)}`} data-blip>
         <GameCover game={game} />
         <GameBadge game={game} />
-        {game.completedAt && (
-          <span className="arcade-completed" title="Completed">
-            <BadgeCheck size={15} strokeWidth={2.4} aria-label="Completed" />
-          </span>
-        )}
-        {game.isFavorite && (
-          <span className="arcade-fav" title="Favorite">
-            <Heart size={13} fill="currentColor" strokeWidth={2.4} aria-label="Favorite" />
-          </span>
-        )}
+        <GameMarks game={game} />
       </Link>
       <button type="button" className="arcade-play" aria-label={`Play ${game.title}`} title="Play" onClick={onPlay}>
         <Play size={18} fill="currentColor" />

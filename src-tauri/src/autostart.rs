@@ -26,16 +26,13 @@ fn program() -> AppResult<std::path::PathBuf> {
 #[cfg(windows)]
 mod platform {
     use super::*;
+    use crate::tools::wide;
     use windows_sys::Win32::Foundation::ERROR_SUCCESS;
     use windows_sys::Win32::System::Registry::{
         RegCloseKey, RegDeleteValueW, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_SZ,
     };
 
     const RUN: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
-
-    fn wide(s: &str) -> Vec<u16> {
-        s.encode_utf16().chain(std::iter::once(0)).collect()
-    }
 
     fn open(access: u32) -> AppResult<HKEY> {
         let mut key: HKEY = std::ptr::null_mut();

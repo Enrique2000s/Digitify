@@ -154,6 +154,15 @@ pub fn library_reveal(state: State<'_, AppState>) -> AppResult<()> {
 }
 
 /// Shows the third-party notices file shipped next to the app.
+/// Digitify's page (D-172): its code, its releases and their installers, its license.
+pub const REPOSITORY: &str = "https://github.com/Enrique2000s/Digitify";
+
+/// Opens Digitify's page in the browser (only that address).
+#[tauri::command]
+pub fn repository_open() -> AppResult<()> {
+    crate::tools::open_link(REPOSITORY).map_err(|e| AppError::msg(format!("Couldn't open the browser: {e}")))
+}
+
 #[tauri::command]
 pub fn notices_reveal(app: AppHandle) -> AppResult<()> {
     let path = app.path().resolve("THIRD_PARTY_NOTICES.md", tauri::path::BaseDirectory::Resource)?;

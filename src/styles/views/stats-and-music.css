@@ -1,0 +1,927 @@
+/* ---------------------------------------------------------------- Home: statistics */
+
+/* Your week (D-164): one line above the statistics, and its dialog. */
+.week-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  font-weight: 700;
+}
+.week-line > svg {
+  color: var(--accent-bright);
+}
+.week-line > span {
+  flex: 1;
+  min-width: 0;
+}
+.week-lead {
+  margin: 0 0 14px;
+  font-size: 17px;
+}
+.week-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 10px;
+  height: 140px;
+  margin-bottom: 16px;
+}
+.week-day {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+}
+.week-bar {
+  width: min(44px, 100%);
+  max-height: calc(100% - 22px);
+  border-radius: 8px;
+  background: var(--accent-bright);
+}
+.week-day-name {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.week-note {
+  margin-right: auto;
+}
+.week .week-tiles {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.week .week-tiles strong {
+  font-size: 22px;
+}
+.week .week-facts {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.week .year-lists {
+  grid-template-columns: none;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+}
+.week .year-lists li {
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .week .week-tiles,
+  .week .week-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Categorical slots 1-3 of the reference palette, validated for both modes (dataviz); playing
+   (D-041) is a magenta checked against them for normal and colorblind vision in both modes. */
+.viz-root {
+  --series-read: #2a78d6;
+  --series-watch: #eb6834;
+  --series-listen: #1baf7a;
+  --series-play: #c2399c;
+}
+:root[data-theme="dark"] .viz-root {
+  --series-read: #3987e5;
+  --series-watch: #d95926;
+  --series-listen: #199e70;
+  --series-play: #cf4fb0;
+}
+.series-play {
+  background: var(--series-play);
+}
+.series-read {
+  background: var(--series-read);
+}
+.series-watch {
+  background: var(--series-watch);
+}
+.series-listen {
+  background: var(--series-listen);
+}
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.stats-loading {
+  min-height: 320px;
+}
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--raised);
+}
+.stat-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+.stat-value {
+  font-size: 26px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+.stat-note {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.stats-swatch {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.stats-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr);
+  gap: 28px;
+}
+.stats-chart {
+  margin: 0;
+  min-width: 0;
+}
+.stats-chart-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 10px;
+  font-weight: 900;
+}
+.stats-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 800;
+}
+.stats-legend span,
+.stats-tip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.stats-bars {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  height: 170px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+.stats-col {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  border-radius: 6px;
+  cursor: default;
+}
+.stats-col:hover {
+  background: var(--accent-soft);
+}
+.stats-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 58%;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 4px 4px 0 0;
+}
+.stats-stack span {
+  flex-basis: 0;
+  min-height: 2px;
+}
+.stats-day {
+  position: absolute;
+  bottom: -20px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 800;
+}
+.stats-tip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 190px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--pop-shadow);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.stats-tip b {
+  margin-left: auto;
+  padding-left: 10px;
+}
+.stats-col:first-child .stats-tip {
+  left: 0;
+  transform: none;
+}
+.stats-col:last-child .stats-tip {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+.stats-empty {
+  position: absolute;
+  inset: 0 0 22px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-weight: 700;
+  pointer-events: none;
+}
+.stats-table {
+  margin-top: 14px;
+  font-size: 13px;
+}
+.stats-table summary {
+  color: var(--accent-text);
+  font-weight: 800;
+  cursor: pointer;
+}
+.stats-table table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+}
+.stats-table th,
+.stats-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+.stats-lists {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.stats-lists h3 {
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 900;
+}
+.stats-none {
+  color: var(--muted);
+  font-weight: 700;
+}
+.stats-artists,
+.stats-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.stats-artists li,
+.stats-categories li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+}
+.stats-artists li span,
+.stats-categories li > span:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stats-artists b,
+.stats-categories b {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.stats-categories li > span:first-child {
+  flex: 0 0 120px;
+}
+.stats-meter {
+  flex: 1;
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--pill);
+  background: var(--track);
+}
+.stats-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-bright);
+}
+.stats-since {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+@media (max-width: 980px) {
+  .stats-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .featured-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* ---------------------------------------------------------------- dragging to reorder */
+
+.drag-handle {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 26px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--faint);
+  cursor: grab;
+  touch-action: none;
+}
+.drag-handle:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+html.reordering,
+html.reordering * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+[data-reorder] {
+  position: relative;
+}
+
+/* Customize Home: one row per section. */
+.home-arrange {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.home-arrange .home-edit-bar {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--raise-sm);
+}
+.home-arrange .home-edit-bar.is-hidden strong {
+  color: var(--muted);
+}
+
+.category-list li {
+  background: var(--field);
+}
+
+/* Playlist tracks have a handle in front. */
+.track-row.reorderable {
+  grid-template-columns: 26px 44px minmax(0, 1fr) minmax(0, 140px) 56px 36px 36px;
+  background: var(--panel);
+}
+.track-row.reorderable:hover {
+  background: var(--field);
+}
+
+/* ---------------------------------------------------------------- Arrange (custom order) */
+
+.arrange-list {
+  height: min(56vh, 560px);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--field);
+}
+.arrange-loading {
+  display: grid;
+  place-items: center;
+  height: 240px;
+}
+.arrange-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 3px 6px;
+  padding: 0 8px;
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--raise-sm);
+}
+.arrange-number {
+  min-width: 34px;
+  color: var(--faint);
+  font-size: 12.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.arrange-thumb {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 42px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--raised);
+}
+.arrange-thumb .cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.arrange-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.arrange-title strong,
+.arrange-title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.arrange-title span {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.arrange-start {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+/* ---------------------------------------------------------------- playlists */
+
+.playlist-card {
+  position: relative;
+  padding: 0;
+  cursor: default;
+}
+.playlist-open {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 16px 12px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.playlist-menu {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+.playlist-rename {
+  margin: -6px 12px 12px;
+  width: calc(100% - 24px);
+}
+.playlist-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px 12px;
+}
+.add-music-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.add-music-search {
+  flex: 1;
+}
+.add-music-search input {
+  width: 100%;
+}
+.add-music-list {
+  position: relative;
+  height: min(50vh, 480px);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--field);
+}
+.add-music-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 2px 6px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.add-music-row:hover {
+  background: var(--panel);
+}
+.add-music-row.on {
+  border-color: var(--accent-bright);
+  background: var(--accent-soft);
+}
+.add-music-row .track-title {
+  flex: 1;
+  min-width: 0;
+}
+.add-music-check {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--accent-ink);
+}
+.add-music-row.on .add-music-check {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.add-music-count {
+  margin-right: auto;
+  color: var(--accent-text);
+  font-weight: 800;
+}
+
+/* ---------------------------------------------------------------- cover shapes */
+
+.cover-shape-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* Round CDs: the art cut into a disc with a center hole and a little shine. */
+/* Only a fallback: a cover box's own position (absolute in the carousel) wins. */
+:where([data-shape="disc"]) {
+  position: relative;
+}
+[data-shape="disc"] {
+  border-radius: 50% !important;
+  overflow: hidden;
+}
+[data-shape="disc"] > .cover-img,
+[data-shape="disc"] > .cover-fallback {
+  border-radius: 50% !important;
+}
+[data-shape="disc"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 20deg,
+    rgba(255, 255, 255, 0) 0deg,
+    rgba(255, 255, 255, 0.26) 24deg,
+    rgba(255, 255, 255, 0) 60deg,
+    rgba(255, 255, 255, 0) 180deg,
+    rgba(255, 255, 255, 0.2) 204deg,
+    rgba(255, 255, 255, 0) 240deg
+  );
+  pointer-events: none;
+}
+[data-shape="disc"]::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  width: 32%;
+  height: 32%;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--bg) 0 30%, rgba(214, 222, 230, 0.95) 32% 58%, rgba(255, 255, 255, 0.4) 60% 100%);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.card-art[data-shape="disc"] {
+  padding: 4px;
+}
+.list-row .thumb[data-shape="disc"],
+.list-row .thumb[data-shape="square"] {
+  height: 34px;
+}
+.list-row .thumb[data-shape="landscape"] {
+  width: 44px;
+  height: 25px;
+}
+.arrange-thumb[data-shape="disc"],
+.arrange-thumb[data-shape="square"] {
+  height: 30px;
+}
+.arrange-thumb[data-shape="landscape"] {
+  width: 44px;
+  height: 25px;
+}
+
+.grid-row.flow {
+  display: flex;
+  align-items: flex-start;
+}
+.row-scroller {
+  display: flex;
+  align-items: flex-start;
+}
+.row-scroller > .card {
+  flex: 0 0 auto;
+}
+
+/* Changing layouts: covers glide from their old places to their new ones, the rest cross-fades. */
+::view-transition-group(*) {
+  animation-duration: 460ms;
+  animation-timing-function: cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+/* A cover's old and new pictures blend while it moves, filling its box the whole way. */
+::view-transition-old(*),
+::view-transition-new(*) {
+  height: 100%;
+  object-fit: cover;
+  animation-duration: 460ms;
+  animation-timing-function: cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  height: auto;
+  object-fit: none;
+  animation-duration: 320ms;
+}
+
+/* Settings sit in the middle of the window, with their title above them. */
+.settings {
+  margin: 0 auto;
+}
+.settings-page > .page-header {
+  max-width: 860px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.settings-credit {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+}
+/* A link that is a button (it opens the browser through the core, D-172). */
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.link-button:hover {
+  color: var(--accent-bright);
+}
+
+/* "Resumed at…" sits above the player's controls, not on them. */
+.ebook-link.watch-note {
+  bottom: 150px;
+}
+
+/* The title bar's Home / Library / Search. */
+.appbar-nav {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--pill);
+  background: var(--field);
+  box-shadow: var(--inset-shadow);
+}
+.appbar-nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: var(--pill);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
+}
+.appbar-nav-item:hover {
+  color: var(--text);
+}
+.appbar-nav-item[aria-current="page"] {
+  background: var(--gloss);
+  color: var(--accent-text);
+  box-shadow: var(--raise-sm);
+}
+/* With the sliding highlight (D-145), as Library's sections have: the highlight is what moves. */
+.appbar-nav.glide {
+  position: relative;
+  isolation: isolate;
+}
+.appbar-nav.glide > .appbar-nav-item[aria-current="page"] {
+  background: transparent;
+  box-shadow: none;
+}
+/* Narrower windows: the search box gives way first, then the labels, so every button stays visible. */
+.appbar-pill .search-pill {
+  flex: 1 1 140px;
+  min-width: 120px;
+}
+@media (max-width: 1500px) {
+  .brand span {
+    display: none;
+  }
+}
+@media (max-width: 1360px) {
+  .appbar-nav-label {
+    display: none;
+  }
+  .appbar-nav-item {
+    padding: 0 10px;
+  }
+}
+
+/* A cover without art in a picked color. */
+.cover-fallback[style*="--fallback-ink"] span {
+  color: var(--fallback-ink);
+}
+.cover-color-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.cover-color-row .swatch {
+  width: 28px;
+  height: 28px;
+}
+
+/* Home's "Discs" section. */
+.discs-banner {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 0% 50%, color-mix(in srgb, var(--accent-bright) 14%, transparent), transparent 55%),
+    var(--surface);
+  box-shadow: var(--raise-sm);
+  color: inherit;
+  text-decoration: none;
+  transition: box-shadow var(--duration) var(--ease), transform 200ms var(--ease);
+}
+.discs-banner:hover,
+.discs-banner:focus-visible {
+  box-shadow: var(--glow-sm);
+  transform: translateY(-2px);
+}
+.discs-banner-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: var(--gloss);
+  box-shadow: var(--raise-sm);
+  color: var(--accent-bright);
+}
+.discs-banner:hover .discs-banner-icon,
+.discs-banner-icon.spinning {
+  animation: disc-spin 2.4s linear infinite;
+}
+@keyframes disc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.discs-banner-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.discs-banner-text strong {
+  font-size: 17px;
+  font-weight: 900;
+}
+.discs-banner-text span {
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+/* "Featured today" wears its own badge. */
+.featured-eyebrow {
+  align-self: flex-start;
+  padding: 5px 12px 5px 9px;
+  border-radius: var(--pill);
+  background: linear-gradient(135deg, #f6c453, #e8873a);
+  color: #3a2208;
+  box-shadow: 0 4px 12px rgba(232, 135, 58, 0.35);
+  letter-spacing: 0.06em;
+}
+
+/* A category's collections, between the toolbar and its items. */
+.before-items {
+  padding: 0 40px 6px;
+}
+.before-items:empty {
+  display: none;
+}
+
+/* A CD without artwork shows only its color (or the neutral one), no title or icon on the disc. */
+[data-shape="disc"] > .cover-fallback > * {
+  display: none;
+}
+
+/* Collections: room around each tile for its lift and glow, so neither is cut. */
+.collection-row {
+  padding: 16px 16px 22px;
+  margin: -16px -16px -4px;
+}
+
+/* The category buttons sit at the same height on every page. */
+.page:has(> .category-strip) {
+  padding-top: 16px;
+}
+
+/* Music: track lists fill the page down to a margin, instead of running into the window's edge. */
+.music-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 28px;
+}
+.music-page .track-list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.music-page .track-rows.scroll {
+  flex: 1;
+  height: auto;
+  min-height: 140px;
+  padding-bottom: 16px;
+}

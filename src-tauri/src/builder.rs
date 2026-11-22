@@ -21,18 +21,6 @@ fn is_image(path: &Path) -> bool {
         .is_some_and(|e| IMAGE_EXTENSIONS.contains(&e.to_ascii_lowercase().as_str()))
 }
 
-fn base64(bytes: &[u8]) -> String {
-    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let n = (u32::from(chunk[0]) << 16) | (u32::from(*chunk.get(1).unwrap_or(&0)) << 8) | u32::from(*chunk.get(2).unwrap_or(&0));
-        for (i, shift) in [18, 12, 6, 0].into_iter().enumerate() {
-            out.push(if i <= chunk.len() { TABLE[(n >> shift) as usize & 63] as char } else { '=' });
-        }
-    }
-    out
-}
-
 /// A small JPEG of an image as a data URL, or `None` when it can't be read.
 fn preview(path: &Path) -> Option<String> {
     if !is_image(path) || !path.is_file() {
@@ -41,7 +29,7 @@ fn preview(path: &Path) -> Option<String> {
     let image = image::open(path).ok()?.thumbnail(240, 360);
     let mut bytes = Vec::new();
     image::codecs::jpeg::JpegEncoder::new_with_quality(&mut Cursor::new(&mut bytes), 80).encode_image(&image.to_rgb8()).ok()?;
-    Some(format!("data:image/jpeg;base64,{}", base64(&bytes)))
+    Some(format!("data:image/jpeg;base64,{}", crate::tools::base64(&bytes)))
 }
 
 /// Previews of images picked for a new book, in the same order (`null` for unreadable ones).
@@ -107,14 +95,12 @@ pub async fn pages_arrange(state: State<'_, AppState>, version: i64, files: Vec<
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn base64_matches_the_standard() {
-        assert_eq!(base64(b""), "");
-        assert_eq!(base64(b"f"), "Zg==");
-        assert_eq!(base64(b"fo"), "Zm8=");
-        assert_eq!(base64(b"foo"), "Zm9v");
-        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
+        assert_eq!(crate::tools::base64(b""), "");
+        assert_eq!(crate::tools::base64(b"f"), "Zg==");
+        assert_eq!(crate::tools::base64(b"fo"), "Zm8=");
+        assert_eq!(crate::tools::base64(b"foo"), "Zm9v");
+        assert_eq!(crate::tools::base64(b"foobar"), "Zm9vYmFy");
     }
 }

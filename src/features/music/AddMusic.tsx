@@ -4,7 +4,8 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Check, Search } from "lucide-react";
 import { api, errorText, type Playlist } from "../../lib/api";
 import { Dialog } from "../../components/common";
-import { AlreadyInPlaylistDialog, duration, useTracks } from "./Tracks";
+import { AlreadyInPlaylistDialog, useTracks } from "./Tracks";
+import { duration } from "../../lib/format";
 
 const ROW = 48;
 

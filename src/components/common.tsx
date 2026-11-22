@@ -156,11 +156,6 @@ export function Cover({ item, size = "thumb", iconOnly = false }: { item: CoverS
   );
 }
 
-/** Albums are square; everything else uses a 2:3 poster/book shape. */
-export function aspectFor(handler: Handler): number {
-  return handler === "audio" ? 1 : 2 / 3;
-}
-
 export function Dialog({
   open,
   onOpenChange,

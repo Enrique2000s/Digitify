@@ -70,15 +70,16 @@ pub fn upsert_person(conn: &Connection, name: &str) -> rusqlite::Result<i64> {
     )
 }
 
-/// Rebuilds an item's full-text entry: title, people, tags, category, the collections it sits in,
-/// series/album, genre and part titles (so tracks and chapters are searchable).
+/// Rebuilds an item's full-text entry: title, people, category, the collections it sits in,
+/// series/album, genre and part titles (so tracks and chapters are searchable). The index's `tags`
+/// column stays, empty: Tags are gone (D-092).
 pub fn reindex(conn: &Connection, item_id: i64) -> rusqlite::Result<()> {
     conn.execute("DELETE FROM items_fts WHERE rowid = ?1", [item_id])?;
     conn.execute(
         "INSERT INTO items_fts (rowid, title, people, tags, extra) \
          SELECT i.id, i.title || ' ' || COALESCE(i.subtitle, ''), \
            COALESCE((SELECT group_concat(p.name, ' ') FROM item_people ip JOIN people p ON p.id = ip.person_id WHERE ip.item_id = i.id), ''), \
-           COALESCE((SELECT group_concat(t.name, ' ') FROM item_tags it JOIN tags t ON t.id = it.tag_id WHERE it.item_id = i.id), ''), \
+           '', \
            c.name || ' ' || COALESCE(json_extract(i.metadata, '$.series'), '') || ' ' || \
            COALESCE(json_extract(i.metadata, '$.album'), '') || ' ' || COALESCE(json_extract(i.metadata, '$.genre'), '') || ' ' || \
            COALESCE((WITH RECURSIVE up(id, parent_id, name) AS ( \
@@ -179,7 +180,6 @@ pub struct QueryParams {
     pub category: Option<String>,
     /// A collection and everything inside it.
     pub collection: Option<i64>,
-    pub tag: Option<i64>,
     pub search: Option<String>,
     pub favorites: bool,
     /// `digital` (files in the library) or `online` (from a link, played online), D-029.
@@ -194,23 +194,9 @@ pub struct QueryParams {
     /// Only items of this kind of category (`image` for the image viewer's photos, D-033).
     #[serde(default)]
     pub handler: Option<String>,
-    /// Smart lists' rules (D-051): `unstarted`, `inProgress` or `finished`…
+    /// `unstarted`, `inProgress` or `finished` (Surprise me looks at what isn't finished, D-163).
     #[serde(default)]
     pub progress: Option<String>,
-    /// …a range of years…
-    #[serde(default)]
-    pub year_from: Option<i64>,
-    #[serde(default)]
-    pub year_to: Option<i64>,
-    /// …added within so many days…
-    #[serde(default)]
-    pub added_days: Option<i64>,
-    /// …and at least this many stars of your rating.
-    #[serde(default)]
-    pub min_rating: Option<i64>,
-    /// Only what's in Later (D-062), newest first unless sorted otherwise.
-    #[serde(default)]
-    pub later: bool,
 }
 
 
@@ -421,10 +407,6 @@ impl QueryParts {
                 args.len()
             ));
         }
-        if let Some(tag) = params.tag {
-            args.push(SqlValue::Integer(tag));
-            conditions.push(format!("EXISTS (SELECT 1 FROM item_tags it WHERE it.item_id = i.id AND it.tag_id = ?{})", args.len()));
-        }
         if params.favorites {
             conditions.push("i.is_favorite = 1".into());
         }
@@ -432,31 +414,12 @@ impl QueryParts {
             args.push(SqlValue::Text(handler.clone()));
             conditions.push(format!("i.category_id IN (SELECT id FROM categories WHERE handler = ?{})", args.len()));
         }
-        // Smart lists' rules (D-051).
+        // How far along (D-051; Surprise me, D-163).
         match params.progress.as_deref() {
             Some("unstarted") => conditions.push("NOT EXISTS (SELECT 1 FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0 AND (pr.fraction > 0.01 OR pr.completed = 1))".into()),
             Some("inProgress") => conditions.push("EXISTS (SELECT 1 FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0 AND pr.fraction > 0.01 AND pr.completed = 0)".into()),
             Some("finished") => conditions.push("EXISTS (SELECT 1 FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0 AND pr.completed = 1)".into()),
             _ => {}
-        }
-        if let Some(year) = params.year_from {
-            args.push(SqlValue::Integer(year));
-            conditions.push(format!("i.year >= ?{}", args.len()));
-        }
-        if let Some(year) = params.year_to {
-            args.push(SqlValue::Integer(year));
-            conditions.push(format!("i.year <= ?{}", args.len()));
-        }
-        if let Some(days) = params.added_days.filter(|d| *d > 0) {
-            args.push(SqlValue::Text(format!("-{days} days")));
-            conditions.push(format!("i.added_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?{})", args.len()));
-        }
-        if params.later {
-            conditions.push("i.id IN (SELECT item_id FROM later)".into());
-        }
-        if let Some(stars) = params.min_rating.filter(|s| (1..=5).contains(s)) {
-            args.push(SqlValue::Integer(stars));
-            conditions.push(format!("i.rating >= ?{}", args.len()));
         }
         // Digital: files in the library; Online: imported from a link and played online (D-029).
         match params.ownership.as_deref() {
@@ -481,7 +444,6 @@ impl QueryParts {
             }
             None | Some("relevance") if search.is_some() => "f.rank".to_string(),
             // In Later, "Recently added" means added to Later (D-062).
-            Some("added") if params.later => "(SELECT l.added_at FROM later l WHERE l.item_id = i.id) DESC, i.id DESC".to_string(),
             Some("added") => "i.added_at DESC, i.id DESC".to_string(),
             Some("opened") => "i.last_opened_at IS NULL, i.last_opened_at DESC, i.id DESC".to_string(),
             Some("year") => "i.year IS NULL, i.year DESC, i.sort_title".to_string(),
@@ -502,7 +464,6 @@ impl QueryParts {
 
 fn query(conn: &Connection, params: &QueryParams) -> AppResult<QueryResult> {
     let started = Instant::now();
-        let params = params;
     let QueryParts { joins, filter, args, counted, order } = QueryParts::new(params);
     let total: i64 = conn.query_row(
         &format!("SELECT count(*) FROM items i{joins}{filter}"),
@@ -614,14 +575,13 @@ pub async fn items_cards(state: State<'_, AppState>, ids: Vec<i64>) -> AppResult
 // ---------------------------------------------------------------------------------------------
 // Blurbs for the detailed view (Phase 5)
 
-/// What the detailed view shows under a title: the start of its description, its tags, and a few
-/// facts such as "320 pages" or "12 tracks · 48 min".
+/// What the detailed view shows under a title: the start of its description and a few facts such
+/// as "320 pages" or "12 tracks · 48 min".
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Blurb {
     pub id: i64,
     pub description: Option<String>,
-    pub tags: Vec<String>,
     pub facts: Vec<String>,
 }
 
@@ -697,7 +657,6 @@ pub fn blurbs(conn: &Connection, ids: &[i64]) -> AppResult<Vec<Blurb>> {
            (SELECT p.kind FROM parts p WHERE p.item_id = i.id LIMIT 1) \
          FROM items i JOIN categories c ON c.id = i.category_id WHERE i.id = ?1",
     )?;
-    let mut tags = conn.prepare("SELECT t.name FROM item_tags it JOIN tags t ON t.id = it.tag_id WHERE it.item_id = ?1 ORDER BY t.name COLLATE NOCASE")?;
     for &id in ids.iter().take(200) {
         let row = item
             .query_row([id], |row| {
@@ -723,7 +682,6 @@ pub fn blurbs(conn: &Connection, ids: &[i64]) -> AppResult<Vec<Blurb>> {
         out.push(Blurb {
             id,
             description,
-            tags: tags.query_map([id], |row| row.get(0))?.collect::<Result<_, _>>()?,
             facts: blurb_facts(&handler, &metadata, parts, parts_kind.as_deref()),
         });
     }
@@ -770,8 +728,6 @@ pub struct Dashboard {
     pub continue_watching: Vec<ItemCard>,
     /// The next volume of series lately finished (D-050).
     pub next_volumes: Vec<ItemCard>,
-    /// What's in Later, newest first (D-062).
-    pub later: Vec<ItemCard>,
     /// "Because you liked …" (D-064): an item you rated well or marked favorite lately, and
     /// others of your library like it that you haven't finished.
     pub because: Option<Because>,
@@ -868,7 +824,6 @@ pub fn similar(conn: &Connection, seed: i64, limit: i64) -> AppResult<Vec<i64>> 
              ORDER BY ( \
                (s.series <> '' AND lower(coalesce(json_extract(i.metadata, '$.series'), '')) = s.series) * 4 + \
                (SELECT count(*) FROM item_people a JOIN item_people b ON a.person_id = b.person_id WHERE a.item_id = i.id AND b.item_id = s.id) * 3 + \
-               (SELECT count(*) FROM item_tags a JOIN item_tags b ON a.tag_id = b.tag_id WHERE a.item_id = i.id AND b.item_id = s.id) * 2 + \
                (s.genre <> '' AND lower(coalesce(json_extract(i.metadata, '$.genre'), '')) = s.genre) * 2 + \
                (s.collection_id IS NOT NULL AND i.collection_id = s.collection_id) * 1 \
              ) DESC, i.rating IS NULL, i.rating DESC, i.added_at DESC LIMIT {limit}"
@@ -881,7 +836,6 @@ pub fn similar(conn: &Connection, seed: i64, limit: i64) -> AppResult<Vec<i64>> 
         for id in found {
             let shared: i64 = conn.query_row(
                 "SELECT (SELECT count(*) FROM item_people a JOIN item_people b ON a.person_id = b.person_id WHERE a.item_id = ?1 AND b.item_id = ?2) + \
-                        (SELECT count(*) FROM item_tags a JOIN item_tags b ON a.tag_id = b.tag_id WHERE a.item_id = ?1 AND b.item_id = ?2) + \
                         (SELECT count(*) FROM items x, items y WHERE x.id = ?1 AND y.id = ?2 AND ( \
                            (trim(coalesce(json_extract(x.metadata, '$.series'), '')) <> '' AND lower(json_extract(x.metadata, '$.series')) = lower(json_extract(y.metadata, '$.series'))) OR \
                            (trim(coalesce(json_extract(x.metadata, '$.genre'), '')) <> '' AND lower(json_extract(x.metadata, '$.genre')) = lower(json_extract(y.metadata, '$.genre'))) OR \
@@ -983,7 +937,6 @@ pub async fn dashboard_get(state: State<'_, AppState>) -> AppResult<Dashboard> {
                 continue_items: cards_by_ids(conn, &continue_ids)?,
                 continue_watching: cards_by_ids(conn, &watching_ids)?,
                 next_volumes: cards_by_ids(conn, &crate::series::next_after_finished(conn, 8)?)?,
-                later: cards_by_ids(conn, &ids(conn, "SELECT item_id FROM later ORDER BY added_at DESC LIMIT 18", &[])?)?,
                 because: because(conn)?,
                 recent: cards_by_ids(conn, &recent_ids)?,
                 recently_opened: cards_by_ids(conn, &opened_ids)?,
@@ -1070,7 +1023,6 @@ pub struct ItemDetail {
     pub people: Vec<Person>,
     pub versions: Vec<VersionInfo>,
     pub parts: Vec<PartInfo>,
-    pub tags: Vec<NamedRef>,
     /// The collections it sits in, from the category root down (empty when it has none).
     pub collection_path: Vec<NamedRef>,
     pub progress: Option<f64>,
@@ -1079,8 +1031,6 @@ pub struct ItemDetail {
     /// The user's own rating, 1-5 stars, and note (D-049).
     pub rating: Option<i64>,
     pub note: Option<String>,
-    /// In Later (D-062).
-    pub in_later: bool,
 }
 
 #[tauri::command]
@@ -1093,8 +1043,7 @@ fn item_detail(conn: &Connection, library: &Library, id: i64) -> AppResult<ItemD
         .query_row(
             "SELECT i.id, c.key, c.name, c.handler, i.title, i.subtitle, i.year, i.description, i.cover_key, \
              i.cover_color, i.is_favorite, i.metadata, i.added_at, i.updated_at, \
-             (SELECT pr.fraction FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0), i.collection_id, i.rating, i.note, \
-             EXISTS (SELECT 1 FROM later l WHERE l.item_id = i.id) \
+             (SELECT pr.fraction FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0), i.collection_id, i.rating, i.note \
              FROM items i JOIN categories c ON c.id = i.category_id WHERE i.id = ?1",
             [id],
             |row| {
@@ -1119,12 +1068,10 @@ fn item_detail(conn: &Connection, library: &Library, id: i64) -> AppResult<ItemD
                     people: Vec::new(),
                     versions: Vec::new(),
                     parts: Vec::new(),
-                    tags: Vec::new(),
                     collection_path: Vec::new(),
                     online: None,
                     rating: row.get(16)?,
                     note: row.get(17)?,
-                    in_later: row.get(18)?,
                 }))
             },
         )
@@ -1148,11 +1095,6 @@ fn item_detail(conn: &Connection, library: &Library, id: i64) -> AppResult<ItemD
         .query_map([id], |row| {
             Ok(PartInfo { id: row.get(0)?, kind: row.get(1)?, number: row.get(2)?, title: row.get(3)?, duration_ms: row.get(4)? })
         })?
-        .collect::<Result<_, _>>()?;
-
-    detail.tags = conn
-        .prepare("SELECT t.id, t.name FROM item_tags it JOIN tags t ON t.id = it.tag_id WHERE it.item_id = ?1 ORDER BY t.name COLLATE NOCASE")?
-        .query_map([id], |row| Ok(NamedRef { id: row.get(0)?, name: row.get(1)? }))?
         .collect::<Result<_, _>>()?;
 
     let mut versions: Vec<VersionInfo> = conn
@@ -1221,29 +1163,6 @@ pub struct ItemEdit {
     pub people: Vec<PersonInput>,
     #[serde(default)]
     pub metadata: Value,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VersionInput {
-    pub id: Option<i64>,
-    #[serde(default)]
-    pub item_id: i64,
-    pub kind: String,
-    pub label: Option<String>,
-    pub format: Option<String>,
-    pub edition: Option<String>,
-    pub condition: Option<String>,
-    pub location: Option<String>,
-    pub acquired_at: Option<String>,
-    pub notes: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NewItem {
-    pub item: ItemEdit,
-    pub physical: Option<VersionInput>,
 }
 
 fn set_people(conn: &Connection, item_id: i64, people: &[PersonInput]) -> AppResult<()> {
@@ -1317,25 +1236,6 @@ pub async fn item_update(state: State<'_, AppState>, id: i64, edit: ItemEdit) ->
     .await
 }
 
-/// Catalogs an item, typically one owned only physically so far.
-#[tauri::command]
-pub async fn item_create(state: State<'_, AppState>, item: NewItem) -> AppResult<i64> {
-    with_library(&state, move |library| {
-        library.db.with(|conn| {
-            let tx = conn.transaction()?;
-            let id = write_item(&tx, None, &item.item)?;
-            if let Some(mut physical) = item.physical {
-                physical.item_id = id;
-                physical.kind = "physical".into();
-                save_version(&tx, &physical)?;
-            }
-            tx.commit()?;
-            Ok(id)
-        })
-    })
-    .await
-}
-
 #[tauri::command]
 pub async fn item_set_favorite(state: State<'_, AppState>, id: i64, favorite: bool) -> AppResult<()> {
     with_library(&state, move |library| {
@@ -1345,26 +1245,6 @@ pub async fn item_set_favorite(state: State<'_, AppState>, id: i64, favorite: bo
                 params![id, favorite],
             )?;
             conn.execute("UPDATE parts SET is_favorite = ?2 WHERE item_id = ?1 AND kind = 'track'", params![id, favorite])?;
-            Ok(())
-        })
-    })
-    .await
-}
-
-/// Puts an item in Later, or takes it out (D-062); returns whether it's in now.
-#[tauri::command]
-pub async fn later_set(state: State<'_, AppState>, ids: Vec<i64>, later: bool) -> AppResult<()> {
-    with_library(&state, move |library| {
-        library.db.with(|conn| {
-            let tx = conn.transaction()?;
-            for id in &ids {
-                if later {
-                    tx.execute("INSERT OR IGNORE INTO later (item_id) SELECT id FROM items WHERE id = ?1", [id])?;
-                } else {
-                    tx.execute("DELETE FROM later WHERE item_id = ?1", [id])?;
-                }
-            }
-            tx.commit()?;
             Ok(())
         })
     })
@@ -1444,62 +1324,6 @@ pub async fn item_set_backdrop(state: State<'_, AppState>, id: i64, path: Option
                  ELSE json_set(metadata, '$.backdropKey', ?2) END, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
                 params![id, key],
             )?;
-            Ok(())
-        })
-    })
-    .await
-}
-
-fn save_version(conn: &Connection, input: &VersionInput) -> AppResult<i64> {
-    let values = (
-        clean(input.label.clone()),
-        clean(input.format.clone()),
-        clean(input.edition.clone()),
-        clean(input.condition.clone()),
-        clean(input.location.clone()),
-        clean(input.acquired_at.clone()),
-        clean(input.notes.clone()),
-    );
-    let id = match input.id {
-        Some(id) => {
-            conn.execute(
-                "UPDATE versions SET label = ?2, format = ?3, edition = ?4, condition = ?5, location = ?6, \
-                 acquired_at = ?7, notes = ?8 WHERE id = ?1",
-                params![id, values.0, values.1, values.2, values.3, values.4, values.5, values.6],
-            )?;
-            id
-        }
-        None => {
-            if input.kind != "physical" {
-                return Err(AppError::msg("Digital copies are added by importing files."));
-            }
-            conn.execute(
-                "INSERT INTO versions (item_id, kind, label, format, edition, condition, location, acquired_at, notes) \
-                 VALUES (?1, 'physical', ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                params![input.item_id, values.0, values.1, values.2, values.3, values.4, values.5, values.6],
-            )?;
-            conn.last_insert_rowid()
-        }
-    };
-    conn.execute(
-        "UPDATE items SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = (SELECT item_id FROM versions WHERE id = ?1)",
-        [id],
-    )?;
-    Ok(id)
-}
-
-#[tauri::command]
-pub async fn version_save(state: State<'_, AppState>, version: VersionInput) -> AppResult<i64> {
-    with_library(&state, move |library| library.db.with(|conn| save_version(conn, &version))).await
-}
-
-/// Removes a copy from the catalog. For digital copies this forgets the file records; the files
-/// themselves are never touched here.
-#[tauri::command]
-pub async fn version_delete(state: State<'_, AppState>, id: i64) -> AppResult<()> {
-    with_library(&state, move |library| {
-        library.db.with(|conn| {
-            conn.execute("DELETE FROM versions WHERE id = ?1", [id])?;
             Ok(())
         })
     })

@@ -62,7 +62,7 @@ pub fn icons(found: &[(Emulator, Program)], cache: &Path) -> HashMap<&'static st
 fn data_url(path: &Path) -> Option<String> {
     let bytes = std::fs::read(path).ok().filter(|b| !b.is_empty() && b.len() < 512 * 1024)?;
     let mime = if super::games::extension(path) == "svg" { "image/svg+xml" } else { "image/png" };
-    Some(format!("data:{mime};base64,{}", super::base64(&bytes)))
+    Some(format!("data:{mime};base64,{}", crate::tools::base64(&bytes)))
 }
 
 /// Saves each program's icon as a PNG, in one run of Windows PowerShell (its drawing library reads
@@ -76,7 +76,7 @@ fn extract_windows(pairs: &[(&Path, &Path)]) {
                 if ($i) { $b = $i.ToBitmap(); $b.Save($p.png, [System.Drawing.Imaging.ImageFormat]::Png); $b.Dispose(); $i.Dispose() } } catch {} }";
     let encoded: Vec<u8> = script.encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
     let result = crate::tools::command(Path::new("powershell"))
-        .args(["-NoProfile", "-NonInteractive", "-EncodedCommand", &super::base64(&encoded)])
+        .args(["-NoProfile", "-NonInteractive", "-EncodedCommand", &crate::tools::base64(&encoded)])
         .env("DIGITIFY_ICON_LIST", serde_json::Value::Array(list).to_string())
         .output();
     if let Err(e) = result {

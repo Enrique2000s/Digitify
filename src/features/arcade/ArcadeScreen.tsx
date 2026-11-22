@@ -8,7 +8,7 @@ import { usePreferences } from "../../lib/preferences";
 import { BpCollectionCard } from "../bigpicture/BpCollectionCard";
 import { allCollections, belongsTo, defaultCollection, gamesOf, isCompleted, isDefault, isFavorites, useCollections } from "./Collections";
 import { LogoMark } from "./logos";
-import { consoleKey, consoleOf, GameBadge, FILTER_LABELS, GameCover, gameAspect, playTime, useArcade, useArcadeFilters, useLaunch, useShownGames } from "./shared";
+import { consoleKey, consoleOf, GameBadge, GameMarks, FILTER_LABELS, GameCover, gameAspect, playTime, useArcade, useArcadeFilters, useLaunch, useShownGames } from "./shared";
 
 /**
  * Arcade in Big Picture (D-034): the games as big tiles a controller reaches. A opens the game's
@@ -125,16 +125,7 @@ export function ArcadeTile({ game, autofocus, onPlay, height = 270 }: { game: Ar
       <span className="bp-tile-art arcade-bp-art" style={{ width, height }}>
         <GameCover game={game} size="cover" />
         <GameBadge game={game} />
-        {game.completedAt && (
-          <span className="arcade-completed" title="Completed">
-            <BadgeCheck size={19} strokeWidth={2.4} aria-label="Completed" />
-          </span>
-        )}
-        {game.isFavorite && (
-          <span className="arcade-fav" title="Favorite">
-            <Heart size={17} fill="currentColor" strokeWidth={2.4} aria-label="Favorite" />
-          </span>
-        )}
+        <GameMarks game={game} big />
       </span>
       <span className="bp-tile-title">
         <Marquee hover text={game.title} />

@@ -377,6 +377,15 @@ fn copy_item(conn: &Connection, album: i64, part: i64) -> AppResult<i64> {
 #[cfg(test)]
 mod tests {
 
+    /// The tables these early reshapings wrote to, as they were then: later migrations dropped them
+    /// (Tags and Later, D-171), and these tests run the reshapings on today's schema.
+    fn with_old_tables(conn: &rusqlite::Connection) {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS tags (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, color TEXT);              CREATE TABLE IF NOT EXISTS item_tags (item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,                tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE, PRIMARY KEY (item_id, tag_id));",
+        )
+        .unwrap();
+    }
+
     #[test]
     fn music_collections_become_playlists() {
         let conn = crate::db::memory();
@@ -409,6 +418,7 @@ mod tests {
     #[test]
     fn albums_become_tracks_and_loose_videos_move() {
         let conn = crate::db::memory();
+        with_old_tables(&conn);
         // The migrations already ran on an empty library; run the reshaping again on some data.
         conn.execute("INSERT INTO items (id, category_id, title, sort_title, cover_key, is_favorite, metadata) VALUES (1, (SELECT id FROM categories WHERE key = 'music'), 'Album', 'album', 'abc', 0, '{\"album\":\"Album\",\"discCount\":1}')", []).unwrap();
         conn.execute("INSERT INTO people (id, name, sort_name) VALUES (1, 'Band', 'Band')", []).unwrap();
@@ -456,6 +466,7 @@ mod tests {
     #[test]
     fn shelves_copies_and_disc_formats() {
         let conn = crate::db::memory();
+        with_old_tables(&conn);
         let add = |category: &str, title: &str| {
             conn.execute("INSERT INTO items (category_id, title, sort_title) VALUES ((SELECT id FROM categories WHERE key = ?1), ?2, ?2)", params![category, title]).unwrap();
             conn.last_insert_rowid()

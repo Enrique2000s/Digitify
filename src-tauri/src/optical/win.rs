@@ -4,8 +4,8 @@
 //! All unsafe code of the optical module is here.
 
 use std::ffi::c_void;
-use std::os::windows::ffi::OsStrExt;
 
+use crate::tools::wide;
 use windows_sys::Win32::Foundation::{CloseHandle, GENERIC_READ, HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, GetDriveTypeW, GetLogicalDrives, GetVolumeInformationW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
@@ -25,10 +25,6 @@ const CDROM_READ_TOC_EX_FORMAT_CDTEXT: u8 = 5;
 const CDDA: u32 = 2;
 /// Bytes in one raw CD audio sector: 1/75 of a second of 16-bit stereo at 44.1 kHz.
 pub const SECTOR: usize = 2352;
-
-fn wide(text: &str) -> Vec<u16> {
-    std::ffi::OsStr::new(text).encode_wide().chain(std::iter::once(0)).collect()
-}
 
 /// Letters of the optical drives, in order.
 pub fn optical_letters() -> Vec<char> {

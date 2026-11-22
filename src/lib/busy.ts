@@ -8,7 +8,7 @@ import { useSyncExternalStore } from "react";
 const QUIET = new Set([
   "app_status", "app_quit", "dashboard_get", "items_cards", "items_blurbs", "image_previews", "items_bulk_actions",
   "item_get", "series_get", "episodes_list", "chapters_get", "bookmarks_list", "resume_get", "year_review", "achievements_list",
-  "playlists_list", "tags_list", "categories_list", "collections_list", "collection_tree", "watched_list",
+  "playlists_list", "categories_list", "collections_list", "collection_tree", "watched_list",
   "backup_list", "backup_auto_status", "autostart_get", "online_keys_status", "ytdlp_status", "films_series", "library_stats",
   "custom_order_slots", "track_playlists", "music_artists", "music_tracks", "online_embed_host", "disc_contents", "drives_list",
   "online_queue", "history_list", "preferences_set", "progress_save", "watch_progress_save", "ebook_progress_save",

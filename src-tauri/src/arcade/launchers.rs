@@ -382,6 +382,7 @@ pub(crate) fn rockstar(uninstall: &[RegBlock]) -> (Option<String>, Vec<StoreGame
 // Riot Client (D-116)
 
 /// Riot's games by their product name.
+#[cfg_attr(not(windows), allow(dead_code))] // Windows only, and in the tests
 fn riot_title(product: &str) -> String {
     match product {
         "league_of_legends" => "League of Legends".to_string(),
@@ -395,6 +396,7 @@ fn riot_title(product: &str) -> String {
 /// Riot's installed games: each product's `<product>.<patchline>.product_settings.yaml` (in
 /// `Metadata`) names its folder; started with the Riot Client's `--launch-product` and
 /// `--launch-patchline`.
+#[cfg_attr(not(windows), allow(dead_code))] // Windows only, and in the tests
 pub(crate) fn riot_games(metadata: &Path) -> Vec<StoreGame> {
     let mut games = Vec::new();
     let Ok(entries) = std::fs::read_dir(metadata) else { return games };

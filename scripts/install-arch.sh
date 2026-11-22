@@ -8,6 +8,7 @@
 # updating your system to you.
 #
 # Usage (as your normal user, not root; it asks for sudo when needed):
+# (A release names it Digitify-Arch-install.sh.)
 #   bash install-arch.sh                      the .deb next to this script or in the current folder
 #   bash install-arch.sh path/to/Digitify.deb a specific .deb
 #   bash install-arch.sh --uninstall          remove Digitify (your library and settings stay)
@@ -31,7 +32,7 @@ RUNTIME_DEPS=(
 # What turning the .deb into a pacman package needs (makepkg comes with pacman; bsdtar with libarchive).
 BUILD_DEPS=(fakeroot libarchive)
 
-command -v pacman >/dev/null 2>&1 || die "pacman wasn't found. This script is for Arch-based distributions; on Ubuntu or Debian use: sudo apt install ./Digitify_*.deb"
+command -v pacman >/dev/null 2>&1 || die "pacman wasn't found. This script is for Arch-based distributions; on Ubuntu or Debian use: sudo apt install ./Digitify-Linux-amd64.deb"
 [[ $EUID -ne 0 ]] || die "Run this as your normal user, not with sudo or as root. It asks for your password when it needs it."
 command -v sudo >/dev/null 2>&1 || die "sudo isn't installed. Install it, or ask whoever manages this computer."
 [[ $(uname -m) == x86_64 ]] || die "Digitify is built for 64-bit Intel/AMD computers (x86_64); this one is $(uname -m)."
@@ -52,17 +53,14 @@ deb=${1:-}
 if [[ -z $deb ]]; then
   here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
   shopt -s nullglob
-  found=("$here"/Digitify_*_amd64.deb "$here"/*.deb ./Digitify_*_amd64.deb ./*.deb)
+  found=("$here"/Digitify-Linux-amd64.deb "$here"/Digitify_*_amd64.deb "$here"/*.deb ./Digitify-Linux-amd64.deb ./Digitify_*_amd64.deb ./*.deb)
   shopt -u nullglob
-  [[ ${#found[@]} -gt 0 ]] || die "No Digitify .deb found next to this script or in the current folder. Put Digitify_<version>_amd64.deb here, or pass its path: bash install-arch.sh path/to/file.deb"
+  [[ ${#found[@]} -gt 0 ]] || die "No Digitify .deb found next to this script or in the current folder. Put Digitify-Linux-amd64.deb here, or pass its path: bash $(basename "$0") path/to/file.deb"
   deb=${found[0]}
 fi
 [[ -f $deb ]] || die "File not found: $deb"
 deb=$(cd "$(dirname "$deb")" && pwd)/$(basename "$deb")
-version=$(basename "$deb" | sed -nE 's/^[^_]+_([0-9][0-9A-Za-z.+~-]*)_.*\.deb$/\1/p')
-version=${version//-/.}
-version=${version:-0.1.0}
-say "Installing Digitify $version from $(basename "$deb")"
+say "Installing Digitify from $(basename "$deb")"
 
 # Dependencies: only what's missing, from your current package lists. No -y, no -u.
 missing=()
@@ -77,6 +75,14 @@ if [[ ${#missing[@]} -gt 0 ]]; then
 else
   say "Everything Digitify needs is already installed."
 fi
+
+# The version: from the package's own control file (a release's .deb is named Digitify-Linux-amd64.deb,
+# without it), else from a name like Digitify_0.9.3_amd64.deb.
+version=$( (bsdtar -xOf "$deb" 'control.tar.*' | bsdtar -xOf - ./control control) 2>/dev/null | sed -n 's/^Version: *//p' | head -n1 || true)
+[[ -n $version ]] || version=$(basename "$deb" | sed -nE 's/^[^_]+_([0-9][0-9A-Za-z.+~-]*)_.*\.deb$/\1/p')
+version=${version//-/.}
+version=${version:-0.1.0}
+say "Digitify $version"
 
 # Build a pacman package from the .deb in a scratch folder.
 work=$(mktemp -d -t digitify-pkg.XXXXXX)
@@ -135,7 +141,7 @@ if [[ -e /dev/sr0 && ! -r /dev/sr0 ]]; then
 fi
 
 say "Done. Open Digitify from your applications menu, or run: ${bin:-digitify}"
-say "Remove it any time with: sudo pacman -R digitify   (or: bash install-arch.sh --uninstall)"
+say "Remove it any time with: sudo pacman -R digitify   (or: bash $(basename "$0") --uninstall)"
 if [[ -n $groups_needed ]]; then
   say "To use CDs, DVDs and Blu-rays, add yourself to the '$groups_needed' group and log in again: sudo usermod -aG $groups_needed \$USER"
 fi

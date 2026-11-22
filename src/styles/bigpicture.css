@@ -350,37 +350,6 @@
   gap: 16px;
   margin-top: 10px;
 }
-.bp-tracks {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 14px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.bp-track {
-  display: grid;
-  grid-template-columns: 50px minmax(0, 1fr) minmax(0, 260px);
-  align-items: center;
-  width: 100%;
-  padding: 14px 20px;
-  border: 0;
-  border-radius: 14px;
-  background: var(--bp-panel);
-  text-align: left;
-  cursor: pointer;
-}
-.bp-track.playing {
-  background: color-mix(in srgb, var(--accent) 35%, transparent);
-}
-.bp-track-no,
-.bp-track-artist {
-  color: var(--bp-muted);
-  font-weight: 700;
-}
-.bp-track-title {
-  font-weight: 800;
-}
 
 /* ---------------------------------------------------------------- search and the keyboard */
 

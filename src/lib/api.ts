@@ -299,7 +299,6 @@ export interface Achievement {
 export interface Blurb {
   id: number;
   description: string | null;
-  tags: string[];
   facts: string[];
 }
 
@@ -307,7 +306,6 @@ export interface QueryParams {
   category?: string | null;
   /** A collection and everything inside it. */
   collection?: number | null;
-  tag?: number | null;
   search?: string | null;
   favorites?: boolean;
   ownership?: Ownership | null;
@@ -316,14 +314,8 @@ export interface QueryParams {
   custom?: string | null;
   /** Only items of this kind of category (photos for the image viewer, D-033). */
   handler?: Handler | null;
-  /** By progress, year, when added and rating (the library query's filters, D-051). */
+  /** How far along (D-051): Surprise me looks at what isn't finished (D-163). */
   progress?: "unstarted" | "inProgress" | "finished" | null;
-  yearFrom?: number | null;
-  yearTo?: number | null;
-  addedDays?: number | null;
-  minRating?: number | null;
-  /** Only what's in Later (D-062). */
-  later?: boolean;
   offset: number;
   limit: number;
 }
@@ -381,8 +373,6 @@ export interface Dashboard {
   continueWatching: ItemCard[];
   /** The next volume of series lately finished (D-050). */
   nextVolumes: ItemCard[];
-  /** What's in Later, newest first (D-062). */
-  later: ItemCard[];
   /** "Because you liked …" (D-064). */
   because: { seed: ItemCard; items: ItemCard[] } | null;
   recent: ItemCard[];
@@ -661,7 +651,6 @@ export interface ItemDetail {
   people: Person[];
   versions: VersionInfo[];
   parts: PartInfo[];
-  tags: NamedRef[];
   /** From the category root down; empty when the item isn't in a collection. */
   collectionPath: NamedRef[];
   progress: number | null;
@@ -670,14 +659,6 @@ export interface ItemDetail {
   /** The user's rating (1-5) and note (D-049). */
   rating: number | null;
   note: string | null;
-  /** In Later (D-062). */
-  inLater: boolean;
-}
-
-export interface Tag {
-  id: number;
-  name: string;
-  itemCount: number;
 }
 
 export interface Collection {
@@ -704,8 +685,6 @@ export interface CollectionNode {
 
 export type BulkOp =
   | { op: "favorite"; favorite: boolean }
-  | { op: "addTags"; names: string[] }
-  | { op: "removeTags"; names: string[] }
   | { op: "move"; category: string; collection: number | null }
   | { op: "setYear"; year: number | null }
   | { op: "setSeries"; series: string | null }
@@ -737,19 +716,6 @@ export interface ItemEdit {
   category: string;
   people: PersonInput[];
   metadata: Record<string, unknown>;
-}
-
-export interface VersionInput {
-  id?: number | null;
-  itemId?: number;
-  kind: "physical" | "digital";
-  label?: string | null;
-  format?: string | null;
-  edition?: string | null;
-  condition?: string | null;
-  location?: string | null;
-  acquiredAt?: string | null;
-  notes?: string | null;
 }
 
 export interface RemoveReport {
@@ -830,10 +796,6 @@ export const api = {
   achievementsList: () => invoke<Achievement[]>("achievements_list"),
   resumeGet: () => invoke<Resume | null>("resume_get"),
   appQuit: () => invoke<void>("app_quit"),
-  tags: () => invoke<Tag[]>("tags_list"),
-  itemTagsSet: (id: number, names: string[]) => invoke<void>("item_tags_set", { id, names }),
-  tagRename: (id: number, name: string) => invoke<void>("tag_rename", { id, name }),
-  tagDelete: (id: number) => invoke<void>("tag_delete", { id }),
   collections: (category: string, parent: number | null) => invoke<CollectionLevel>("collections_list", { category, parent }),
   collectionTree: (category: string) => invoke<CollectionNode[]>("collection_tree", { category }),
   collectionCreate: (category: string, parent: number | null, name: string) => invoke<number>("collection_create", { category, parent, name }),
@@ -871,7 +833,6 @@ export const api = {
   arcadeSetExtraTime: (id: number, seconds: number) => invoke<void>("arcade_set_extra_time", { id, seconds }),
   arcadeSetReview: (id: number, rating: number | null, note: string | null) => invoke<void>("arcade_set_review", { id, rating, note }),
   itemSetReview: (id: number, rating: number | null, note: string | null) => invoke<void>("item_set_review", { id, rating, note }),
-  laterSet: (ids: number[], later: boolean) => invoke<void>("later_set", { ids, later }),
   backupAutoStatus: () => invoke<AutoBackupStatus>("backup_auto_status"),
   backupAutoNow: () => invoke<AutoBackupStatus>("backup_auto_now"),
   libraryCheck: () => invoke<LibraryCheck>("library_check"),
@@ -917,7 +878,6 @@ export const api = {
   arcadeCollectionDelete: (id: number) => invoke<void>("arcade_collection_delete", { id }),
   arcadeCollectionAdd: (id: number, games: number[]) => invoke<number>("arcade_collection_add", { id, games }),
   arcadeCollectionRemove: (id: number, games: number[]) => invoke<number>("arcade_collection_remove", { id, games }),
-  arcadeCollectionsReorder: (ids: number[]) => invoke<void>("arcade_collections_reorder", { ids }),
   /** A game's own emulator (D-148); null goes back to its console's. */
   arcadeSetGameEmulator: (id: number, emulator: ArcadeEmulator | null) => invoke<void>("arcade_set_game_emulator", { id, emulator }),
   /** Marks games as completed or not (D-149). */
@@ -964,15 +924,11 @@ export const api = {
   dashboard: () => invoke<Dashboard>("dashboard_get"),
   item: (id: number) => invoke<ItemDetail>("item_get", { id }),
   itemUpdate: (id: number, edit: ItemEdit) => invoke<void>("item_update", { id, edit }),
-  itemCreate: (item: ItemEdit, physical: VersionInput | null) =>
-    invoke<number>("item_create", { item: { item, physical } }),
   itemSetFavorite: (id: number, favorite: boolean) => invoke<void>("item_set_favorite", { id, favorite }),
   itemSetCover: (id: number, path: string) => invoke<void>("item_set_cover", { id, path }),
   itemsSetCover: (ids: number[], path: string) => invoke<void>("items_set_cover", { ids, path }),
   itemRemove: (ids: number[], trashManagedCopies: boolean) =>
     invoke<RemoveReport>("item_remove", { ids, trashManagedCopies }),
-  versionSave: (version: VersionInput) => invoke<number>("version_save", { version }),
-  versionDelete: (id: number) => invoke<void>("version_delete", { id }),
   fileReveal: (id: number) => invoke<void>("file_reveal", { id }),
 
   importStart: (paths: string[], mode: ImportMode, category: string | null) =>
@@ -1015,9 +971,7 @@ export const api = {
   watchMark: (id: number, part: number | null, watched: boolean) => invoke<void>("watch_mark", { id, part, watched }),
   episodesList: (id: number) => invoke<Episode[]>("episodes_list", { id }),
 
-  devMode: () => invoke<string | null>("dev_mode"),
-  devReport: (name: string, report: unknown) => invoke<string>("dev_report", { name, report }),
-  devExit: () => invoke<void>("dev_exit"),
+  repositoryOpen: () => invoke<void>("repository_open"),
 };
 
 /** Running on Linux (WebKitGTK), where some things differ from Windows (D-031). */

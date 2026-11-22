@@ -323,13 +323,11 @@ fn installed(emulator: Emulator) -> Option<Program> {
             Emulator::Ryujinx => &["ryujinx", "Ryujinx"],
             Emulator::Project64 | Emulator::NullDc | Emulator::Xenia => return None,
         };
-        if let Some(path) = binaries.iter().find_map(|b| crate::tools::find_in(Path::new("/nonexistent"), b)) {
+        if let Some(path) = binaries.iter().find_map(|b| crate::tools::find_on_path(b)) {
             return Some(Program::Native(path));
         }
         let id = emulator.flatpak_id()?;
-        let home = home();
-        let installed = [PathBuf::from("/var/lib/flatpak/app").join(id), home.join(".local/share/flatpak/app").join(id)].iter().any(|p| p.is_dir());
-        installed.then_some(Program::Flatpak(id))
+        flatpak_installed(id).then_some(Program::Flatpak(id))
     }
 }
 
@@ -372,8 +370,14 @@ fn portable_program(places: &[PathBuf], names: &[&str]) -> Option<PathBuf> {
 }
 
 #[cfg(not(windows))]
-fn home() -> PathBuf {
+pub(crate) fn home() -> PathBuf {
     std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default()
+}
+
+/// Whether a Flatpak is installed, for the whole system or for this user (Linux).
+#[cfg(not(windows))]
+pub(crate) fn flatpak_installed(id: &str) -> bool {
+    [PathBuf::from("/var/lib/flatpak/app").join(id), home().join(".local/share/flatpak/app").join(id)].iter().any(|p| p.is_dir())
 }
 
 /// Where an emulator keeps its settings, and the game folders and covers they point to.

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { BackButton } from "../../components/BackButton";
 import { open } from "@tauri-apps/plugin-dialog";
 import { FolderOpen, Monitor, Moon, ScrollText, Settings, Sun } from "lucide-react";
@@ -447,13 +447,14 @@ export function SettingsPage() {
                   Show file
                 </button>
               </Setting>
-              <Setting title="Developer" text="Phase 0 video lab: mpv playback under the web interface.">
-                <Link to="/lab" className="btn">
-                  Open lab
-                </Link>
-              </Setting>
             </section>
-            <p className="settings-credit">Digitify is free and open source.</p>
+            {/* Where Digitify lives (D-172): its page, its releases, its license (MIT). */}
+            <p className="settings-credit">
+              Digitify is free and open source (MIT).{" "}
+              <button type="button" className="link-button" onClick={() => void api.repositoryOpen().catch((e) => setError(errorText(e)))}>
+                Digitify on GitHub
+              </button>
+            </p>
           </>
         )}
       </div>

@@ -77,11 +77,6 @@ const EVEN_ODD = new Set(["wii", "wiiu", "ds", "gb", "gba", "nes", "snes", "pc"]
 /** Consoles drawn as another one's. */
 const SAME_AS: Record<string, string> = { gbc: "gb" };
 
-/** Whether a store or console has a symbol. */
-export function hasLogo(key: string | null | undefined): boolean {
-  return !!key && !!PATHS[SAME_AS[key] ?? key];
-}
-
 /**
  * A store's or console's symbol (D-119). It's drawn a little inside its box with room around it,
  * so no edge is cut, at a whole-pixel size so it stays sharp.

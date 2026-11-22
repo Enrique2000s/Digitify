@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { Outlet, useRouterState } from "@tanstack/react-router";
 import { api } from "../lib/api";
 import { AmbientProvider } from "../lib/ambient/AmbientProvider";
 import { MusicProvider } from "../lib/music/MusicProvider";
@@ -47,11 +46,9 @@ export function Root() {
   // Button groups' highlight slides to the chosen button (D-047).
   useSegmentedGlide();
   const status = useAppStatus();
-  const devMode = useQuery({ queryKey: ["dev-mode"], queryFn: api.devMode, staleTime: Infinity });
-  const navigate = useNavigate();
   // Decided from the route being rendered rather than the address: while a navigation is in
   // progress the address already changed, and deciding from it would mount the old page again.
-  const fullWindow = useRouterState({ select: (state) => state.matches.some((match) => match.routeId === "/lab" || match.routeId === "/read/$id" || match.routeId === "/watch/$id" || match.routeId === "/disc/$letter/$title" || match.routeId === "/bp") });
+  const fullWindow = useRouterState({ select: (state) => state.matches.some((match) => match.routeId === "/read/$id" || match.routeId === "/watch/$id" || match.routeId === "/disc/$letter/$title" || match.routeId === "/bp") });
   const bigPictureRoute = useRouterState({ select: (state) => state.matches.some((match) => match.routeId === "/bp") });
   const [builderCategory, setBuilderCategory] = useState<string | null>(null);
   const [importUrlCategory, setImportUrlCategory] = useState<string | null>(null);
@@ -64,11 +61,6 @@ export function Root() {
   useEffect(() => {
     if (libraryReady) void api.manualSync().catch(() => undefined);
   }, [libraryReady]);
-
-  // Automated video-lab runs (DIGITIFY_POC=video:<path>) open the lab directly.
-  useEffect(() => {
-    if (devMode.data?.startsWith("video:")) void navigate({ to: "/lab" });
-  }, [devMode.data, navigate]);
 
   if (!status.data) return null;
   const libraryOpen = status.data.libraryOpen;
@@ -89,7 +81,7 @@ export function Root() {
         <BigPictureLauncher />
         <BusyIndicator />
         {fullWindow ? (
-          // The video lab and the reader take the whole window.
+          // Readers, the players and Big Picture take the whole window.
           <>
             <Outlet />
             {/* From Big Picture, readers and the player are used with its cursor. */}

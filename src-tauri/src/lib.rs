@@ -13,7 +13,6 @@ mod check;
 mod chapters;
 mod config;
 mod db;
-mod dev;
 mod ebooks;
 mod episodes;
 mod error;
@@ -154,7 +153,6 @@ pub fn run() {
             media::start(app);
             tray::start(app);
             app.manage(pages::PageEngine::default());
-            dev::configure_window(app)?;
             setup::spawn_maintenance(app.handle().clone());
             backup::watch_auto(app.handle().clone());
             watched::watch(app.handle().clone());
@@ -218,23 +216,15 @@ pub fn run() {
             library::dashboard_get,
             library::item_get,
             library::item_update,
-            library::item_create,
             library::item_set_favorite,
             library::item_set_review,
-            library::later_set,
             library::resume_get,
             tray::app_quit,
             library::item_set_cover,
             library::items_set_cover,
             library::item_set_backdrop,
             library::item_remove,
-            library::version_save,
-            library::version_delete,
             library::file_reveal,
-            organize::tags_list,
-            organize::item_tags_set,
-            organize::tag_rename,
-            organize::tag_delete,
             organize::collections_list,
             organize::collection_tree,
             organize::collection_create,
@@ -257,17 +247,17 @@ pub fn run() {
             arcade::arcade_set_cover,
             arcade::arcade_forget,
             arcade::arcade_reveal,
-            arcade::arcade_launch,
+            arcade::play::arcade_launch,
             arcade::arcade_add_program,
             arcade::arcade_ignore_emulator,
-            arcade::arcade_cover_choices,
-            arcade::arcade_choose_cover,
-            arcade::arcade_steamgriddb_status,
-            arcade::arcade_steamgriddb_set,
-            arcade::arcade_steamgriddb_open,
-            arcade::arcade_launchbox_status,
-            arcade::arcade_launchbox_download,
-            arcade::arcade_launchbox_remove,
+            arcade::covers::arcade_cover_choices,
+            arcade::covers::arcade_choose_cover,
+            arcade::covers::arcade_steamgriddb_status,
+            arcade::covers::arcade_steamgriddb_set,
+            arcade::covers::arcade_steamgriddb_open,
+            arcade::covers::arcade_launchbox_status,
+            arcade::covers::arcade_launchbox_download,
+            arcade::covers::arcade_launchbox_remove,
             arcade::arcade_emulator_folders,
             arcade::arcade_set_favorite_many,
             arcade::arcade_forget_many,
@@ -297,7 +287,6 @@ pub fn run() {
             arcade::collections::arcade_collection_delete,
             arcade::collections::arcade_collection_add,
             arcade::collections::arcade_collection_remove,
-            arcade::collections::arcade_collections_reorder,
             library::custom_order_slots,
             arcade::arcade_unhide,
             online::online_import,
@@ -366,9 +355,7 @@ pub fn run() {
             player::player_command,
             player::player_set_rect,
             player::player_close,
-            dev::dev_mode,
-            dev::dev_report,
-            dev::dev_exit,
+            setup::repository_open,
         ])
         .build(tauri::generate_context!())
         .expect("failed to start Digitify");

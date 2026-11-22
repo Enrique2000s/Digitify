@@ -30,6 +30,7 @@ Every product or architecture decision is recorded here with its reason. Anythin
 - **Decision:**
   - No GPL code is linked into Digitify. GPL tools ship only as separate executables, with their license and a source offer.
   - Core features avoid services that are free only for non-commercial use.
+- **Since D-172:** free and open source under the MIT license, with installers published as GitHub releases.
 
 ### D-004 · Organization model
 - **Date:** 2026-10-30 · **Approved by:** project owner
@@ -100,6 +101,29 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Vendored from commit `78914aef4466eb960965702401634c2cb348e9b1` into `src/vendor/foliate-js/`, with its `pdf.js` replaced by a stand-in so PDF.js (about 10 MB) isn't bundled. PDFs stay with PDFium (D-013).
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
+
+### D-173 · Cleanup, third phase: the video lab, the stores read once a minute, the largest files in parts
+- **Date:** 2026-11-21 · **Approved by:** project owner (asked for the review's third phase)
+- **The Phase 0 video lab is gone:** Settings › Developer, its page and its core module (`dev`) tested mpv inside the window before the players existed (D-002's proof of concept); the players have done that since Phase 3. The `poc/` folder and its styles went with it.
+- **The stores read once a minute at most:** Arcade's panel and the covers asked every store for its games each time; the result is now kept for 60 seconds and dropped as soon as the stores' installs change (the watcher that already noticed them), so a new game still shows at once.
+- **Large files in parts, nothing changed in what they do:**
+  - Arcade's page: the game's panel (`GamePanel.tsx`), the bar for several games (`BulkBar.tsx`) and Emulators & folders (`Setup.tsx`) are files of their own.
+  - Arcade's core: covers (`arcade/covers.rs`) and playing (`arcade/play.rs`) left `arcade/mod.rs`, which keeps scanning, the games and the views.
+  - The styles: `app.css` and `views.css` load their parts (`styles/app/`, `styles/views/`) in the order they had, so every rule wins as before.
+- **Linux builds without warnings:** helpers only Windows uses (wide strings, Minecraft's Store packages, the Riot Client's games) are built only for Windows, or kept for the tests.
+
+### D-172 · Ready to be public: MIT, nothing personal, installers a click away
+- **Date:** 2026-11-22 · **Approved by:** project owner (chose the MIT license, removing the name from the app, and rewriting the history's email)
+- **License:** MIT (`LICENSE`, and in `package.json`, `Cargo.toml` and the installers' copyright). The helper programs keep their own licenses (THIRD_PARTY_NOTICES.md).
+- **Nothing personal:** no name in the app or the README (Settings ends with "Digitify is free and open source (MIT)" and a link to its page on GitHub, opened in the browser); the test notes say what was tested, not on whose computer; an example path in `build.rs` became a generic one. The commits' author email is replaced by GitHub's private address, once, with the owner's go-ahead.
+- **Downloads:** pushing a tag `vX.Y.Z` (the version in `package.json`) builds both platforms on GitHub Actions and publishes a release with four files under names that never change (`Digitify-Setup-Windows-x64.exe`, `Digitify-Linux-amd64.deb`, `Digitify-Linux-x86_64.AppImage`, `Digitify-Arch-install.sh`) and their SHA-256 sums, so the README's links (`releases/latest/download/…`) always give the newest. The README starts with them, which to pick for each system and what to do when Windows warns about an unsigned installer. The Arch script reads Digitify's version from the package itself (the release's `.deb` has none in its name) and calls itself by the name it was saved under.
+
+### D-171 · Cleanup: what was left of removed features, dead code, duplicates
+- **Date:** 2026-11-21 · **Approved by:** project owner (asked for a maintainability review, then for its first two phases)
+- **Removed, unused since their features left:** Tags and Later (D-092): their commands (`tags_list`, `tag_rename`, `tag_delete`, `item_tags_set`, `later_set`), the selection's tag operations, tags in the search index (its column stays, empty), in "Because you liked" and in the detailed view's lines, Home's Later row and the item's Later flag, and their empty tables (migration 0033, schema 33; the migrations of D-029's era still write to them on their way up). Cataloging a physical item (`item_create`, `version_save`, `version_delete`). The library query's smart-list filters (tag, years, added within, rating, Later; progress stays for Surprise me). Arcade's collections reordering (never offered). Favorites as an Arcade view (rules saved with it still mean Favorites).
+- **Removed from the interface:** nine exports nothing used (an older collection mover, a controller shortcut hook, physical formats and conditions, creator roles, an aspect helper and others), eight API calls nothing made, about 475 lines of CSS for screens that are gone (the old Now playing panel, the tag editor and Tags page, smart lists, the old Arcade setup, Big Picture's old track list, an old achievements list).
+- **One of each:** the games' Completed and Favorite badges (`GameMarks`, for Arcade, Home and Big Picture); one track-length format (the music lists' own is gone; an hour-long track now reads 1:15:00); the shared plural helper; one summary for Look for games. In the core: `tools::wide`, `tools::base64` and `tools::find_on_path` (each written up to six times before), Linux's `home` and Flatpak check, the activity and top-artists queries shared by the statistics, your year and your week.
+- **Nothing a user does changes** beyond the hour-long tracks' format. Kept for a next step (done in D-173): the Phase 0 video lab (Settings › Developer), the large files' split, caching the stores' state for Arcade's panel.
 
 ### D-170 · Title is Arcade's default sort again
 - **Date:** 2026-11-21 · **Approved by:** project owner (asked for Title back as the default)
@@ -883,7 +907,7 @@ Every product or architecture decision is recorded here with its reason. Anythin
 - Home has a "Discs" section so disc features are visible without a drive; "Featured today" has its own badge.
 - In Big Picture's cursor mode only the cursor selects.
 - A cover without artwork can be given a color on the item's page (stored as the item's cover color until it gets artwork); CDs stay round everywhere.
-- Settings end with "Digitify is free and open source."
+- Settings end with a link to Digitify's page on GitHub (D-172).
 
 ### D-025 · Big Picture: a TV interface for controllers
 - **Date:** 2026-10-31 · **Approved by:** project owner (chose each option)

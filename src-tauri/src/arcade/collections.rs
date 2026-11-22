@@ -148,22 +148,6 @@ pub async fn arcade_collection_remove(state: State<'_, AppState>, id: i64, games
     .await
 }
 
-/// The collections in a new order.
-#[tauri::command]
-pub async fn arcade_collections_reorder(state: State<'_, AppState>, ids: Vec<i64>) -> AppResult<()> {
-    with_library(&state, move |library| {
-        library.db.with(|conn| {
-            let tx = conn.transaction()?;
-            for (position, id) in ids.iter().enumerate() {
-                tx.execute("UPDATE arcade_collections SET position = ?2 WHERE id = ?1", params![id, position as i64])?;
-            }
-            tx.commit()?;
-            Ok(())
-        })
-    })
-    .await
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

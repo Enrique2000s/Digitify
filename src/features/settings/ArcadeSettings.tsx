@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, errorText } from "../../lib/api";
 import { addProgramGame, arcadeFilters, FILTER_LABELS, filledFilters } from "../arcade/shared";
-import { Setup } from "../arcade/ArcadePage";
+import { Setup } from "../arcade/Setup";
 import { Setting } from "./Setting";
 
 /** Settings › Arcade (D-038): the views' order, which ones show, and one "All games" or two. */

@@ -77,7 +77,7 @@ fn read_texts(dir: &Path) -> Texts {
 
 fn picture(dir: &Path, kind: &str) -> Option<String> {
     let bytes = std::fs::read(dir.join(format!("{kind}.jpg"))).ok()?;
-    Some(format!("data:image/jpeg;base64,{}", crate::arcade::base64(&bytes)))
+    Some(format!("data:image/jpeg;base64,{}", crate::tools::base64(&bytes)))
 }
 
 fn write_texts(dir: &Path, texts: &Texts) -> AppResult<()> {

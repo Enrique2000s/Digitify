@@ -46,136 +46,6 @@ fn item_ids(conn: &Connection, sql: &str, id: i64) -> AppResult<Vec<i64>> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Tags
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Tag {
-    pub id: i64,
-    pub name: String,
-    pub item_count: i64,
-}
-
-#[tauri::command]
-pub async fn tags_list(state: State<'_, AppState>) -> AppResult<Vec<Tag>> {
-    with_library(&state, |library| {
-        library.db.with(|conn| {
-            let rows = conn
-                .prepare(
-                    "SELECT t.id, t.name, (SELECT count(*) FROM item_tags it WHERE it.tag_id = t.id) \
-                     FROM tags t ORDER BY t.name COLLATE NOCASE",
-                )?
-                .query_map([], |row| Ok(Tag { id: row.get(0)?, name: row.get(1)?, item_count: row.get(2)? }))?
-                .collect::<Result<_, _>>()?;
-            Ok(rows)
-        })
-    })
-    .await
-}
-
-/// The id of the tag called `name` (case-insensitive), creating it when needed.
-fn tag_id(conn: &Connection, name: &str) -> rusqlite::Result<i64> {
-    conn.query_row(
-        "INSERT INTO tags (name) VALUES (?1) ON CONFLICT(name) DO UPDATE SET name = tags.name RETURNING id",
-        [name],
-        |row| row.get(0),
-    )
-}
-
-fn add_tags(conn: &Connection, ids: &[i64], names: &[String]) -> AppResult<()> {
-    for name in names.iter().filter_map(|name| clean_name(name, 60)) {
-        let tag = tag_id(conn, &name)?;
-        for id in ids {
-            conn.execute("INSERT OR IGNORE INTO item_tags (item_id, tag_id) VALUES (?1, ?2)", params![id, tag])?;
-        }
-    }
-    Ok(())
-}
-
-fn remove_tags(conn: &Connection, ids: &[i64], names: &[String]) -> AppResult<()> {
-    for name in names.iter().filter_map(|name| clean_name(name, 60)) {
-        for id in ids {
-            conn.execute(
-                "DELETE FROM item_tags WHERE item_id = ?1 AND tag_id = (SELECT id FROM tags WHERE name = ?2)",
-                params![id, name],
-            )?;
-        }
-    }
-    prune_tags(conn)
-}
-
-/// Tags exist through the items that carry them; one left on nothing disappears.
-fn prune_tags(conn: &Connection) -> AppResult<()> {
-    conn.execute("DELETE FROM tags WHERE id NOT IN (SELECT tag_id FROM item_tags)", [])?;
-    Ok(())
-}
-
-/// Replaces an item's tags.
-#[tauri::command]
-pub async fn item_tags_set(state: State<'_, AppState>, id: i64, names: Vec<String>) -> AppResult<()> {
-    with_library(&state, move |library| {
-        library.db.with(|conn| {
-            let tx = conn.transaction()?;
-            tx.execute("DELETE FROM item_tags WHERE item_id = ?1", [id])?;
-            add_tags(&tx, &[id], &names)?;
-            prune_tags(&tx)?;
-            reindex(&tx, id)?;
-            tx.commit()?;
-            Ok(())
-        })
-    })
-    .await
-}
-
-/// Renames a tag; renaming it to another tag's name merges the two.
-#[tauri::command]
-pub async fn tag_rename(state: State<'_, AppState>, id: i64, name: String) -> AppResult<()> {
-    let name = clean_name(&name, 60).ok_or_else(|| AppError::msg("A tag needs a name."))?;
-    with_library(&state, move |library| library.db.with(|conn| rename_tag(conn, id, &name))).await
-}
-
-fn rename_tag(conn: &mut Connection, id: i64, name: &str) -> AppResult<()> {
-    let tx = conn.transaction()?;
-    let other: Option<i64> = tx
-        .query_row("SELECT id FROM tags WHERE name = ?1 AND id <> ?2", params![name, id], |row| row.get(0))
-        .optional()?;
-    let target = match other {
-        Some(other) => {
-            tx.execute(
-                "INSERT OR IGNORE INTO item_tags (item_id, tag_id) SELECT item_id, ?2 FROM item_tags WHERE tag_id = ?1",
-                params![id, other],
-            )?;
-            tx.execute("DELETE FROM tags WHERE id = ?1", [id])?;
-            other
-        }
-        None => {
-            tx.execute("UPDATE tags SET name = ?2 WHERE id = ?1", params![id, name])?;
-            id
-        }
-    };
-    let ids = item_ids(&tx, "SELECT item_id FROM item_tags WHERE tag_id = ?1", target)?;
-    reindex_all(&tx, &ids)?;
-    tx.commit()?;
-    Ok(())
-}
-
-/// Takes a tag off every item. The items themselves stay.
-#[tauri::command]
-pub async fn tag_delete(state: State<'_, AppState>, id: i64) -> AppResult<()> {
-    with_library(&state, move |library| {
-        library.db.with(|conn| {
-            let tx = conn.transaction()?;
-            let ids = item_ids(&tx, "SELECT item_id FROM item_tags WHERE tag_id = ?1", id)?;
-            tx.execute("DELETE FROM tags WHERE id = ?1", [id])?;
-            reindex_all(&tx, &ids)?;
-            tx.commit()?;
-            Ok(())
-        })
-    })
-    .await
-}
-
-// ---------------------------------------------------------------------------------------------
 // Collections
 
 #[derive(Debug, Serialize)]
@@ -412,8 +282,6 @@ pub fn delete_collection(conn: &mut Connection, id: i64) -> AppResult<()> {
 #[serde(tag = "op", rename_all = "camelCase")]
 pub enum BulkOp {
     Favorite { favorite: bool },
-    AddTags { names: Vec<String> },
-    RemoveTags { names: Vec<String> },
     /// A new home: a category, optionally inside one of its collections.
     Move { category: String, collection: Option<i64> },
     SetYear { year: Option<i64> },
@@ -517,14 +385,6 @@ pub fn apply_bulk(conn: &mut Connection, ids: &[i64], ops: &[BulkOp]) -> AppResu
                     tx.execute(&format!("UPDATE items SET is_favorite = ?2, updated_at = {NOW} WHERE id = ?1"), params![id, favorite])?;
                     tx.execute("UPDATE parts SET is_favorite = ?2 WHERE item_id = ?1 AND kind = 'track'", params![id, favorite])?;
                 }
-            }
-            BulkOp::AddTags { names } => {
-                add_tags(&tx, ids, names)?;
-                searchable = true;
-            }
-            BulkOp::RemoveTags { names } => {
-                remove_tags(&tx, ids, names)?;
-                searchable = true;
             }
             BulkOp::Move { category, collection } => {
                 let category = category_id(&tx, category)?;
@@ -687,33 +547,6 @@ mod tests {
         let home: Option<i64> = conn.query_row("SELECT collection_id FROM items WHERE id = ?1", [volume], |row| row.get(0)).unwrap();
         assert_eq!(home, None);
         assert_eq!(search(&conn, "one piece"), Vec::<i64>::new());
-    }
-
-    #[test]
-    fn tags_merge_on_rename_and_disappear_when_unused() {
-        let mut conn = db::memory();
-        let a = item(&conn, "books", "Alpha");
-        let b = item(&conn, "books", "Beta");
-        apply_bulk(&mut conn, &[a], &[BulkOp::AddTags { names: vec!["  To   read ".into()] }]).unwrap();
-        apply_bulk(&mut conn, &[b], &[BulkOp::AddTags { names: vec!["Signed".into(), "to read".into()] }]).unwrap();
-        let tags: Vec<(String, i64)> = conn
-            .prepare("SELECT name, (SELECT count(*) FROM item_tags WHERE tag_id = tags.id) FROM tags ORDER BY name")
-            .unwrap()
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-            .unwrap()
-            .collect::<Result<_, _>>()
-            .unwrap();
-        assert_eq!(tags, [("Signed".to_string(), 1), ("To read".to_string(), 2)]);
-        assert_eq!(search(&conn, "signed"), vec![b]);
-
-        let signed: i64 = conn.query_row("SELECT id FROM tags WHERE name = 'Signed'", [], |row| row.get(0)).unwrap();
-        rename_tag(&mut conn, signed, "to READ").unwrap();
-        let count: i64 = conn.query_row("SELECT count(*) FROM tags", [], |row| row.get(0)).unwrap();
-        assert_eq!(count, 1);
-
-        apply_bulk(&mut conn, &[a, b], &[BulkOp::RemoveTags { names: vec!["To read".into()] }]).unwrap();
-        let count: i64 = conn.query_row("SELECT count(*) FROM tags", [], |row| row.get(0)).unwrap();
-        assert_eq!(count, 0);
     }
 
     #[test]

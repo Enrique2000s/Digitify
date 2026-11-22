@@ -121,7 +121,16 @@ pub struct StoreScan {
     pub games: Vec<StoreGame>,
 }
 
+/// Every store's installed games, read now (Look for games); kept for a moment for Arcade's panel.
 pub fn scan_all() -> Vec<StoreScan> {
+    let found = read_all();
+    if let Ok(mut cache) = CACHE.lock() {
+        *cache = Some((std::time::Instant::now(), found.clone()));
+    }
+    found
+}
+
+fn read_all() -> Vec<StoreScan> {
     // Programs' uninstall entries, read once for the launchers that use them (D-112).
     #[cfg(windows)]
     let uninstall = super::launchers::uninstall_entries();
@@ -161,6 +170,29 @@ pub fn scan_all() -> Vec<StoreScan> {
         })
         .collect()
 }
+/// The stores as last read (D-173): Arcade's panel refreshes often, and reading every store each
+/// time isn't needed; a minute old at most, read again by Look for games, and forgotten as soon as
+/// a store's installed games change.
+static CACHE: std::sync::Mutex<Option<(std::time::Instant, Vec<StoreScan>)>> = std::sync::Mutex::new(None);
+const FRESH_FOR: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// The stores as last read, when that was a moment ago; read again otherwise.
+pub fn scan_all_cached() -> Vec<StoreScan> {
+    if let Ok(cache) = CACHE.lock() {
+        if let Some((_, found)) = cache.as_ref().filter(|(at, _)| at.elapsed() < FRESH_FOR) {
+            return found.clone();
+        }
+    }
+    scan_all()
+}
+
+/// A store's installed games changed: the next look reads them again.
+pub fn forget_cached() {
+    if let Ok(mut cache) = CACHE.lock() {
+        *cache = None;
+    }
+}
+
 
 /// A cheap fingerprint of every store's install records (names and modification times), to notice
 /// a game installed or removed without reading everything again.
@@ -881,11 +913,10 @@ fn xbox_roots() -> Vec<PathBuf> {
 /// (one offline makes every look wait for it), disc drives and empty card readers are left out (D-152).
 #[cfg(windows)]
 fn local_drives() -> Vec<PathBuf> {
-    use std::os::windows::ffi::OsStrExt;
+    use crate::tools::wide;
     use windows_sys::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives, GetVolumeInformationW};
     const DRIVE_REMOVABLE: u32 = 2;
     const DRIVE_FIXED: u32 = 3;
-    let wide = |text: &str| std::ffi::OsStr::new(text).encode_wide().chain(std::iter::once(0)).collect::<Vec<u16>>();
     let mask = unsafe { GetLogicalDrives() };
     (2..26u8)
         .filter(|bit| mask & (1 << bit) != 0)

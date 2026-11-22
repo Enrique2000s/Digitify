@@ -2,6 +2,7 @@
 //! readers of that text stay as they are. Starting `reg.exe` took seconds on some computers each
 //! time Arcade looked at its launchers (D-152); asking Windows itself takes milliseconds.
 
+use crate::tools::wide;
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
 use windows_sys::Win32::System::Registry::{
     RegCloseKey, RegEnumKeyExW, RegEnumValueW, RegOpenKeyExW, RegQueryInfoKeyW, HKEY, HKEY_CLASSES_ROOT, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, HKEY_USERS, KEY_READ,
@@ -41,10 +42,6 @@ fn split(key: &str) -> Option<(HKEY, &'static str, &str)> {
         _ => return None,
     };
     Some((handle, name, path.trim_end_matches('\\')))
-}
-
-fn wide(s: &str) -> Vec<u16> {
-    s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
 fn open(parent: HKEY, path: &str) -> Option<HKEY> {

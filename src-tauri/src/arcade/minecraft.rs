@@ -15,11 +15,14 @@ use std::path::{Path, PathBuf};
 use super::stores::{Store, StoreGame};
 
 /// The Minecraft Launcher's package family (the Microsoft Store and the Xbox app).
+#[cfg_attr(not(windows), allow(dead_code))] // Windows only, and in the tests
 pub const LAUNCHER_FAMILY: &str = "Microsoft.4297127D64EC6_8wekyb3d8bbwe";
 /// Minecraft for Windows' (Bedrock's) package family.
+#[cfg_attr(not(windows), allow(dead_code))] // Windows only, and in the tests
 pub const BEDROCK_FAMILY: &str = "Microsoft.MinecraftUWP_8wekyb3d8bbwe";
 
 /// Whether a package family is Minecraft's (the Xbox app writes some in capitals).
+#[cfg(windows)]
 pub fn is_minecraft_family(family: &str) -> bool {
     family.eq_ignore_ascii_case(LAUNCHER_FAMILY) || family.eq_ignore_ascii_case(BEDROCK_FAMILY)
 }
@@ -117,6 +120,7 @@ fn package(family: &str, fallback_app: &str) -> Option<(PathBuf, String)> {
 
 /// Whether a package's full name (`Name_Version_Arch_ResourceId_PublisherId`) is of `family`
 /// (`Name_PublisherId`) and is the app itself, not one of its resource packs.
+#[cfg_attr(not(windows), allow(dead_code))] // Windows only, and in the tests
 pub(crate) fn package_matches(full_name: &str, family: &str) -> bool {
     let Some((name, publisher)) = family.split_once('_') else { return false };
     let parts: Vec<&str> = full_name.split('_').collect();
@@ -124,6 +128,7 @@ pub(crate) fn package_matches(full_name: &str, family: &str) -> bool {
 }
 
 /// The first app id in a package manifest.
+#[cfg_attr(not(windows), allow(dead_code))] // Windows only, and in the tests
 pub(crate) fn manifest_app(text: &str) -> Option<String> {
     let doc = roxmltree::Document::parse(text).ok()?;
     doc.descendants().find(|n| n.has_tag_name("Application")).and_then(|n| n.attribute("Id")).map(str::to_string)
@@ -163,7 +168,7 @@ fn official_windows(uninstall: &[super::launchers::RegBlock]) -> Option<StoreGam
 #[cfg(not(windows))]
 fn official_linux() -> Option<StoreGame> {
     let home = home();
-    if let Some(program) = crate::tools::find_in(Path::new("/nonexistent"), "minecraft-launcher") {
+    if let Some(program) = crate::tools::find_on_path("minecraft-launcher") {
         return Some(java_game(home.join(".minecraft"), format!("exe:{}", program.display()), None));
     }
     let id = "com.mojang.Minecraft";
@@ -220,7 +225,7 @@ fn prism_windows(uninstall: &[super::launchers::RegBlock]) -> Option<(PathBuf, S
 #[cfg(not(windows))]
 fn prism_linux() -> Option<(PathBuf, Start)> {
     let home = home();
-    if let Some(program) = crate::tools::find_in(Path::new("/nonexistent"), "prismlauncher") {
+    if let Some(program) = crate::tools::find_on_path("prismlauncher") {
         let data = home.join(".local/share/PrismLauncher");
         return data.is_dir().then(|| (data, Start { exe: Some(program.display().to_string()), flatpak: None, instance: String::new() }));
     }
@@ -249,7 +254,7 @@ fn multimc() -> Option<(PathBuf, Start)> {
     #[cfg(not(windows))]
     let (program, data) = {
         let data = home().join(".local/share/multimc");
-        let program = ["MultiMC", "multimc"].iter().map(|n| data.join(n)).find(|p| p.is_file()).or_else(|| crate::tools::find_in(Path::new("/nonexistent"), "multimc"))?;
+        let program = ["MultiMC", "multimc"].iter().map(|n| data.join(n)).find(|p| p.is_file()).or_else(|| crate::tools::find_on_path("multimc"))?;
         (program, data)
     };
     data.is_dir().then(|| (data, Start { exe: Some(program.display().to_string()), flatpak: None, instance: String::new() }))
@@ -322,14 +327,7 @@ pub fn cover_title(key: &str) -> &'static str {
 }
 
 #[cfg(not(windows))]
-fn home() -> PathBuf {
-    std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default()
-}
-
-#[cfg(not(windows))]
-fn flatpak_installed(id: &str) -> bool {
-    [PathBuf::from("/var/lib/flatpak/app").join(id), home().join(".local/share/flatpak/app").join(id)].iter().any(|p| p.is_dir())
-}
+use super::detect::{flatpak_installed, home};
 
 #[cfg(test)]
 mod tests {

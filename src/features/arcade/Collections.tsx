@@ -6,6 +6,7 @@ import { api, errorText, type ArcadeCollection, type ArcadeCollectionRules, type
 import { ARCADE_FILTER_ORDER, type ArcadeFilter } from "../../lib/preferences";
 import { Dialog, Field, Switch } from "../../components/common";
 import { Marquee } from "../../components/Marquee";
+import { plural } from "../../lib/format";
 import { FILTER_LABELS, filledFilters, GameCover, inFilter } from "./shared";
 
 /**
@@ -45,7 +46,10 @@ export function allCollections(list: ArcadeCollection[] | undefined): ArcadeColl
 }
 
 export function rulesOf(collection: ArcadeCollection): ArcadeCollectionRules {
-  return { ...NO_RULES, ...(collection.rules ?? {}) };
+  const rules = { ...NO_RULES, ...(collection.rules ?? {}) };
+  // Rules saved while Favorites was still a view (before D-149) say so with their own switch.
+  if (rules.views.includes("favorites")) return { ...rules, views: rules.views.filter((v) => v !== "favorites"), favorites: true };
+  return rules;
 }
 
 /** Lower case, accents off, so "Pokémon" is found by "pokemon". */
@@ -91,7 +95,8 @@ export function gamesOf(collection: ArcadeCollection, games: ArcadeGame[] | unde
   return (games ?? []).filter((game) => !game.missing && inIt(game));
 }
 
-const plural = (n: number) => `${n.toLocaleString()} ${n === 1 ? "game" : "games"}`;
+/** "1 game", "1,204 games". */
+const countGames = (n: number) => plural(n, "game");
 
 // ---------------------------------------------------------------------------------------------
 // The collections, as cards
@@ -164,7 +169,7 @@ function CollectionCard({ collection, games, onOpen, onEdit, onDelete }: { colle
   const fixed = favorites || completed;
   return (
     <div className={`arcade-collection-card${fixed ? " favorites" : ""}${completed ? " completed" : ""}`}>
-      <button type="button" className="arcade-collection-open" onClick={onOpen} aria-label={`${collection.name}, ${plural(games.length)}`} data-blip>
+      <button type="button" className="arcade-collection-open" onClick={onOpen} aria-label={`${collection.name}, ${countGames(games.length)}`} data-blip>
         <span className={`arcade-collage n${shown.length}`} aria-hidden>
           {shown.length === 0 ? (
             <span className="arcade-collage-empty">{favorites ? <Heart size={34} /> : completed ? <BadgeCheck size={34} /> : collection.dynamic ? <ListFilter size={34} /> : <Joystick size={34} />}</span>
@@ -181,7 +186,7 @@ function CollectionCard({ collection, games, onOpen, onEdit, onDelete }: { colle
             <Marquee hover text={collection.name} />
           </strong>
           <span>
-            {plural(games.length)}
+            {countGames(games.length)}
             {collection.dynamic && (
               <span className="arcade-dynamic-chip">
                 <ListFilter size={12} /> Dynamic
@@ -301,7 +306,7 @@ function DeleteCollection({ collection, onClose }: { collection: ArcadeCollectio
 // ---------------------------------------------------------------------------------------------
 // Making and changing one
 
-const NOT_VIEWS: ArcadeFilter[] = ["all", "all-pc", "all-roms", "favorites"];
+const NOT_VIEWS: ArcadeFilter[] = ["all", "all-pc", "all-roms"];
 
 function CollectionEditor({ editing, games, onClose, onSaved }: { editing: Editing; games: ArcadeGame[] | undefined; onClose: () => void; onSaved: (id: number) => void }) {
   const queryClient = useQueryClient();
@@ -343,7 +348,7 @@ function CollectionEditor({ editing, games, onClose, onSaved }: { editing: Editi
   const description = dynamic
     ? "Its games are the ones that pass every filter you set; it fills and empties by itself as games come and go."
     : editing.games?.length
-      ? `With the ${plural(editing.games.length)} selected.`
+      ? `With the ${countGames(editing.games.length)} selected.`
       : existing
         ? undefined
         : "Put games in it from a game's panel (Collections), or select several and use Add to collection.";
@@ -356,7 +361,7 @@ function CollectionEditor({ editing, games, onClose, onSaved }: { editing: Editi
       description={description}
       footer={
         <>
-          {dynamic && <span className="collection-count muted">{plural(matching)} match</span>}
+          {dynamic && <span className="collection-count muted">{countGames(matching)} match</span>}
           <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>
@@ -487,14 +492,14 @@ export function CollectionMenu({ ids, games, onNotice, children, side = "bottom"
     run(async () => {
       await (single ? api.arcadeSetFavorite(ids[0], on) : api.arcadeSetFavoriteMany(ids, on));
       await queryClient.invalidateQueries({ queryKey: ["arcade-games"] });
-    }, single ? undefined : `${plural(ids.length)} in Favorites`);
+    }, single ? undefined : `${countGames(ids.length)} in Favorites`);
   // Completed is a collection too (D-169): in it is marked as completed.
   const done = single && !!games?.find((g) => g.id === ids[0])?.completedAt;
   const complete = (on: boolean) =>
     run(async () => {
       await api.arcadeSetCompleted(ids, on);
       await queryClient.invalidateQueries({ queryKey: ["arcade-games"] });
-    }, single ? undefined : `${plural(ids.length)} marked as completed`);
+    }, single ? undefined : `${countGames(ids.length)} marked as completed`);
   const run = async (action: () => Promise<unknown>, done?: string) => {
     try {
       await action();
@@ -545,7 +550,7 @@ export function CollectionMenu({ ids, games, onNotice, children, side = "bottom"
                   {collection.name}
                 </DropdownMenu.CheckboxItem>
               ) : (
-                <DropdownMenu.Item key={collection.id} className="menu-item" onSelect={() => void run(() => api.arcadeCollectionAdd(collection.id, ids), `${plural(ids.length)} in “${collection.name}”`)}>
+                <DropdownMenu.Item key={collection.id} className="menu-item" onSelect={() => void run(() => api.arcadeCollectionAdd(collection.id, ids), `${countGames(ids.length)} in “${collection.name}”`)}>
                   <Layers size={17} /> {collection.name}
                 </DropdownMenu.Item>
               );
@@ -564,7 +569,7 @@ export function CollectionMenu({ ids, games, onNotice, children, side = "bottom"
           onClose={() => setCreating(false)}
           onSaved={() => {
             setCreating(false);
-            onNotice?.(single ? "Collection made" : `Collection made with ${plural(ids.length)}`);
+            onNotice?.(single ? "Collection made" : `Collection made with ${countGames(ids.length)}`);
           }}
         />
       )}

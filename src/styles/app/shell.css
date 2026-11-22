@@ -1,0 +1,479 @@
+/* ---------------------------------------------------------------- window shell */
+
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg);
+  background-image: repeating-linear-gradient(0deg, var(--stripe) 0 2px, transparent 2px 7px);
+}
+
+.appbar {
+  flex: 0 0 auto;
+  padding: 12px 16px 6px;
+  user-select: none;
+}
+.appbar-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 60px;
+  padding: 0 10px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: var(--gloss);
+  box-shadow: var(--raise);
+}
+.appbar-drag {
+  flex: 1;
+  align-self: stretch;
+  min-width: 8px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 8px 4px 2px;
+  border-radius: var(--pill);
+  color: var(--text);
+  font-size: 19px;
+  font-weight: 900;
+}
+.brand svg {
+  transition: transform 260ms var(--spring);
+}
+.brand:hover svg {
+  transform: rotate(-8deg) scale(1.08);
+}
+/* "Working…" while something takes a moment (D-143). */
+.busy-indicator {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  z-index: 2147483000;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: var(--surface, var(--field));
+  box-shadow: var(--shadow, 0 6px 24px rgba(0, 0, 0, 0.18));
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 800;
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: busy-in 160ms var(--ease, ease-out);
+}
+@keyframes busy-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
+
+/* A screen that failed (D-143): what happened, with Back and Home. */
+.screen-error {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  min-height: 70vh;
+  padding: 40px;
+  text-align: center;
+}
+.screen-error.bp {
+  min-height: 100vh;
+}
+.screen-error.bp > svg,
+.screen-error.bp h1 {
+  color: #fff;
+}
+.screen-error p {
+  max-width: 640px;
+  margin: 0;
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+}
+.screen-error-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* A page's own Back (D-138), in the same place on every page past Home, Library and Arcade. */
+.page-back {
+  align-self: flex-start;
+  margin-bottom: 14px;
+}
+.page-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.page-top .page-back {
+  margin-bottom: 0;
+}
+/* An item's previous and next (D-138). */
+.item-steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.item-steps-count {
+  min-width: 84px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.search-pill {
+  flex: 1 1 200px;
+  max-width: 420px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: var(--field);
+  box-shadow: var(--inset-shadow);
+  color: var(--muted);
+  transition: border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease);
+}
+.search-pill:focus-within {
+  border-color: var(--accent-bright);
+  box-shadow: var(--inset-shadow), 0 0 0 3px var(--accent-ring);
+}
+.search-pill input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 14.5px;
+  font-weight: 700;
+}
+.search-pill input::placeholder {
+  color: var(--muted);
+}
+.search-pill kbd {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 1px 6px;
+  background: var(--panel);
+}
+.window-buttons {
+  display: flex;
+  gap: 6px;
+  margin-left: 2px;
+}
+
+/* The ambient music capsule. */
+.music-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 12px 0 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: var(--field);
+  box-shadow: var(--inset-shadow);
+}
+.music-play {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--gloss);
+  color: var(--accent-bright);
+  box-shadow: var(--raise-sm);
+  cursor: pointer;
+  transition: box-shadow 300ms var(--ease);
+}
+/* The menu music has no play/pause: the round badge only shows it's on. */
+span.music-play {
+  cursor: default;
+}
+.music-pill.idle .music-play {
+  color: var(--muted);
+}
+.music-pill.idle .music-text {
+  width: 160px;
+}
+.music-play.on {
+  box-shadow: var(--glow);
+  animation: breathe 3.6s ease-in-out infinite;
+}
+@keyframes breathe {
+  50% {
+    box-shadow: 0 0 0 3px var(--accent-bright), 0 6px 14px var(--accent-glow);
+  }
+}
+.music-text {
+  display: flex;
+  flex-direction: column;
+  width: 210px;
+  min-width: 0;
+  line-height: 1.2;
+}
+.volume-value {
+  min-width: 34px;
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--muted);
+}
+.watch-volume-value {
+  min-width: 40px;
+}
+/* Text that doesn't fit slides to show the rest, pausing at both ends. */
+.marquee {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.marquee.moving {
+  text-overflow: clip;
+}
+.marquee-inner {
+  display: inline-block;
+}
+.marquee.moving .marquee-inner {
+  animation: marquee var(--duration, 6s) linear infinite;
+}
+@keyframes marquee {
+  0%,
+  15% {
+    transform: translateX(0);
+  }
+  50%,
+  65% {
+    transform: translateX(var(--shift, 0));
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+:root[data-motion="reduced"] .marquee.moving .marquee-inner,
+:root[data-motion="off"] .marquee.moving .marquee-inner {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .marquee.moving .marquee-inner {
+    animation: none;
+  }
+}
+.music-title,
+.music-status {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.music-title {
+  font-size: 13.5px;
+  font-weight: 900;
+}
+.music-status {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.music-volume {
+  width: 84px;
+}
+@media (max-width: 1240px) {
+  .music-volume {
+    display: none;
+  }
+}
+@media (max-width: 1120px) {
+  .brand span {
+    display: none;
+  }
+  .music-text {
+    width: 150px;
+  }
+}
+.app-main {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* The scrollbar's room is always kept, so nothing on the right moves when a page is short (D-145). */
+  scrollbar-gutter: stable;
+  padding: 20px 40px 56px;
+}
+
+/* ---------------------------------------------------------------- menus & dialogs */
+
+.menu {
+  min-width: 230px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--panel);
+  box-shadow: var(--pop-shadow);
+  z-index: 60;
+  animation: pop-in 140ms var(--ease);
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 14px;
+  color: var(--text);
+  font-weight: 800;
+  cursor: pointer;
+  outline: none;
+}
+.menu-item svg {
+  color: var(--accent-text);
+}
+.menu-item[data-highlighted] {
+  background: var(--accent-soft);
+}
+.menu-item small {
+  margin-left: auto;
+  color: var(--faint);
+}
+.menu-separator {
+  height: 1px;
+  margin: 6px 8px;
+  background: var(--line);
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  backdrop-filter: blur(3px);
+  z-index: 50;
+  animation: fade-in 160ms var(--ease);
+}
+.dialog {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, calc(100vw - 48px));
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+  box-shadow: var(--pop-shadow);
+  z-index: 51;
+  animation: dialog-in 220ms var(--spring);
+}
+.dialog.wide {
+  width: min(720px, calc(100vw - 48px));
+}
+.dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px 0;
+}
+.dialog-title {
+  font-size: 22px;
+  font-weight: 900;
+}
+.dialog-description {
+  margin-top: 6px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.dialog-body {
+  padding: 18px 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 8px 24px 22px;
+}
+.dialog-error {
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-weight: 700;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 14px)) scale(0.96);
+  }
+}
+
+.choice {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--field);
+  cursor: pointer;
+  transition: border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease);
+}
+.choice:has(input:checked) {
+  border-color: var(--accent-bright);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent-bright);
+}
+.choice input {
+  margin-top: 3px;
+}
+.choice strong {
+  display: block;
+  margin-bottom: 3px;
+  font-weight: 900;
+}
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}

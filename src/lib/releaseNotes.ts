@@ -12,6 +12,19 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.9.3",
+    date: "2026-11-22",
+    added: [
+      { icon: "download", title: "Free and open source", text: "Digitify is free and open source under the MIT license. Settings › About links to its page on GitHub, where each new version's installers for Windows and Linux are published." },
+    ],
+    fixed: [
+      "Under the hood: what was left of Tags, Later and cataloging physical items is gone, along with unused code and styles, so Digitify is lighter and quicker to keep up.",
+      "Arcade's panel opens quicker: the stores' games are read once a minute at most, and at once when you install or remove one.",
+      "The old video lab under Settings › Developer is gone; the players have long done what it tested.",
+      "Tracks an hour or longer show their length as hours, minutes and seconds.",
+    ],
+  },
+  {
     version: "0.9.2",
     date: "2026-11-21",
     added: [

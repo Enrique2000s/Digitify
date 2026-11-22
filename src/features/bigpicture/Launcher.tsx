@@ -2,7 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { enterBigPicture, useBigPicture } from "../../lib/bigpicture";
 import { usePreferences } from "../../lib/preferences";
 import { Cursor } from "./Cursor";
-import { pressShortcut, simulatePad, usePad, type PadAction } from "../../lib/gamepad";
+import { simulatePad, usePad, type PadAction } from "../../lib/gamepad";
 import type { ShortcutId } from "../../lib/shortcuts";
 
 // Lets automated tests press controller buttons without a controller.
@@ -18,21 +18,6 @@ export function BigPictureLauncher() {
     return true;
   }, !active);
   return null;
-}
-
-/**
- * In Big Picture, the controller drives a reader or the player through their keyboard shortcuts
- * (so changed keys keep working). Each button maps to a shortcut, or to a function.
- */
-export function useControllerShortcuts(map: Partial<Record<PadAction, ShortcutId | (() => void)>>) {
-  const active = useBigPicture();
-  usePad((action) => {
-    const target = map[action];
-    if (!target) return;
-    if (typeof target === "function") target();
-    else pressShortcut(target);
-    return true;
-  }, active);
 }
 
 /** In a reader the cursor does the pointing (left stick, A); the D-pad and bumpers turn pages. */

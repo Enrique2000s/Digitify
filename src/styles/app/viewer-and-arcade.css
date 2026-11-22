@@ -1,0 +1,1492 @@
+/* ------------------------------------------------------------------ Image viewer (D-033) */
+.picture-viewer {
+  background: #07090d;
+}
+.picture-viewer.calm {
+  cursor: none;
+}
+.pv-stage {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  touch-action: none;
+  cursor: zoom-in;
+}
+.pv-stage.zoomed {
+  cursor: grab;
+}
+.pv-stage.zoomed:active {
+  cursor: grabbing;
+}
+.pv-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transform-origin: center;
+  transition: opacity 260ms var(--ease);
+  will-change: transform;
+}
+.pv-image.shown {
+  opacity: 1;
+}
+:root[data-motion="off"] .pv-image {
+  transition: none;
+}
+.pv-spinner {
+  position: absolute;
+  color: rgba(255, 255, 255, 0.55);
+}
+.pv-message {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 14px;
+  justify-items: center;
+  color: var(--muted);
+  font-weight: 700;
+}
+.pv-side {
+  position: absolute;
+  top: calc(50% - 28px);
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  background: rgba(18, 26, 36, 0.7);
+  color: #eaf2f8;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  transition: opacity 220ms var(--ease), background 160ms var(--ease);
+}
+.pv-side:hover {
+  background: rgba(30, 44, 60, 0.92);
+}
+.pv-side.left {
+  left: 18px;
+}
+.pv-side.right {
+  right: 18px;
+}
+.pv-side.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.pv-spacer {
+  flex: 1;
+  align-self: stretch;
+}
+.pv-bar {
+  justify-content: center;
+  width: auto;
+  max-width: calc(100% - 32px);
+  flex-wrap: wrap;
+}
+.pv-divider {
+  width: 1px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.14);
+}
+.pv-speed {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+.picture-viewer .round-btn.active {
+  color: var(--accent-text);
+  box-shadow: var(--glow-sm);
+}
+.picture-viewer .round-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.picture-viewer .round-btn.small {
+  width: 30px;
+  height: 30px;
+}
+.pv-info {
+  position: absolute;
+  top: 72px;
+  right: 16px;
+  bottom: 84px;
+  z-index: 6;
+  width: min(340px, calc(100% - 32px));
+  overflow: auto;
+  padding: 18px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(18, 26, 36, 0.9);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(14px);
+  animation: fade-in 200ms var(--ease);
+}
+.pv-info h2 {
+  margin: 0 0 12px;
+  font-size: 17px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+.pv-info dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+.pv-info dt {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pv-info dd {
+  margin: 2px 0 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.pv-path {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.pv-notice {
+  position: absolute;
+  left: 50%;
+  bottom: 92px;
+  z-index: 7;
+  padding: 9px 16px;
+  border-radius: var(--pill);
+  background: rgba(18, 26, 36, 0.92);
+  color: #eaf2f8;
+  font-weight: 800;
+  transform: translateX(-50%);
+  animation: fade-in 180ms var(--ease);
+}
+:root[data-perf="light"] .pv-side,
+:root[data-perf="light"] .pv-info {
+  backdrop-filter: none;
+}
+
+/* Home with a photo behind it (D-033), fading into the page color. */
+.page.with-wallpaper {
+  --wallpaper-fade: linear-gradient(180deg, color-mix(in srgb, var(--bg) 40%, transparent) 0%, color-mix(in srgb, var(--bg) 80%, transparent) 55%, var(--bg) 100%);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
+/* ------------------------------------------------------------------ Arcade (D-034) */
+.arcade-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.arcade-head-title {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.arcade-head-title p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.arcade-logo {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #7a5cff 0%, #e0458f 100%);
+  color: #fff;
+  box-shadow: var(--raise);
+}
+.arcade-head-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.arcade-running,
+.arcade-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  font-weight: 700;
+}
+.arcade-notice .icon-btn {
+  margin-left: auto;
+}
+.arcade-notice.error {
+  border-color: #e5484d;
+  color: #e5484d;
+}
+.arcade-running-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #30a46c;
+  box-shadow: 0 0 0 4px rgba(48, 164, 108, 0.25);
+  animation: arcade-pulse 1.6s ease-in-out infinite;
+}
+@keyframes arcade-pulse {
+  50% {
+    box-shadow: 0 0 0 8px rgba(48, 164, 108, 0);
+  }
+}
+.arcade-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 6px 0 20px;
+}
+.arcade-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 180px;
+  max-width: 320px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: var(--field);
+  box-shadow: var(--inset-shadow);
+  color: var(--muted);
+}
+.arcade-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  outline: none;
+}
+.arcade-sort {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  font-weight: 800;
+  color: var(--muted);
+}
+.arcade-sort select {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+}
+.arcade-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--card, 170px), 1fr));
+  gap: 26px 20px;
+  align-items: end;
+}
+.arcade-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.arcade-tile-art {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 12px;
+  background: var(--raised);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transition: transform 180ms var(--ease), box-shadow 180ms var(--ease);
+}
+.arcade-tile-art:hover,
+.arcade-tile-art:focus-visible {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.3), var(--glow-sm);
+}
+.arcade-tile.running .arcade-tile-art {
+  box-shadow: 0 0 0 3px #30a46c, 0 14px 28px rgba(0, 0, 0, 0.3);
+}
+.arcade-cover-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.arcade-cover-blank {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 100%;
+  height: 100%;
+  padding: 38px 14px 14px;
+  color: #fff;
+  text-align: left;
+  background: linear-gradient(160deg, #5b2a86 0%, #2d1846 100%);
+}
+.arcade-cover-blank[data-platform="wii"] {
+  background: linear-gradient(160deg, #e9eef3 0%, #b8c4d0 100%);
+  color: #1d2835;
+}
+.arcade-cover-blank[data-platform="n64"] {
+  background: linear-gradient(160deg, #1d2b53 0%, #0b1022 60%);
+  border-top: 6px solid #e5484d;
+}
+.arcade-cover-console {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+.arcade-cover-title {
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.arcade-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: var(--pill);
+  background: rgba(10, 14, 20, 0.72);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+.arcade-badge[data-platform="gamecube"] {
+  background: rgba(91, 42, 134, 0.88);
+}
+.arcade-badge[data-platform="wii"] {
+  background: rgba(0, 150, 200, 0.88);
+}
+.arcade-badge[data-platform="n64"] {
+  background: rgba(229, 72, 77, 0.9);
+}
+/* Favorite and completed (D-166): two round badges of one size, side by side at the bottom right,
+   clear of the console's or launcher's badge at the top (D-169). */
+.arcade-fav {
+  position: absolute;
+  bottom: 7px;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #e5476d;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+.arcade-play {
+  position: absolute;
+  right: 10px;
+  bottom: 54px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(6px) scale(0.9);
+  transition: opacity 160ms var(--ease), transform 160ms var(--ease);
+}
+.arcade-tile:hover .arcade-play,
+.arcade-play:focus-visible {
+  opacity: 1;
+  transform: none;
+}
+.arcade-tile-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+.arcade-tile-text strong {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 800;
+}
+.arcade-tile-text span {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.arcade-empty {
+  align-items: center;
+  text-align: center;
+  margin: 10px auto;
+  max-width: 640px;
+  color: var(--muted);
+}
+.arcade-setup {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 22px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--raise-sm);
+  animation: fade-in 200ms var(--ease);
+}
+.arcade-emulator-path {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 700;
+  font-size: 12.5px;
+}
+.arcade-emulator-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+.arcade-setup-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+.arcade-setup-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.arcade-setup-block h3 {
+  font-size: 15px;
+  font-weight: 900;
+}
+.arcade-setup-block .muted {
+  font-size: 13px;
+}
+.arcade-folders {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.arcade-folders li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+.arcade-folders li span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.arcade-folders li em {
+  flex: none;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+.arcade-folders li.missing span {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+.arcade-folders li .icon-btn {
+  margin-left: auto;
+}
+.arcade-switch-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-weight: 700;
+}
+.arcade-switch-row small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.arcade-panel-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(5, 8, 12, 0.45);
+  animation: fade-in 160ms var(--ease);
+}
+.arcade-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(380px, calc(100% - 24px));
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--panel);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+  animation: arcade-slide 220ms var(--ease);
+}
+@keyframes arcade-slide {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+.arcade-panel-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 1;
+}
+/* The cover whole (D-156): never squeezed by a long panel (it scrolls instead), and narrower
+   rather than cut when its shape would make it taller than 340 px. */
+.arcade-panel-art {
+  flex: none;
+  width: min(100%, 240px, calc(340px * var(--aspect, 0.667)));
+  align-self: center;
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+.arcade-panel h2 {
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+.arcade-panel-sub {
+  margin-top: -6px;
+  color: var(--muted);
+  font-weight: 700;
+}
+/* A note under Play (Minecraft: Java Edition, D-155). */
+.arcade-panel-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+.arcade-panel-note svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent-bright);
+}
+.arcade-panel-note b {
+  color: var(--text);
+}
+.arcade-panel-play {
+  justify-content: center;
+  height: 46px;
+  font-size: 16px;
+}
+.arcade-panel-facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+.arcade-panel-facts dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.arcade-panel-facts dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+/* A game's own keywords (D-160): little chips, and a field to add one. */
+.keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.keyword {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 26px;
+  padding: 0 4px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-size: 12.5px;
+  font-weight: 800;
+}
+.keyword button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.keyword button:hover {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  color: var(--text);
+}
+.keyword-input {
+  flex: 1 1 110px;
+  min-width: 110px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--pill);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.keyword-input:focus {
+  border-style: solid;
+  border-color: var(--accent);
+  outline: none;
+}
+/* Steam's hours (D-167): each game, Digitify's time → Steam's. */
+.steam-hours {
+  display: grid;
+  gap: 6px;
+  max-height: 340px;
+  margin: 10px 0 0;
+  padding: 0 4px 0 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.steam-hours li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: baseline;
+}
+.steam-hours li > span:first-child {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Surprise me's pick (D-163): its box glows for a moment. */
+.arcade-tile.surprised .arcade-tile-art {
+  animation: surprised 1.6s var(--ease) 1;
+}
+@keyframes surprised {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  20%,
+  60% {
+    box-shadow: 0 0 0 4px var(--accent-bright), 0 0 32px var(--accent);
+  }
+}
+:root[data-motion="off"] .arcade-tile.surprised .arcade-tile-art {
+  animation: none;
+  outline: 4px solid var(--accent-bright);
+}
+
+/* Keywords for several games at once (D-162). */
+.bulk-keywords {
+  width: min(340px, calc(100vw - 32px));
+  padding: 12px;
+}
+.bulk-keywords-add {
+  display: flex;
+  gap: 8px;
+}
+.bulk-keywords-add .input {
+  flex: 1;
+  min-width: 0;
+}
+.bulk-keywords-title {
+  margin: 12px 2px 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.bulk-keywords-list {
+  display: grid;
+  gap: 4px;
+  max-height: 240px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.bulk-keywords-list li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.bulk-keywords-list .keyword {
+  padding-right: 10px;
+}
+.bulk-keywords-list .muted {
+  flex: 1;
+  font-size: 12px;
+}
+.bulk-keywords-none {
+  margin: 10px 2px 0;
+  font-size: 12.5px;
+}
+.arcade-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+:root[data-motion="off"] .arcade-tile-art,
+:root[data-motion="off"] .arcade-play,
+:root[data-motion="off"] .arcade-panel,
+:root[data-motion="off"] .arcade-running-dot {
+  transition: none;
+  animation: none;
+}
+
+/* Dragging cards to a new place in a custom order (Library, Arcade). */
+.drag-ghost {
+  opacity: 0.92;
+  filter: drop-shadow(0 18px 30px rgba(0, 0, 0, 0.35));
+  transition: none !important;
+}
+.drag-source {
+  opacity: 0.35;
+}
+.dragging-cards,
+.dragging-cards * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+[data-drag-id]:not(.list-row):not(.detail-row) {
+  position: relative;
+}
+.drop-before::before,
+.drop-after::after {
+  content: "";
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--accent-bright, var(--accent));
+  box-shadow: 0 0 10px var(--accent);
+  pointer-events: none;
+}
+.drop-before::before {
+  left: -9px;
+}
+.drop-after::after {
+  right: -9px;
+}
+.list-row.drop-before::before,
+.list-row.drop-after::after,
+.detail-row.drop-before::before,
+.detail-row.drop-after::after {
+  left: 0;
+  right: 0;
+  width: auto;
+  height: 3px;
+}
+.list-row.drop-before::before,
+.detail-row.drop-before::before {
+  top: -2px;
+  bottom: auto;
+}
+.list-row.drop-after::after,
+.detail-row.drop-after::after {
+  top: auto;
+  bottom: -2px;
+}
+.arranging-in-place [data-drag-id] {
+  cursor: grab;
+}
+
+/* Arcade, D-035: selecting, arranging, editable folders. */
+.arcade-bulk {
+  position: fixed;
+}
+.arcade-grid.selecting .arcade-tile-art {
+  cursor: pointer;
+}
+.arcade-tile .card-check {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+}
+.arcade-tile.checked .arcade-tile-art {
+  box-shadow: 0 0 0 3px var(--accent), 0 10px 22px rgba(0, 0, 0, 0.28);
+}
+.arcade-hint {
+  margin: -8px 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.arcade-panel-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.arcade-rename {
+  display: flex;
+  gap: 6px;
+}
+.arcade-rename .input {
+  flex: 1;
+  min-width: 0;
+}
+.arcade-emulator-program {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.arcade-emulator-program .arcade-emulator-path {
+  flex: 1;
+  min-width: 0;
+}
+.arcade-emulator-label {
+  margin-top: 2px;
+  font-size: 12.5px;
+  font-weight: 800;
+}
+.arcade-folders li .icon-btn + .icon-btn {
+  margin-left: 0;
+}
+
+.arcade-tile .card-check {
+  top: auto;
+  left: auto;
+}
+
+/* Arcade, D-037: centered grid, size, PC stores. */
+.arcade-grid {
+  grid-template-columns: repeat(auto-fill, var(--card, 160px));
+  justify-content: center;
+}
+.arcade-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  color: var(--muted);
+}
+.arcade-size input {
+  width: 110px;
+}
+.arcade-running.starting {
+  border-style: dashed;
+}
+.arcade-badge[data-store="steam"] {
+  background: rgba(23, 26, 33, 0.9);
+}
+.arcade-badge[data-store="epic"] {
+  background: rgba(40, 40, 40, 0.92);
+}
+.arcade-badge[data-store="xbox"] {
+  background: rgba(16, 124, 16, 0.92);
+}
+.arcade-badge[data-store="heroic"] {
+  background: rgba(130, 70, 200, 0.9);
+}
+.arcade-cover-blank[data-platform="pc"] {
+  background: linear-gradient(160deg, #2a3f5f 0%, #121a26 100%);
+}
+.arcade-cover-blank[data-store="xbox"] {
+  background: linear-gradient(160deg, #1c7d1c 0%, #0b3a0b 100%);
+}
+.arcade-cover-blank[data-store="epic"] {
+  background: linear-gradient(160deg, #3a3a3a 0%, #121212 100%);
+}
+
+.arcade-hidden {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* D-101: the new consoles' and GOG's badges and blank boxes. */
+.arcade-badge[data-platform="ps1"],
+.arcade-badge[data-platform="ps2"],
+.arcade-badge[data-platform="ps3"] {
+  background: rgba(0, 67, 156, 0.9);
+}
+.arcade-badge[data-platform="ds"] {
+  background: rgba(90, 96, 108, 0.9);
+}
+.arcade-badge[data-store="gog"] {
+  background: rgba(134, 50, 160, 0.92);
+}
+.arcade-cover-blank[data-platform="ps1"],
+.arcade-cover-blank[data-platform="ps2"],
+.arcade-cover-blank[data-platform="ps3"] {
+  background: linear-gradient(160deg, #0b3a82 0%, #071a3a 100%);
+}
+.arcade-cover-blank[data-platform="ds"] {
+  background: linear-gradient(160deg, #3a3f48 0%, #16191e 100%);
+}
+/* Many consoles (D-109): Arcade's views stay one row that scrolls sideways, with arrows at its
+   ends and its edges fading, so they never grow past the page or push the tools away. */
+.arcade-views {
+  position: relative;
+  display: flex;
+  /* Its full width first (D-158): when that and the tools don't fit on one line, the tools go under
+     it, so its arrows only show when even a line of its own isn't enough. */
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: max-content;
+}
+.arcade-views > .segmented {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  /* The view scrolled into sight stays clear of the arrows. */
+  scroll-padding-inline: 40px;
+}
+.arcade-views > .segmented::-webkit-scrollbar {
+  display: none;
+}
+.arcade-views.more-left > .segmented {
+  mask-image: linear-gradient(90deg, transparent 0, #000 56px);
+}
+.arcade-views.more-right > .segmented {
+  mask-image: linear-gradient(90deg, #000 calc(100% - 56px), transparent 100%);
+}
+.arcade-views.more-left.more-right > .segmented {
+  mask-image: linear-gradient(90deg, transparent 0, #000 56px, #000 calc(100% - 56px), transparent 100%);
+}
+/* Find, Size, Select and Sort: beside the views when both fit whole, else on the line under them
+   (D-158); they take what's left of their line (Sort at its end). */
+.arcade-views + .view-tools {
+  flex: 1 0 auto;
+}
+/* The arrows stay where they are: placed without a transform (a pressed round button moves by
+   one), always there and only hidden when there's nothing more that way, so a click is never lost. */
+.arcade-views-arrow {
+  position: absolute;
+  top: calc(50% - 15px);
+  z-index: 1;
+  width: 30px;
+  height: 30px;
+  /* It shows a moment late and hides at once (D-161): a frame measured wrong never shows. */
+  transition: opacity 140ms var(--ease) 90ms;
+}
+.arcade-views-arrow:active {
+  transform: scale(0.94);
+}
+.arcade-views-arrow.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transition-delay: 0s;
+}
+.arcade-views-arrow.left {
+  left: 2px;
+}
+.arcade-views-arrow.right {
+  right: 2px;
+}
+/* D-108: covers for every game without one. */
+.arcade-missing-covers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 4px;
+  font-size: 13px;
+}
+/* D-106, D-107: the cartridge consoles' and itch.io's badges. */
+.arcade-badge[data-store="itch"] {
+  background: rgba(250, 92, 92, 0.92);
+}
+.arcade-badge[data-platform="nes"],
+.arcade-badge[data-platform="snes"] {
+  background: rgba(120, 120, 128, 0.92);
+}
+.arcade-badge[data-platform="gb"],
+.arcade-badge[data-platform="gbc"],
+.arcade-badge[data-platform="gba"] {
+  background: rgba(76, 64, 160, 0.92);
+}
+
+/* Emulators & folders in tabs (D-113): Launchers, Emulators (by maker), Consoles, Folders & covers. */
+.arcade-setup-tabs {
+  justify-self: start;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.arcade-setup-pane {
+  display: grid;
+  gap: 12px;
+}
+.arcade-setup-pane > .muted {
+  font-size: 13px;
+}
+.arcade-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.arcade-rows > li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  font-size: 13px;
+}
+.arcade-rows > li > .btn {
+  margin-left: auto;
+}
+.arcade-rows > li.absent {
+  opacity: 0.72;
+}
+.arcade-rows .ok {
+  flex: none;
+  color: #30a46c;
+}
+.arcade-rows .warn {
+  flex: none;
+  color: #e5a00d;
+}
+.arcade-emulator-group {
+  display: grid;
+  gap: 8px;
+}
+.arcade-emulator-group h3 {
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.emulator-rows > li {
+  display: block;
+  padding: 0;
+}
+.emulator-rows > li.open {
+  grid-column: 1 / -1;
+}
+.arcade-emulator-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 8px 12px;
+}
+.arcade-emulator-line > .btn,
+.arcade-emulator-line > :last-child {
+  margin-left: auto;
+  flex: none;
+}
+.arcade-emulator-consoles {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+}
+.arcade-chevron {
+  transition: transform 160ms var(--ease);
+}
+.arcade-emulator-row.open .arcade-chevron {
+  transform: rotate(180deg);
+}
+.arcade-emulator-details {
+  display: grid;
+  gap: 8px;
+  padding: 4px 14px 14px 38px;
+  font-size: 13px;
+}
+.arcade-emulator-details .arcade-emulator-program {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.arcade-consoles {
+  width: 100%;
+  max-width: 760px;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.arcade-consoles th {
+  padding: 6px 10px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.arcade-consoles td {
+  height: 48px;
+  padding: 0 10px;
+  border-top: 1px solid var(--line);
+  vertical-align: middle;
+}
+.arcade-consoles td:nth-child(2) {
+  width: 90px;
+  font-variant-numeric: tabular-nums;
+}
+.arcade-consoles tr.quiet td:first-child,
+.arcade-consoles tr.quiet td:nth-child(2) {
+  color: var(--muted);
+}
+.arcade-consoles select {
+  min-width: 180px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+}
+/* D-112: the new launchers' badges. */
+.arcade-badge[data-store="ubisoft"] {
+  background: rgba(0, 112, 255, 0.92);
+}
+.arcade-badge[data-store="ea"] {
+  background: rgba(255, 71, 71, 0.92);
+}
+.arcade-badge[data-store="battlenet"] {
+  background: rgba(20, 140, 230, 0.92);
+}
+.arcade-badge[data-store="amazon"] {
+  background: rgba(255, 153, 0, 0.92);
+  color: #1a1206;
+}
+.arcade-badge[data-store="lutris"] {
+  background: rgba(240, 120, 30, 0.92);
+}
+.arcade-badge[data-store="minecraft"] {
+  background: rgba(62, 140, 50, 0.92);
+}
+.arcade-badge[data-platform="genesis"],
+.arcade-badge[data-platform="segacd"],
+.arcade-badge[data-platform="dreamcast"] {
+  background: rgba(20, 70, 160, 0.92);
+}
+
+/* D-117: an emulator set aside. */
+.emulator-rows > li.ignored {
+  opacity: 0.6;
+}
+/* D-119: symbols beside the names of launchers and consoles. */
+.arcade-console-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+.arcade-rows > li .setup-logo {
+  margin-left: -2px;
+}
+/* D-118: the covers found for a game, to choose from. */
+.cover-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px;
+  max-height: min(62vh, 640px);
+  overflow-y: auto;
+  padding: 4px;
+}
+.cover-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 8px;
+  border: 2px solid transparent;
+  border-radius: 16px;
+  background: var(--panel);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.cover-choice img {
+  width: 100%;
+  height: 190px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: var(--track);
+}
+.cover-choice:hover {
+  box-shadow: var(--glow-sm);
+}
+.cover-choice.picked {
+  border-color: var(--accent);
+  box-shadow: var(--glow-sm);
+}
+.cover-choice-source {
+  font-size: 13px;
+  font-weight: 800;
+  /* A search's covers say which game they're of (D-148): two lines at most. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.cover-choice-size {
+  font-size: 12px;
+  color: var(--muted);
+}
+.cover-picker-wait {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 30px 6px;
+  font-weight: 700;
+}
+
+/* D-121: Settings in tabs; a maker's consoles in one view menu. */
+.settings-tabs {
+  display: flex;
+  width: fit-content;
+  max-width: min(860px, 100%);
+  margin: 0 auto 18px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.maker-view svg {
+  margin-left: 2px;
+  opacity: 0.7;
+}
+.maker-menu {
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+}
+.maker-menu .menu-item .maker-menu-name {
+  flex: 1;
+}
+.maker-menu .menu-item .muted {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* D-123: each emulator's own icon (or its initials) beside its name. */
+.emulator-mark {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  object-fit: contain;
+}
+.emulator-mark.letters {
+  display: inline-grid;
+  place-items: center;
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+/* D-124: Emulators & folders inside Settings › Arcade. */
+.settings-subtitle {
+  margin: 22px 0 10px;
+  font-size: 16px;
+  font-weight: 900;
+}
+.panel .arcade-setup {
+  margin-bottom: 0;
+  padding: 14px;
+  box-shadow: none;
+}
+/* D-125: Home's and Everything's Add menu, a category each. */
+.menu-item .menu-sub-arrow {
+  margin-left: auto;
+  opacity: 0.6;
+}
+.menu-item[data-state="open"] {
+  background: var(--hover, rgba(0, 0, 0, 0.05));
+}
+.import-into {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+/* D-126: an item's category, shown, not changed. */
+.field-static {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  margin: 0;
+  font-weight: 800;
+}
+/* D-128: SteamGridDB's key. */
+.steamgriddb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.steamgriddb-row .input {
+  width: 200px;
+}
+.steamgriddb-ok {
+  font-weight: 800;
+  color: #30a46c;
+}
+.setting-error {
+  color: var(--danger, #d64545);
+  font-weight: 700;
+}
+
+/* D-146: the name a game's covers are looked up by, editable. */
+.cover-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.cover-search > svg {
+  flex: none;
+  color: var(--muted);
+}
+.cover-search .input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* D-146: Look for games sits with the folders it looks in. */
+.arcade-scan-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.arcade-scan-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.arcade-head-busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* D-148: a badge with its logo alone. */
+.arcade-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.arcade-badge.logo-only {
+  padding: 4px 6px;
+}
+.arcade-badge.logo-only .platform-logo {
+  width: 15px;
+  height: 15px;
+}
+
+/* D-148: a cover of another shape than its box shows whole, over a blur of itself. */
+.arcade-cover-whole {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.arcade-cover-whole .arcade-cover-back {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(14px) saturate(1.15) brightness(0.62);
+  transform: scale(1.2);
+}
+.arcade-cover-whole > img.arcade-cover-img:not(.arcade-cover-back) {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+:root[data-perf="light"] .arcade-cover-whole .arcade-cover-back {
+  filter: brightness(0.45);
+}
+
+/* D-150: a name on a card that doesn't fit ends in "…", and slides to show the rest while its card
+   is pointed at, has the keyboard, or is Big Picture's selection. */
+.marquee.on-hover .marquee-inner {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+.marquee.on-hover.moving .marquee-inner {
+  animation: none;
+}
+:is(.card, .arcade-tile, .bp-tile, .arcade-collection-card, .bp-collection):is(:hover, :focus-visible, :focus-within, .bp-selected) .marquee.on-hover.moving .marquee-inner {
+  max-width: none;
+  overflow: visible;
+  animation: marquee var(--duration, 6s) linear infinite;
+}

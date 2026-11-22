@@ -10,7 +10,8 @@ import { CategoryIcon } from "../../components/common";
 import { CategoryStrip } from "../../components/CategoryStrip";
 import { AddMenu } from "../../components/AddMenu";
 import { useArrival } from "../../lib/arrival";
-import { duration, NewPlaylistDialog, TrackList, usePlaylists } from "./Tracks";
+import { NewPlaylistDialog, TrackList, usePlaylists } from "./Tracks";
+import { duration } from "../../lib/format";
 
 export const MUSIC_TABS = ["tracks", "playlists", "artists", "recent", "favorites"] as const;
 export type MusicTab = (typeof MUSIC_TABS)[number];

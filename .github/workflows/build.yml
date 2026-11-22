@@ -3,6 +3,11 @@
 # builds and tests; the installers are kept as downloadable artifacts only when the workflow is run
 # by hand (Actions › Build installers › Run workflow) or for a version tag (v0.3.0…), and only for a
 # week, so the account's artifact storage never fills up (D-089).
+#
+# A version tag (v0.9.3…) also publishes a GitHub Release with the installers under names that never
+# change, so the README's download links always give the newest one (D-172):
+#   Digitify-Setup-Windows-x64.exe, Digitify-Linux-amd64.deb, Digitify-Linux-x86_64.AppImage,
+#   Digitify-Arch-install.sh, and SHA256SUMS.txt to check them.
 name: Build installers
 
 on:
@@ -109,3 +114,58 @@ jobs:
           retention-days: 7
           path: src-tauri/target/release/bundle/nsis/*-setup.exe
           if-no-files-found: error
+
+  release:
+    name: Publish the release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # The tag has to be the version the app says it is (package.json), so the release and the
+      # installers inside it never disagree.
+      - name: Tag matches the version
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "The tag ${GITHUB_REF_NAME} isn't v${version} (package.json)." >&2
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: built
+
+      - name: Installers under names that never change
+        run: |
+          mkdir release
+          cp built/digitify-windows/*-setup.exe release/Digitify-Setup-Windows-x64.exe
+          cp built/digitify-linux/deb/*.deb release/Digitify-Linux-amd64.deb
+          cp built/digitify-linux/appimage/*.AppImage release/Digitify-Linux-x86_64.AppImage
+          cp built/digitify-linux/install-arch.sh release/Digitify-Arch-install.sh
+          cd release && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - name: Release notes
+        run: |
+          cat > notes.md <<EOF
+          ## Download
+
+          | Your computer | File |
+          |---|---|
+          | **Windows 10/11 (64-bit)** | [Digitify-Setup-Windows-x64.exe](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Digitify-Setup-Windows-x64.exe) |
+          | **Ubuntu, Debian, Linux Mint, Pop!_OS** | [Digitify-Linux-amd64.deb](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Digitify-Linux-amd64.deb) |
+          | **Arch, Manjaro, EndeavourOS, CachyOS** | the .deb above and [Digitify-Arch-install.sh](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Digitify-Arch-install.sh) |
+          | **Any other Linux** | [Digitify-Linux-x86_64.AppImage](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Digitify-Linux-x86_64.AppImage) |
+
+          How to install each one is in the [README](https://github.com/${GITHUB_REPOSITORY}#download). What changed is in the app, under Settings › About › What's new.
+          EOF
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Digitify ${{ github.ref_name }}
+          body_path: notes.md
+          files: release/*
+          fail_on_unmatched_files: true

@@ -1000,11 +1000,9 @@ export function LibraryView({
     ? null
     : base.collection != null
       ? `collection:${base.collection}`
-      : base.tag != null
-        ? `tag:${base.tag}`
-        : base.favorites
-          ? "favorites"
-          : (base.category ?? "all");
+      : base.favorites
+        ? "favorites"
+        : (base.category ?? "all");
   // A view of books or comics alone has nothing to time.
   const timed =
     handler === "image"

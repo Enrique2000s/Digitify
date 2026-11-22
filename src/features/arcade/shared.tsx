@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { BadgeCheck, Heart } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { api, ARCADE_CONSOLES, artworkUrl, errorText, onLinux, type ArcadeConsole, type ArcadeGame, type ArcadePlatform, type ArcadeStore } from "../../lib/api";
+import { api, ARCADE_CONSOLES, artworkUrl, errorText, onLinux, type ArcadeConsole, type ArcadeGame, type ArcadePlatform, type ArcadeScanReport, type ArcadeStatus, type ArcadeStore } from "../../lib/api";
+import { plural } from "../../lib/format";
 import { usePreferences, type ArcadeFilter, type ArcadePreferences } from "../../lib/preferences";
 import { hasPlatformLogo, PlatformLogo } from "./logos";
 
@@ -156,6 +158,25 @@ export function GameBadge({ game }: { game: ArcadeGame }) {
   );
 }
 
+/** A game's marks on its box (D-166, D-169): completed and favorite, two round badges at the bottom
+ *  right; bigger in Big Picture. One drawing for Arcade, Home and Big Picture. */
+export function GameMarks({ game, big = false }: { game: Pick<ArcadeGame, "completedAt" | "isFavorite">; big?: boolean }) {
+  return (
+    <>
+      {game.completedAt && (
+        <span className="arcade-completed" title="Completed">
+          <BadgeCheck size={big ? 19 : 15} strokeWidth={2.4} aria-label="Completed" />
+        </span>
+      )}
+      {game.isFavorite && (
+        <span className="arcade-fav" title="Favorite">
+          <Heart size={big ? 17 : 13} fill="currentColor" strokeWidth={2.4} aria-label="Favorite" />
+        </span>
+      )}
+    </>
+  );
+}
+
 /** Arcade's views (D-038), with what each one holds. */
 export const FILTER_LABELS: Record<ArcadeFilter, string> = {
   all: "All games",
@@ -178,7 +199,6 @@ export const FILTER_LABELS: Record<ArcadeFilter, string> = {
   // PC games added by their program (D-115).
   others: "Other PC",
   ...(Object.fromEntries(ARCADE_CONSOLES.map((key) => [key, PLATFORM_NAMES[key]])) as Record<ArcadeConsole, string>),
-  favorites: "Favorites",
 };
 
 export function inFilter(game: ArcadeGame, filter: ArcadeFilter): boolean {
@@ -208,8 +228,6 @@ export function inFilter(game: ArcadeGame, filter: ArcadeFilter): boolean {
     case "heroic":
     case "lutris":
       return game.store === filter;
-    case "favorites":
-      return game.isFavorite;
     default:
       return game.platform === filter;
   }
@@ -452,4 +470,36 @@ export function reorderWithin(all: ArcadeGame[], shown: ArcadeGame[], dragged: n
   // The shown games go back into the places shown games had, in their new order.
   let next = 0;
   return byCustom.map((g) => (shownIds.has(g.id) ? subset[next++] : g.id));
+}
+
+/** What can be done to several selected games at once. */
+/**
+ * Keywords for the selected games at once (D-162): one added to all of them, or one they have taken
+ * out of all of them; each game keeps its other keywords.
+ */
+/** What a search for games found: "153 games found · 2 new · looking for 4 covers". */
+export function scanSummary(report: ArcadeScanReport): string {
+  const parts = [`${plural(report.found, "game")} found`];
+  if (report.added) parts.push(`${report.added} new`);
+  if (report.missing) parts.push(`${report.missing} missing`);
+  if (report.coversQueued) parts.push(`looking for ${plural(report.coversQueued, "cover")}`);
+  return parts.join(" · ");
+}
+
+/** "A, B or C" / "A, B and C". */
+export function listOf(names: string[], joiner: "and" | "or"): string {
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} ${joiner} ${names.at(-1)}` : (names[0] ?? "");
+}
+
+/** The emulator a game starts in (D-111): RetroArch for its playlists' games, else the one chosen
+ *  for its console if it's found, else the first found in Arcade's order. */
+export function playsIn(game: ArcadeGame, arcade: ArcadePreferences, status: ArcadeStatus | undefined): string {
+  if (game.retroarch) return "RetroArch";
+  const players = status?.consoles.find((c) => c.key === game.platform)?.players ?? [];
+  const found = players.filter((key) => status?.emulators.find((e) => e.key === key)?.found);
+  // Its own emulator first (D-148).
+  if (game.emulator) return status?.emulators.find((e) => e.key === game.emulator)?.name ?? game.emulator;
+  const chosen = arcade.playsIn[game.platform as ArcadeConsole];
+  const key = chosen && found.includes(chosen) ? chosen : (found[0] ?? players[0]);
+  return status?.emulators.find((e) => e.key === key)?.name ?? "its emulator";
 }

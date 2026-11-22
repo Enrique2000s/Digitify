@@ -1,0 +1,1297 @@
+/* ---------------------------------------------------------------- reader (Phase 2) */
+
+/* Pages sit on a dark backdrop in both themes; the controls use Breeze's night tokens. */
+.reader {
+  color-scheme: dark;
+  --panel: #18222e;
+  --raised: #1d2835;
+  --surface: rgba(27, 38, 51, 0.86);
+  --field: #16202b;
+  --frame: linear-gradient(180deg, #2a3a4d 0%, #1f2b39 100%);
+  --gloss: linear-gradient(180deg, #243345 0%, #1c2837 47%, #17212d 53%, #1d2835 100%);
+  --line: #2e3d4f;
+  --line-strong: #41546a;
+  --track: #26364a;
+  --text: #eaf2f8;
+  --muted: #a9b7c4;
+  --raise: 0 8px 20px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --raise-sm: 0 4px 10px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --inset-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.35);
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 35%, #1b2533 0%, #0b1017 78%);
+  color: var(--text);
+  user-select: none;
+}
+.reader-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  overflow: auto;
+}
+.reader.calm .reader-stage {
+  cursor: none;
+}
+.reader-stage::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.22);
+}
+.reader-view {
+  display: flex;
+  align-items: center;
+  margin: auto;
+}
+.reader-page {
+  display: block;
+  background: #1d2633;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+.reader-strip {
+  position: relative;
+  width: 100%;
+  flex: 0 0 auto;
+}
+.reader-strip .reader-page {
+  position: absolute;
+  left: 50%;
+}
+
+.reader-view.enter-slide-forward {
+  animation: page-forward 260ms var(--ease);
+}
+.reader-view.enter-slide-back {
+  animation: page-back 260ms var(--ease);
+}
+.reader-view.enter-fade-forward,
+.reader-view.enter-fade-back {
+  animation: fade-in 220ms var(--ease);
+}
+@keyframes page-forward {
+  from {
+    opacity: 0;
+    transform: translateX(56px);
+  }
+}
+@keyframes page-back {
+  from {
+    opacity: 0;
+    transform: translateX(-56px);
+  }
+}
+
+.reader-bar {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--pill);
+  background: rgba(18, 26, 36, 0.84);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(14px);
+  transition: opacity 220ms var(--ease), transform 220ms var(--ease);
+}
+.reader-bar.top {
+  top: 12px;
+  left: 16px;
+  right: 16px;
+}
+.reader-bar.bottom {
+  bottom: 14px;
+  left: 50%;
+  width: min(760px, calc(100% - 32px));
+  transform: translateX(-50%);
+}
+.reader-bar.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.reader-bar.top.hidden {
+  transform: translateY(-12px);
+}
+.reader-bar.bottom.hidden {
+  transform: translate(-50%, 12px);
+}
+/* A player's or reader's name: one line that scrolls when it doesn't fit, never "…" (D-145). */
+.reader-title {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  max-width: min(640px, 46vw);
+  padding: 0 4px;
+  line-height: 1.25;
+}
+.reader-title .reader-name {
+  font-weight: 900;
+}
+.reader-title .reader-sub {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.reader-zoom {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--pill);
+  background: var(--field);
+  box-shadow: var(--inset-shadow);
+}
+.reader-zoom-value {
+  min-width: 52px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-weight: 800;
+  cursor: pointer;
+}
+.reader-slider {
+  flex: 1;
+}
+input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
+  background: linear-gradient(270deg, var(--accent-bright) var(--fill, 0%), var(--track) var(--fill, 0%));
+}
+.reader-message {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  padding: 40px;
+  text-align: center;
+}
+.reader-message p {
+  max-width: 520px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+/* Ebooks: the page color fills the window; foliate-js lays the text out inside. */
+.ebook-reader {
+  background: var(--book-bg);
+  transition: background 220ms var(--ease);
+}
+.ebook-stage {
+  position: absolute;
+  inset: 0;
+}
+.ebook-stage foliate-view {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.ebook-reader .reader-message {
+  background: var(--book-bg);
+  color: #24211b;
+}
+.ebook-percent {
+  min-width: 40px;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: right;
+  color: var(--muted);
+}
+.reader-panel {
+  color: var(--text);
+}
+.toc-panel {
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(70vh, 640px);
+  overflow: auto;
+}
+.toc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.toc-item {
+  display: block;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+.toc-item:hover {
+  background: var(--raised);
+}
+.toc-item[aria-current] {
+  background: var(--raised);
+  color: var(--accent-bright);
+}
+.toc-item:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+.type-panel {
+  display: grid;
+  gap: 12px;
+  width: min(420px, calc(100vw - 32px));
+  padding: 14px 16px;
+}
+.type-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.type-row > span {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--muted);
+}
+.theme-swatches {
+  display: flex;
+  gap: 6px;
+}
+.theme-swatches button {
+  min-width: 70px;
+  height: 34px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--pill);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.theme-swatches button[aria-pressed="true"] {
+  border-color: var(--accent-bright);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+}
+.reader-page {
+  filter: var(--page-filter, none);
+}
+
+/* Page turns (D-021): the pages under the turning leaf, and the leaf itself. */
+.page-turn {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.page-turn-book {
+  position: relative;
+  perspective: 2600px;
+}
+.page-turn-book > .reader-page {
+  position: absolute;
+}
+.page-leaf {
+  position: absolute;
+  transform-style: preserve-3d;
+}
+.page-leaf.measuring {
+  visibility: hidden;
+}
+.page-leaf.turning-right {
+  animation: leaf-turn-right 620ms cubic-bezier(0.45, 0.05, 0.35, 1) forwards;
+}
+.page-leaf.turning-left {
+  animation: leaf-turn-left 620ms cubic-bezier(0.45, 0.05, 0.35, 1) forwards;
+}
+.page-leaf.reverse {
+  animation-direction: reverse;
+}
+.leaf-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
+}
+.leaf-back {
+  transform: rotateY(180deg);
+}
+.leaf-back.blank {
+  background: linear-gradient(90deg, #ddd8cd, #f3efe6 40%, #ebe6dc);
+}
+@keyframes leaf-turn-right {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(-180deg);
+  }
+}
+@keyframes leaf-turn-left {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(180deg);
+  }
+}
+.page-curl {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.panel-slider {
+  width: 220px;
+}
+.type-panel .theme-swatches button {
+  min-width: 58px;
+  padding: 0 10px;
+}
+.color-swatch {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  background: conic-gradient(#ef5f4f, #f2a516, #3fae49, #1592d0, #8a63d2, #ef5f4f);
+  cursor: pointer;
+}
+.color-swatch[aria-pressed="true"] {
+  border-color: var(--accent-bright);
+}
+.color-swatch input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.bookmarks-panel {
+  display: grid;
+  gap: 10px;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  padding: 12px;
+}
+.bookmark-toggle {
+  justify-content: center;
+}
+.bookmarks-empty {
+  margin: 4px 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.bookmark-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bookmark-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.bookmark-row .input {
+  flex: 1;
+}
+.bookmark-go {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.bookmark-go:hover {
+  background: var(--raised);
+}
+.bookmark-go strong {
+  overflow: hidden;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bookmark-go span {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.toc-page {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.bookmark-row .toc-item {
+  flex: 1;
+}
+.next-volume {
+  position: absolute;
+  z-index: 6;
+  right: 24px;
+  bottom: 84px;
+  max-width: min(420px, calc(100% - 48px));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: pop-in 160ms var(--ease);
+}
+
+/* The video player (Phase 3): mpv draws under the transparent page; the bars float over it. */
+.reader.watch {
+  background: transparent;
+}
+.reader.watch.loading {
+  background: #070b10;
+}
+/* The curtain: the item's artwork while the player opens and closes (fades in from the library,
+   lifts on the first frame, and comes back before leaving). Under the bars. */
+.watch-curtain {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #070b10;
+  transition: opacity 320ms var(--ease);
+  animation: curtain-in 220ms var(--ease) both;
+  pointer-events: none;
+}
+.watch-curtain.gone {
+  opacity: 0;
+}
+@keyframes curtain-in {
+  from {
+    opacity: 0;
+  }
+}
+.watch-curtain-backdrop {
+  position: absolute;
+  inset: -60px;
+  background-position: center;
+  background-size: cover;
+  filter: blur(42px) brightness(0.42) saturate(1.2);
+}
+.watch-curtain-card {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  color: #fff;
+  text-align: center;
+  animation: curtain-card-in 380ms var(--ease) both;
+}
+@keyframes curtain-card-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+.watch-curtain-card strong {
+  max-width: min(70vw, 720px);
+  font-size: 22px;
+  font-weight: 900;
+}
+.watch-curtain-cover {
+  height: min(42vh, 340px);
+  overflow: hidden;
+  border-radius: var(--radius-cover);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
+}
+.watch-surface {
+  position: absolute;
+  inset: 0;
+}
+.watch.calm .watch-surface {
+  cursor: none;
+}
+.watch-bar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: min(980px, calc(100% - 32px));
+  padding: 10px 14px;
+  border-radius: 24px;
+}
+.watch-seek,
+.watch-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.watch-time {
+  min-width: 56px;
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--muted);
+}
+/* The players' position bar (SeekBar): a thin track that thickens under the pointer, with the
+   time under the pointer shown above it. */
+.seek {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  height: 26px;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+.seek-track {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  border-radius: var(--pill);
+  background: var(--track);
+  box-shadow: var(--inset-shadow);
+  transition: height 140ms var(--ease);
+}
+.seek:hover .seek-track,
+.seek:focus-visible .seek-track,
+.seek.dragging .seek-track {
+  height: 9px;
+}
+.seek-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--accent-bright);
+}
+.seek-thumb {
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--gloss);
+  box-shadow: 0 2px 5px rgba(30, 60, 90, 0.3);
+  transform: translateY(-50%) scale(0.8);
+  transition: transform 140ms var(--ease), box-shadow var(--duration) var(--ease);
+  pointer-events: none;
+}
+.seek:hover .seek-thumb,
+.seek:focus-visible .seek-thumb,
+.seek.dragging .seek-thumb {
+  transform: translateY(-50%) scale(1.1);
+  box-shadow: 0 0 0 3px var(--accent-ring), 0 2px 5px rgba(30, 60, 90, 0.3);
+}
+.seek-hover {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 10px;
+  background: rgba(10, 16, 24, 0.92);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.seek-hover span {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.72);
+}
+.watch-busy {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  border-radius: 50%;
+  background: rgba(10, 16, 24, 0.6);
+  color: #fff;
+  pointer-events: none;
+}
+.watch-tick {
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 8px;
+  margin-left: -1px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.75);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.watch-play {
+  width: 44px;
+  height: 44px;
+}
+.watch-volume {
+  width: 110px;
+}
+.watch-menu {
+  display: grid;
+  gap: 2px;
+  min-width: 240px;
+  max-height: min(60vh, 460px);
+  overflow: auto;
+  padding: 10px;
+}
+.watch-menu-title {
+  padding: 4px 12px 6px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.watch-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.watch-check {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  color: var(--accent-bright);
+}
+.watch-load {
+  margin-top: 6px;
+}
+.watch-note {
+  bottom: 150px;
+}
+.watch-next {
+  position: absolute;
+  right: 32px;
+  bottom: 150px;
+  z-index: 6;
+  display: grid;
+  gap: 8px;
+  max-width: 380px;
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  background: rgba(18, 26, 36, 0.92);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+  animation: pop-in 160ms var(--ease);
+}
+.season + .season {
+  margin-top: 14px;
+}
+.tracks.episodes li {
+  grid-template-columns: 32px minmax(0, 1fr) auto auto 36px;
+  align-items: center;
+  padding-block: 4px;
+}
+.episodes li.watched .episode-link {
+  color: var(--muted);
+}
+.episode-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.episode-meter {
+  width: 60px;
+  height: 5px;
+  border-radius: var(--pill);
+  background: linear-gradient(90deg, var(--accent-bright) var(--fill), var(--track) var(--fill));
+}
+.episodes .icon-btn[aria-pressed="true"] {
+  color: var(--accent-text);
+}
+
+/* Music (Phase 3, D-020): the mini-player in the title-bar capsule, "Now playing", and track lists. */
+.mini-player-open {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 270px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mini-player-open:hover {
+  background: var(--accent-soft);
+}
+.mini-cover {
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  overflow: hidden;
+  border-radius: 8px;
+  box-shadow: var(--raise-sm);
+}
+.now-playing {
+  display: grid;
+  gap: 12px;
+}
+.now-meta .icon-btn[aria-pressed="true"],
+.track-row .icon-btn[aria-pressed="true"],
+.now-controls .icon-btn[aria-pressed="true"] {
+  color: var(--accent-text);
+}
+.now-queue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.now-queue-head h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.music-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  width: fit-content;
+  max-width: 100%;
+  margin: 4px 0 18px;
+}
+.music-page {
+  padding: 16px 40px 40px;
+}
+.music-sub {
+  margin: 10px 0;
+  font-size: 22px;
+  font-weight: 900;
+}
+.track-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.track-rows.scroll {
+  height: min(64vh, 720px);
+  overflow: auto;
+}
+.track-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) minmax(0, 140px) 56px 36px 36px;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 8px;
+  border-radius: 12px;
+}
+.track-row:hover {
+  background: var(--field);
+}
+.track-row.playing {
+  background: var(--accent-soft);
+}
+.track-play {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.track-play-icon {
+  position: absolute;
+  opacity: 0;
+}
+.track-row:hover .track-no {
+  opacity: 0;
+}
+.track-row:hover .track-play-icon {
+  opacity: 1;
+  color: var(--accent-text);
+}
+.track-no {
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.track-row.playing .track-no {
+  color: var(--accent-text);
+}
+.track-title {
+  display: grid;
+  min-width: 0;
+}
+.track-title strong,
+.track-title span,
+.track-genre {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.track-title span,
+.track-genre,
+.track-time {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.track-time {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.artist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 14px;
+}
+.artist-card {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 16px 12px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+  box-shadow: var(--raise-sm);
+  cursor: pointer;
+}
+.artist-card:hover {
+  border-color: var(--accent-edge);
+}
+.artist-card span:last-child {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.artist-avatar {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--gel);
+  color: var(--accent-ink);
+  font-size: 26px;
+  font-weight: 900;
+}
+.playlist-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+/* Discs (Phase 4, D-022): drives, what's in them, and the notice when one is inserted. */
+.discs-page {
+  padding: 16px 40px 40px;
+}
+.disc-drive {
+  margin-bottom: 18px;
+}
+.disc-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.disc-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--gel);
+  color: var(--accent-ink);
+  box-shadow: var(--raise-sm);
+}
+.disc-name {
+  flex: 1;
+  min-width: 0;
+}
+.disc-name h2 {
+  margin: 2px 0 6px;
+}
+.disc-chips {
+  display: flex;
+  gap: 6px;
+}
+.disc-body {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+.disc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.tracks.disc-tracks li {
+  grid-template-columns: 22px 28px minmax(0, 1fr) 60px 36px;
+  align-items: center;
+  padding-block: 4px;
+}
+.tracks.disc-tracks li.playing {
+  background: var(--accent-soft);
+}
+.track-name {
+  min-height: 34px;
+}
+.tracks.disc-titles li {
+  grid-template-columns: 28px minmax(0, 1fr) 80px auto;
+  align-items: center;
+}
+.disc-titles li > span:nth-child(2) {
+  display: grid;
+  gap: 2px;
+}
+.disc-titles .chip {
+  justify-self: start;
+}
+.disc-title-actions {
+  display: flex;
+  gap: 6px;
+}
+.disc-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.disc-crumbs span {
+  display: inline-flex;
+  align-items: center;
+}
+.disc-files {
+  display: grid;
+  gap: 2px;
+  max-height: 420px;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.disc-files li {
+  display: grid;
+  grid-template-columns: 22px 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+}
+.disc-files li:nth-child(odd) {
+  background: var(--field);
+}
+.disc-folder {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-text);
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+.disc-job {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--field);
+}
+.disc-job-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.discs-note {
+  max-width: 760px;
+}
+.disc-button {
+  position: relative;
+}
+.disc-button.has-disc::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent-bright);
+  box-shadow: 0 0 0 2px var(--panel);
+}
+.disc-notice {
+  position: fixed;
+  left: 24px;
+  bottom: 24px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--panel);
+  box-shadow: var(--pop-shadow);
+  animation: pop-in 160ms var(--ease);
+}
+.disc-notice div {
+  display: grid;
+}
+.disc-notice span {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* The image-set book builder: pages in reading order, dragged or moved with arrows. */
+.arranger-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.arranger {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 12px;
+  max-height: min(52vh, 520px);
+  overflow: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  user-select: none;
+}
+.arranger.dragging {
+  cursor: grabbing;
+}
+.arranger li {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  background: var(--raised);
+  cursor: grab;
+}
+.arranger li.lifted {
+  opacity: 0.45;
+}
+.arranger li.drop-before {
+  border-left-color: var(--accent-bright);
+}
+.arranger li.drop-after {
+  border-right-color: var(--accent-bright);
+}
+.arranger-thumb {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: 9px;
+  background: var(--field);
+  color: var(--muted);
+}
+.arranger-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.arranger-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+}
+.arranger-number {
+  font-weight: 900;
+}
+.arranger-name {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.arranger-actions {
+  display: flex;
+  justify-content: space-between;
+}
+.arranger-actions .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+
+/* Item page: the volumes of a series and a book's chapters (D-019). */
+.series-strip {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 4px 2px 10px;
+}
+.series-entry {
+  display: grid;
+  flex: 0 0 92px;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 800;
+  text-align: center;
+  text-decoration: none;
+}
+.series-entry span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.series-entry[aria-current="page"] {
+  color: var(--accent-text);
+}
+.series-cover {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  box-shadow: var(--raise-sm);
+}
+.series-entry[aria-current="page"] .series-cover {
+  border-color: var(--accent-bright);
+}
+.series-progress {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  left: 6px;
+  height: 5px;
+  border-radius: var(--pill);
+  background: linear-gradient(90deg, var(--accent-bright) var(--fill), rgba(0, 0, 0, 0.45) var(--fill));
+}
+.chapter-link {
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: none;
+}
+.chapter-link:hover {
+  color: var(--accent-text);
+}
+.ebook-link {
+  position: absolute;
+  z-index: 6;
+  bottom: 84px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(640px, calc(100% - 32px));
+  padding: 10px 10px 10px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  background: rgba(18, 26, 36, 0.92);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+  transform: translateX(-50%);
+  animation: pop-in 140ms var(--ease);
+}
+.ebook-link div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ebook-link span {
+  overflow: hidden;
+  font-size: 12.5px;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1500px) {
+  .reader-bar .label {
+    display: none;
+  }
+}
+.reader-bar .reader-title {
+  flex: 0 1 auto;
+  min-width: 150px;
+}
+:root[data-motion="reduced"] .reader-view,
+:root[data-motion="off"] .reader-view {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .reader-view {
+    animation: none;
+  }
+}
+
+/* Spinning icons (loading). */
+.spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------------------------------------------------------------- reduced motion */
+
+:root[data-motion="reduced"] .tile:hover,
+:root[data-motion="reduced"] .tile:focus-visible,
+:root[data-motion="reduced"] .card:hover .card-art,
+:root[data-motion="reduced"] .shelf-item:hover {
+  transform: none;
+}
+:root[data-motion="reduced"] .tile:hover .tile-cover,
+:root[data-motion="reduced"] .tile-cover,
+:root[data-perf="light"] .tile-cover {
+  transform: translateY(var(--drop, 0%)) rotate(var(--tilt, 0deg));
+  animation: none;
+}
+:root[data-motion="reduced"] .music-play.on {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .tile:hover,
+  :root:not([data-motion="full"]) .tile:focus-visible,
+  :root:not([data-motion="full"]) .card:hover .card-art,
+  :root:not([data-motion="full"]) .shelf-item:hover {
+    transform: none;
+  }
+  :root:not([data-motion="full"]) .tile:hover .tile-cover,
+  :root:not([data-motion="full"]) .tile-cover {
+    transform: translateY(var(--drop, 0%)) rotate(var(--tilt, 0deg));
+    animation: none;
+  }
+  :root:not([data-motion="full"]) .music-play.on {
+    animation: none;
+  }
+}

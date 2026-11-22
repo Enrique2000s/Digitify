@@ -6,7 +6,23 @@ Digitify is an offline-first desktop app for **Windows and Linux** with two purp
 
 - **Library**, a home for all your media: your books, comics and manga, music, videos, movies and series in one library that lives on your own computer, with built-in readers and players.
 - **Arcade**, a universal launcher for your games: the games of your PC stores (Steam, Epic Games, Xbox, GOG, Ubisoft Connect, the EA app, Battle.net, Amazon Games, itch.io, Heroic, Lutris, and Minecraft), of your emulators, and any program you add, each started the way it always starts.
- No accounts, no cloud, no telemetry: it goes online only when you import from a link (D-008, D-028). See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for the original brief.
+
+No accounts, no cloud, no telemetry: it goes online only when you ask it to, such as importing from a link or looking for covers (D-008, D-028). See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for the original brief.
+
+## Download
+
+**[⬇ Get the latest version](https://github.com/Enrique2000s/Digitify/releases/latest)** · free, no account, no ads.
+
+| Your computer | Download | Then |
+|---|---|---|
+| **Windows 10 / 11** (64-bit) | [**Digitify-Setup-Windows-x64.exe**](https://github.com/Enrique2000s/Digitify/releases/latest/download/Digitify-Setup-Windows-x64.exe) | Open it and follow the steps. |
+| **Ubuntu, Debian, Linux Mint, Pop!_OS** | [**Digitify-Linux-amd64.deb**](https://github.com/Enrique2000s/Digitify/releases/latest/download/Digitify-Linux-amd64.deb) | `sudo apt install ./Digitify-Linux-amd64.deb` |
+| **Arch, Manjaro, EndeavourOS, CachyOS** | [the .deb](https://github.com/Enrique2000s/Digitify/releases/latest/download/Digitify-Linux-amd64.deb) and [**Digitify-Arch-install.sh**](https://github.com/Enrique2000s/Digitify/releases/latest/download/Digitify-Arch-install.sh) | `bash Digitify-Arch-install.sh` (in the folder with both) |
+| **Any other Linux** | [**Digitify-Linux-x86_64.AppImage**](https://github.com/Enrique2000s/Digitify/releases/latest/download/Digitify-Linux-x86_64.AppImage) | Install `mpv` and `ffmpeg`, then `chmod +x` it and run it. |
+
+Each release also has `SHA256SUMS.txt` to check the files. Older versions: [all releases](https://github.com/Enrique2000s/Digitify/releases).
+
+> **Windows says "Windows protected your PC"?** The installer isn't signed with a paid certificate yet. Click **More info**, then **Run anyway**.
 
 ## What it does
 - **One library** for Pictures, Books, Comics, Manga, Music, Videos and Movies & Series, in fixed categories you can reorder or hide. Each file is its own item (a series keeps its episodes together).
@@ -45,27 +61,25 @@ Progress, test results and known limits are in [docs/STATUS.md](docs/STATUS.md);
 
 ## Installing
 
-### Windows 11 (x64)
-Run `Digitify_0.6.0_x64-setup.exe`. It installs for the current user in `%LOCALAPPDATA%\Digitify` without admin rights, and adds Start menu and desktop shortcuts. Uninstall it from Settings › Apps; that removes the program, never your library folder, settings or logs.
+### Windows 10 / 11 (64-bit)
+Run `Digitify-Setup-Windows-x64.exe`. It installs for you alone in `%LOCALAPPDATA%\Digitify` without admin rights, and adds Start menu and desktop shortcuts. Uninstall it from Settings › Apps; that removes the program, never your library folder, settings or logs.
 
-### Linux (x64)
-Built by GitHub Actions:
-- **`.deb`** (Ubuntu, Debian, Linux Mint, Pop!_OS…): `sudo apt install ./Digitify_0.6.0_amd64.deb`. It brings in `mpv`, `ffmpeg`, `udisks2` and GStreamer (the web view's sound, and the decoders YouTube's player needs) from the distribution. Digitify then appears in the applications menu. Uninstall with `sudo apt remove digitify`.
-- **Arch Linux and Arch-based** (Manjaro, EndeavourOS, CachyOS…): put `install-arch.sh` next to the `.deb` and run `bash install-arch.sh` as your normal user. It installs only the missing packages Digitify needs, YouTube's video decoders included (never `pacman -Syu`), turns the `.deb` into a pacman package and installs it. Uninstall with `sudo pacman -R digitify`. If pacman reports missing files (404), your package lists are out of date: update your system as you normally do, then run it again.
-- **AppImage** (any distribution; it carries its own GStreamer for the app's sounds, without an H.264 decoder, so YouTube videos don't play in it: on Ubuntu-like and Arch-based systems use the `.deb` or `install-arch.sh` for that): install `mpv` and `ffmpeg` with your package manager first, then `chmod +x Digitify_0.6.0_amd64.AppImage` and run it. Nothing is installed; delete the file to remove it.
+### Linux (64-bit)
+- **`.deb`** (Ubuntu, Debian, Linux Mint, Pop!_OS…): `sudo apt install ./Digitify-Linux-amd64.deb`. It brings in `mpv`, `ffmpeg`, `udisks2` and GStreamer (the web view's sound, and the decoders YouTube's player needs) from the distribution. Digitify then appears in the applications menu. Uninstall with `sudo apt remove digitify`.
+- **Arch Linux and Arch-based** (Manjaro, EndeavourOS, CachyOS…): put `Digitify-Arch-install.sh` next to the `.deb` and run `bash Digitify-Arch-install.sh` as your normal user. It installs only the missing packages Digitify needs, YouTube's video decoders included (never `pacman -Syu`), turns the `.deb` into a pacman package and installs it. Uninstall with `sudo pacman -R digitify`. If pacman reports missing files (404), your package lists are out of date: update your system as you normally do, then run it again.
+- **AppImage** (any distribution; it carries its own GStreamer for the app's sounds, without an H.264 decoder, so YouTube videos don't play in it: on Ubuntu-like and Arch-based systems use the `.deb` or the Arch script for that): install `mpv` and `ffmpeg` with your package manager first, then `chmod +x Digitify-Linux-x86_64.AppImage` and run it. Nothing is installed; delete the file to remove it.
 
 On Wayland desktops Digitify runs through XWayland (needed to show video inside its window). Disc drives appear as `sr0`, `sr1`…; your user needs read access to them (usually the `cdrom` or `optical` group).
 
-### Giving Digitify to someone
-Send the file itself (a USB stick, Google Drive, WeTransfer, a chat app): the Windows installer, or for Linux the `.deb` (simplest on Ubuntu-like systems; on Arch, together with `install-arch.sh`) or the AppImage (any distribution). The GitHub repository is private, so they can't download it from there themselves.
+## Publishing a new version
+Raise the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`, add its entry to `src/lib/releaseNotes.ts`, commit, then tag it and push the tag:
 
-## Getting the installers
-| Platform | How | Where it ends up |
-|---|---|---|
-| Windows | `npm run installer` on this PC | `installer\Digitify_0.6.0_x64-setup.exe` |
-| Linux | GitHub builds and tests every push to `main`, and keeps the packages for a week when you run Actions › **Build installers** › **Run workflow** (or push a version tag such as `v0.6.0`); then `npm run installer:linux` downloads them (needs the [GitHub CLI](https://cli.github.com), signed in with `gh auth login`) | `installer\linux\*.deb`, `*.AppImage` and `install-arch.sh` |
+```
+git tag v0.9.3
+git push origin v0.9.3
+```
 
-Without the GitHub CLI: open the repository's **Actions** tab, the latest **Build installers** run started by hand, and download **digitify-linux** (and **digitify-windows**) under **Artifacts**. The `installer` folder isn't committed.
+GitHub Actions builds the Windows installer and the Linux packages, runs the tests, and publishes a release with the four files under the names above (the README's links always give the newest). It refuses a tag that isn't the version in `package.json`. To build the installers on your own computer instead: `npm run installer` (Windows, into `installer\`); for Linux, Actions › **Build installers** › **Run workflow** keeps them for a week, and `npm run installer:linux` downloads them (needs the [GitHub CLI](https://cli.github.com)).
 
 ## Building from source
 
@@ -85,7 +99,8 @@ npm run installer                                                  # optimized b
 ### Linux x64 (Ubuntu 22.04 or newer)
 ```bash
 sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
-  libxdo-dev libssl-dev libdbus-1-dev libx11-dev pkg-config patchelf file mpv ffmpeg \n  gstreamer1.0-plugins-base gstreamer1.0-plugins-good
+  libxdo-dev libssl-dev libdbus-1-dev libx11-dev pkg-config patchelf file mpv ffmpeg \
+  gstreamer1.0-plugins-base gstreamer1.0-plugins-good
 npm install
 bash scripts/fetch-deps.sh     # pinned PDFium, hash- and DRM-checked
 npm run tauri dev              # development build
@@ -112,18 +127,19 @@ Set `DIGITIFY_CONFIG_DIR` to use another config folder, for example for a throwa
 ```powershell
 cd src-tauri; cargo test --release
 ```
-GitHub Actions runs them on Windows with every build.
+GitHub Actions runs them on Windows and Linux with every build.
 
 ## Project layout
 ```
 src/                  React + TypeScript UI
+src/styles/           Its styles, in parts loaded in order by app.css and views.css
 src-tauri/src/        Rust core (database, import, readers, players, discs, online import…)
 src-tauri/migrations/ SQLite schema migrations
 scripts/              Dependency fetching, sample generation, installer helpers
 .github/workflows/    Installer builds for Windows and Linux
 docs/                 Requirements, decisions, roadmap, architecture, status
+LICENSE               MIT
 ```
 
-## Licensing
-Digitify's own license isn't decided yet (D-003). The helper engines run as separate programs: mpv (GPLv2+) and FFmpeg (LGPL build); PDFium (BSD) is loaded as a library. Their notices ship with the app ([THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). No copyrighted media is included; test media is generated by `scripts\make-samples.ps1`.
-
+## License
+Digitify is free and open source under the [MIT License](LICENSE). The helper engines it comes with run as separate programs or libraries under their own licenses: mpv (GPLv2+), FFmpeg (LGPL build), PDFium (BSD), yt-dlp (Unlicense) and UnRAR (its own license); their notices ship with the app ([THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). No copyrighted media is included; test media is generated by `scripts\make-samples.ps1`.

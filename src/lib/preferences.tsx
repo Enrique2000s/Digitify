@@ -6,7 +6,6 @@ import { sanitizeShortcuts, setCustomShortcuts, type ShortcutMap } from "./short
 export type ThemeChoice = "dark" | "light" | "system";
 export type MotionChoice = "system" | "full" | "reduced" | "off";
 export type Layout = "grid" | "list" | "shelf" | "detailed" | "carousel";
-export const LAYOUTS: Layout[] = ["grid", "shelf", "list", "detailed", "carousel"];
 /** The overall style (D-016, D-023): Breeze, or Cinematic as an option. */
 /** The styles (D-016, D-015, D-149): Breeze, Cinematic, Frutiger Aero and Minimal. */
 export type Look = "breeze" | "cinematic" | "aero" | "minimal";
@@ -205,9 +204,9 @@ export interface Preferences {
   arcade: ArcadePreferences;
 }
 
-/** Arcade's views (D-038): everything, PC or ROM games, one store, one console, favorites. */
-/** "others": PC games added by hand (D-115), from no store. */
-export type ArcadeFilter = "all" | "all-pc" | "all-roms" | ArcadeStore | "others" | ArcadeConsole | "favorites";
+/** Arcade's views (D-038): everything, PC or ROM games, one store, one console (Favorites is a
+ *  collection since D-149). "others": PC games added by hand (D-115), from no store. */
+export type ArcadeFilter = "all" | "all-pc" | "all-roms" | ArcadeStore | "others" | ArcadeConsole;
 
 /** Their default order: All games first (D-169), then PC games and ROM games, the stores, the consoles. */
 // Favorites is a collection now (D-149), not a view.

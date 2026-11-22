@@ -1,4 +1,4 @@
-import { createHashHistory, createRootRoute, createRoute, createRouter, useNavigate } from "@tanstack/react-router";
+import { createHashHistory, createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { HomePage } from "../features/home/HomePage";
 import { ScreenError } from "./ScreenError";
 import { ItemPage } from "../features/item/ItemPage";
@@ -16,10 +16,6 @@ import { DiscPlayPage, WatchPage } from "../features/player/VideoPlayer";
 import { DiscsPage } from "../features/discs/DiscsPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { BigPicturePage, type BigPictureSearch } from "../features/bigpicture/BigPicture";
-import { VideoPoc } from "../poc/VideoPoc";
-import { api } from "../lib/api";
-import { useAmbientHold } from "../lib/ambient/AmbientProvider";
-import { useQuery } from "@tanstack/react-query";
 import { Root } from "./Root";
 
 const rootRoute = createRootRoute({ component: Root });
@@ -28,14 +24,6 @@ function Home() {
   return <HomePage />;
 }
 
-function Lab() {
-  const navigate = useNavigate();
-  useAmbientHold("video");
-  const mode = useQuery({ queryKey: ["dev-mode"], queryFn: api.devMode, staleTime: Infinity });
-  if (mode.isPending) return null;
-  const path = mode.data?.startsWith("video:") ? mode.data.slice("video:".length) : null;
-  return <VideoPoc initialPath={path} onExit={() => void navigate({ to: "/settings" })} />;
-}
 
 const routeTree = rootRoute.addChildren([
   createRoute({ getParentRoute: () => rootRoute, path: "/", component: Home }),
@@ -113,7 +101,6 @@ const routeTree = rootRoute.addChildren([
   createRoute({ getParentRoute: () => rootRoute, path: "/achievements", component: AchievementsPage }),
   // Your profile (D-149).
   createRoute({ getParentRoute: () => rootRoute, path: "/profile", component: ProfilePage }),
-  createRoute({ getParentRoute: () => rootRoute, path: "/lab", component: Lab }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/bp",
