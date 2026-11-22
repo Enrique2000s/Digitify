@@ -49,7 +49,10 @@ export function ArcadeSession() {
       const running = event.payload.running != null;
       setInGame(running);
       // Time played counts in Home's statistics (D-041).
-      if (!running) void queryClient.invalidateQueries({ queryKey: ["stats"] });
+      if (!running) {
+        void queryClient.invalidateQueries({ queryKey: ["stats"] });
+        void queryClient.invalidateQueries({ queryKey: ["week-review"] });
+      }
       const player = latest.current;
       if (running) {
         resumeMusic.current = player.active && !player.paused;

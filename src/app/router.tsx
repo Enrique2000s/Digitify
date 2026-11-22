@@ -66,14 +66,14 @@ const routeTree = rootRoute.addChildren([
     getParentRoute: () => rootRoute,
     path: "/arcade",
     // ?game=<id> opens that game's panel (from Home, D-041); ?board=collections shows the
-    // collections and ?collection=<id> one of them (Favorites is 0, D-149).
+    // collections and ?collection=<id> one of them (Favorites is 0, D-149; Completed is -1, D-169).
     validateSearch: (search: Record<string, unknown>): { game?: number; board?: "collections"; collection?: number } => {
       const game = Number(search.game);
       const collection = Number(search.collection);
       return {
         ...(Number.isInteger(game) && game > 0 ? { game } : {}),
         ...(search.board === "collections" ? { board: "collections" as const } : {}),
-        ...(search.collection != null && search.collection !== "" && Number.isInteger(collection) && collection >= 0 ? { collection } : {}),
+        ...(search.collection != null && search.collection !== "" && Number.isInteger(collection) && collection >= -1 ? { collection } : {}),
       };
     },
     component: ArcadePage,

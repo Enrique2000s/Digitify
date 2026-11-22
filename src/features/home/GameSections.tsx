@@ -46,7 +46,11 @@ export function GameCard({ game, running, onPlay }: { game: ArcadeGame; running:
             <BadgeCheck size={15} strokeWidth={2.4} aria-label="Completed" />
           </span>
         )}
-        {game.isFavorite && <Heart className="arcade-fav" size={16} fill="currentColor" aria-label="Favorite" />}
+        {game.isFavorite && (
+          <span className="arcade-fav" title="Favorite">
+            <Heart size={13} fill="currentColor" strokeWidth={2.4} aria-label="Favorite" />
+          </span>
+        )}
       </Link>
       <button type="button" className="arcade-play" aria-label={`Play ${game.title}`} title="Play" onClick={onPlay}>
         <Play size={18} fill="currentColor" />

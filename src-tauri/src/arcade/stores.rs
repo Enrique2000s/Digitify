@@ -1279,3 +1279,104 @@ mod tests {
         assert_eq!(heroic_gog(gog, library)[0].title, "Unreal Gold");
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// Steam's own play time (D-167): read from the signed-in account's `localconfig.vdf`, never changed
+
+/// Minutes Steam has recorded per app id, from the account that used Steam last on this computer
+/// (the most recently written `userdata/<account>/config/localconfig.vdf`).
+pub fn steam_playtimes() -> HashMap<String, i64> {
+    let newest = steam_roots()
+        .iter()
+        .filter_map(|root| std::fs::read_dir(root.join("userdata")).ok())
+        .flatten()
+        .filter_map(Result::ok)
+        .map(|account| account.path().join("config").join("localconfig.vdf"))
+        .filter_map(|file| std::fs::metadata(&file).and_then(|m| m.modified()).ok().map(|t| (t, file)))
+        .max_by_key(|(t, _)| *t);
+    newest.and_then(|(_, file)| std::fs::read_to_string(file).ok()).map(|text| parse_playtimes(&text)).unwrap_or_default()
+}
+
+/// The `Playtime` (minutes) of each app under `…/Software/Valve/Steam/apps/<id>` in a VDF text.
+pub(crate) fn parse_playtimes(text: &str) -> HashMap<String, i64> {
+    let mut out = HashMap::new();
+    let mut path: Vec<String> = Vec::new();
+    let mut pending: Option<String> = None;
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => {
+                let mut token = String::new();
+                while let Some(c) = chars.next() {
+                    match c {
+                        '\\' => {
+                            if let Some(next) = chars.next() {
+                                token.push(next);
+                            }
+                        }
+                        '"' => break,
+                        _ => token.push(c),
+                    }
+                }
+                match pending.take() {
+                    None => pending = Some(token),
+                    Some(key) => {
+                        // A key and its value: an app's play time when it sits right under "apps".
+                        let n = path.len();
+                        if key.eq_ignore_ascii_case("Playtime") && n >= 2 && path[n - 2].eq_ignore_ascii_case("apps") && n >= 3 && path[n - 3].eq_ignore_ascii_case("steam") {
+                            if let Ok(minutes) = token.trim().parse::<i64>() {
+                                out.insert(path[n - 1].clone(), minutes);
+                            }
+                        }
+                    }
+                }
+            }
+            '{' => path.push(pending.take().unwrap_or_default()),
+            '}' => {
+                path.pop();
+                pending = None;
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod playtime_tests {
+    #[test]
+    fn steam_play_time_is_read_from_the_apps_block() {
+        let text = r#""UserLocalConfigStore"
+{
+	"Software"
+	{
+		"Valve"
+		{
+			"Steam"
+			{
+				"apps"
+				{
+					"413150"
+					{
+						"LastPlayed"		"1700000000"
+						"Playtime"		"5432"
+						"Playtime2wks"		"60"
+					}
+					"945360"
+					{
+						"Playtime"		"17"
+						"cloud" { "quota" "1" }
+					}
+				}
+				"other" { "Playtime" "99" }
+			}
+		}
+	}
+	"friends" { "apps" { "1" { "Playtime" "3" } } }
+}"#;
+        let times = super::parse_playtimes(text);
+        assert_eq!(times.len(), 2);
+        assert_eq!(times["413150"], 5432);
+        assert_eq!(times["945360"], 17);
+    }
+}

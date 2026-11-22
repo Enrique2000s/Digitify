@@ -17,6 +17,14 @@ body,
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
+/* The window itself never scrolls (D-165): "clip" rather than "hidden", so nothing (bringing a
+   game's box into sight, Aero's bubbles reaching past the edges) can push the whole app up. */
+html,
+body,
+#root,
+.app {
+  overflow: clip;
+}
 
 /* Video playback (Phase 0 lab): the page turns transparent so mpv's picture shows through. */
 html.video-mode,
@@ -4699,12 +4707,20 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
 .arcade-badge[data-platform="n64"] {
   background: rgba(229, 72, 77, 0.9);
 }
+/* Favorite and completed (D-166): two round badges of one size, side by side at the bottom right,
+   clear of the console's or launcher's badge at the top (D-169). */
 .arcade-fav {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  color: #ff5a7a;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+  bottom: 7px;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #e5476d;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
 }
 .arcade-play {
   position: absolute;
@@ -4981,6 +4997,145 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
   overflow-wrap: anywhere;
   font-weight: 700;
 }
+/* A game's own keywords (D-160): little chips, and a field to add one. */
+.keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.keyword {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 26px;
+  padding: 0 4px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-size: 12.5px;
+  font-weight: 800;
+}
+.keyword button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.keyword button:hover {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  color: var(--text);
+}
+.keyword-input {
+  flex: 1 1 110px;
+  min-width: 110px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--pill);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.keyword-input:focus {
+  border-style: solid;
+  border-color: var(--accent);
+  outline: none;
+}
+/* Steam's hours (D-167): each game, Digitify's time → Steam's. */
+.steam-hours {
+  display: grid;
+  gap: 6px;
+  max-height: 340px;
+  margin: 10px 0 0;
+  padding: 0 4px 0 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.steam-hours li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: baseline;
+}
+.steam-hours li > span:first-child {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Surprise me's pick (D-163): its box glows for a moment. */
+.arcade-tile.surprised .arcade-tile-art {
+  animation: surprised 1.6s var(--ease) 1;
+}
+@keyframes surprised {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  20%,
+  60% {
+    box-shadow: 0 0 0 4px var(--accent-bright), 0 0 32px var(--accent);
+  }
+}
+:root[data-motion="off"] .arcade-tile.surprised .arcade-tile-art {
+  animation: none;
+  outline: 4px solid var(--accent-bright);
+}
+
+/* Keywords for several games at once (D-162). */
+.bulk-keywords {
+  width: min(340px, calc(100vw - 32px));
+  padding: 12px;
+}
+.bulk-keywords-add {
+  display: flex;
+  gap: 8px;
+}
+.bulk-keywords-add .input {
+  flex: 1;
+  min-width: 0;
+}
+.bulk-keywords-title {
+  margin: 12px 2px 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.bulk-keywords-list {
+  display: grid;
+  gap: 4px;
+  max-height: 240px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.bulk-keywords-list li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.bulk-keywords-list .keyword {
+  padding-right: 10px;
+}
+.bulk-keywords-list .muted {
+  flex: 1;
+  font-size: 12px;
+}
+.bulk-keywords-none {
+  margin: 10px 2px 0;
+  font-size: 12.5px;
+}
 .arcade-panel-actions {
   display: flex;
   flex-wrap: wrap;
@@ -5224,8 +5379,9 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
 .arcade-views {
   position: relative;
   display: flex;
-  /* It takes the room the tools don't need, up to its own width. */
-  flex: 1000 1 360px;
+  /* Its full width first (D-158): when that and the tools don't fit on one line, the tools go under
+     it, so its arrows only show when even a line of its own isn't enough. */
+  flex: 0 1 auto;
   min-width: 0;
   max-width: max-content;
 }
@@ -5250,9 +5406,10 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
 .arcade-views.more-left.more-right > .segmented {
   mask-image: linear-gradient(90deg, transparent 0, #000 56px, #000 calc(100% - 56px), transparent 100%);
 }
-/* Find, Size, Select and Sort keep the room they need on the views' line, or go under it. */
+/* Find, Size, Select and Sort: beside the views when both fit whole, else on the line under them
+   (D-158); they take what's left of their line (Sort at its end). */
 .arcade-views + .view-tools {
-  flex: 1 1 800px;
+  flex: 1 0 auto;
 }
 /* The arrows stay where they are: placed without a transform (a pressed round button moves by
    one), always there and only hidden when there's nothing more that way, so a click is never lost. */
@@ -5262,7 +5419,8 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
   z-index: 1;
   width: 30px;
   height: 30px;
-  transition: opacity 140ms var(--ease);
+  /* It shows a moment late and hides at once (D-161): a frame measured wrong never shows. */
+  transition: opacity 140ms var(--ease) 90ms;
 }
 .arcade-views-arrow:active {
   transform: scale(0.94);
@@ -5270,6 +5428,7 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
 .arcade-views-arrow.hidden {
   opacity: 0;
   pointer-events: none;
+  transition-delay: 0s;
 }
 .arcade-views-arrow.left {
   left: 2px;
@@ -5378,10 +5537,9 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
   flex: none;
 }
 .arcade-emulator-consoles {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  flex: 1 1 auto;
   min-width: 0;
+  font-size: 12px;
 }
 .arcade-chevron {
   transition: transform 160ms var(--ease);

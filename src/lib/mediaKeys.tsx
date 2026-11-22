@@ -7,6 +7,8 @@ import { useMusic } from "./music/MusicProvider";
 export interface VideoMediaHandler {
   title: string;
   subtitle?: string | null;
+  /** Its cover, for the system's "now playing" card (D-168). */
+  coverKey?: string | null;
   paused: boolean;
   toggle: () => void;
   play: () => void;
@@ -25,7 +27,16 @@ export function setVideoMedia(handler: VideoMediaHandler | null) {
   changed.forEach((f) => f());
 }
 
-type NowPlaying = { title: string | null; artist: string | null; album: string | null; state: "playing" | "paused" | "stopped" };
+type NowPlaying = {
+  title: string | null;
+  artist: string | null;
+  album: string | null;
+  coverKey: string | null;
+  /** Which default cover shows when there's none (D-169). */
+  kind: "music" | "video" | null;
+  duration: number | null;
+  state: "playing" | "paused" | "stopped";
+};
 const report = (now: NowPlaying) => void invoke("media_now_playing", { now }).catch(() => {});
 
 /**
@@ -42,10 +53,18 @@ export function MediaKeys() {
     const send = () => {
       const m = latest.current;
       const now: NowPlaying = video
-        ? { title: video.title, artist: video.subtitle ?? null, album: null, state: video.paused ? "paused" : "playing" }
+        ? { title: video.title, artist: video.subtitle ?? null, album: null, coverKey: video.coverKey ?? null, kind: "video", duration: null, state: video.paused ? "paused" : "playing" }
         : m.active && m.current
-          ? { title: m.current.title, artist: m.current.artist ?? null, album: m.current.album ?? null, state: m.paused ? "paused" : "playing" }
-          : { title: null, artist: null, album: null, state: "stopped" };
+          ? {
+              title: m.current.title,
+              artist: m.current.artist ?? null,
+              album: m.current.album ?? null,
+              coverKey: m.current.coverKey ?? null,
+              kind: "music",
+              duration: m.current.durationMs ? m.current.durationMs / 1000 : null,
+              state: m.paused ? "paused" : "playing",
+            }
+          : { title: null, artist: null, album: null, coverKey: null, kind: null, duration: null, state: "stopped" };
       const key = JSON.stringify(now);
       if (key === last.current) return;
       last.current = key;

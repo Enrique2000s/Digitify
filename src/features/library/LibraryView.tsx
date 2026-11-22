@@ -5,7 +5,7 @@ import { flushSync } from "react-dom";
 import { motionAllowed } from "../reader/chrome";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Popover } from "radix-ui";
-import { Check, ChevronLeft, Cloud, HardDrive, Layers, ChevronRight, GalleryHorizontalEnd, GripVertical, Heart, LayoutGrid, LayoutList, LibraryBig, List, ListChecks, Paintbrush, Play, Plus, Search, Shuffle } from "lucide-react";
+import { Check, ChevronLeft, Cloud, Dices, HardDrive, Layers, ChevronRight, GalleryHorizontalEnd, GripVertical, Heart, LayoutGrid, LayoutList, LibraryBig, List, ListChecks, Paintbrush, Play, Plus, Search, Shuffle } from "lucide-react";
 import { api, type Blurb, type ItemCard, type Ownership, type QueryParams, type SortKey } from "../../lib/api";
 import { itemPath, photoContext } from "../../lib/routes";
 import { GridDragProvider, moved } from "../../lib/gridDrag";
@@ -858,6 +858,35 @@ const OWNERSHIP: { value: Filter; label: string; icon: typeof Layers }[] = [
   { value: "online", label: "Online", icon: Cloud },
 ];
 
+/**
+ * Surprise me (D-163): something from what this view shows, at random, opened on its page; what you
+ * haven't finished (not started or under way) first, and not the one it just picked.
+ */
+function SurpriseButton({ base }: { base: Omit<QueryParams, "offset" | "limit"> }) {
+  const navigate = useNavigate();
+  const last = useRef<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const surprise = async () => {
+    setBusy(true);
+    try {
+      const unfinished = (await Promise.all([api.queryIds({ ...base, progress: "unstarted" }), api.queryIds({ ...base, progress: "inProgress" })])).flat();
+      let pool = unfinished.length > 0 ? unfinished : await api.queryIds(base);
+      if (pool.length > 1) pool = pool.filter((id) => id !== last.current);
+      if (pool.length === 0) return;
+      const id = pool[Math.floor(Math.random() * pool.length)];
+      last.current = id;
+      void navigate({ to: "/item/$id", params: { id: String(id) } });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button type="button" className="btn btn-sm surprise-btn" disabled={busy} title="Surprise me: something from here you haven't finished, at random" onClick={() => void surprise()}>
+      <Dices size={15} /> Surprise me
+    </button>
+  );
+}
+
 /** The "Select" toggle; Ctrl+A selects everything and Esc stops selecting. */
 function SelectToggle({ base, collections, itemsShown }: { base: Omit<QueryParams, "offset" | "limit">; collections: number[]; itemsShown: boolean }) {
   const selection = useSelection();
@@ -1088,6 +1117,7 @@ export function LibraryView({
                   <CardSizeSlider value={preferences.cardSize} onChange={(cardSize) => update({ cardSize })} />
                 </label>
               )}
+              {total != null && total > 0 && !onlyCollections && <SurpriseButton base={params} />}
               {total != null && total > 0 && <SelectToggle base={params} collections={leadCards.map((c) => c.id)} itemsShown={!onlyCollections} />}
               <label className="arcade-sort">
                 <span>Sort</span>

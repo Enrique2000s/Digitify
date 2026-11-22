@@ -132,6 +132,8 @@ pub async fn start_with(
             format!("--log-file={}", log_file.display()),
         ])
         .args(options)
+        // The system's media card is Digitify's own (D-058, D-168); only the bundled mpv (Windows) knows this.
+        .args(if cfg!(windows) { &["--media-controls=no"][..] } else { &[][..] })
         .spawn();
     let mut child = match spawned {
         Ok(child) => child,

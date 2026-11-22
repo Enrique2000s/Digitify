@@ -209,9 +209,9 @@ export interface Preferences {
 /** "others": PC games added by hand (D-115), from no store. */
 export type ArcadeFilter = "all" | "all-pc" | "all-roms" | ArcadeStore | "others" | ArcadeConsole | "favorites";
 
-/** Their default order; "all" stands in for "all-pc" and "all-roms" when they're combined. */
+/** Their default order: All games first (D-169), then PC games and ROM games, the stores, the consoles. */
 // Favorites is a collection now (D-149), not a view.
-export const ARCADE_FILTER_ORDER: ArcadeFilter[] = ["all-pc", "all-roms", "steam", "epic", "xbox", "minecraft", "gog", "ubisoft", "ea", "battlenet", "rockstar", "riot", "amazon", "itch", "heroic", "lutris", "others", ...ARCADE_CONSOLES];
+export const ARCADE_FILTER_ORDER: ArcadeFilter[] = ["all", "all-pc", "all-roms", "steam", "epic", "xbox", "minecraft", "gog", "ubisoft", "ea", "battlenet", "rockstar", "riot", "amazon", "itch", "heroic", "lutris", "others", ...ARCADE_CONSOLES];
 
 export interface ArcadePreferences {
   downloadCovers: boolean;
@@ -223,8 +223,8 @@ export interface ArcadePreferences {
   /** The views' order and the hidden ones (Settings › Arcade). */
   filterOrder: ArcadeFilter[];
   hiddenFilters: ArcadeFilter[];
-  /** "All PC games" and "All ROM games" as one "All games" view. */
-  combineAll: boolean;
+  /** Which of Arcade's changed defaults this copy has taken on (D-169: the All games view; D-170: Title the default sort again). */
+  defaults: number;
   /** What Digitify does while a game runs (D-041): stays open with its music silenced (the default;
    *  the music can be switched back on), hides and comes back when the game ends, or quits. */
   whilePlaying: "stay" | "hide" | "quit";
@@ -334,10 +334,10 @@ export const DEFAULT_PREFERENCES: Preferences = {
     downloadCovers: true,
     badge: "full",
     playsIn: {},
-    platform: "all-pc",
+    platform: "all",
     filterOrder: [...ARCADE_FILTER_ORDER],
     hiddenFilters: [],
-    combineAll: false,
+    defaults: 170,
     whilePlaying: "stay",
     sort: "title",
   },
@@ -509,19 +509,33 @@ function sanitizeArcade(raw: unknown): ArcadePreferences {
   const value = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   // Views saved before D-038: "pc" is now All PC games.
   const saved = value.platform === "pc" ? "all-pc" : value.platform;
-  let order = Array.isArray(value.filterOrder) ? [...new Set(value.filterOrder.filter((f): f is ArcadeFilter => isArcadeFilter(f) && f !== "all"))] : [];
-  // Views added later join at their default place.
+  let order = Array.isArray(value.filterOrder) ? [...new Set(value.filterOrder.filter((f): f is ArcadeFilter => isArcadeFilter(f)))] : [];
+  // Views added later join at their default place (All games, D-169, first).
   for (const [index, filter] of ARCADE_FILTER_ORDER.entries()) if (!order.includes(filter)) order.splice(Math.min(index, order.length), 0, filter);
   order = order.filter((f) => ARCADE_FILTER_ORDER.includes(f));
+  let hiddenFilters: ArcadeFilter[] = Array.isArray(value.hiddenFilters) ? [...new Set(value.hiddenFilters.filter(isArcadeFilter))] : [];
+  let platform: ArcadeFilter = isArcadeFilter(saved) ? saved : DEFAULT_PREFERENCES.arcade.platform;
+  let sort = pick("sort", (v) => ["title", "played", "most", "added", "rating", "console", "custom"].includes(v as string));
+  // Saved before D-169: "All games" is a view of its own now, shown first and chosen; what was still
+  // the old default (All PC games) moves on once. One "All games" in place of PC games and ROM games
+  // (the old "combine" switch) is those two hidden.
+  const defaults = typeof value.defaults === "number" ? value.defaults : 0;
+  if (defaults < 169) {
+    if (value.combineAll === true) hiddenFilters = [...new Set([...hiddenFilters, "all-pc" as const, "all-roms" as const])];
+    hiddenFilters = hiddenFilters.filter((f) => f !== "all");
+    if (platform === "all-pc" || platform === "all-roms") platform = "all";
+  }
+  // D-169 had moved Title to Console for a while; Title is the default again (D-170), once.
+  if (defaults === 169 && sort === "console") sort = "title";
   return {
     downloadCovers: pick("downloadCovers", isBoolean),
     playsIn: sanitizePlaysIn(value),
-    platform: isArcadeFilter(saved) ? saved : DEFAULT_PREFERENCES.arcade.platform,
+    platform,
     filterOrder: order,
-    hiddenFilters: Array.isArray(value.hiddenFilters) ? [...new Set(value.hiddenFilters.filter(isArcadeFilter))] : [],
-    combineAll: pick("combineAll", isBoolean),
+    hiddenFilters,
+    defaults: 170,
     whilePlaying: pick("whilePlaying", (v) => v === "stay" || v === "hide" || v === "quit"),
-    sort: pick("sort", (v) => ["title", "played", "most", "added", "rating", "console", "custom"].includes(v as string)),
+    sort,
     badge: pick("badge", (v) => v === "full" || v === "logo" || v === "none"),
   };
 }

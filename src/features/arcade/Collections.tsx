@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu } from "radix-ui";
-import { Check, ChevronLeft, Ellipsis, FolderPlus, Heart, Joystick, Layers, ListFilter, Pencil, Plus, Trash } from "lucide-react";
+import { BadgeCheck, Check, ChevronLeft, Ellipsis, FolderPlus, Heart, Joystick, Layers, ListFilter, Pencil, Plus, Trash } from "lucide-react";
 import { api, errorText, type ArcadeCollection, type ArcadeCollectionRules, type ArcadeGame } from "../../lib/api";
 import { ARCADE_FILTER_ORDER, type ArcadeFilter } from "../../lib/preferences";
 import { Dialog, Field, Switch } from "../../components/common";
@@ -30,10 +30,18 @@ export const NO_RULES: ArcadeCollectionRules = { include: "", match: "all", excl
 export const FAVORITES_ID = 0;
 export const FAVORITES: ArcadeCollection = { id: FAVORITES_ID, name: "Favorites", dynamic: false, rules: null, games: [] };
 export const isFavorites = (collection: ArcadeCollection) => collection.id === FAVORITES_ID;
+/** Completed, every Arcade's second collection (D-169): the games marked as completed. */
+export const COMPLETED_ID = -1;
+export const COMPLETED: ArcadeCollection = { id: COMPLETED_ID, name: "Completed", dynamic: false, rules: null, games: [] };
+export const isCompleted = (collection: ArcadeCollection) => collection.id === COMPLETED_ID;
+/** Favorites and Completed: always there, never renamed or deleted. */
+export const isDefault = (collection: ArcadeCollection) => isFavorites(collection) || isCompleted(collection);
+/** One of the default collections by its id. */
+export const defaultCollection = (id: number): ArcadeCollection | undefined => (id === FAVORITES_ID ? FAVORITES : id === COMPLETED_ID ? COMPLETED : undefined);
 
-/** The collections in their order: Favorites first, then yours. */
+/** The collections in their order: Favorites and Completed first, then yours. */
 export function allCollections(list: ArcadeCollection[] | undefined): ArcadeCollection[] {
-  return [FAVORITES, ...(list ?? [])];
+  return [FAVORITES, COMPLETED, ...(list ?? [])];
 }
 
 export function rulesOf(collection: ArcadeCollection): ArcadeCollectionRules {
@@ -50,7 +58,8 @@ export function filterWords(text: string): string[] {
 
 /** Whether a game passes every filter that's set. */
 export function passes(game: ArcadeGame, rules: ArcadeCollectionRules): boolean {
-  const name = fold(game.title);
+  // Its own keywords count as words of its name (D-160).
+  const name = fold(`${game.title} ${game.keywords.join(" ")}`);
   const include = filterWords(rules.include);
   if (include.length > 0 && !(rules.match === "any" ? include.some((w) => name.includes(w)) : include.every((w) => name.includes(w)))) return false;
   if (filterWords(rules.exclude).some((w) => name.includes(w))) return false;
@@ -68,6 +77,7 @@ export function passes(game: ArcadeGame, rules: ArcadeCollectionRules): boolean 
 /** Whether a game is in a collection: put in it, or passing its filters. */
 export function belongsTo(collection: ArcadeCollection): (game: ArcadeGame) => boolean {
   if (isFavorites(collection)) return (game) => game.isFavorite;
+  if (isCompleted(collection)) return (game) => !!game.completedAt;
   if (collection.dynamic) {
     const rules = rulesOf(collection);
     return (game) => passes(game, rules);
@@ -101,7 +111,7 @@ export function CollectionsBoard({ games, onOpen, onBack }: { games: ArcadeGame[
             <ChevronLeft size={16} /> All games
           </button>
           <h2>Collections</h2>
-          <p className="muted">Favorites, your own, and dynamic ones that fill themselves by their filters.</p>
+          <p className="muted">Favorites, Completed, your own, and dynamic ones that fill themselves by their filters.</p>
         </div>
         <div className="arcade-collections-actions">
           <button type="button" className="btn" onClick={() => setEditing({ dynamic: false })}>
@@ -112,7 +122,7 @@ export function CollectionsBoard({ games, onOpen, onBack }: { games: ArcadeGame[
           </button>
         </div>
       </div>
-      {collections.isSuccess && list.length === 1 && (
+      {collections.isSuccess && list.length === 2 && (
         <p className="arcade-collections-hint muted">
           Make a collection and put games in it from their panel or by selecting several, or make a dynamic one: say which words, consoles, launchers or play state its games have, and it keeps itself up to date.
         </p>
@@ -150,12 +160,14 @@ function CollectionCard({ collection, games, onOpen, onEdit, onDelete }: { colle
   // Covers first for the collage.
   const shown = [...games.filter((g) => g.coverKey), ...games.filter((g) => !g.coverKey)].slice(0, 4);
   const favorites = isFavorites(collection);
+  const completed = isCompleted(collection);
+  const fixed = favorites || completed;
   return (
-    <div className={`arcade-collection-card${favorites ? " favorites" : ""}`}>
+    <div className={`arcade-collection-card${fixed ? " favorites" : ""}${completed ? " completed" : ""}`}>
       <button type="button" className="arcade-collection-open" onClick={onOpen} aria-label={`${collection.name}, ${plural(games.length)}`} data-blip>
         <span className={`arcade-collage n${shown.length}`} aria-hidden>
           {shown.length === 0 ? (
-            <span className="arcade-collage-empty">{favorites ? <Heart size={34} /> : collection.dynamic ? <ListFilter size={34} /> : <Joystick size={34} />}</span>
+            <span className="arcade-collage-empty">{favorites ? <Heart size={34} /> : completed ? <BadgeCheck size={34} /> : collection.dynamic ? <ListFilter size={34} /> : <Joystick size={34} />}</span>
           ) : (
             shown.map((game) => (
               <span key={game.id} className="arcade-collage-cell">
@@ -175,15 +187,15 @@ function CollectionCard({ collection, games, onOpen, onEdit, onDelete }: { colle
                 <ListFilter size={12} /> Dynamic
               </span>
             )}
-            {favorites && (
-              <span className="arcade-dynamic-chip favorites">
-                <Heart size={12} fill="currentColor" /> Default
+            {fixed && (
+              <span className={`arcade-dynamic-chip ${completed ? "completed" : "favorites"}`}>
+                {completed ? <BadgeCheck size={12} /> : <Heart size={12} fill="currentColor" />} Default
               </span>
             )}
           </span>
         </span>
       </button>
-      {!favorites && (
+      {!fixed && (
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button type="button" className="round-btn arcade-collection-more" aria-label={`More for ${collection.name}`}>
@@ -224,9 +236,9 @@ export function CollectionBar({ collection, count, games, onBack }: { collection
           <ListFilter size={12} /> Dynamic
         </span>
       )}
-      {isFavorites(collection) ? (
-        <span className="arcade-dynamic-chip favorites">
-          <Heart size={12} fill="currentColor" /> Default
+      {isDefault(collection) ? (
+        <span className={`arcade-dynamic-chip ${isCompleted(collection) ? "completed" : "favorites"}`}>
+          {isCompleted(collection) ? <BadgeCheck size={12} /> : <Heart size={12} fill="currentColor" />} Default
         </span>
       ) : (
         <>
@@ -368,9 +380,9 @@ function CollectionEditor({ editing, games, onClose, onSaved }: { editing: Editi
         {dynamic && (
           <>
             <div className="field">
-              <span>The name has</span>
+              <span>The name or keywords have</span>
               <div className="collection-words">
-                <input className="input" aria-label="Words the name has" value={rules.include} placeholder='mario, kart or "a phrase"' maxLength={300} onChange={(event) => set({ include: event.target.value })} />
+                <input className="input" aria-label="Words the name or keywords have" value={rules.include} placeholder='mario, kart or "a phrase"' maxLength={300} onChange={(event) => set({ include: event.target.value })} />
                 <div className="segmented" role="group" aria-label="Which of the words">
                   {(
                     [
@@ -384,9 +396,9 @@ function CollectionEditor({ editing, games, onClose, onSaved }: { editing: Editi
                   ))}
                 </div>
               </div>
-              <small className="hint">Words apart by spaces or commas, “a phrase” in quotes. Capitals and accents don't matter.</small>
+              <small className="hint">Words apart by spaces or commas, “a phrase” in quotes. Capitals and accents don't matter. A game's own keywords (in its panel) count as its name.</small>
             </div>
-            <Field label="The name doesn't have">
+            <Field label="The name or keywords don't have">
               <input className="input" value={rules.exclude} placeholder="demo, beta" maxLength={300} onChange={(event) => set({ exclude: event.target.value })} />
             </Field>
             <div className="field">
@@ -476,6 +488,13 @@ export function CollectionMenu({ ids, games, onNotice, children, side = "bottom"
       await (single ? api.arcadeSetFavorite(ids[0], on) : api.arcadeSetFavoriteMany(ids, on));
       await queryClient.invalidateQueries({ queryKey: ["arcade-games"] });
     }, single ? undefined : `${plural(ids.length)} in Favorites`);
+  // Completed is a collection too (D-169): in it is marked as completed.
+  const done = single && !!games?.find((g) => g.id === ids[0])?.completedAt;
+  const complete = (on: boolean) =>
+    run(async () => {
+      await api.arcadeSetCompleted(ids, on);
+      await queryClient.invalidateQueries({ queryKey: ["arcade-games"] });
+    }, single ? undefined : `${plural(ids.length)} marked as completed`);
   const run = async (action: () => Promise<unknown>, done?: string) => {
     try {
       await action();
@@ -499,6 +518,16 @@ export function CollectionMenu({ ids, games, onNotice, children, side = "bottom"
             ) : (
               <DropdownMenu.Item className="menu-item" onSelect={() => void favor(true)}>
                 <Heart size={17} /> Favorites
+              </DropdownMenu.Item>
+            )}
+            {single ? (
+              <DropdownMenu.CheckboxItem className="menu-item" checked={done} onSelect={(event) => event.preventDefault()} onCheckedChange={(on) => void complete(on)}>
+                <span className="menu-check">{done && <Check size={15} strokeWidth={3} aria-label="Completed" />}</span>
+                Completed
+              </DropdownMenu.CheckboxItem>
+            ) : (
+              <DropdownMenu.Item className="menu-item" onSelect={() => void complete(true)}>
+                <BadgeCheck size={17} /> Completed
               </DropdownMenu.Item>
             )}
             {mine.length > 0 && <DropdownMenu.Separator className="menu-separator" />}

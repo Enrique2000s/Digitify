@@ -3,10 +3,10 @@ import { Marquee } from "../../components/Marquee";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { ReviewPanel } from "../../components/Review";
 import { createPortal } from "react-dom";
-import { DropdownMenu } from "radix-ui";
+import { DropdownMenu, Popover } from "radix-ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { BadgeCheck, AppWindow, Info, Check, CheckCircle2, ChevronDown, CircleSlash, ChevronLeft, ChevronRight, CircleAlert, Clock, FolderOpen, FolderPlus, Heart, ImageDown, ImagePlus, Joystick, Layers, ListChecks, LoaderCircle, Pencil, Play, RefreshCw, RotateCcw, Search, Settings2, Trash, X } from "lucide-react";
+import { BadgeCheck, AppWindow, Dices, Info, Tag, Check, CheckCircle2, ChevronDown, CircleSlash, ChevronLeft, ChevronRight, CircleAlert, Clock, FolderOpen, FolderPlus, Heart, ImageDown, ImagePlus, Joystick, Layers, ListChecks, LoaderCircle, Pencil, Play, RefreshCw, RotateCcw, Search, Settings2, Trash, X } from "lucide-react";
 import { api, errorText, onLinux, type ArcadeConsole, type ArcadeEmulator, type ArcadeEmulatorStatus, type ArcadeFolder, type ArcadeGame, type ArcadeStatus } from "../../lib/api";
 import type { ArcadeFilter } from "../../lib/preferences";
 import { usePreferences, type ArcadePreferences } from "../../lib/preferences";
@@ -15,7 +15,7 @@ import { CardSizeSlider, Dialog, Switch } from "../../components/common";
 import { consoleKey, consoleOf, GameBadge, gameAspect, FILTER_LABELS, inFilter, GameCover, lastPlayed, PLATFORM_NAMES, playTime, reorderWithin, SORTS, useArcade, useArcadeFilters, useLaunch, useShownGames, addProgramGame } from "./shared";
 import { EmulatorMark, LogoMark } from "./logos";
 import { CoverPicker } from "./CoverPicker";
-import { belongsTo, CollectionBar, CollectionMenu, CollectionsBoard, FAVORITES, FAVORITES_ID, useCollections } from "./Collections";
+import { belongsTo, COMPLETED_ID, CollectionBar, CollectionMenu, CollectionsBoard, defaultCollection, FAVORITES_ID, useCollections } from "./Collections";
 
 /** What Arcade shows (D-148, D-149): its games, the collections (their own screen, with a Back to
  *  the games), or one collection (Favorites is 0); in the address, so Back goes where it came from. */
@@ -48,7 +48,7 @@ export function ArcadePage() {
     setPicked(new Set());
     void navigate({ to: "/arcade", search: next === "games" ? {} : next === "collections" ? { board: "collections" } : { collection: next } });
   };
-  const collection = board === FAVORITES_ID ? FAVORITES : typeof board === "number" ? collections.data?.find((c) => c.id === board) : undefined;
+  const collection = typeof board === "number" ? (defaultCollection(board) ?? collections.data?.find((c) => c.id === board)) : undefined;
   // A collection that's gone (deleted) goes back to the collections.
   useEffect(() => {
     if (typeof board === "number" && collections.isSuccess && !collection) setBoard("collections");
@@ -56,6 +56,32 @@ export function ArcadePage() {
   }, [board, collections.isSuccess, collection]);
   const scope = useMemo(() => (collection ? belongsTo(collection) : null), [collection]);
   const shown = useShownGames(games.data, search, scope);
+  // Surprise me (D-163): a game from what's shown, at random, its panel opened and its box brought
+  // into sight; one not completed first, and not the one just picked.
+  const lastSurprise = useRef<number | null>(null);
+  const surprise = () => {
+    const open = shown.filter((g) => !g.completedAt);
+    let pool = open.length > 0 ? open : shown;
+    if (pool.length > 1) pool = pool.filter((g) => g.id !== lastSurprise.current);
+    const game = pool[Math.floor(Math.random() * pool.length)];
+    if (!game) return;
+    lastSurprise.current = game.id;
+    setSelected(game.id);
+    requestAnimationFrame(() => {
+      const tile = document.querySelector<HTMLElement>(`[data-game-id="${game.id}"]`);
+      // Only the page scrolls to bring it into the middle, never the window around it (D-165).
+      const page = tile?.closest<HTMLElement>(".page");
+      if (tile && page) {
+        const box = tile.getBoundingClientRect();
+        const view = page.getBoundingClientRect();
+        page.scrollBy({ top: box.top + box.height / 2 - (view.top + view.height / 2), behavior: "smooth" });
+      }
+      tile?.classList.remove("surprised");
+      void tile?.offsetWidth;
+      tile?.classList.add("surprised");
+      window.setTimeout(() => tile?.classList.remove("surprised"), 1700);
+    });
+  };
   // The Console sort puts each console's and launcher's games under its name (D-149).
   const bySection = preferences.arcade.sort === "console";
   const sectionCounts = useMemo(() => {
@@ -77,6 +103,53 @@ export function ArcadePage() {
   const anyEmulator = (status.data?.emulators.some((e) => e.found) || status.data?.stores.some((s) => s.found)) ?? false;
   // The setup shows by itself until there's an emulator and a game.
   const showSetup = setup ?? (status.data ? !anyEmulator || status.data.games === 0 : false);
+  // Emulators & folders closes when anything else is used (D-157): a button, a dropdown and its
+  // options, a field outside it, by mouse or keyboard. Not its own button (which toggles it), nor
+  // what's inside it or the menus and dialogs it opened. What was pressed is seen as it's pressed
+  // (a dropdown opens then and takes the click), and it closes when the pointer is let go: closing
+  // sooner would move the page up under a dropdown just opened and put an option under the pointer.
+  const setupToggle = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!showSetup) return;
+    const CONTROL = "button, a[href], input, select, textarea, summary, [role='button'], [role='tab'], [role='option'], [role='menuitem'], [role='menuitemradio'], [role='menuitemcheckbox'], [role='combobox'], [role='switch'], [role='checkbox'], [role='radio']";
+    const OVERLAY = "[role='dialog'], [role='alertdialog'], [role='menu'], [role='listbox'], [data-radix-popper-content-wrapper]";
+    // Whether the last thing used was inside it: then a menu or dialog that opens is its own.
+    let inside = false;
+    // Whether something outside it was pressed and it closes when the pointer is let go.
+    let pressed = false;
+    const close = () => window.setTimeout(() => setSetup(false), 0);
+    /** Whether using `target` closes it. */
+    const closes = (target: Element | null): boolean => {
+      const control = target?.closest(CONTROL);
+      if (target?.closest(".arcade-setup")) {
+        inside = true;
+        return false;
+      }
+      if (target?.closest(OVERLAY)) return !inside && !!control;
+      inside = false;
+      return !!control && control !== setupToggle.current && !setupToggle.current?.contains(control);
+    };
+    const onPress = (event: PointerEvent) => {
+      pressed = closes(event.target instanceof Element ? event.target : null);
+    };
+    const onRelease = () => {
+      if (pressed) close();
+      pressed = false;
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.key === "Enter" || event.key === " ") && closes(document.activeElement)) close();
+    };
+    document.addEventListener("pointerdown", onPress, true);
+    document.addEventListener("pointerup", onRelease, true);
+    document.addEventListener("pointercancel", onRelease, true);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPress, true);
+      document.removeEventListener("pointerup", onRelease, true);
+      document.removeEventListener("pointercancel", onRelease, true);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [showSetup]);
   const running = status.data?.running != null ? games.data?.find((g) => g.id === status.data!.running) : undefined;
   const game = selected != null ? games.data?.find((g) => g.id === selected) : undefined;
   const refresh = () => {
@@ -180,7 +253,7 @@ export function ArcadePage() {
           <button type="button" className="btn arcade-collections-button" aria-current={board !== "games" ? "page" : undefined} onClick={() => board !== "collections" && setBoard("collections")}>
             <Layers size={16} /> Collections
           </button>
-          <button type="button" className="btn glow-when-on" aria-pressed={showSetup} onClick={() => setSetup(!showSetup)}>
+          <button ref={setupToggle} type="button" className="btn glow-when-on" aria-pressed={showSetup} onClick={() => setSetup(!showSetup)}>
             <Settings2 size={16} /> Emulators & folders
           </button>
         </div>
@@ -252,6 +325,11 @@ export function ArcadePage() {
           <span>Size</span>
           <CardSizeSlider value={preferences.cardSize} onChange={(cardSize) => update({ cardSize })} />
         </label>
+        {shown.length > 1 && !selecting && (
+          <button type="button" className="btn btn-sm surprise-btn" title="Surprise me: a game from here you haven't completed, at random" onClick={surprise}>
+            <Dices size={15} /> Surprise me
+          </button>
+        )}
         <button type="button" className="btn btn-sm glow-when-on" aria-pressed={selecting} onClick={() => (selecting ? stopSelecting() : setSelecting(true))}>
           <ListChecks size={15} /> Select
         </button>
@@ -407,14 +485,44 @@ function ViewStrip({ filters, current, onChoose, games }: { filters: ArcadeFilte
   const measure = () => {
     const el = strip.current;
     if (!el) return;
-    setEnds({ left: el.scrollLeft > 2, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 2 });
+    const left = el.scrollLeft > 2;
+    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
+    setEnds((was) => (was.left === left && was.right === right ? was : { left, right }));
   };
+  // Measured again after every change (D-159), and then every frame for a moment after it (D-161):
+  // a view's name changing ("Nintendo · GameCube" back to "Nintendo"), the tools moving to or from
+  // its line, the window changing, or anything settling a little later; so an arrow never shows
+  // when everything fits, not even for a moment (a wrong frame stays under its fade-in).
+  const watching = useRef({ until: 0, frame: 0 });
+  const watch = () => {
+    const w = watching.current;
+    w.until = performance.now() + 1500;
+    if (w.frame) return;
+    const tick = () => {
+      measure();
+      w.frame = performance.now() < w.until ? requestAnimationFrame(tick) : 0;
+    };
+    w.frame = requestAnimationFrame(tick);
+  };
+  useEffect(() => () => cancelAnimationFrame(watching.current.frame), []);
+  useLayoutEffect(() => {
+    measure();
+    watch();
+  });
   useLayoutEffect(() => {
     const el = strip.current;
     if (!el) return;
     measure();
-    const observer = new ResizeObserver(measure);
+    const changed = () => {
+      measure();
+      watch();
+    };
+    const observer = new ResizeObserver(changed);
     observer.observe(el);
+    if (el.parentElement) observer.observe(el.parentElement);
+    for (const child of Array.from(el.children)) observer.observe(child);
+    window.addEventListener("resize", changed);
+    el.addEventListener("transitionend", changed);
     // The wheel scrolls the row sideways.
     const onWheel = (event: WheelEvent) => {
       if (el.scrollWidth <= el.clientWidth || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
@@ -424,12 +532,23 @@ function ViewStrip({ filters, current, onChoose, games }: { filters: ArcadeFilte
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => {
       observer.disconnect();
+      window.removeEventListener("resize", changed);
+      el.removeEventListener("transitionend", changed);
       el.removeEventListener("wheel", onWheel);
     };
-  }, [filters.length]);
+  }, [filters.join(",")]);
   useEffect(() => {
     target.current = null;
-    strip.current?.querySelector<HTMLElement>('[aria-pressed="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+    // The chosen view into sight: only the row scrolls, sideways (D-165).
+    const el = strip.current;
+    const pressed = el?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (el && pressed) {
+      const box = pressed.getBoundingClientRect();
+      const row = el.getBoundingClientRect();
+      const pad = 40;
+      if (box.left < row.left + pad) el.scrollBy({ left: box.left - row.left - pad, behavior: "smooth" });
+      else if (box.right > row.right - pad) el.scrollBy({ left: box.right - row.right + pad, behavior: "smooth" });
+    }
   }, [current]);
   const count = (filter: ArcadeFilter) => (games ?? []).filter((g) => !g.missing && inFilter(g, filter)).length;
   // Each click moves on from where the row is heading, so quick clicks during the glide all count.
@@ -475,7 +594,7 @@ function ViewStrip({ filters, current, onChoose, games }: { filters: ArcadeFilte
 export function GameTile({ game, index, running, selecting, checked, onOpen, onPlay }: { game: ArcadeGame; index: number; running: boolean; selecting: boolean; checked: boolean; onOpen: () => void; onPlay: () => void }) {
   const drag = useGridDragProps(game.id);
   return (
-    <div className={`arcade-tile${running ? " running" : ""}${checked ? " checked" : ""}`} data-platform={game.platform} style={{ ["--i" as string]: index, ["--aspect" as string]: gameAspect(game) }} {...drag}>
+    <div className={`arcade-tile${running ? " running" : ""}${checked ? " checked" : ""}`} data-platform={game.platform} data-game-id={game.id} style={{ ["--i" as string]: index, ["--aspect" as string]: gameAspect(game) }} {...drag}>
       <button
         type="button"
         className="arcade-tile-art"
@@ -492,7 +611,11 @@ export function GameTile({ game, index, running, selecting, checked, onOpen, onP
             <BadgeCheck size={15} strokeWidth={2.4} aria-label="Completed" />
           </span>
         )}
-        {game.isFavorite && <Heart className="arcade-fav" size={16} fill="currentColor" aria-label="Favorite" />}
+        {game.isFavorite && (
+          <span className="arcade-fav" title="Favorite">
+            <Heart size={13} fill="currentColor" strokeWidth={2.4} aria-label="Favorite" />
+          </span>
+        )}
         {selecting && <span className={`card-check${checked ? " on" : ""}`} aria-hidden>{checked && <Check size={15} strokeWidth={3.2} />}</span>}
       </button>
       {!selecting && (
@@ -558,6 +681,78 @@ function ExtraTime({ game, onSave }: { game: ArcadeGame; onSave: (seconds: numbe
 }
 
 /** What can be done to several selected games at once. */
+/**
+ * Keywords for the selected games at once (D-162): one added to all of them, or one they have taken
+ * out of all of them; each game keeps its other keywords.
+ */
+function BulkKeywords({ ids, games, disabled, onChange }: { ids: number[]; games: ArcadeGame[] | undefined; disabled: boolean; onChange: (add: string[], remove: string[], done: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const picked = new Set(ids);
+  // The keywords the selected games have, with how many have each.
+  const counts = new Map<string, { label: string; n: number }>();
+  for (const game of games ?? []) {
+    if (!picked.has(game.id)) continue;
+    for (const keyword of game.keywords) {
+      const key = keyword.toLowerCase();
+      const entry = counts.get(key) ?? { label: keyword, n: 0 };
+      entry.n += 1;
+      counts.set(key, entry);
+    }
+  }
+  const had = [...counts.values()].sort((a, b) => b.n - a.n || a.label.localeCompare(b.label));
+  const plural = (n: number) => `${n} ${n === 1 ? "game" : "games"}`;
+  const add = () => {
+    const words = text.split(",").map((w) => w.trim()).filter(Boolean);
+    if (!words.length) return;
+    setText("");
+    onChange(words, [], `${words.join(", ")} added to ${plural(ids.length)}`);
+  };
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <button type="button" className="btn btn-sm" disabled={disabled}>
+          <Tag size={15} /> Keywords <ChevronDown size={13} />
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content className="menu bulk-keywords" side="top" align="center" sideOffset={10} collisionPadding={16}>
+          <form
+            className="bulk-keywords-add"
+            onSubmit={(event) => {
+              event.preventDefault();
+              add();
+            }}
+          >
+            <input className="input" autoFocus value={text} maxLength={120} placeholder="A keyword for all of them" aria-label="A keyword for all the selected games" onChange={(event) => setText(event.target.value)} />
+            <button type="submit" className="btn btn-sm btn-primary" disabled={!text.trim()}>
+              Add
+            </button>
+          </form>
+          {had.length > 0 ? (
+            <>
+              <p className="bulk-keywords-title">Theirs</p>
+              <ul className="bulk-keywords-list">
+                {had.map(({ label, n }) => (
+                  <li key={label}>
+                    <span className="keyword">{label}</span>
+                    <span className="muted">{n === ids.length ? "all" : plural(n)}</span>
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => onChange([], [label], `${label} taken out of ${plural(n)}`)}>
+                      Take out
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="muted bulk-keywords-none">None of them has keywords yet.</p>
+          )}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
 function BulkBar({
   ids,
   total,
@@ -653,6 +848,7 @@ function BulkBar({
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
+        <BulkKeywords ids={ids} games={games} disabled={none || busy} onChange={(add, remove, done) => void run(() => api.arcadeChangeKeywords(ids, add, remove), done)} />
         <CollectionMenu ids={ids} games={games} onNotice={onNotice} side="top">
           <button type="button" className="btn btn-sm" disabled={none || busy}>
             <Layers size={15} /> Add to collection <ChevronDown size={13} />
@@ -666,7 +862,13 @@ function BulkBar({
             onClick={() =>
               void run(async () => {
                 // Out of Favorites is no longer a favorite (D-149).
-                const removed = inCollection === FAVORITES_ID ? (await api.arcadeSetFavoriteMany(ids, false), ids.length) : await api.arcadeCollectionRemove(inCollection, ids);
+                // Out of Completed is no longer completed (D-169).
+                const removed =
+                  inCollection === FAVORITES_ID
+                    ? (await api.arcadeSetFavoriteMany(ids, false), ids.length)
+                    : inCollection === COMPLETED_ID
+                      ? (await api.arcadeSetCompleted(ids, false), ids.length)
+                      : await api.arcadeCollectionRemove(inCollection, ids);
                 await queryClient.invalidateQueries({ queryKey: ["arcade-collections"] });
                 onClear();
                 onNotice(`${removed} ${removed === 1 ? "game" : "games"} taken out of the collection`);
@@ -715,6 +917,48 @@ function BulkBar({
       </Dialog>
     </>,
     document.body,
+  );
+}
+
+/**
+ * A game's own keywords (D-160): words it's found by in the search and in dynamic collections, as if
+ * they were in its name. Enter or a comma adds one; × or Backspace in the empty field takes one out.
+ */
+function KeywordsEditor({ keywords, onSave }: { keywords: string[]; onSave: (keywords: string[]) => void }) {
+  const [text, setText] = useState("");
+  const add = () => {
+    const words = text.split(",").map((w) => w.trim()).filter(Boolean);
+    setText("");
+    if (words.length) onSave([...keywords, ...words.filter((w) => !keywords.some((k) => k.toLowerCase() === w.toLowerCase()))]);
+  };
+  return (
+    <div className="keywords">
+      {keywords.map((keyword) => (
+        <span key={keyword} className="keyword">
+          {keyword}
+          <button type="button" aria-label={`Take out ${keyword}`} onClick={() => onSave(keywords.filter((k) => k !== keyword))}>
+            <X size={12} />
+          </button>
+        </span>
+      ))}
+      <input
+        className="keyword-input"
+        value={text}
+        placeholder={keywords.length ? "Add another" : "Add a keyword"}
+        aria-label="Add a keyword"
+        maxLength={80}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === ",") {
+            event.preventDefault();
+            add();
+          } else if (event.key === "Backspace" && !text && keywords.length) {
+            onSave(keywords.slice(0, -1));
+          }
+        }}
+        onBlur={add}
+      />
+    </div>
   );
 }
 
@@ -816,6 +1060,14 @@ function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame; runni
             <dt>Your review</dt>
             <dd>
               <ReviewPanel compact rating={game.rating} note={game.note} onSave={(rating, note) => void run(() => api.arcadeSetReview(game.id, rating, note))} />
+            </dd>
+          </div>
+          <div>
+            <dt>
+              <Tag size={13} aria-hidden /> Keywords
+            </dt>
+            <dd>
+              <KeywordsEditor keywords={game.keywords} onSave={(keywords) => void run(() => api.arcadeSetKeywords(game.id, keywords))} />
             </dd>
           </div>
           {played && (
@@ -991,6 +1243,7 @@ function LaunchersTab({ status, games, onRun, onAddProgram }: { status: ArcadeSt
             <LogoMark name={store.key} className="setup-logo" />
             <strong>{store.name}</strong>
             <span className="muted">{store.found ? `${store.games} installed ${store.games === 1 ? "game" : "games"}` : "not found on this computer"}</span>
+            {store.key === "steam" && store.found && <SteamHoursButton onRun={onRun} />}
           </li>
         ))}
         <li className="found">
@@ -1011,6 +1264,83 @@ function LaunchersTab({ status, games, onRun, onAddProgram }: { status: ArcadeSt
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Steam's hours (D-167): the time Steam has recorded for each of your Steam games, read from Steam's
+ * own records, shown first and brought in only when you say so, as time played elsewhere, so each
+ * game's total matches Steam's (a game where Digitify counts more keeps its time).
+ */
+function SteamHoursButton({ onRun }: { onRun: Run }) {
+  const [open, setOpen] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  const hours = useQuery({ queryKey: ["arcade-steam-hours"], queryFn: api.arcadeSteamHours, enabled: open });
+  const queryClient = useQueryClient();
+  const list = hours.data ?? [];
+  const extra = list.reduce((n, g) => n + g.steamSeconds - g.digitifySeconds, 0);
+  const apply = () =>
+    onRun(async () => {
+      const changed = await api.arcadeSteamHoursApply();
+      await queryClient.invalidateQueries({ queryKey: ["arcade-steam-hours"] });
+      void queryClient.invalidateQueries({ queryKey: ["stats"] });
+      setDone(`${changed} ${changed === 1 ? "game" : "games"} now count Steam's hours.`);
+    });
+  return (
+    <>
+      <button
+        type="button"
+        className="btn btn-sm"
+        onClick={() => {
+          setDone(null);
+          setOpen(true);
+        }}
+      >
+        <Clock size={14} /> Steam's hours…
+      </button>
+      <Dialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Use Steam's hours"
+        description="Steam keeps how long you've played each game. Bring that time in as time played elsewhere, so each game's total matches Steam's. Games where Digitify already counts more keep theirs; you can do this again later to add what Steam counts since."
+        footer={
+          <>
+            <button type="button" className="btn" onClick={() => setOpen(false)}>
+              {done ? "Close" : "Cancel"}
+            </button>
+            {!done && (
+              <button type="button" className="btn btn-primary" disabled={!list.length} onClick={() => void apply()}>
+                Use Steam's hours
+              </button>
+            )}
+          </>
+        }
+      >
+        {done ? (
+          <p>{done}</p>
+        ) : hours.isLoading ? (
+          <p className="muted">Reading Steam's records…</p>
+        ) : list.length === 0 ? (
+          <p className="muted">Nothing to bring in: every Steam game here already counts at least Steam's time (or Steam hasn't recorded any).</p>
+        ) : (
+          <>
+            <p>
+              <b>{playTime(extra)}</b> more over <b>{list.length}</b> {list.length === 1 ? "game" : "games"}.
+            </p>
+            <ul className="steam-hours">
+              {list.slice(0, 40).map((g) => (
+                <li key={g.id}>
+                  <span>{g.title}</span>
+                  <span className="muted">{playTime(g.digitifySeconds)} →</span>
+                  <b>{playTime(g.steamSeconds)}</b>
+                </li>
+              ))}
+              {list.length > 40 && <li className="muted">and {list.length - 40} more</li>}
+            </ul>
+          </>
+        )}
+      </Dialog>
+    </>
   );
 }
 
@@ -1254,7 +1584,8 @@ function EmulatorRow({ emulator, open, onToggle, onRun }: { emulator: ArcadeEmul
         {emulator.found ? <CheckCircle2 size={16} className="ok" /> : emulator.ignored ? <CircleSlash size={16} className="muted" /> : <CircleAlert size={16} className="warn" />}
         <EmulatorMark emulator={emulator.key} name={emulator.name} icon={emulator.icon} />
         <strong>{emulator.name}</strong>
-        <span className="muted arcade-emulator-consoles">{emulator.ignored ? "Not used" : consolesOf(emulator)}</span>
+        {/* Every console it plays, its names sliding when they don't fit (D-169). */}
+        <Marquee className="muted arcade-emulator-consoles" text={emulator.ignored ? "Not used" : consolesOf(emulator)} />
         {emulator.found ? (
           <button type="button" className="btn btn-sm" aria-expanded={open} onClick={onToggle}>
             {summary} <ChevronDown size={14} className="arcade-chevron" />

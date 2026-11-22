@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Flame, Target, CalendarHeart } from "lucide-react";
 import { AchievementsSummary, ActivityCalendar, YearReview } from "./YearViews";
+import { WeekLine } from "./Week";
 import { usePreferences, type Goals } from "../../lib/preferences";
 import { Dialog, Field } from "../../components/common";
 import { useQuery } from "@tanstack/react-query";
@@ -212,6 +213,7 @@ export function StatsPanel({ bigPicture = false }: { bigPicture?: boolean }) {
   const largest = Math.max(...s.categories.map((c) => c.count), 1);
   return (
     <div className="stats panel viz-root">
+      <WeekLine bigPicture={bigPicture} />
       <div className="stat-tiles">
         {SERIES.map((series) => (
           <div key={series.key} className="stat-tile">

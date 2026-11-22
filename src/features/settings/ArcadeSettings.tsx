@@ -28,17 +28,15 @@ export function ArcadeSettings() {
     }
   };
   const arcade = preferences.arcade;
-  // The rows in their order, hidden ones included; "all" stands for the two All views when combined.
+  // The rows in their order, hidden ones included.
   // A store or console without games has no view to arrange (D-101).
   const games = useQuery({ queryKey: ["arcade-games"], queryFn: api.arcadeGames });
   const rows = arcadeFilters(arcade, true, filledFilters(games.data));
 
   const arrange = (next: ArcadeFilter[]) =>
     update((c) => {
-      // Back to the saved order: "all" expands into the two All views, and views this system
-      // doesn't have keep their place after the one before them.
-      const expanded = next.flatMap((f): ArcadeFilter[] => (f === "all" ? ["all-pc", "all-roms"] : [f]));
-      const order = [...expanded];
+      // Back to the saved order: views this system doesn't have keep their place after the one before them.
+      const order = [...next];
       c.arcade.filterOrder.forEach((filter, index) => {
         if (order.includes(filter)) return;
         const before = c.arcade.filterOrder.slice(0, index).reverse().find((f) => order.includes(f));
@@ -94,8 +92,8 @@ export function ArcadeSettings() {
           ))}
         </div>
       </Setting>
-      <Setting title="One “All games” view" text="Show your PC games and your ROM games together in one view, instead of “PC games” and “ROM games”.">
-        <Switch checked={arcade.combineAll} label="Combine PC games and ROM games" onChange={(combineAll) => update((c) => ({ arcade: { ...c.arcade, combineAll } }))} />
+      <Setting title="“All games” view" text="Every game together in one view, first in Arcade and shown when it opens. Switched off, Arcade starts at your next view.">
+        <Switch checked={!arcade.hiddenFilters.includes("all")} label="Show All games" onChange={(shown) => show("all", shown)} />
       </Setting>
       <p className="hint" style={{ margin: "14px 0 10px" }}>
         Drag the views (or use the arrows) to set the order of Arcade's buttons; switch off the ones you don't use. A store or console shows here once Arcade has one of its games.

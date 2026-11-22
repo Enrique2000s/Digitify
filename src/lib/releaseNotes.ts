@@ -12,6 +12,29 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.9.2",
+    date: "2026-11-21",
+    added: [
+      { icon: "gamepad", title: "Keywords for your games", text: "Give any game in Arcade keywords of your own from its panel, or to many at once from the selection bar. The search finds it by them, and dynamic collections count them as part of its name." },
+      { icon: "library", title: "Surprise me", text: "Can't choose? Surprise me, in Arcade and in the Library, picks something you haven't finished from what you're looking at." },
+      { icon: "monitor", title: "Your week", text: "Home sums up your last seven days, and Your week shows it in full: compare it with the week before and save it as a picture." },
+      { icon: "gamepad", title: "All games and Completed", text: "Arcade opens on All games (switch it off in Settings › Arcade if you like), and your completed games have a collection of their own, beside Favorites." },
+      { icon: "gamepad", title: "Steam's hours", text: "Bring the time Steam has recorded for your games into Arcade, from Emulators & folders › Launchers. You see it first; nothing changes until you say so." },
+    ],
+    fixed: [
+      "Arcade's Emulators & folders closes when you use any other button, instead of staying open.",
+      "The views' arrows no longer show, even for a moment, after changing a maker's console when everything fits.",
+      "Your profile's Share as image saves the picture again.",
+      "Surprise me no longer pushes the whole app up.",
+      "Favorite and Completed badges match in size and sit at the bottom right of the box, clear of the console's badge.",
+      "Others is now Other PC, and every emulator's consoles can be read in full.",
+      "The Console sort centers each console's games.",
+      "Songs without a cover show Digitify's own on Windows' media controls and in the queue, never the previous song's.",
+      "The song playing shows its cover on Windows' media controls, and there's only Digitify's card there now.",
+      "Arcade's views show whole, with Find, Size, Select and Sort under them when both don't fit; the arrows only show when the views don't fit even on their own line.",
+    ],
+  },
+  {
     version: "0.9.1",
     date: "2026-11-21",
     added: [

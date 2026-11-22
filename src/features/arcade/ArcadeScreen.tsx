@@ -6,7 +6,7 @@ import type { ArcadeGame } from "../../lib/api";
 import { usePad } from "../../lib/gamepad";
 import { usePreferences } from "../../lib/preferences";
 import { BpCollectionCard } from "../bigpicture/BpCollectionCard";
-import { allCollections, belongsTo, FAVORITES, FAVORITES_ID, gamesOf, isFavorites, useCollections } from "./Collections";
+import { allCollections, belongsTo, defaultCollection, gamesOf, isCompleted, isDefault, isFavorites, useCollections } from "./Collections";
 import { LogoMark } from "./logos";
 import { consoleKey, consoleOf, GameBadge, FILTER_LABELS, GameCover, gameAspect, playTime, useArcade, useArcadeFilters, useLaunch, useShownGames } from "./shared";
 
@@ -21,7 +21,7 @@ export function ArcadeScreen({ scope }: { scope?: string }) {
   const collections = useCollections();
   const inCollections = scope === "collections" || !!scope?.startsWith("collection:");
   const openId = scope?.startsWith("collection:") ? Number(scope.slice("collection:".length)) : null;
-  const open = openId === FAVORITES_ID ? FAVORITES : openId != null ? collections.data?.find((c) => c.id === openId) : undefined;
+  const open = openId != null ? (defaultCollection(openId) ?? collections.data?.find((c) => c.id === openId)) : undefined;
   const inOpen = useMemo(() => (open ? belongsTo(open) : null), [open]);
   const shown = useShownGames(games.data, "", inOpen);
   const { error } = useLaunch();
@@ -70,8 +70,8 @@ export function ArcadeScreen({ scope }: { scope?: string }) {
                 name={collection.name}
                 detail={`${inIt.length.toLocaleString()} ${inIt.length === 1 ? "game" : "games"}`}
                 covers={inIt.filter((g) => g.coverKey).map((g) => g.coverKey!)}
-                icon={isFavorites(collection) ? <Heart size={40} /> : collection.dynamic ? <ListFilter size={40} /> : <Joystick size={40} />}
-                badge={collection.dynamic ? <span className="bp-collection-chip">Dynamic</span> : isFavorites(collection) ? <span className="bp-collection-chip">Default</span> : undefined}
+                icon={isFavorites(collection) ? <Heart size={40} /> : isCompleted(collection) ? <BadgeCheck size={40} /> : collection.dynamic ? <ListFilter size={40} /> : <Joystick size={40} />}
+                badge={collection.dynamic ? <span className="bp-collection-chip">Dynamic</span> : isDefault(collection) ? <span className="bp-collection-chip">Default</span> : undefined}
                 autofocus={index === 0}
                 onOpen={() => void navigate({ to: "/bp", search: { screen: "arcade", scope: `collection:${collection.id}` } })}
               />
@@ -130,7 +130,11 @@ export function ArcadeTile({ game, autofocus, onPlay, height = 270 }: { game: Ar
             <BadgeCheck size={19} strokeWidth={2.4} aria-label="Completed" />
           </span>
         )}
-        {game.isFavorite && <Heart className="arcade-fav" size={22} fill="currentColor" />}
+        {game.isFavorite && (
+          <span className="arcade-fav" title="Favorite">
+            <Heart size={17} fill="currentColor" strokeWidth={2.4} aria-label="Favorite" />
+          </span>
+        )}
       </span>
       <span className="bp-tile-title">
         <Marquee hover text={game.title} />

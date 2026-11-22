@@ -42,6 +42,7 @@ pub const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0029_import_history.sql"),
     include_str!("../migrations/0030_arcade_collections.sql"),
     include_str!("../migrations/0031_completed_no_smart_lists.sql"),
+    include_str!("../migrations/0032_arcade_keywords.sql"),
 ];
 
 pub struct Database {

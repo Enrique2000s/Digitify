@@ -176,7 +176,7 @@ export const FILTER_LABELS: Record<ArcadeFilter, string> = {
   heroic: "Heroic",
   lutris: "Lutris",
   // PC games added by their program (D-115).
-  others: "Others",
+  others: "Other PC",
   ...(Object.fromEntries(ARCADE_CONSOLES.map((key) => [key, PLATFORM_NAMES[key]])) as Record<ArcadeConsole, string>),
   favorites: "Favorites",
 };
@@ -243,10 +243,6 @@ export function arcadeFilters(arcade: ArcadePreferences, withHidden = false, fil
   for (const filter of arcade.filterOrder) {
     if (!filterAvailable(filter)) continue;
     if (filled && !ALWAYS.includes(filter) && !filled.has(filter)) continue;
-    if (arcade.combineAll && (filter === "all-pc" || filter === "all-roms")) {
-      if (!out.includes("all") && (withHidden || !arcade.hiddenFilters.includes("all"))) out.push("all");
-      continue;
-    }
     if (!withHidden && arcade.hiddenFilters.includes(filter)) continue;
     out.push(filter);
   }
@@ -263,6 +259,7 @@ export function useArcadeFilters() {
   return { filters, current, choose };
 }
 
+// Title first, and the default (D-170).
 export const SORTS: { key: ArcadePreferences["sort"]; label: string }[] = [
   { key: "title", label: "Title" },
   { key: "played", label: "Recently played" },
@@ -323,7 +320,8 @@ export function useShownGames(games: ArcadeGame[] | undefined, search: string, s
       (game) =>
         !game.missing &&
         (scope ? scope(game) : inFilter(game, platform)) &&
-        words.every((word) => game.title.toLowerCase().includes(word) || game.gameId?.toLowerCase() === word),
+        // Its own keywords count as its name (D-160).
+        words.every((word) => game.title.toLowerCase().includes(word) || game.gameId?.toLowerCase() === word || game.keywords.some((k) => k.toLowerCase().includes(word))),
     );
     const byTitle = (a: ArcadeGame, b: ArcadeGame) => a.title.localeCompare(b.title, undefined, { sensitivity: "base", numeric: true });
     const place = (game: ArcadeGame) => {
@@ -352,7 +350,7 @@ export function matchingGames(games: ArcadeGame[] | undefined, q: string): Arcad
   return (games ?? [])
     .filter((game) => !game.missing)
     .filter((game) => {
-      const text = `${game.title} ${consoleOf(game)} ${game.store ? STORE_NAMES[game.store] : ""} ${game.gameId ?? ""}`.toLowerCase();
+      const text = `${game.title} ${consoleOf(game)} ${game.store ? STORE_NAMES[game.store] : ""} ${game.gameId ?? ""} ${game.keywords.join(" ")}`.toLowerCase();
       return words.every((word) => text.includes(word));
     })
     .sort((a, b) => Number(!a.title.toLowerCase().includes(words[0])) - Number(!b.title.toLowerCase().includes(words[0])) || a.title.localeCompare(b.title, undefined, { sensitivity: "base", numeric: true }));

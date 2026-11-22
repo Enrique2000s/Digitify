@@ -137,7 +137,7 @@ export function CommandPalette() {
       : []),
     ...(words.length
       ? (games.data ?? [])
-          .filter((g: ArcadeGame) => !g.missing && words.every((w) => g.title.toLowerCase().includes(w)))
+          .filter((g: ArcadeGame) => !g.missing && words.every((w) => g.title.toLowerCase().includes(w) || g.keywords.some((k) => k.toLowerCase().includes(w))))
           .slice(0, 5)
           .map<Entry>((g) => ({
             id: `game-${g.id}`,

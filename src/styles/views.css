@@ -586,6 +586,83 @@
 
 /* ---------------------------------------------------------------- Home: statistics */
 
+/* Your week (D-164): one line above the statistics, and its dialog. */
+.week-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  font-weight: 700;
+}
+.week-line > svg {
+  color: var(--accent-bright);
+}
+.week-line > span {
+  flex: 1;
+  min-width: 0;
+}
+.week-lead {
+  margin: 0 0 14px;
+  font-size: 17px;
+}
+.week-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 10px;
+  height: 140px;
+  margin-bottom: 16px;
+}
+.week-day {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+}
+.week-bar {
+  width: min(44px, 100%);
+  max-height: calc(100% - 22px);
+  border-radius: 8px;
+  background: var(--accent-bright);
+}
+.week-day-name {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.week-note {
+  margin-right: auto;
+}
+.week .week-tiles {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.week .week-tiles strong {
+  font-size: 22px;
+}
+.week .week-facts {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.week .year-lists {
+  grid-template-columns: none;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+}
+.week .year-lists li {
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .week .week-tiles,
+  .week .week-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* Categorical slots 1-3 of the reference palette, validated for both modes (dataviz); playing
    (D-041) is a magenta checked against them for normal and colorblind vision in both modes. */
 .viz-root {
@@ -3344,6 +3421,10 @@ body:has(.import-panel) .online-queue {
   gap: 22px;
   margin-top: 8px;
 }
+/* A long name is cut with "…" in its column, never running into the next. */
+.year-lists > section {
+  min-width: 0;
+}
 .year-lists ol {
   display: grid;
   gap: 6px;
@@ -4530,10 +4611,19 @@ a.mini-player-open {
 :root[data-theme="light"] .arcade-dynamic-chip.favorites {
   color: #d6304f;
 }
+/* Completed, the other default collection (D-169): green like its seal. */
+.arcade-dynamic-chip.completed {
+  background: color-mix(in srgb, #1f9d55 18%, transparent);
+  color: #4ade80;
+}
+:root[data-theme="light"] .arcade-dynamic-chip.completed {
+  color: #15803d;
+}
 
 /* Under their headings the games start at the left, as shelves do. */
+/* Each console's games centered under its heading, as the other sorts' are (D-169). */
 .arcade-grid.by-section {
-  justify-content: flex-start;
+  justify-content: center;
 }
 /* D-149: the Console sort's headings: a console's or launcher's symbol, name and count, and a line
    across the grid. */
@@ -4581,7 +4671,7 @@ a.mini-player-open {
 /* D-149: a game marked as completed: a green seal on its box, the heart beside it. */
 .arcade-completed {
   position: absolute;
-  top: 7px;
+  bottom: 7px;
   right: 7px;
   display: grid;
   place-items: center;
@@ -4593,16 +4683,28 @@ a.mini-player-open {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
 }
 .arcade-completed ~ .arcade-fav {
-  right: 36px;
+  right: 37px;
 }
-.bp-tile-art .arcade-completed {
-  top: 12px;
+/* The play button takes that corner while the box is pointed at: the badges step aside. */
+.arcade-fav,
+.arcade-completed {
+  transition: opacity 160ms var(--ease);
+}
+.arcade-tile:hover .arcade-fav,
+.arcade-tile:hover .arcade-completed,
+.arcade-tile:has(.arcade-play:focus-visible) .arcade-fav,
+.arcade-tile:has(.arcade-play:focus-visible) .arcade-completed {
+  opacity: 0;
+}
+.bp-tile-art .arcade-completed,
+.bp-tile-art .arcade-fav {
+  bottom: 12px;
   right: 12px;
   width: 30px;
   height: 30px;
 }
 .bp-tile-art .arcade-completed ~ .arcade-fav {
-  right: 50px;
+  right: 49px;
 }
 .arcade-complete-btn[aria-pressed="true"] {
   border-color: #1f9d55;

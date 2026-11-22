@@ -127,6 +127,104 @@ pub async fn year_review(state: State<'_, AppState>, year: i64) -> AppResult<Yea
 }
 
 // ---------------------------------------------------------------------------------------------
+// Your week (D-164): the last seven days, today included, beside the seven before them
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WeekReview {
+    /// The first and last day (local dates).
+    pub start: String,
+    pub end: String,
+    /// Seconds of each activity.
+    pub read: i64,
+    pub watch: i64,
+    pub listen: i64,
+    pub play: i64,
+    /// All the time of the seven days before.
+    pub previous: i64,
+    pub days_active: i64,
+    /// Each day's seconds, oldest first.
+    pub days: Vec<CalendarDay>,
+    pub finished: i64,
+    pub added: i64,
+    /// Different games played, items read, watched or listened to, and tracks played.
+    pub games: i64,
+    pub items: i64,
+    pub tracks: i64,
+    pub best_day: Option<(String, i64)>,
+    /// Minutes played per game, minutes per item, plays per artist; most first.
+    pub top_games: Vec<NamedCount>,
+    pub top_items: Vec<NamedCount>,
+    pub top_artists: Vec<NamedCount>,
+}
+
+pub fn week(conn: &Connection) -> AppResult<WeekReview> {
+    let (start, end, before): (String, String, String) = conn.query_row(
+        "SELECT date('now', 'localtime', '-6 days'), date('now', 'localtime'), date('now', 'localtime', '-13 days')",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    let kind = |k: &str| -> AppResult<i64> {
+        Ok(conn.query_row(&format!("SELECT coalesce(sum(seconds), 0) FROM {ALL} WHERE kind = ?1 AND day BETWEEN ?2 AND ?3"), params![k, start, end], |row| row.get(0))?)
+    };
+    let days: Vec<CalendarDay> = conn
+        .prepare(&format!(
+            "WITH RECURSIVE d(day) AS (SELECT ?1 UNION ALL SELECT date(day, '+1 day') FROM d WHERE day < ?2) \
+             SELECT d.day, coalesce(sum(a.seconds), 0) FROM d LEFT JOIN {ALL} a ON a.day = d.day GROUP BY d.day ORDER BY d.day"
+        ))?
+        .query_map(params![start, end], |row| Ok(CalendarDay { day: row.get(0)?, seconds: row.get(1)? }))?
+        .collect::<Result<_, _>>()?;
+    let count = |sql: &str| -> AppResult<i64> { Ok(conn.query_row(sql, params![start, end], |row| row.get(0))?) };
+    let named = |sql: &str| -> AppResult<Vec<NamedCount>> {
+        Ok(conn
+            .prepare(sql)?
+            .query_map(params![start, end], |row| Ok(NamedCount { key: row.get::<_, i64>(0)?.to_string(), name: row.get(1)?, count: row.get(2)? }))?
+            .collect::<Result<_, _>>()?)
+    };
+    // Plays, additions and finishes are kept in UTC: compared by their local day.
+    let top_artists = conn
+        .prepare(
+            "SELECT artist, count(*) AS n FROM (SELECT coalesce(json_extract(p.metadata, '$.artist'), \
+               (SELECT pe.name FROM item_people ip JOIN people pe ON pe.id = ip.person_id WHERE ip.item_id = p.item_id AND ip.role = 'artist' ORDER BY ip.position LIMIT 1)) AS artist \
+             FROM plays pl JOIN parts p ON p.id = pl.part_id WHERE date(pl.played_at, 'localtime') BETWEEN ?1 AND ?2) WHERE artist IS NOT NULL GROUP BY artist ORDER BY n DESC LIMIT 3",
+        )?
+        .query_map(params![start, end], |row| Ok(NamedCount { key: row.get(0)?, name: row.get(0)?, count: row.get(1)? }))?
+        .collect::<Result<_, _>>()?;
+    let previous = conn.query_row(&format!("SELECT coalesce(sum(seconds), 0) FROM {ALL} WHERE day >= ?1 AND day < ?2"), params![before, start], |row| row.get(0))?;
+    Ok(WeekReview {
+        read: kind("read")?,
+        watch: kind("watch")?,
+        listen: kind("listen")?,
+        play: kind("play")?,
+        previous,
+        days_active: days.iter().filter(|d| d.seconds > 0).count() as i64,
+        best_day: days.iter().filter(|d| d.seconds > 0).max_by_key(|d| d.seconds).map(|d| (d.day.clone(), d.seconds)),
+        days,
+        finished: count("SELECT count(*) FROM progress WHERE part_id = 0 AND completed = 1 AND date(updated_at, 'localtime') BETWEEN ?1 AND ?2")?,
+        added: count("SELECT count(*) FROM items WHERE date(added_at, 'localtime') BETWEEN ?1 AND ?2")?,
+        games: count("SELECT count(DISTINCT game_id) FROM arcade_activity WHERE day BETWEEN ?1 AND ?2 AND seconds > 0")?,
+        items: count("SELECT count(DISTINCT item_id) FROM activity WHERE day BETWEEN ?1 AND ?2 AND seconds > 0")?,
+        tracks: count("SELECT count(*) FROM plays WHERE date(played_at, 'localtime') BETWEEN ?1 AND ?2")?,
+        top_games: named(
+            "SELECT g.id, g.title, sum(a.seconds) / 60 AS m FROM arcade_activity a JOIN arcade_games g ON g.id = a.game_id \
+             WHERE a.day BETWEEN ?1 AND ?2 GROUP BY g.id HAVING m > 0 ORDER BY m DESC LIMIT 3",
+        )?,
+        top_items: named(
+            "SELECT i.id, i.title, sum(a.seconds) / 60 AS m FROM activity a JOIN items i ON i.id = a.item_id \
+             WHERE a.day BETWEEN ?1 AND ?2 GROUP BY i.id HAVING m > 0 ORDER BY m DESC LIMIT 3",
+        )?,
+        top_artists,
+        start,
+        end,
+    })
+}
+
+#[tauri::command]
+pub async fn week_review(state: State<'_, AppState>) -> AppResult<WeekReview> {
+    with_library(&state, |library| library.db.with(|conn| week(conn))).await
+}
+
+// ---------------------------------------------------------------------------------------------
 // Achievements
 
 #[derive(Debug, Serialize)]
@@ -208,6 +306,21 @@ pub async fn achievements_list(state: State<'_, AppState>) -> AppResult<Vec<Achi
 mod tests {
     use super::*;
     use crate::db;
+
+    #[test]
+    fn the_week_has_seven_days_and_its_time() {
+        let conn = db::memory();
+        conn.execute("INSERT INTO items (category_id, title, sort_title) VALUES ((SELECT id FROM categories WHERE key = 'books'), 'Dune', 'dune')", []).unwrap();
+        conn.execute("INSERT INTO activity (day, item_id, kind, seconds) VALUES (date('now', 'localtime'), 1, 'read', 600), (date('now', 'localtime', '-3 days'), 1, 'read', 300), (date('now', 'localtime', '-9 days'), 1, 'read', 900)", []).unwrap();
+        let w = week(&conn).unwrap();
+        assert_eq!(w.days.len(), 7);
+        assert_eq!(w.read, 900);
+        assert_eq!(w.previous, 900);
+        assert_eq!(w.days_active, 2);
+        assert_eq!(w.items, 1);
+        assert_eq!(w.top_items[0].name, "Dune");
+        assert_eq!(w.top_items[0].count, 15);
+    }
 
     #[test]
     fn achievements_unlock_once_and_the_year_adds_up() {

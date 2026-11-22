@@ -123,7 +123,8 @@ export function NowPlayingPage() {
               <li key={`${index}:${queued.id}`} aria-current={index === music.index ? "true" : undefined} className={index < music.index ? "played" : undefined}>
                 <button type="button" className="now-page-go" onClick={() => music.jump(index)}>
                   <span className="now-page-thumb">
-                    <Cover item={{ title: queued.title, coverKey: queued.coverKey, handler: "audio" }} />
+                    {/* No cover: the same sound waves as the title bar's player (D-169). */}
+                    <Cover item={{ title: queued.title, coverKey: queued.coverKey, handler: "audio" }} iconOnly />
                   </span>
                   <span className="now-page-text">
                     <strong>{queued.title}</strong>

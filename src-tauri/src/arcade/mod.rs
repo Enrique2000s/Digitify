@@ -1195,6 +1195,8 @@ pub struct GameCard {
     pub emulator: Option<String>,
     /// When the player marked it as completed (D-149).
     pub completed_at: Option<String>,
+    /// The player's own keywords for it (D-160).
+    pub keywords: Vec<String>,
 }
 
 #[tauri::command]
@@ -1204,7 +1206,7 @@ pub async fn arcade_games(state: State<'_, AppState>) -> AppResult<Vec<GameCard>
             let rows = conn
                 .prepare(
                     "SELECT id, title, platform, game_id, path, size, cover_key, cover_color, is_favorite, play_seconds + extra_seconds, play_count, \
-                     last_played_at, added_at, missing, position, store, extra_seconds, rating, note, system IS NOT NULL, emulator, completed_at FROM arcade_games WHERE hidden = 0 ORDER BY sort_title, id",
+                     last_played_at, added_at, missing, position, store, extra_seconds, rating, note, system IS NOT NULL, emulator, completed_at, keywords FROM arcade_games WHERE hidden = 0 ORDER BY sort_title, id",
                 )?
                 .query_map([], |row| {
                     Ok(GameCard {
@@ -1230,6 +1232,7 @@ pub async fn arcade_games(state: State<'_, AppState>) -> AppResult<Vec<GameCard>
                         retroarch: row.get(19)?,
                         emulator: row.get(20)?,
                         completed_at: row.get(21)?,
+                        keywords: row.get::<_, Option<String>>(22)?.and_then(|k| serde_json::from_str(&k).ok()).unwrap_or_default(),
                     })
                 })?
                 .collect::<Result<_, _>>()?;
@@ -1268,6 +1271,62 @@ pub async fn arcade_set_completed(state: State<'_, AppState>, ids: Vec<i64>, com
         })
     })
     .await
+}
+
+/// A game's own keywords (D-160): trimmed, without repeats (whatever their case), at most 40 of up
+/// to 40 characters; none clears them.
+#[tauri::command]
+pub async fn arcade_set_keywords(state: State<'_, AppState>, id: i64, keywords: Vec<String>) -> AppResult<Vec<String>> {
+    let keywords = clean_keywords(keywords);
+    with_library(&state, move |library| {
+        library.db.with(|conn| {
+            let stored = (!keywords.is_empty()).then(|| serde_json::to_string(&keywords).unwrap_or_default());
+            conn.execute("UPDATE arcade_games SET keywords = ?2 WHERE id = ?1", params![id, stored])?;
+            Ok(keywords)
+        })
+    })
+    .await
+}
+
+/// Keywords added to and taken out of several games at once (D-162); each game keeps its others.
+/// Returns how many games changed.
+#[tauri::command]
+pub async fn arcade_change_keywords(state: State<'_, AppState>, ids: Vec<i64>, add: Vec<String>, remove: Vec<String>) -> AppResult<usize> {
+    let add = clean_keywords(add);
+    let remove: Vec<String> = remove.iter().map(|k| k.trim().to_lowercase()).collect();
+    with_library(&state, move |library| {
+        library.db.with(|conn| {
+            let tx = conn.transaction()?;
+            let mut changed = 0;
+            for id in &ids {
+                let Some(stored) = tx.query_row("SELECT keywords FROM arcade_games WHERE id = ?1", [id], |row| row.get::<_, Option<String>>(0)).optional()? else { continue };
+                let before: Vec<String> = stored.and_then(|k| serde_json::from_str(&k).ok()).unwrap_or_default();
+                let mut after: Vec<String> = before.iter().filter(|k| !remove.contains(&k.to_lowercase())).cloned().collect();
+                after.extend(add.iter().cloned());
+                let after = clean_keywords(after);
+                if after != before {
+                    let value = (!after.is_empty()).then(|| serde_json::to_string(&after).unwrap_or_default());
+                    tx.execute("UPDATE arcade_games SET keywords = ?2 WHERE id = ?1", params![id, value])?;
+                    changed += 1;
+                }
+            }
+            tx.commit()?;
+            Ok(changed)
+        })
+    })
+    .await
+}
+
+pub(crate) fn clean_keywords(keywords: Vec<String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for keyword in keywords {
+        let keyword: String = keyword.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(40).collect();
+        if !keyword.is_empty() && !out.iter().any(|k| k.to_lowercase() == keyword.to_lowercase()) {
+            out.push(keyword);
+        }
+    }
+    out.truncate(40);
+    out
 }
 
 /// The emulator one game starts in (D-148), over its console's; none goes back to the console's.
@@ -1485,6 +1544,65 @@ pub async fn arcade_set_extra_time(app: AppHandle, state: State<'_, AppState>, i
     .await?;
     let _ = app.emit("arcade-changed", ());
     Ok(())
+}
+
+/// A Steam game whose hours on Steam are more than Digitify counts (D-167).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SteamHours {
+    pub id: i64,
+    pub title: String,
+    /// What Steam has recorded, and what Digitify counts now (its own and added by hand).
+    pub steam_seconds: i64,
+    pub digitify_seconds: i64,
+}
+
+/// The Steam games in Arcade whose time on Steam (read from Steam's own records, D-167) is more than
+/// Digitify counts, most first. Nothing is changed.
+#[tauri::command]
+pub async fn arcade_steam_hours(state: State<'_, AppState>) -> AppResult<Vec<SteamHours>> {
+    let times = crate::library::blocking(|| Ok(stores::steam_playtimes())).await?;
+    with_library(&state, move |library| library.db.with(|conn| steam_hours(conn, &times))).await
+}
+
+fn steam_hours(conn: &rusqlite::Connection, times: &HashMap<String, i64>) -> AppResult<Vec<SteamHours>> {
+    let mut games: Vec<SteamHours> = conn
+        .prepare("SELECT id, title, store_key, play_seconds + extra_seconds FROM arcade_games WHERE store = 'steam' AND hidden = 0")?
+        .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, Option<String>>(2)?, row.get::<_, i64>(3)?)))?
+        .filter_map(Result::ok)
+        .filter_map(|(id, title, app, counted)| {
+            let steam = times.get(app.as_deref()?)? * 60;
+            (steam > counted).then_some(SteamHours { id, title, steam_seconds: steam, digitify_seconds: counted })
+        })
+        .collect();
+    games.sort_by_key(|g| std::cmp::Reverse(g.steam_seconds - g.digitify_seconds));
+    Ok(games)
+}
+
+/// Brings Steam's hours in (D-167): each Steam game whose time on Steam is more than Digitify counts
+/// gets the difference as time played elsewhere, so its total matches Steam's; a game where Digitify
+/// counts more keeps its time. Run again, it only adds what Steam has counted since. Returns how many
+/// games changed.
+#[tauri::command]
+pub async fn arcade_steam_hours_apply(app: AppHandle, state: State<'_, AppState>) -> AppResult<usize> {
+    let times = crate::library::blocking(|| Ok(stores::steam_playtimes())).await?;
+    let changed = with_library(&state, move |library| {
+        library.db.with(|conn| {
+            let games = steam_hours(conn, &times)?;
+            let tx = conn.transaction()?;
+            for game in &games {
+                tx.execute(
+                    "UPDATE arcade_games SET extra_seconds = extra_seconds + ?2 WHERE id = ?1",
+                    params![game.id, (game.steam_seconds - game.digitify_seconds).clamp(0, 360_000_000)],
+                )?;
+            }
+            tx.commit()?;
+            Ok(games.len())
+        })
+    })
+    .await?;
+    let _ = app.emit("arcade-changed", ());
+    Ok(changed)
 }
 
 /// The user's rating (1-5 stars, or none) and note for a game (D-049).
@@ -2036,6 +2154,13 @@ mod schema_tests {
     use crate::db::Database;
 
     #[test]
+    fn keywords_are_cleaned() {
+        let cleaned = super::clean_keywords(vec!["  Party  game ".into(), "party GAME".into(), "".into(), "x".repeat(60), "Couch".into()]);
+        assert_eq!(cleaned, vec!["Party game".to_string(), "x".repeat(40), "Couch".to_string()]);
+        assert_eq!(super::clean_keywords((0..50).map(|i| format!("k{i}")).collect()).len(), 40);
+    }
+
+    #[test]
     fn new_consoles_and_emulators_fit_the_tables() {
         let dir = std::env::temp_dir().join(format!("digitify-d101-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -2055,6 +2180,10 @@ mod schema_tests {
             assert!(conn.query_row("SELECT ignored FROM arcade_emulators WHERE kind = 'nulldc'", [], |r| r.get::<_, bool>(0))?);
             conn.execute("INSERT INTO arcade_games (path, platform, title, sort_title, core, system) VALUES ('a.sfc', 'snes', 'A', 'a', 'c', 'Nintendo - Super Nintendo Entertainment System')", [])?;
             assert!(conn.execute("INSERT INTO arcade_games (path, platform, title, sort_title) VALUES ('b', '', 'B', 'b')", []).is_err(), "a console needs a name");
+            // D-160: a game's keywords, kept as a JSON list.
+            conn.execute("UPDATE arcade_games SET keywords = '[\"party\",\"4 players\"]' WHERE path = 'a.sfc'", [])?;
+            let kept: String = conn.query_row("SELECT keywords FROM arcade_games WHERE path = 'a.sfc'", [], |r| r.get(0))?;
+            assert_eq!(serde_json::from_str::<Vec<String>>(&kept).unwrap(), ["party", "4 players"]);
             Ok(())
         })
         .unwrap();

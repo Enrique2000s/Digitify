@@ -101,6 +101,80 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-170 · Title is Arcade's default sort again
+- **Date:** 2026-11-21 · **Approved by:** project owner (asked for Title back as the default)
+- Title is first in Arcade's Sort menu and the default again; Console stays in the menu (still centering each console's games). A copy that D-169 had moved from Title to Console goes back to Title once; a sort chosen after that is kept.
+
+### D-169 · Arcade's defaults and touches: All games, Console first, Completed, badges below, Other PC, every console's name, default covers
+- **Date:** 2026-11-21 · **Approved by:** project owner (asked for each)
+- **All games:** a view of its own, first, and the one Arcade opens on; Settings › Arcade › "All games" view switches it off (as does its row in the views' list). It replaces the "combine PC games and ROM games" switch: a copy that had it on keeps one All games view, PC games and ROM games hidden.
+- **Console sort first:** first in the Sort menu and the default (Title again since D-170); its games centered under each heading, as the other sorts' are. A copy saved before still on the old default view (All PC games) moves to All games once.
+- **Completed, a default collection:** after Favorites, always there, never renamed or deleted, holding the games marked as completed; in Add to collection (checking it marks the game as completed) and in Big Picture; Take out of collection marks them not completed.
+- **Favorite and Completed badges at the bottom right** of the box, clear of the console's or launcher's badge at the top; they step aside while the play button shows there.
+- **Other PC:** the view of games added by their program, before "Others".
+- **Every console's name** in Emulators & folders: a little smaller, and sliding to show the rest when it still doesn't fit.
+- **Default covers:** a song (or video) without a cover shows Digitify's own on the system's media card (sound waves, or a play sign, white on a blue tile, drawn once into the settings' cache), so the card never keeps the one before; in the Now playing queue, a song without a cover shows the same sound waves as the title bar's player.
+- **Epic Games' hours: not possible.** Epic's launcher doesn't keep play time on the computer (it asks Epic's servers when its library opens); reading it would mean signing in to the player's Epic account, which Digitify doesn't do.
+
+### D-168 · The cover on the system's "now playing" card, and one card only
+- **Date:** 2026-11-21 · **Approved by:** project owner (chose "media keys and Windows' media controls" from a list; they were already there since D-058, so this adds what was missing)
+- **The cover and length:** the song playing shows its cover (from the library's artwork) and its length on Windows' media card and Linux's MPRIS. Videos keep their title.
+- **One card:** the bundled mpv (Windows) put up a "now playing" card of its own beside Digitify's, which could take the media keys and do nothing with them. Its own media controls are now off (`--media-controls=no`, music and videos), so Digitify's card, which works for both, is the only one.
+
+### D-167 · Steam's hours in Arcade
+- **Date:** 2026-11-21 · **Approved by:** project owner (chose this idea from a list)
+- **Read, never changed:** Steam keeps each game's play time in the account's `userdata/<account>/config/localconfig.vdf` (`Playtime`, in minutes, under `Software/Valve/Steam/apps/<app id>`); Digitify reads the one Steam wrote last.
+- **Shown first:** Emulators & folders › Launchers, on Steam's row, **Steam's hours…**: how much more time and over how many games, each game's time in Digitify → on Steam. Nothing changes until **Use Steam's hours**.
+- **Brought in:** each Steam game whose time on Steam is more than Digitify counts gets the difference as time played elsewhere, so its total matches Steam's; a game where Digitify counts more keeps its time. Done again later, it adds only what Steam has counted since. The time has no days, so it counts in the games' totals, not in the statistics by day.
+
+### D-166 · Favorite and Completed, the same badge
+- **Date:** 2026-11-21 · **Approved by:** project owner (asked for them to match and line up)
+- A favorite's heart is now a round badge like Completed's seal: both 24 px (30 px in Big Picture), at the same height at the top right of the box, 6 px apart; pink with a white heart, green with a white check.
+
+### D-165 · The window never moves up
+- **Date:** 2026-11-21 · **Approved by:** project owner (reported Surprise me pushing the whole app up, its top cut off)
+- **The cause:** bringing the chosen game's box into the middle asked every container around it to scroll, the window's own included; with Frutiger Aero's bubbles reaching past the window's edges, it had room to, and moved up.
+- **Now:** only the page scrolls to bring the box into the middle, and only the views' row scrolls sideways to show the chosen view; and the window's outer containers can't be scrolled at all (`overflow: clip`), so nothing can push the app up again.
+
+### D-164 · Your week on Home, saved as a picture
+- **Date:** 2026-11-21 · **Approved by:** project owner (chose this idea from a list)
+- **On Home:** one line above the statistics, **This week**: the last seven days' time (today included) and the activities with the most, plus things finished, and a **Your week** button. Nothing recorded yet says so on the line, with no button; in Big Picture the line shows alone.
+- **Your week:** the time over how many days, and how it compares with the seven days before ("+40 % on the week before", "2.5× the week before", "about the same"; nothing when the week before had under 10 minutes), the seven days as bars, the time per activity, games played, things read, watched or listened to, tracks played, finished and added, and the most played games, most time with and most played artists. From this library's own records (`week_review`).
+- **Save as image:** a 1600 × 900 picture (the total and how it compares, the time per activity, the seven days, the week's most played game, most time with and most played artist, your name, "Made with Digitify"), drawn on this computer and saved where you choose.
+- **A fix found on the way:** saving a picture needs Windows' save dialog, which Digitify wasn't allowed to open (`dialog:allow-save` was missing), so the profile's **Share as image** (D-149) couldn't save either; both save now.
+
+### D-163 · Surprise me
+- **Date:** 2026-11-21 · **Approved by:** project owner (chose this idea from a list)
+- **In Arcade:** **Surprise me**, beside Select, picks a game from what's shown (the view, collection or search), one not completed first and never the one it just picked; its panel opens and its box is brought into sight with a glow for a moment. Nothing starts by itself.
+- **In the Library:** **Surprise me**, beside Select, picks something from the view: not started or under way first (finished only when nothing else is left), never the one just picked, and opens its page. Not on a view of collections.
+
+### D-162 · Keywords for several games at once
+- **Date:** 2026-11-21 · **Approved by:** project owner (chose this idea from a list)
+- **In the selection bar:** **Keywords** opens a little menu: a field to add one (or several, with commas) to all the selected games, and the keywords they have, with how many have each ("all", "2 games") and **Take out** for each. Each game keeps its other keywords (`arcade_change_keywords`).
+
+### D-161 · The views' arrows don't show even for a moment when everything fits
+- **Date:** 2026-11-21 · **Approved by:** project owner (reported the arrow still showing for about a second after going from GameCube or Wii to another view)
+- **Now:** besides being measured after every change (D-159), the views are measured again every frame for a moment after any change, so whatever settles late is caught at once; and an arrow appears 90 ms after it's wanted while it hides at once, so a frame measured wrong never shows. (A scroll timeline in CSS was tried and left out: the web view keeps its last state when the row stops overflowing.)
+
+### D-160 · Keywords of your own on Arcade's games
+- **Date:** 2026-11-21 · **Approved by:** project owner (asked for keywords per game, found by the search and by dynamic collections)
+- **In a game's panel:** **Keywords**, under Your review: little chips with × to take one out, and a field where Enter or a comma adds one (several at once with commas; Backspace in the empty field takes the last out). Trimmed, without repeats whatever their case, up to 40 of up to 40 characters. Kept in `arcade_games.keywords` (a JSON list; schema 32).
+- **Found by them:** Arcade's Find a game, the title bar's search (Arcade's games) and the command palette match a game's keywords as they match its name. A dynamic collection's words ("The name or keywords have", "…don't have") match them too, so a game whose name lacks a word joins the collection by a keyword.
+
+### D-159 · The views' arrows never stay on when everything fits
+- **Date:** 2026-11-21 · **Approved by:** project owner (reported an arrow left on, and doing nothing, after going from GameCube or Wii to another view, until leaving Arcade and coming back)
+- **Now:** whether the views overflow is measured again after every change to them, not only when their row is resized: a view's name changing ("Nintendo · GameCube" back to "Nintendo"), a view's button changing size, the tools moving to or from their line, the window changing. An arrow only shows while there's more that way.
+
+### D-158 · Arcade's views use the room there is before showing arrows
+- **Date:** 2026-11-21 · **Approved by:** project owner (reported the views' arrows showing with room left on the line)
+- **The cause:** Find, Size, Select and Sort started from a set 800 px, more than they need, so the views stopped short (about 900 px at 1920) behind their arrows while space sat empty before Sort.
+- **Now:** the views come first at their full width. When they and the tools don't fit on one line, the tools (Find, Size, Select, Sort) go to the line under them, Sort at its end, so the views show whole; arrows show only when the views don't fit even on a line of their own. When both fit, they share the line. A view's name changing (a maker's console chosen, "Nintendo · GameCube") is laid out again the same way.
+
+### D-157 · Emulators & folders closes when another button is used
+- **Date:** 2026-11-21 · **Approved by:** project owner (asked for it to close instead of staying open)
+- **Now:** with Emulators & folders open in Arcade, using anything outside it closes it: a button, a link, a field, a dropdown (the makers' consoles, Sort) and its options, by mouse or by keyboard (Enter, Space). Its own button still opens and closes it; what's inside it, and menus or dialogs it opens, keep it open; a click on empty space doesn't close it.
+- **When:** what was pressed is seen as it's pressed (a dropdown opens then), and it closes as the pointer is let go: closing sooner moved the page up under the dropdown just opened, so letting go chose one of its options by itself.
+
 ### D-156 · A game's cover whole in its panel
 - **Date:** 2026-11-21 · **Approved by:** project owner (reported the cover cut at the top of a game's panel)
 - **The cause:** the panel is a column that scrolls; when its contents were taller than the window (a note, several facts), the cover's box was squeezed shorter and its picture cut. Its box was also capped at 340 px high, which cut 20 px off a 2 : 3 cover.

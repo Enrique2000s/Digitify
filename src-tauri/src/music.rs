@@ -483,6 +483,9 @@ async fn session(app: &AppHandle, state: &MusicState, volume: f64) -> AppResult<
             "--terminal=no".into(),
             format!("--log-file={}", log_file.display()),
         ])
+        // Windows' media controls are Digitify's own (D-058): mpv's would be a second card that
+        // takes the media keys and does nothing with them (D-168). Only the bundled mpv knows this option.
+        .args(if cfg!(windows) { &["--media-controls=no"][..] } else { &[][..] })
         .spawn()
         .map_err(|e| AppError::msg(format!("could not start mpv: {e}")))?;
     let client = match player::connect(&pipe).await {

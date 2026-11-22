@@ -242,6 +242,30 @@ export interface CalendarDay {
   seconds: number;
 }
 
+/** Your week (D-164): the last seven days, today included; times in seconds, top lists' `count` in
+ *  minutes (artists: plays). */
+export interface WeekReview {
+  start: string;
+  end: string;
+  read: number;
+  watch: number;
+  listen: number;
+  play: number;
+  /** All the time of the seven days before. */
+  previous: number;
+  daysActive: number;
+  days: CalendarDay[];
+  finished: number;
+  added: number;
+  games: number;
+  items: number;
+  tracks: number;
+  bestDay: [string, number] | null;
+  topGames: NamedCount[];
+  topItems: NamedCount[];
+  topArtists: NamedCount[];
+}
+
 /** Your year in Digitify (D-065); times in seconds, top lists' `count` in minutes (artists: plays). */
 export interface YearReview {
   year: number;
@@ -802,6 +826,7 @@ export const api = {
   stats: () => invoke<LibraryStats>("library_stats"),
   activityCalendar: (year: number) => invoke<CalendarDay[]>("activity_calendar", { year }),
   yearReview: (year: number) => invoke<YearReview>("year_review", { year }),
+  weekReview: () => invoke<WeekReview>("week_review"),
   achievementsList: () => invoke<Achievement[]>("achievements_list"),
   resumeGet: () => invoke<Resume | null>("resume_get"),
   appQuit: () => invoke<void>("app_quit"),
@@ -897,6 +922,10 @@ export const api = {
   arcadeSetGameEmulator: (id: number, emulator: ArcadeEmulator | null) => invoke<void>("arcade_set_game_emulator", { id, emulator }),
   /** Marks games as completed or not (D-149). */
   arcadeSetCompleted: (ids: number[], completed: boolean) => invoke<void>("arcade_set_completed", { ids, completed }),
+  arcadeSetKeywords: (id: number, keywords: string[]) => invoke<string[]>("arcade_set_keywords", { id, keywords }),
+  arcadeChangeKeywords: (ids: number[], add: string[], remove: string[]) => invoke<number>("arcade_change_keywords", { ids, add, remove }),
+  arcadeSteamHours: () => invoke<{ id: number; title: string; steamSeconds: number; digitifySeconds: number }[]>("arcade_steam_hours"),
+  arcadeSteamHoursApply: () => invoke<number>("arcade_steam_hours_apply"),
   arcadeCoverChoices: (id: number, search?: string) => invoke<ArcadeCoverChoice[]>("arcade_cover_choices", { id, search: search ?? null }),
   arcadeChooseCover: (id: number, index: number) => invoke<void>("arcade_choose_cover", { id, index }),
   /** Adds a PC game by its program (D-107); returns its id. */
@@ -1121,6 +1150,8 @@ export interface ArcadeGame {
   emulator: ArcadeEmulator | null;
   /** When it was marked as completed (D-149). */
   completedAt: string | null;
+  /** Your own keywords for it (D-160). */
+  keywords: string[];
 }
 
 /** The personal profile (D-149): kept on this computer; the pictures come as data URLs. */
