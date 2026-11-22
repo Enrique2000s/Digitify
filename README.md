@@ -1,6 +1,14 @@
-# Digitify
+<p align="center">
+  <img src="docs/images/banner.webp" alt="Digitify: your whole media collection and all your games, in one place" width="100%">
+</p>
 
-> Your whole media collection and all your games, in one place.
+<p align="center">
+  <a href="https://github.com/Enrique2000s/Digitify/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Enrique2000s/Digitify?label=download&color=1592d0"></a>
+  <img alt="Windows and Linux" src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-2d3748">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-29a383"></a>
+</p>
+
+# Digitify
 
 Digitify is an offline-first desktop app for **Windows and Linux** with two purposes (D-110):
 
@@ -23,6 +31,20 @@ No accounts, no cloud, no telemetry: it goes online only when you ask it to, suc
 Each release also has `SHA256SUMS.txt` to check the files. Older versions: [all releases](https://github.com/Enrique2000s/Digitify/releases).
 
 > **Windows says "Windows protected your PC"?** The installer isn't signed with a paid certificate yet. Click **More info**, then **Run anyway**.
+
+## Screenshots
+
+<p align="center"><img src="docs/images/tour.gif" alt="A short tour: Home, Movies & Series, Books, Arcade and Big Picture" width="100%"></p>
+
+<table>
+  <tr><td width="50%"><img src="docs/images/screenshots/home.webp" alt="Home: your categories, what's featured today and your statistics"><br><sub>Home: your categories, what's featured today and your statistics</sub></td><td width="50%"><img src="docs/images/screenshots/arcade.webp" alt="Arcade: your stores' and emulators' games, each in its console's box"><br><sub>Arcade: your stores' and emulators' games, each in its console's box</sub></td></tr>
+  <tr><td width="50%"><img src="docs/images/screenshots/arcade-panel.webp" alt="A game's panel: play time, your review, keywords and collections"><br><sub>A game's panel: play time, your review, keywords and collections</sub></td><td width="50%"><img src="docs/images/screenshots/bigpicture.webp" alt="Big Picture: the TV interface for controllers"><br><sub>Big Picture: the TV interface for controllers</sub></td></tr>
+  <tr><td width="50%"><img src="docs/images/screenshots/movies-carousel.webp" alt="Movies & Series in the 3D carousel"><br><sub>Movies & Series in the 3D carousel</sub></td><td width="50%"><img src="docs/images/screenshots/books-shelf.webp" alt="Books on wooden shelves"><br><sub>Books on wooden shelves</sub></td></tr>
+  <tr><td width="50%"><img src="docs/images/screenshots/comic.webp" alt="Comics and manga, page by page or as spreads"><br><sub>Comics and manga, page by page or as spreads</sub></td><td width="50%"><img src="docs/images/screenshots/nowplaying.webp" alt="Now playing, with its queue"><br><sub>Now playing, with its queue</sub></td></tr>
+  <tr><td width="50%"><img src="docs/images/screenshots/pictures.webp" alt="Pictures, in albums from your folders"><br><sub>Pictures, in albums from your folders</sub></td><td width="50%"><img src="docs/images/screenshots/profile.webp" alt="Your profile, shared as a picture"><br><sub>Your profile, shared as a picture</sub></td></tr>
+</table>
+
+<sub>Every book, song, film, picture and game shown is fictional demo content made for these screenshots.</sub>
 
 ## What it does
 - **One library** for Pictures, Books, Comics, Manga, Music, Videos and Movies & Series, in fixed categories you can reorder or hide. Each file is its own item (a series keeps its episodes together).
@@ -58,6 +80,7 @@ Progress, test results and known limits are in [docs/STATUS.md](docs/STATUS.md);
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the app is put together |
 | [docs/STATUS.md](docs/STATUS.md) | Feature status, test results and known limitations |
 | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) | Licenses of the helper programs and libraries |
+| [docs/images/](docs/images) | The README's banner, tour and screenshots, and the repository's social preview (`social-preview.png`) |
 
 ## Installing
 
