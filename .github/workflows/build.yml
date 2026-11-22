@@ -1,13 +1,15 @@
 # Builds Digitify's installers (D-031): the Windows installer (NSIS) and, for Linux, a .deb package,
 # an AppImage and the Arch Linux install script, and runs the core's tests. Every push to main
 # builds and tests; the installers are kept as downloadable artifacts only when the workflow is run
-# by hand (Actions › Build installers › Run workflow) or for a version tag (v0.3.0…), and only for a
-# week, so the account's artifact storage never fills up (D-089).
+# by hand (Actions › Build installers › Run workflow), and only for a week (D-089).
 #
-# A version tag (v0.9.3…) also publishes a GitHub Release with the installers under names that never
+# A version tag (v0.9.3…) publishes a GitHub Release with the installers under names that never
 # change, so the README's download links always give the newest one (D-172):
 #   Digitify-Setup-Windows-x64.exe, Digitify-Linux-amd64.deb, Digitify-Linux-x86_64.AppImage,
 #   Digitify-Arch-install.sh, and SHA256SUMS.txt to check them.
+# The release starts as a draft, each build puts its files straight into it, and it's published once
+# all of them are there. Release files never count against Actions' artifact storage (500 MB on a
+# private repository's free plan, less than one version's installers).
 name: Build installers
 
 on:
@@ -17,9 +19,57 @@ on:
     tags: ["v*"]
 
 jobs:
+  # A version tag only: it must be the version in package.json, so the release and the installers
+  # inside it never disagree; then its release is started as a draft (or put back to one, when the
+  # tag is built again).
+  prepare:
+    name: Start the release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag matches the version
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "The tag ${GITHUB_REF_NAME} isn't v${version} (package.json)." >&2
+            exit 1
+          fi
+
+      - name: Draft release
+        run: |
+          cat > notes.md <<EOF
+          ## Download
+
+          | Your computer | File |
+          |---|---|
+          | **Windows 10/11 (64-bit)** | [Digitify-Setup-Windows-x64.exe](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Digitify-Setup-Windows-x64.exe) |
+          | **Ubuntu, Debian, Linux Mint, Pop!_OS** | [Digitify-Linux-amd64.deb](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Digitify-Linux-amd64.deb) |
+          | **Arch, Manjaro, EndeavourOS, CachyOS** | the .deb above and [Digitify-Arch-install.sh](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Digitify-Arch-install.sh) |
+          | **Any other Linux** | [Digitify-Linux-x86_64.AppImage](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Digitify-Linux-x86_64.AppImage) |
+
+          How to install each one is in the [README](https://github.com/${GITHUB_REPOSITORY}#download). What changed is in the app, under Settings › About › What's new.
+          EOF
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release edit "${GITHUB_REF_NAME}" --draft --title "Digitify ${GITHUB_REF_NAME}" --notes-file notes.md
+          else
+            gh release create "${GITHUB_REF_NAME}" --draft --verify-tag --title "Digitify ${GITHUB_REF_NAME}" --notes-file notes.md
+          fi
+
   linux:
     name: Linux (.deb, AppImage)
+    # After the release is started, for a tag; at once for a push to main (the start is skipped then).
+    needs: prepare
+    if: ${{ !cancelled() && needs.prepare.result != 'failure' }}
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -57,8 +107,20 @@ jobs:
       - name: Arch Linux install script
         run: cp scripts/install-arch.sh src-tauri/target/release/bundle/install-arch.sh
 
+      - name: Into the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir -p release
+          cp src-tauri/target/release/bundle/deb/*.deb release/Digitify-Linux-amd64.deb
+          cp src-tauri/target/release/bundle/appimage/*.AppImage release/Digitify-Linux-x86_64.AppImage
+          cp scripts/install-arch.sh release/Digitify-Arch-install.sh
+          gh release upload "${GITHUB_REF_NAME}" release/* --clobber
+
       - uses: actions/upload-artifact@v4
-        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'workflow_dispatch'
         with:
           name: digitify-linux
           retention-days: 7
@@ -70,7 +132,11 @@ jobs:
 
   windows:
     name: Windows (installer)
+    needs: prepare
+    if: ${{ !cancelled() && needs.prepare.result != 'failure' }}
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -107,65 +173,44 @@ jobs:
         working-directory: src-tauri
         run: cargo test --release
 
+      - name: Into the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir -p release
+          cp src-tauri/target/release/bundle/nsis/*-setup.exe release/Digitify-Setup-Windows-x64.exe
+          gh release upload "${GITHUB_REF_NAME}" release/Digitify-Setup-Windows-x64.exe --clobber
+
       - uses: actions/upload-artifact@v4
-        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'workflow_dispatch'
         with:
           name: digitify-windows
           retention-days: 7
           path: src-tauri/target/release/bundle/nsis/*-setup.exe
           if-no-files-found: error
 
-  release:
+  # Once both builds have put their files in: their checksums, then the release goes public.
+  publish:
     name: Publish the release
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [linux, windows]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
     steps:
-      - uses: actions/checkout@v4
-
-      # The tag has to be the version the app says it is (package.json), so the release and the
-      # installers inside it never disagree.
-      - name: Tag matches the version
+      - name: Checksums, then published
         run: |
-          version="$(node -p "require('./package.json').version")"
-          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
-            echo "The tag ${GITHUB_REF_NAME} isn't v${version} (package.json)." >&2
-            exit 1
-          fi
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: built
-
-      - name: Installers under names that never change
-        run: |
-          mkdir release
-          cp built/digitify-windows/*-setup.exe release/Digitify-Setup-Windows-x64.exe
-          cp built/digitify-linux/deb/*.deb release/Digitify-Linux-amd64.deb
-          cp built/digitify-linux/appimage/*.AppImage release/Digitify-Linux-x86_64.AppImage
-          cp built/digitify-linux/install-arch.sh release/Digitify-Arch-install.sh
-          cd release && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
-
-      - name: Release notes
-        run: |
-          cat > notes.md <<EOF
-          ## Download
-
-          | Your computer | File |
-          |---|---|
-          | **Windows 10/11 (64-bit)** | [Digitify-Setup-Windows-x64.exe](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Digitify-Setup-Windows-x64.exe) |
-          | **Ubuntu, Debian, Linux Mint, Pop!_OS** | [Digitify-Linux-amd64.deb](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Digitify-Linux-amd64.deb) |
-          | **Arch, Manjaro, EndeavourOS, CachyOS** | the .deb above and [Digitify-Arch-install.sh](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Digitify-Arch-install.sh) |
-          | **Any other Linux** | [Digitify-Linux-x86_64.AppImage](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Digitify-Linux-x86_64.AppImage) |
-
-          How to install each one is in the [README](https://github.com/${GITHUB_REPOSITORY}#download). What changed is in the app, under Settings › About › What's new.
-          EOF
-
-      - uses: softprops/action-gh-release@v2
-        with:
-          name: Digitify ${{ github.ref_name }}
-          body_path: notes.md
-          files: release/*
-          fail_on_unmatched_files: true
+          mkdir release && cd release
+          gh release download "${GITHUB_REF_NAME}" --pattern 'Digitify-*'
+          for f in Digitify-Setup-Windows-x64.exe Digitify-Linux-amd64.deb Digitify-Linux-x86_64.AppImage Digitify-Arch-install.sh; do
+            [ -s "$f" ] || { echo "The release is missing $f." >&2; exit 1; }
+          done
+          sha256sum Digitify-* > SHA256SUMS.txt && cat SHA256SUMS.txt
+          gh release upload "${GITHUB_REF_NAME}" SHA256SUMS.txt --clobber
+          gh release edit "${GITHUB_REF_NAME}" --draft=false --latest

@@ -79,7 +79,7 @@ git tag v0.9.3
 git push origin v0.9.3
 ```
 
-GitHub Actions builds the Windows installer and the Linux packages, runs the tests, and publishes a release with the four files under the names above (the README's links always give the newest). It refuses a tag that isn't the version in `package.json`. To build the installers on your own computer instead: `npm run installer` (Windows, into `installer\`); for Linux, Actions › **Build installers** › **Run workflow** keeps them for a week, and `npm run installer:linux` downloads them (needs the [GitHub CLI](https://cli.github.com)).
+GitHub Actions builds the Windows installer and the Linux packages, runs the tests, and puts the four files into a draft release under the names above, published once all of them are there with their checksums (the README's links always give the newest). It refuses a tag that isn't the version in `package.json`. To build the installers on your own computer instead: `npm run installer` (Windows, into `installer\`); for Linux, Actions › **Build installers** › **Run workflow** keeps them for a week, and `npm run installer:linux` downloads them (needs the [GitHub CLI](https://cli.github.com)).
 
 ## Building from source
 
