@@ -1,6 +1,6 @@
 [package]
 name = "digitify"
-version = "0.9.3"
+version = "0.10.0"
 description = "Digitify: a home for all your media (Library) and a universal launcher for your games (Arcade)"
 authors = ["Digitify contributors"]
 license = "MIT"

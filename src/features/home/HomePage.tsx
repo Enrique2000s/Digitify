@@ -34,7 +34,7 @@ import { useDashboard } from "../../lib/queries";
 import { AddMenu } from "../../components/AddMenu";
 import { photoContext } from "../../lib/routes";
 import { addProgramGame } from "../arcade/shared";
-import { Collage } from "../../components/Collage";
+import { RotatingCollage } from "../../components/Collage";
 import { CategoryIcon, Cover } from "../../components/common";
 import { MediaCard } from "../../components/MediaCard";
 import { useLaunch } from "../arcade/shared";
@@ -94,11 +94,12 @@ interface TileProps extends ComponentPropsWithoutRef<"button"> {
   add?: boolean;
 }
 
-function TileBody({ label, screen, covers, icon, count, add }: Omit<TileProps, keyof ComponentPropsWithoutRef<"button">>) {
+function TileBody({ label, screen, covers, icon, count, add, turn }: Omit<TileProps, keyof ComponentPropsWithoutRef<"button">> & { turn?: number }) {
   return (
     <>
       <div className={`tile-screen screen-${screen}`}>
-        {covers.length > 0 ? <Collage covers={covers} /> : <div className="tile-icon">{icon}</div>}
+        {/* The covers move on through the category's newest ones (D-177). */}
+        {covers.length > 0 ? <RotatingCollage covers={covers} turn={turn} /> : <div className="tile-icon">{icon}</div>}
       </div>
       <div className="tile-label">
         <strong>{label}</strong>
@@ -109,10 +110,10 @@ function TileBody({ label, screen, covers, icon, count, add }: Omit<TileProps, k
   );
 }
 
-function SectionTile({ scope, label, screen, covers, icon, count }: { scope: string; label: string; screen: number; covers: TileCover[]; icon: ReactNode; count?: number }) {
+function SectionTile({ scope, label, screen, covers, icon, count, turn }: { scope: string; label: string; screen: number; covers: TileCover[]; icon: ReactNode; count?: number; turn?: number }) {
   return (
     <Link to="/library/$scope" params={{ scope }} className="tile" data-blip>
-      <TileBody label={label} screen={screen} covers={covers} icon={icon} count={count} />
+      <TileBody label={label} screen={screen} covers={covers} icon={icon} count={count} turn={turn} />
     </Link>
   );
 }
@@ -140,10 +141,11 @@ function Tiles({ categories, covers, total, games }: { categories: Category[]; c
           covers={covers[category.key] ?? []}
           icon={<CategoryIcon icon={category.icon} size={36} strokeWidth={2.2} />}
           count={category.itemCount}
+          turn={index + 1}
         />
       ))}
       <Link to="/arcade" className="tile" data-blip>
-        <TileBody label="Arcade" screen={SCREENS.arcade} covers={games.covers} icon={<Joystick size={36} strokeWidth={2.2} aria-hidden />} count={games.count} />
+        <TileBody label="Arcade" screen={SCREENS.arcade} covers={games.covers} icon={<Joystick size={36} strokeWidth={2.2} aria-hidden />} count={games.count} turn={visible.length + 1} />
       </Link>
     </section>
   );

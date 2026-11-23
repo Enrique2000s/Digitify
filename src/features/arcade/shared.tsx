@@ -503,3 +503,12 @@ export function playsIn(game: ArcadeGame, arcade: ArcadePreferences, status: Arc
   const key = chosen && found.includes(chosen) ? chosen : (found[0] ?? players[0]);
   return status?.emulators.find((e) => e.key === key)?.name ?? "its emulator";
 }
+
+/** Each maker's consoles, in their order: the views' menus and Emulators & folders › Consoles group by them. */
+export const CONSOLE_MAKERS: [string, readonly string[]][] = [
+  ["Nintendo", ["wii", "wiiu", "gamecube", "n64", "switch", "ds", "3ds", "nes", "snes", "gb", "gbc", "gba"]],
+  ["PlayStation", ["ps1", "ps2", "ps3", "psp"]],
+  ["Sega", ["sms", "genesis", "segacd", "gamegear", "saturn", "dreamcast"]],
+  ["Xbox consoles", ["ogxbox", "x360"]],
+  ["More consoles", ["pce", "arcade", "atari2600", "other"]],
+];

@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Check, Circle, Play } from "lucide-react";
 import { api, type Episode, type ItemDetail } from "../../lib/api";
 import { libraryChanged } from "../../lib/queries";
+import { EpisodeThumb, useEpisodeThumbs } from "./SeriesEpisodes";
 
 const VIDEO_FILES = /\.(mp4|m4v|mkv|mov|avi|webm|wmv|mpg|mpeg|ts|m2ts|ogv|flv)$/i;
 
@@ -67,10 +68,27 @@ export function WatchedButton({ item }: { item: ItemDetail }) {
   );
 }
 
+/** Marks a book, comic or manga read or not (D-178), as Mark as watched does for films. */
+export function ReadButton({ item }: { item: ItemDetail }) {
+  const queryClient = useQueryClient();
+  const read = (item.progress ?? 0) >= 0.999;
+  const toggle = async () => {
+    await api.readMark(item.id, !read);
+    libraryChanged(queryClient);
+  };
+  return (
+    <button type="button" className="btn" aria-pressed={read} onClick={() => void toggle()}>
+      {read ? <Check size={16} /> : <Circle size={16} />} {read ? "Read" : "Mark as read"}
+    </button>
+  );
+}
+
 /** A series' seasons and episodes, each with its progress, a play link and a watched mark. */
 export function EpisodesPanel({ item }: { item: ItemDetail }) {
   const queryClient = useQueryClient();
   const episodes = useEpisodes(item);
+  // Each episode shows its thumbnail (D-174); the ones still missing are made from the episodes.
+  useEpisodeThumbs(item.id, isSeries(item));
   if (!isSeries(item) || !episodes.data?.length) return null;
   const seasons = [...new Set(episodes.data.map((e) => e.season ?? 0))];
   const mark = async (episode: Episode) => {
@@ -90,6 +108,9 @@ export function EpisodesPanel({ item }: { item: ItemDetail }) {
               .map((episode) => (
                 <li key={episode.id} className={episode.completed ? "watched" : undefined}>
                   <span className="no">{episode.number ?? ""}</span>
+                  <Link to="/watch/$id" params={{ id: String(item.id) }} search={{ part: episode.id }} className="episode-thumb-link" tabIndex={-1} aria-hidden>
+                    <EpisodeThumb episode={episode} />
+                  </Link>
                   <Link to="/watch/$id" params={{ id: String(item.id) }} search={{ part: episode.id }} className="chapter-link episode-link">
                     <Play size={14} aria-hidden /> {episode.title || `Episode ${episode.number}`}
                   </Link>

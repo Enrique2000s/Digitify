@@ -39,6 +39,11 @@ impl LibraryFolder {
         self.root.join("cache").join("thumbs")
     }
 
+    /// Hover previews of Videos (D-179), short silent clips made when first wanted.
+    pub fn previews_dir(&self) -> PathBuf {
+        self.root.join("cache").join("previews")
+    }
+
     /// Managed copies made by "Copy into library" imports.
     pub fn media_dir(&self) -> PathBuf {
         self.root.join("media")

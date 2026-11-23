@@ -5,6 +5,9 @@ import { Plus, X } from "lucide-react";
 import { api, errorText, type Handler, type ItemDetail, type PersonInput } from "../../lib/api";
 import { libraryChanged, useCategories } from "../../lib/queries";
 import { Dialog, Field } from "../../components/common";
+import { SeriesEpisodesEditor } from "./SeriesEpisodes";
+import { ItemAppearance } from "./ItemAppearance";
+import { isSeries } from "./WatchPanels";
 
 /** Disc formats a film or series in Movies & Series can come from (D-029). */
 export const DISC_FORMATS: [string, string][] = [
@@ -114,15 +117,19 @@ export function EditItemDialog({ item, open, onOpenChange }: { item: ItemDetail;
       discFormat: str(metadata.discFormat),
     });
     setError(null);
-    // Only when the dialog opens: later category changes must not reset what's being typed.
-  }, [open, item]);
+    // Only when the dialog opens: changes made meanwhile (the appearance, applied at once) must not
+    // reset what's being typed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, item.id]);
 
   const handler = categoryInfo?.handler ?? item.handler;
+  // A series' own details: its episodes are edited below, so the per-episode fields don't apply (D-174).
+  const metadataFields = isSeries(item) ? [] : METADATA_FIELDS[handler];
   const defaultDirection = categoryInfo?.settings.readingDirection ?? (category === "manga" ? "rtl" : "ltr");
 
   const save = async () => {
     const metadata: Record<string, unknown> = { ...(item.metadata ?? {}) };
-    for (const { key } of METADATA_FIELDS[handler]) {
+    for (const { key } of metadataFields) {
       const value = blankToNull(fields[key] ?? "");
       if (value === null) delete metadata[key];
       else metadata[key] = value;
@@ -158,7 +165,7 @@ export function EditItemDialog({ item, open, onOpenChange }: { item: ItemDetail;
       onOpenChange={onOpenChange}
       wide
       title="Edit details"
-      description="Changes are saved in your library only. Your media files are never modified."
+      description="Its details, how it looks, and for a series its episodes. Changes are saved in your library only; your media files are never modified."
       footer={
         <>
           <button type="button" className="btn" onClick={() => onOpenChange(false)}>
@@ -170,6 +177,8 @@ export function EditItemDialog({ item, open, onOpenChange }: { item: ItemDetail;
         </>
       }
     >
+      {/* Everything about how it looks, in one place (D-175). */}
+      <ItemAppearance item={item} />
       <div className="field-row">
         <Field label="Title">
           <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -188,9 +197,9 @@ export function EditItemDialog({ item, open, onOpenChange }: { item: ItemDetail;
         </Field>
       </div>
       <PeopleEditor people={people} onChange={setPeople} />
-      {METADATA_FIELDS[handler].length > 0 && (
+      {metadataFields.length > 0 && (
         <div className="field-row">
-          {METADATA_FIELDS[handler].map(({ key, label }) => (
+          {metadataFields.map(({ key, label }) => (
             <Field key={key} label={label}>
               <input className="input" value={fields[key] ?? ""} onChange={(e) => setFields({ ...fields, [key]: e.target.value })} />
             </Field>
@@ -224,6 +233,8 @@ export function EditItemDialog({ item, open, onOpenChange }: { item: ItemDetail;
         <textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} />
       </Field>
       {error && <div className="dialog-error">{error}</div>}
+      {/* A series' episodes: their order, thumbnails, and adding or taking out episodes (D-174). */}
+      {isSeries(item) && <SeriesEpisodesEditor item={item} />}
     </Dialog>
   );
 }

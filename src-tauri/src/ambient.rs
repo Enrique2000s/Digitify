@@ -3,7 +3,7 @@
 //! the library) into a playlist and remembers exactly which files may be streamed, so the media
 //! protocol never serves a path that came from a URL.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
@@ -24,17 +24,21 @@ const MAX_TRACKS: usize = 10_000;
 #[derive(Default)]
 pub struct AmbientState {
     next_generation: AtomicU64,
-    /// The current playlist's generation and files; a track's id is its index.
-    playlist: RwLock<(u64, Vec<PathBuf>)>,
+    /// Each menu's current playlist (D-174: the main menu, Settings and Big Picture can each have
+    /// the user's own music): its generation and files; a track's id is its index.
+    playlists: RwLock<HashMap<String, (u64, Vec<PathBuf>)>>,
 }
 
 impl AmbientState {
-    /// The file behind a track of the current playlist. Stale generations resolve to nothing.
+    /// The file behind a track of a menu's current playlist. Stale generations resolve to nothing.
     pub fn track(&self, generation: u64, index: usize) -> Option<PathBuf> {
-        let playlist = self.playlist.read().ok()?;
-        (playlist.0 == generation).then(|| playlist.1.get(index).cloned()).flatten()
+        let playlists = self.playlists.read().ok()?;
+        playlists.values().find(|(current, _)| *current == generation).and_then(|(_, files)| files.get(index).cloned())
     }
 }
+
+/// The menus that can have music of their own (D-174).
+const SLOTS: &[&str] = &["main", "settings", "bigpicture"];
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -172,7 +176,9 @@ pub async fn ambient_playlist(
     state: State<'_, AppState>,
     ambient: State<'_, AmbientState>,
     sources: Vec<MusicSource>,
+    slot: Option<String>,
 ) -> AppResult<Playlist> {
+    let slot = slot.filter(|s| SLOTS.contains(&s.as_str())).unwrap_or_else(|| "main".to_string());
     let generation = ambient.next_generation.fetch_add(1, Ordering::SeqCst) + 1;
     let library = state.library().ok();
     let built = blocking(move || {
@@ -196,10 +202,11 @@ pub async fn ambient_playlist(
     .await?;
 
     let (paths, tracks): (Vec<PathBuf>, Vec<AmbientTrack>) = built.tracks.into_iter().unzip();
-    if let Ok(mut playlist) = ambient.playlist.write() {
-        // A slower, older request must not replace a newer playlist.
-        if generation > playlist.0 {
-            *playlist = (generation, paths);
+    if let Ok(mut playlists) = ambient.playlists.write() {
+        // A slower, older request must not replace a newer playlist of the same menu.
+        let current = playlists.entry(slot).or_insert((0, Vec::new()));
+        if generation > current.0 {
+            *current = (generation, paths);
         }
     }
     Ok(Playlist { generation, tracks, unavailable: built.unavailable, truncated: built.truncated })
@@ -235,9 +242,13 @@ mod tests {
     #[test]
     fn stale_generations_are_refused() {
         let state = AmbientState::default();
-        *state.playlist.write().unwrap() = (3, vec![PathBuf::from("a.mp3")]);
+        state.playlists.write().unwrap().insert("main".into(), (3, vec![PathBuf::from("a.mp3")]));
         assert_eq!(state.track(3, 0), Some(PathBuf::from("a.mp3")));
         assert_eq!(state.track(2, 0), None);
         assert_eq!(state.track(3, 1), None);
+        // Settings' own playlist doesn't replace the main menu's (D-174).
+        state.playlists.write().unwrap().insert("settings".into(), (4, vec![PathBuf::from("b.mp3")]));
+        assert_eq!(state.track(3, 0), Some(PathBuf::from("a.mp3")));
+        assert_eq!(state.track(4, 0), Some(PathBuf::from("b.mp3")));
     }
 }

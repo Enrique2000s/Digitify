@@ -701,9 +701,265 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
   margin-top: 14px;
 }
 .tracks.episodes li {
-  grid-template-columns: 32px minmax(0, 1fr) auto auto 36px;
+  grid-template-columns: 32px auto minmax(0, 1fr) auto auto 36px;
   align-items: center;
   padding-block: 4px;
+}
+/* An episode's thumbnail: always horizontal (D-174). */
+.episode-thumb {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--field);
+  color: var(--muted);
+}
+.episode-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.episode-thumb-link {
+  display: block;
+  line-height: 0;
+}
+.episodes li.watched .episode-thumb img {
+  opacity: 0.55;
+}
+
+/* How an item looks, at the top of Edit details (D-175). */
+.appearance {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.appearance-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.appearance-title {
+  font-weight: 900;
+  font-size: 15px;
+}
+.appearance-head .muted {
+  font-size: 12.5px;
+}
+.appearance-body {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.appearance-cover {
+  flex: 0 0 auto;
+  width: 120px;
+  max-height: 150px;
+  overflow: hidden;
+  border-radius: 12px;
+  box-shadow: var(--soft-shadow, 0 6px 18px rgba(0, 0, 0, 0.25));
+}
+.appearance-cover[data-shape="landscape"] {
+  width: 180px;
+}
+.appearance-cover[data-shape="disc"] {
+  border-radius: 50%;
+}
+.appearance-cover > * {
+  width: 100%;
+  height: 100%;
+}
+.appearance-cover .cover-img {
+  object-fit: cover;
+}
+.appearance-controls {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.appearance-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.appearance-row > .eyebrow {
+  min-width: 96px;
+}
+.appearance-row .swatches {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.appearance-backdrop {
+  width: 64px;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid var(--line);
+}
+
+/* Editing a series' episodes, in Edit details (D-174). */
+.series-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.series-editor-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.series-editor-title {
+  font-weight: 900;
+  font-size: 15px;
+}
+.series-editor-head .muted {
+  font-size: 12.5px;
+}
+.episode-edit-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 46vh;
+  overflow: auto;
+}
+.episode-edit-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--field);
+}
+.episode-edit-list .episode-thumb {
+  width: 112px;
+}
+.episode-edit-label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.episode-edit-label strong {
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.episode-edit-label .muted {
+  font-size: 12.5px;
+}
+.episode-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.series-editor-add,
+.series-editor-mode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.series-editor-mode {
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: var(--accent-soft, rgba(21, 146, 208, 0.12));
+}
+.series-editor-mode > span {
+  flex: 1 1 260px;
+}
+.series-editor-season {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 13px;
+}
+.series-editor-season .input {
+  width: 76px;
+}
+.series-editor-busy {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.video-pick-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+  max-height: 56vh;
+  overflow: auto;
+}
+.video-pick-list button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  background: var(--field);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.video-pick-list button[aria-pressed="true"] {
+  border-color: var(--accent-bright);
+}
+.video-pick-art {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 10px;
+}
+.video-pick-art > * {
+  width: 100%;
+  height: 100%;
+}
+.video-pick-order {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: auto !important;
+  height: auto !important;
+  min-width: 24px;
+  padding: 2px 7px;
+  border-radius: var(--pill);
+  background: var(--accent-bright);
+  color: #fff;
+  font-weight: 900;
+  font-size: 12px;
+  text-align: center;
+}
+.video-pick-title {
+  font-weight: 700;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .episodes li.watched .episode-link {
   color: var(--muted);

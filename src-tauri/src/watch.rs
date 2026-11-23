@@ -29,6 +29,10 @@ pub struct Episode {
     pub completed: bool,
     /// Where it stopped, in seconds.
     pub seconds: Option<f64>,
+    /// Its thumbnail (an artwork key, always horizontal, D-174): a frame of it, or a picture chosen.
+    pub thumb: Option<String>,
+    /// The thumbnail was chosen by hand (not a frame of the episode).
+    pub thumb_own: bool,
 }
 
 impl Episode {
@@ -47,11 +51,11 @@ impl Episode {
     }
 }
 
-fn episodes(conn: &Connection, item: i64) -> AppResult<Vec<Episode>> {
+pub(crate) fn episodes(conn: &Connection, item: i64) -> AppResult<Vec<Episode>> {
     let episodes = conn
         .prepare(
             "SELECT p.id, json_extract(p.metadata, '$.season'), p.number, p.title, p.duration_ms, pr.fraction, pr.completed, \
-             json_extract(pr.locator, '$.seconds') \
+             json_extract(pr.locator, '$.seconds'), json_extract(p.metadata, '$.thumb'), coalesce(json_extract(p.metadata, '$.thumbOwn'), 0) \
              FROM parts p LEFT JOIN progress pr ON pr.item_id = p.item_id AND pr.part_id = p.id \
              WHERE p.item_id = ?1 AND p.kind = 'episode' \
              ORDER BY coalesce(json_extract(p.metadata, '$.season'), 0), p.number, p.position",
@@ -66,6 +70,8 @@ fn episodes(conn: &Connection, item: i64) -> AppResult<Vec<Episode>> {
                 progress: row.get::<_, Option<f64>>(5)?.unwrap_or(0.0),
                 completed: row.get::<_, Option<bool>>(6)?.unwrap_or(false),
                 seconds: row.get(7)?,
+                thumb: row.get(8)?,
+                thumb_own: row.get::<_, i64>(9)? != 0,
             })
         })?
         .collect::<Result<_, _>>()?;
@@ -112,7 +118,7 @@ fn next_up(conn: &Connection, item: i64, list: &[Episode]) -> AppResult<Option<E
     .or_else(|| list.first().cloned()))
 }
 
-fn video_file(library: &Library, conn: &Connection, item: i64, part: Option<i64>) -> AppResult<PathBuf> {
+pub(crate) fn video_file(library: &Library, conn: &Connection, item: i64, part: Option<i64>) -> AppResult<PathBuf> {
     let rows: Vec<(String, String, String)> = conn
         .prepare(
             "SELECT f.path, f.storage, f.status FROM files f JOIN versions v ON v.id = f.version_id \
@@ -283,9 +289,44 @@ pub async fn watch_mark(state: State<'_, AppState>, id: i64, part: Option<i64>, 
     .await
 }
 
+/// Marks a book, comic or manga read or not by hand (D-178): read keeps where it was open and
+/// counts it finished; not read forgets where it was, as starting over.
+#[tauri::command]
+pub async fn read_mark(state: State<'_, AppState>, id: i64, read: bool) -> AppResult<()> {
+    with_library(&state, move |library| library.db.with(|conn| mark_read(conn, id, read))).await
+}
+
+pub fn mark_read(conn: &Connection, id: i64, read: bool) -> AppResult<()> {
+    if read {
+        conn.execute(
+            "INSERT INTO progress (item_id, part_id, fraction, completed, updated_at) VALUES (?1, 0, 1.0, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) \
+             ON CONFLICT(item_id, part_id) DO UPDATE SET fraction = 1.0, completed = 1, updated_at = excluded.updated_at",
+            [id],
+        )?;
+    } else {
+        conn.execute("DELETE FROM progress WHERE item_id = ?1 AND part_id = 0", [id])?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_book_is_marked_read_and_unread() {
+        let conn = crate::db::memory();
+        conn.execute("INSERT INTO items (id, category_id, title, sort_title) VALUES (5, (SELECT id FROM categories WHERE key = 'books'), 'B', 'b')", []).unwrap();
+        conn.execute("INSERT INTO progress (item_id, part_id, locator, fraction, completed) VALUES (5, 0, '{\"page\":40}', 0.4, 0)", []).unwrap();
+        mark_read(&conn, 5, true).unwrap();
+        let (locator, fraction, completed): (String, f64, bool) =
+            conn.query_row("SELECT locator, fraction, completed FROM progress WHERE item_id = 5 AND part_id = 0", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap();
+        assert_eq!((locator.as_str(), fraction, completed), ("{\"page\":40}", 1.0, true), "read keeps its place");
+        assert!(crate::library::cards_by_ids(&conn, &[5]).unwrap()[0].completed);
+        mark_read(&conn, 5, false).unwrap();
+        assert_eq!(conn.query_row("SELECT count(*) FROM progress WHERE item_id = 5", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
+        assert!(!crate::library::cards_by_ids(&conn, &[5]).unwrap()[0].completed);
+    }
 
     fn library_with_series() -> Connection {
         let conn = crate::db::memory();

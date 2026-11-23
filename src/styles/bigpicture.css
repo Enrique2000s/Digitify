@@ -299,9 +299,77 @@
 
 .bp-item {
   display: flex;
+  flex-wrap: wrap;
   gap: 56px;
   align-items: flex-start;
   padding-top: 20px;
+}
+/* A series' episodes, under its details, a row per season (D-175). */
+.bp-episodes {
+  flex: 1 0 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  margin-top: -16px;
+}
+.bp-season h2 {
+  margin: 0 0 14px;
+  font-size: 28px;
+  font-weight: 900;
+}
+.bp-episode-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 22px;
+}
+.bp-episode {
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 0;
+  border-radius: 22px;
+  background: var(--bp-panel);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.bp-episode-art {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--bp-panel-strong);
+}
+.bp-episode-thumb {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.5);
+}
+.bp-episode-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.bp-episode.watched .bp-episode-thumb img {
+  opacity: 0.55;
+}
+.bp-episode-code {
+  font-size: 16px;
+  font-weight: 800;
+  opacity: 0.7;
+}
+.bp-episode-title {
+  font-size: 21px;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* As large as fits (520 px tall at most), always in the cover's own shape. */
 .bp-item-art {
@@ -755,6 +823,19 @@ html.bp-cursor-on * {
 .bp-category {
   animation: pop-in 380ms var(--spring) both;
 }
+/* A new tab in Library or Arcade: only what's under the tabs comes in (D-180). */
+.bp-tab-body {
+  animation: view-in 320ms var(--ease) both;
+}
+.bp-arcade-note .arcade-running-dot {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.bp-button .arcade-running-dot {
+  flex: none;
+  margin: 0 6px;
+}
 
 /* Arcade in Big Picture (D-034). */
 .arcade-bp-art {
@@ -925,6 +1006,12 @@ html[data-perf="light"] .bp-intro * {
 }
 @keyframes bp-screen-in {
   from { opacity: 0; transform: translateY(14px); }
+}
+/* Hidden under the logo, so it doesn't show while the logo fades and then appear again (D-176). */
+.bp.in-intro:not(.after-intro) .bp-main,
+.bp.in-intro:not(.after-intro) .bp-top,
+.bp.in-intro:not(.after-intro) .bp-hints {
+  opacity: 0;
 }
 .bp.after-intro .bp-main,
 .bp.after-intro .bp-top,

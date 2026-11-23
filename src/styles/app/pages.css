@@ -235,6 +235,25 @@
     transform: translateY(26%) rotate(0deg) scale(0.92);
   }
 }
+/* Home's tiles move on through their covers (D-177): the set leaving floats up and fades, one cover
+   after another, as the next set rises in (tile-cover-in). */
+.tile-collage {
+  position: absolute;
+  inset: 0;
+}
+.tile-collage.leaving {
+  pointer-events: none;
+}
+.tile-collage.leaving .tile-cover {
+  animation: tile-cover-out 600ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation-delay: calc(var(--n, 0) * 60ms);
+}
+@keyframes tile-cover-out {
+  to {
+    opacity: 0;
+    transform: translateY(calc(var(--drop, 0%) - 22%)) rotate(var(--tilt, 0deg)) scale(0.94);
+  }
+}
 .tile-cover img {
   display: block;
   width: 100%;
@@ -481,6 +500,40 @@
   background: linear-gradient(180deg, #ffe58a 0%, #f5b821 55%, #e09a0b 100%);
   color: #fff;
   box-shadow: 0 2px 6px rgba(120, 80, 0, 0.35);
+}
+/* A finished item's check, bottom right of its cover, in the progress bar's color (D-178). */
+.done-badge {
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bar, var(--accent-bright));
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35), 0 0 0 2px rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+}
+.series-cover .done-badge {
+  right: 5px;
+  bottom: 5px;
+  width: 18px;
+  height: 18px;
+}
+.bp-tile-art .done-badge,
+.bp-episode-art .done-badge {
+  right: 12px;
+  bottom: 12px;
+  width: 32px;
+  height: 32px;
+}
+/* The selection check sits at the top left too: the Movie or Series tag steps aside for it. */
+.card-art:has(.card-check) .film-tag,
+.detail-cover:has(.card-check) .film-tag {
+  left: 44px;
 }
 .card-progress {
   position: absolute;

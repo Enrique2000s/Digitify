@@ -22,11 +22,12 @@ import { CategoryStrip } from "../../components/CategoryStrip";
 import { useArrival } from "../../lib/arrival";
 import { useGlide } from "../../lib/glide";
 import { CardSizeSlider, Cover } from "../../components/common";
-import { CardSkeleton, caseBand, MediaCard } from "../../components/MediaCard";
+import { CardSkeleton, caseBand, MediaCard, DoneBadge, isFinished } from "../../components/MediaCard";
 import { CollectionCard, collectionCard, CollectionCarouselItem, CollectionDetailRow, CollectionRowItem, CollectionShelfItem } from "../../components/CollectionCard";
 import { SHELF_LOOKS, ShelfLookPicker } from "../../components/ShelfLookPicker";
 import { BulkBar } from "./BulkBar";
-import { SourceTag, sourceProps } from "../../components/SourceTag";
+import { FilmTag, FormatTag, SourceTag, sourceProps } from "../../components/SourceTag";
+import { CoverPreview } from "../../components/CoverPreview";
 import { ArrangeDialog } from "./ArrangeDialog";
 import type { CoverShape } from "../../lib/api";
 
@@ -407,7 +408,10 @@ function ShelfItem({ item, index, height, spines }: { item: ItemCard; index: num
       {/* Sized by width: if a full shelf narrows its covers, they shrink whole and keep their shape. */}
       <div className="shelf-cover" data-shape={shape} style={{ width: item.handler === "image" && item.aspect ? Math.round(height * PHOTO_ON_SHELF * aspect) : shelfBox(shape, height).width, aspectRatio: aspect, position: "relative" }} {...vt(item.id)} {...sourceProps(item.source)}>
         <Cover item={item} />
+        <CoverPreview item={item} />
         <SourceTag service={item.source} />
+        <FilmTag item={item} />
+        <FormatTag item={item} />
         {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
       </div>
       {check}
@@ -516,14 +520,19 @@ function DetailedRow({ item, index, top, height, blurb }: { item: ItemCard; inde
   const band = caseBand(item);
   const { selecting, checked, props } = useSelectable(item.id, index);
   const { shape, aspect } = useCoverShape()(item);
-  const progress = item.progress ?? 0;
+  const progress = item.category === "videos" ? 0 : (item.progress ?? 0);
+  const done = item.category !== "videos" && isFinished(item);
   const availability = item.online ? `Online on ${item.source ?? "the web"}` : item.hasDigital ? "Digital" : null;
   return (
     <Link to={itemPath(item)} params={{ id: String(item.id) }} className="detail-row" style={{ top, height }} data-blip {...props}>
       <div className="detail-cover" data-shape={shape} style={{ height: height - 26, aspectRatio: aspect }} {...vt(item.id)} {...sourceProps(item.source)}>
         <Cover item={item} />
+        <CoverPreview item={item} />
         <SourceTag service={item.source} />
+        <FilmTag item={item} />
+        <FormatTag item={item} />
         {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
+        {done && <DoneBadge />}
         {selecting && (
           <span className={`card-check${checked ? " on" : ""}`} aria-hidden>
             {checked && <Check size={15} strokeWidth={3.2} />}
@@ -553,8 +562,8 @@ function DetailedRow({ item, index, top, height, blurb }: { item: ItemCard; inde
         </div>
         {blurb?.description ? <p className="detail-description">{blurb.description}</p> : blurb && <p className="detail-description none">No description yet.</p>}
       </div>
-      {progress > 0 && (
-        <div className="detail-progress" title={progress >= 0.999 ? "Finished" : `${Math.round(progress * 100)}%`}>
+      {progress > 0 && !done && (
+        <div className="detail-progress" title={`${Math.round(progress * 100)}%`}>
           <span style={{ width: `${Math.min(100, progress * 100)}%` }} />
         </div>
       )}
@@ -789,7 +798,10 @@ function CarouselCover({ item, index, front, shape, style, onPick }: { item: Ite
       }}
     >
       <Cover item={item} />
+      <CoverPreview item={item} />
       <SourceTag service={item.source} />
+      <FilmTag item={item} />
+      <FormatTag item={item} />
       {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
       {selecting && (
         <span className={`card-check${checked ? " on" : ""}`} aria-hidden>

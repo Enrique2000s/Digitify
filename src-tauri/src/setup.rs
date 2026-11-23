@@ -46,6 +46,12 @@ pub fn spawn_maintenance(app: AppHandle) {
             }
             Err(e) => log::warn!("missing-file check failed: {e}"),
         }
+        // Hover previews of videos no longer in Videos (D-179).
+        match crate::previews::prune(&library) {
+            Ok(0) => {}
+            Ok(removed) => log::info!("removed {removed} old video previews"),
+            Err(e) => log::warn!("video preview clean-up failed: {e}"),
+        }
         match pdf_details(&library) {
             Ok(0) => {}
             Ok(updated) => {

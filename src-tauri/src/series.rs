@@ -26,6 +26,10 @@ pub struct SeriesEntry {
     pub label: Option<String>,
     pub progress: Option<f64>,
     pub completed: bool,
+    /// A picture's own proportions (width / height), so an album's photos keep their shape (D-178).
+    pub aspect: Option<f64>,
+    /// Its file's format ("gif", "jpg"…), so a GIF moves in the row too (D-178).
+    pub format: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -87,7 +91,10 @@ pub async fn series_get(state: State<'_, AppState>, id: i64) -> AppResult<Option
                 return Ok(None);
             };
             let select = "SELECT i.id, i.title, i.sort_title, i.cover_key, json_extract(i.metadata, '$.volume'), \
-                          json_extract(i.metadata, '$.number'), pr.fraction, pr.completed \
+                          json_extract(i.metadata, '$.number'), pr.fraction, pr.completed, \
+                          (SELECT max(0.4, min(2.6, CAST(json_extract(i.metadata, '$.width') AS REAL) / json_extract(i.metadata, '$.height'))) \
+                           WHERE json_extract(i.metadata, '$.height') > 0 AND json_extract(i.metadata, '$.width') > 0), \
+                          (SELECT lower(v.format) FROM versions v WHERE v.item_id = i.id AND v.format IS NOT NULL LIMIT 1) \
                           FROM items i LEFT JOIN progress pr ON pr.item_id = i.id AND pr.part_id = 0";
             let (name, sql, key): (String, String, SqlValue) = match (series.filter(|s| !s.trim().is_empty()), collection) {
                 (Some(series), _) => (
@@ -116,6 +123,8 @@ pub async fn series_get(state: State<'_, AppState>, id: i64) -> AppResult<Option
                             label,
                             progress: row.get(6)?,
                             completed: row.get::<_, Option<bool>>(7)?.unwrap_or(false),
+                            aspect: row.get(8)?,
+                            format: row.get(9)?,
                         },
                         volume,
                         number,
@@ -156,7 +165,7 @@ pub fn next_after_finished(conn: &rusqlite::Connection, limit: usize) -> AppResu
         let mut rows: Vec<Row> = conn
             .prepare(&format!(
                 "SELECT i.id, i.title, i.sort_title, i.cover_key, json_extract(i.metadata, '$.volume'), json_extract(i.metadata, '$.number'), \
-                 pr.fraction, pr.completed FROM items i LEFT JOIN progress pr ON pr.item_id = i.id AND pr.part_id = 0 \
+                 pr.fraction, pr.completed, NULL, NULL FROM items i LEFT JOIN progress pr ON pr.item_id = i.id AND pr.part_id = 0 \
                  WHERE i.category_id = ?1 AND lower(json_extract(i.metadata, '$.series')) = lower(?2) LIMIT {MAX_ENTRIES}"
             ))?
             .query_map(rusqlite::params![category, series], |row| {
@@ -168,6 +177,8 @@ pub fn next_after_finished(conn: &rusqlite::Connection, limit: usize) -> AppResu
                         label: None,
                         progress: row.get(6)?,
                         completed: row.get::<_, Option<bool>>(7)?.unwrap_or(false),
+                        aspect: row.get(8)?,
+                        format: row.get(9)?,
                     },
                     volume: numeric(&row.get::<_, SqlValue>(4)?),
                     number: numeric(&row.get::<_, SqlValue>(5)?),
@@ -241,7 +252,7 @@ mod tests {
     #[test]
     fn volumes_sort_before_unnumbered_items() {
         let row = |title: &str, volume: Option<f64>| Row {
-            entry: SeriesEntry { id: 0, title: title.into(), cover_key: None, label: None, progress: None, completed: false },
+            entry: SeriesEntry { id: 0, title: title.into(), cover_key: None, label: None, progress: None, completed: false, aspect: None, format: None },
             volume,
             number: None,
             sort_title: title.to_lowercase(),

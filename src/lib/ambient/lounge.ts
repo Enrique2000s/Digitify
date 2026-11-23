@@ -112,9 +112,16 @@ const THEME = [
   [72, 0, 0, 0, 67, 0, 0, 0],
 ];
 
-const EIGHTH = 60 / 92 / 2;
-const SWING = 1.12;
+/** Every menu theme's beat (D-175): 92 BPM with a light swing, so they can crossfade in step. */
+export const EIGHTH = 60 / 92 / 2;
+export const SWING = 1.12;
 const LOOKAHEAD = 0.25;
+
+/** Where a theme is in its piece: the next step and when it sounds, to start another in step. */
+export interface Clock {
+  step: number;
+  next: number;
+}
 
 const ELECTRIC_PIANO: VoiceOptions = { gain: 0.05, attack: 0.012, decay: 1.6, lowpass: 3200, partials: [[1, 1], [2, 0.18], [3, 0.05]] };
 const BASS: VoiceOptions = { type: "triangle", gain: 0.22, attack: 0.01, decay: 0.9, lowpass: 420 };
@@ -137,11 +144,21 @@ export class MorningLounge {
     return this.timer !== 0;
   }
 
-  start() {
+  /** Starts, in step with another theme when one is playing (the same bar and beat). */
+  start(at?: Clock | null) {
     if (this.timer) return;
-    this.next = this.synth.ctx.currentTime + 0.1;
+    if (at) {
+      this.step = at.step;
+      this.next = at.next;
+    } else {
+      this.next = this.synth.ctx.currentTime + 0.1;
+    }
     this.timer = window.setInterval(() => this.schedule(), 40);
     this.schedule();
+  }
+
+  clock(): Clock | null {
+    return this.timer ? { step: this.step, next: this.next } : null;
   }
 
   /** Stops scheduling; notes already queued ring out under the caller's fade. */

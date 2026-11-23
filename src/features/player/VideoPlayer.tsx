@@ -30,7 +30,7 @@ import { api, artworkUrl, errorText, onLinux, type WatchTarget } from "../../lib
 import { useAmbientHold } from "../../lib/ambient/AmbientProvider";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { accentVariables } from "../../lib/color";
-import { usePreferences } from "../../lib/preferences";
+import { FILMS, usePreferences } from "../../lib/preferences";
 import { libraryChanged, useItem } from "../../lib/queries";
 import { Cover } from "../../components/common";
 import { useCoverShape } from "../../lib/preferences";
@@ -483,11 +483,14 @@ function VideoPlayer({ source }: { source: Source }) {
   // controls to move through like a console (D-071).
   const driving = usePlayerController(root, VIDEO_PAD, poke);
   const bigPicture = useBigPicture();
-  // Outside a series, previous and next are the videos before and after this one in the library
-  // view it was opened from (D-091).
+  // In Videos, previous and next are the videos before and after this one in the library view it
+  // was opened from (D-091). Movies & Series stay with what's playing (D-174): a movie has no
+  // previous or next, a series only its own episodes.
+  const watched = useItem(Number(id) || 0, source.kind === "item" && !!id);
+  const inFilms = watched.data?.category === FILMS;
   const list = useQuery({
     queryKey: ["video-list", id],
-    enabled: source.kind === "item" && !!id,
+    enabled: source.kind === "item" && !!id && watched.isSuccess && !inFilms,
     staleTime: Infinity,
     // Online videos play in their service's player, not here, so previous and next pass them by;
     // past the last video it goes round to the first, and before the first to the last (D-140).
@@ -495,13 +498,15 @@ function VideoPlayer({ source }: { source: Source }) {
   });
   const at = list.data ? list.data.indexOf(Number(id)) : -1;
   const count = list.data?.length ?? 0;
-  const listPrevious = at >= 0 && count > 1 ? list.data![(at - 1 + count) % count] : null;
-  const listNext = at >= 0 && count > 1 ? list.data![(at + 1) % count] : null;
+  const listPrevious = !inFilms && at >= 0 && count > 1 ? list.data![(at - 1 + count) % count] : null;
+  const listNext = !inFilms && at >= 0 && count > 1 ? list.data![(at + 1) % count] : null;
   const openVideo = (other: number) => void navigate({ to: "/watch/$id", params: { id: String(other) }, replace: true });
   const goNext = () => (target?.next ? playPart(target.next) : listNext != null ? openVideo(listNext) : undefined);
   const goPrevious = () => (target?.previous ? playPart(target.previous) : listPrevious != null ? openVideo(listPrevious) : undefined);
   const hasNext = !!target?.next || listNext != null;
   const hasPrevious = !!target?.previous || listPrevious != null;
+  // A movie (or a one-episode series) shows no previous and next at all (D-174).
+  const stepping = !inFilms || hasNext || hasPrevious;
   const canCorner = !!target && target.itemId !== 0 && !fullscreen && !bigPicture;
   const backCorners = preferences.videoBackToCorner && canCorner && !playback.ended;
   const back = () => (backCorners ? toCorner() : close());
@@ -693,9 +698,11 @@ function VideoPlayer({ source }: { source: Source }) {
             <SeekBar time={playback.time} duration={duration} marks={playback.chapters} clock={clock} timeClassName="watch-time" onSeek={seek} />
           </div>
           <div className="watch-controls">
-            <button type="button" className="round-btn" aria-label={target.previous || !listPrevious ? "Previous episode" : "Previous video"} disabled={!hasPrevious} onClick={goPrevious}>
-              <SkipBack size={17} />
-            </button>
+            {stepping && (
+              <button type="button" className="round-btn" aria-label={target.previous || !listPrevious ? "Previous episode" : "Previous video"} disabled={!hasPrevious} onClick={goPrevious}>
+                <SkipBack size={17} />
+              </button>
+            )}
             <button
               type="button"
               className="round-btn watch-play"
@@ -706,9 +713,11 @@ function VideoPlayer({ source }: { source: Source }) {
             >
               {playback.ended ? <RotateCcw size={20} /> : playback.paused ? <Play size={20} /> : <Pause size={20} />}
             </button>
-            <button type="button" className="round-btn" aria-label={target.next || !listNext ? "Next episode" : "Next video"} title={target.nextLabel ?? undefined} disabled={!hasNext} onClick={goNext}>
-              <SkipForward size={17} />
-            </button>
+            {stepping && (
+              <button type="button" className="round-btn" aria-label={target.next || !listNext ? "Next episode" : "Next video"} title={target.nextLabel ?? undefined} disabled={!hasNext} onClick={goNext}>
+                <SkipForward size={17} />
+              </button>
+            )}
             <button type="button" className="round-btn" aria-label={playback.muted ? "Unmute" : "Mute"} onClick={() => command(["cycle", "mute"])}>
               {playback.muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
             </button>

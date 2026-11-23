@@ -960,6 +960,50 @@ pub fn import_in_place(library: &Library, paths: &[PathBuf]) -> AppResult<Vec<i6
     Ok(ids)
 }
 
+/// Video files as items of Videos, in their order, to become a series' episodes (D-174): each one
+/// added as an import would (kept where it is or copied in), or the video already in Videos that
+/// holds the same file. A file already elsewhere in the library is refused by name.
+pub fn import_videos(library: &Library, paths: &[PathBuf], mode: ImportMode) -> AppResult<Vec<i64>> {
+    let (category_id, category_name): (i64, String) = library.db.with(|conn| Ok(conn.query_row("SELECT id, name FROM categories WHERE key = 'videos'", [], |row| Ok((row.get(0)?, row.get(1)?)))?))?;
+    let mut ids = Vec::new();
+    for path in paths {
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.display().to_string());
+        if !matches!(kind_of(path), Some(Kind::Video)) {
+            return Err(AppError::msg(format!("{name} isn't a video Digitify can play.")));
+        }
+        match prepare(library, &Candidate::Single { kind: Kind::Video, path: path.clone() })? {
+            Prepared::Duplicate => {
+                let size = std::fs::metadata(path)?.len();
+                let quick_hash = files::quick_hash(path, size)?;
+                let (item, key): (i64, String) = library.db.with(|conn| {
+                    Ok(conn.query_row(
+                        "SELECT v.item_id, c.key FROM files f JOIN versions v ON v.id = f.version_id JOIN items i ON i.id = v.item_id \
+                         JOIN categories c ON c.id = i.category_id WHERE f.quick_hash = ?1 AND f.size = ?2 LIMIT 1",
+                        params![quick_hash, size as i64],
+                        |row| Ok((row.get(0)?, row.get(1)?)),
+                    )?)
+                })?;
+                if key != "videos" {
+                    return Err(AppError::msg(format!("{name} is already in the library, outside Videos.")));
+                }
+                ids.push(item);
+            }
+            Prepared::Draft(mut draft) => {
+                // A video with a year would go to Movies & Series as a film; here it's an episode.
+                draft.category = "videos";
+                let stored = store_files(library, &draft, mode, &category_name)?;
+                let art = store_artwork(library, &draft);
+                let result = library.db.with(|conn| insert(conn, &draft, &stored, category_id, art.as_ref()));
+                if result.is_err() {
+                    discard_copies(library, &stored);
+                }
+                ids.push(result?);
+            }
+        }
+    }
+    Ok(ids)
+}
+
 /// Adds a file Digitify brings with it (its manual, D-149) to a category, copied into the library
 /// folder, under `title`. Gives the new item's id, or the id of the item that already holds the
 /// same file.

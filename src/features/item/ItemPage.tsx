@@ -2,23 +2,23 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { listen } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-dialog";
-import { BookOpen, ChevronLeft, ChevronRight, Cloud, Download, ExternalLink, FolderOpen, HardDrive, ImagePlus, Pause, Pencil, Play, Star, Trash, Eye } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Cloud, Download, ExternalLink, FolderOpen, HardDrive, Pause, Pencil, Play, Star, Trash, Eye } from "lucide-react";
 import { photoContext, viewList } from "../../lib/routes";
 import { isTyping } from "../../lib/shortcuts";
 import { BackButton } from "../../components/BackButton";
-import { api, artworkUrl, errorText, type CoverShape, type ItemDetail, type OnlineJob, type VersionInfo } from "../../lib/api";
+import { api, artworkUrl, errorText, photoAspect, type CoverShape, type ItemDetail, type OnlineJob, type VersionInfo } from "../../lib/api";
 import { bytes, date, duration, formatLabel, longDuration, ROLE_LABELS } from "../../lib/format";
 import { libraryChanged, useItem } from "../../lib/queries";
 import { ReviewPanel } from "../../components/Review";
 import { Cover } from "../../components/common";
-import { SourceTag, sourceProps } from "../../components/SourceTag";
-import { coverShapeOf, FILMS, SHAPE_ASPECT, usePreferences } from "../../lib/preferences";
+import { FilmTag, FormatTag, SourceTag, sourceProps } from "../../components/SourceTag";
+import { CoverPreview } from "../../components/CoverPreview";
+import { coverShapeOf, SHAPE_ASPECT, usePreferences } from "../../lib/preferences";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { HomePath, OrganizePanel } from "../organize/OrganizePanel";
 import { canRead } from "../reader/ReaderPage";
 import { ChaptersPanel, SeriesPanel } from "./SeriesPanels";
-import { canWatch, EpisodesPanel, WatchButton, WatchedButton } from "./WatchPanels";
+import { canWatch, EpisodesPanel, ReadButton, WatchButton, WatchedButton } from "./WatchPanels";
 import { ArrangePagesDialog } from "../builder/BookBuilder";
 import { EditItemDialog, RemoveItemDialog } from "./forms";
 import { DownloadDialog } from "../online/DownloadDialog";
@@ -212,8 +212,6 @@ function FilePanel({ item, version }: { item: ItemDetail; version: VersionInfo }
 }
 
 /** Colors offered for a cover without artwork. */
-const COVER_COLORS = ["#1592d0", "#3fae49", "#f2a516", "#ef5f4f", "#d94f8c", "#8a63d2", "#2b3442", "#c9ced6"];
-
 export function ItemPage() {
   const { id } = useParams({ from: "/item/$id" });
   const navigate = useNavigate();
@@ -253,22 +251,16 @@ export function ItemPage() {
   };
 
   const backdrop = (item.metadata as Record<string, unknown>).backdropKey as string | undefined;
-  // Music as square covers or CDs, Videos horizontal or vertical, Movies & Series always vertical
-  // (D-027); one that matches the default isn't stored.
+  // Music as square covers or CDs, Videos and Movies & Series horizontal or vertical (D-174); set in
+  // Edit details (D-175).
   const ownShape = (item.metadata as Record<string, unknown>).coverShape as CoverShape | undefined;
   const shape = coverShapeOf({ handler: item.handler, category: item.category, coverShape: ownShape }, preferences.coverShapes);
-  const setShape = (value: CoverShape) => {
-    const usual = coverShapeOf({ handler: item.handler, category: item.category }, preferences.coverShapes);
-    void run(() => api.itemsBulk([item.id], [{ op: "setCoverShape", shape: value === usual ? null : value }]));
-  };
-  const changeBackdrop = async () => {
-    const path = await open({ multiple: false, title: "Choose a background", filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "webp", "bmp"] }] });
-    if (typeof path === "string") await run(() => api.itemSetBackdrop(item.id, path));
-  };
-  const changeArtwork = async () => {
-    const path = await open({ multiple: false, title: "Choose artwork", filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "webp", "gif", "bmp"] }] });
-    if (typeof path === "string") await run(() => api.itemSetCover(item.id, path));
-  };
+
+  // A picture keeps its own proportions, about as tall as a vertical cover (D-178); the rest their shape.
+  const ownAspect = item.handler === "image" ? photoAspect(item.metadata as Record<string, unknown>) : null;
+  const heroSize = ownAspect
+    ? { flexBasis: Math.round(Math.min(520, Math.max(170, 320 * ownAspect))), aspectRatio: String(ownAspect) }
+    : { flexBasis: shape === "landscape" ? 360 : 220, aspectRatio: SHAPE_ASPECT[shape] };
 
   const people = Object.entries(
     item.people.reduce<Record<string, string[]>>((groups, person) => {
@@ -304,9 +296,12 @@ export function ItemPage() {
       ) : (
         item.coverKey && <div className="hero-backdrop" style={{ backgroundImage: `url(${artworkUrl(item.coverKey)})` }} />
       )}
-        <div className="hero-cover" data-shape={shape} style={{ flexBasis: shape === "landscape" ? 360 : 220, aspectRatio: SHAPE_ASPECT[shape] }} {...sourceProps(onlineOnly && source?.provider !== "web" ? source?.service : null)}>
+        <div className="hero-cover" data-shape={shape} style={heroSize} {...sourceProps(onlineOnly && source?.provider !== "web" ? source?.service : null)}>
           <Cover item={item} size="cover" />
+          <CoverPreview item={item} />
           <SourceTag service={onlineOnly && source?.provider !== "web" ? source?.service : null} />
+          <FormatTag item={item} />
+          <FilmTag item={{ category: item.category, kind: (item.metadata as Record<string, unknown>).kind as string | undefined }} />
         </div>
         <div className="hero-body">
           <span className="eyebrow">
@@ -379,9 +374,10 @@ export function ItemPage() {
             {readable && item.handler !== "image" && (
               <Link to="/read/$id" params={{ id: String(item.id) }} className="btn btn-primary">
                 <BookOpen size={16} />
-                {item.progress != null && item.progress > 0 && item.progress < 1 ? `Continue reading · ${Math.round(item.progress * 100)}%` : "Read"}
+                {item.progress != null && item.progress > 0 && item.progress < 1 ? `Continue reading · ${Math.round(item.progress * 100)}%` : (item.progress ?? 0) >= 0.999 ? "Read again" : "Read"}
               </Link>
             )}
+            {readable && item.handler !== "image" && <ReadButton item={item} />}
             {/* Where it came from, after Play, online or downloaded alike (D-143). */}
             {source && (
               <button type="button" className="btn" onClick={openOnline}>
@@ -397,69 +393,14 @@ export function ItemPage() {
               <Star size={16} fill={item.isFavorite ? "currentColor" : "none"} />
               {item.isFavorite ? "Favorite" : "Add to favorites"}
             </button>
+            {/* Details, artwork, cover shape and color, background, a series' episodes: all in Edit details (D-175). */}
             <button type="button" className="btn" onClick={() => setEditing(true)}>
               <Pencil size={16} /> Edit details
             </button>
-            {item.handler !== "image" && (
-              <button type="button" className="btn" onClick={() => void changeArtwork()}>
-                <ImagePlus size={16} /> Change artwork
-              </button>
-            )}
-            {item.handler === "video" && (
-              <button type="button" className="btn" onClick={() => void (backdrop ? run(() => api.itemSetBackdrop(item.id, null)) : changeBackdrop())}>
-                <ImagePlus size={16} /> {backdrop ? "Remove background" : "Background…"}
-              </button>
-            )}
             <button type="button" className="btn" onClick={() => setRemoving(true)}>
               <Trash size={16} /> Remove
             </button>
           </div>
-          {!item.coverKey && (
-            <div className="cover-color-row" role="group" aria-label="Cover color">
-              <span className="eyebrow">Cover color</span>
-              {COVER_COLORS.map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  className="swatch"
-                  style={{ background: color }}
-                  aria-label={color}
-                  aria-pressed={item.coverColor === color}
-                  onClick={() => void run(() => api.itemsBulk([item.id], [{ op: "setCoverColor", color }]))}
-                />
-              ))}
-              <label className="swatch swatch-custom" title="Another color" style={{ background: "conic-gradient(red, yellow, lime, aqua, blue, magenta, red)" }}>
-                <span className="sr-only">Another color</span>
-                <input type="color" value={item.coverColor ?? "#5b7290"} onChange={(event) => void run(() => api.itemsBulk([item.id], [{ op: "setCoverColor", color: event.target.value }]))} />
-              </label>
-              {item.coverColor && (
-                <button type="button" className="btn btn-sm" onClick={() => void run(() => api.itemsBulk([item.id], [{ op: "setCoverColor", color: null }]))}>
-                  Plain
-                </button>
-              )}
-            </div>
-          )}
-          {(item.handler === "audio" || (item.handler === "video" && item.category !== FILMS)) && (
-            <div className="cover-shape-row">
-              <span className="eyebrow">Cover</span>
-              <div className="segmented" role="group" aria-label="Cover shape">
-                {(item.handler === "audio"
-                  ? ([
-                      ["square", "Square"],
-                      ["disc", "CD"],
-                    ] as const)
-                  : ([
-                      ["poster", "Vertical"],
-                      ["landscape", "Horizontal"],
-                    ] as const)
-                ).map(([value, label]) => (
-                  <button key={value} type="button" aria-pressed={shape === value} onClick={() => setShape(value)}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
           {error && <div className="dialog-error">{error}</div>}
         </div>
       </section>

@@ -149,7 +149,7 @@ impl Emulator {
             Emulator::Ppsspp => "PPSSPP",
             Emulator::Flycast => "Flycast",
             Emulator::Cemu => "Cemu",
-            Emulator::Azahar => "Azahar / Lime3DS",
+            Emulator::Azahar => "Azahar / Lime3DS / Citra",
             Emulator::Xemu => "xemu",
             Emulator::Xenia => "Xenia",
             Emulator::Ryujinx => "Ryujinx",
@@ -318,7 +318,7 @@ fn installed(emulator: Emulator) -> Option<Program> {
             Emulator::Ppsspp => &["PPSSPPSDL", "PPSSPPQt", "ppsspp"],
             Emulator::Flycast => &["flycast"],
             Emulator::Cemu => &["cemu", "Cemu"],
-            Emulator::Azahar => &["azahar", "lime3ds", "lime3ds-gui", "citra-qt"],
+            Emulator::Azahar => &["azahar", "lime3ds", "lime3ds-gui", "citra-qt", "citra"],
             Emulator::Xemu => &["xemu"],
             Emulator::Ryujinx => &["ryujinx", "Ryujinx"],
             Emulator::Project64 | Emulator::NullDc | Emulator::Xenia => return None,
@@ -326,14 +326,16 @@ fn installed(emulator: Emulator) -> Option<Program> {
         if let Some(path) = binaries.iter().find_map(|b| crate::tools::find_on_path(b)) {
             return Some(Program::Native(path));
         }
-        let id = emulator.flatpak_id()?;
-        flatpak_installed(id).then_some(Program::Flatpak(id))
+        // Citra's own Flatpak too, for the 3DS (D-174).
+        let citra = (emulator == Emulator::Azahar).then_some("org.citra_emu.citra");
+        emulator.flatpak_id().into_iter().chain(citra).find(|id| flatpak_installed(id)).map(Program::Flatpak)
     }
 }
 
 /// A portable copy (or an installed one) in a folder named after it, in one of `places`: the first
 /// program in it whose name starts with `name` ("duckstation-qt-x64-ReleaseLTCG.exe" for
-/// "duckstation"). Scoop keeps the program in a `current` folder inside.
+/// "duckstation"). Scoop keeps the program in a `current` folder inside, and Citra's installer and
+/// its downloads in a folder per build (`%LOCALAPPDATA%\Citra\nightly-mingw`, D-174).
 #[cfg(windows)]
 fn portable_program(places: &[PathBuf], names: &[&str]) -> Option<PathBuf> {
     let starts = |text: &str| names.iter().any(|n| text.starts_with(n));
@@ -361,7 +363,8 @@ fn portable_program(places: &[PathBuf], names: &[&str]) -> Option<PathBuf> {
             .collect();
         dirs.sort();
         for dir in dirs {
-            if let Some(program) = program_in(&dir).or_else(|| program_in(&dir.join("current"))) {
+            let inside = ["current", "nightly-mingw", "canary-mingw", "nightly-msvc", "canary-msvc", "nightly", "canary"];
+            if let Some(program) = program_in(&dir).or_else(|| inside.iter().find_map(|sub| program_in(&dir.join(sub)))) {
                 return Some(program);
             }
         }
@@ -491,6 +494,8 @@ fn settings_files(emulator: Emulator, program: &Program) -> Vec<PathBuf> {
             _ => ("config/mgba", "mgba"),
         };
         match program {
+            // Citra's Flatpak keeps its settings under its own name.
+            Program::Flatpak(id) if *id == "org.citra_emu.citra" => dirs.push(home().join(".var/app").join(id).join("config/citra-emu")),
             Program::Flatpak(id) => dirs.push(home().join(".var/app").join(id).join(flatpak)),
             // ares keeps its settings with its data.
             Program::Native(_) if matches!(emulator, Emulator::Ares | Emulator::Xemu) => dirs.push(xdg("XDG_DATA_HOME", ".local/share").join(native)),
@@ -965,6 +970,29 @@ pub(crate) fn section_folder(text: &str, section: &str, recursive_default: bool)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// D-174: Citra where its installer puts it (a folder per build under %LOCALAPPDATA%\Citra),
+    /// and where a downloaded build unpacks; its main program before its room server.
+    #[cfg(windows)]
+    #[test]
+    fn citra_is_found_in_its_build_folders() {
+        let root = std::env::temp_dir().join(format!("digitify-citra-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let local = root.join("Local");
+        let build = local.join("Citra").join("nightly-mingw");
+        std::fs::create_dir_all(&build).unwrap();
+        for exe in ["citra-qt.exe", "citra-room.exe"] {
+            std::fs::write(build.join(exe), b"MZ").unwrap();
+        }
+        let names = Emulator::Azahar.program_names();
+        assert_eq!(portable_program(&[local.clone()], names), Some(build.join("citra-qt.exe")));
+        let unpacked = root.join("Downloads").join("citra-windows-msvc-20240303").join("canary");
+        std::fs::create_dir_all(&unpacked).unwrap();
+        std::fs::write(unpacked.join("citra-qt.exe"), b"MZ").unwrap();
+        assert_eq!(portable_program(&[root.join("Downloads")], names), Some(unpacked.join("citra-qt.exe")));
+        assert_eq!(Emulator::Azahar.name(), "Azahar / Lime3DS / Citra");
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn dolphin_lists_its_folders() {

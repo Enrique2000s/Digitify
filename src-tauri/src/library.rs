@@ -227,6 +227,10 @@ pub struct ItemCard {
     pub disc_format: Option<String>,
     /// A photo's own proportions (width / height, upright), so it's drawn whole at any height (D-073).
     pub aspect: Option<f64>,
+    /// `series` for a series in Movies & Series (its tag says Series; anything else there is a Movie, D-174).
+    pub kind: Option<String>,
+    /// Finished: watched, read, or marked so (its cover shows a check instead of a full bar, D-178).
+    pub completed: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -320,7 +324,8 @@ const CARD_COLUMNS: &str = concat!("i.id, i.title, \
     (SELECT pr.fraction FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0), \
     coalesce(json_extract(i.metadata, '$.coverShape'), CASE WHEN c.handler = 'image' THEN ", photo_shape!(), " END),     EXISTS (SELECT 1 FROM online_sources o WHERE o.item_id = i.id AND o.downloaded = 0), \
     (SELECT o.service FROM online_sources o WHERE o.item_id = i.id AND o.provider <> 'web' AND o.downloaded = 0), \
-    json_extract(i.metadata, '$.discFormat'),     CASE WHEN c.handler = 'image' THEN ", photo_aspect!(), " END");
+    json_extract(i.metadata, '$.discFormat'),     CASE WHEN c.handler = 'image' THEN ", photo_aspect!(), " END,     json_extract(i.metadata, '$.kind'), \
+    coalesce((SELECT pr.completed FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0), 0)");
 
 fn card(row: &Row<'_>) -> rusqlite::Result<ItemCard> {
     let formats: Option<String> = row.get(9)?;
@@ -348,6 +353,8 @@ fn card(row: &Row<'_>) -> rusqlite::Result<ItemCard> {
         source: row.get(16)?,
         disc_format: row.get(17)?,
         aspect: row.get(18)?,
+        kind: row.get(19)?,
+        completed: row.get::<_, i64>(20)? != 0,
     })
 }
 
@@ -736,16 +743,21 @@ pub struct Dashboard {
     pub favorites: Vec<ItemCard>,
     pub categories: Vec<Category>,
     pub totals: Totals,
-    /// Up to three recent covers per category key, plus `all` and `favorites`.
+    /// Up to `TILE_POOL` recent covers per category key, plus `all` and `favorites`: Home's tiles show
+    /// three at a time and move on through the rest (D-177).
     pub tile_covers: HashMap<String, Vec<TileCover>>,
 }
+
+/// How many covers each of Home's tiles can show in turn (D-177).
+const TILE_POOL: i64 = 15;
 
 fn tile_covers(conn: &Connection) -> AppResult<HashMap<String, Vec<TileCover>>> {
     let cover = |row: &Row<'_>| -> rusqlite::Result<(String, TileCover)> {
         Ok((row.get(0)?, TileCover { key: row.get(1)?, color: row.get(2)?, handler: row.get(3)?, category: row.get(0)?, cover_shape: row.get(5)?, aspect: row.get(6)? }))
     };
     let mut tiles: HashMap<String, Vec<TileCover>> = HashMap::new();
-    let mut newest_per_category: Vec<TileCover> = Vec::new();
+    // The categories in the order of their newest cover, for Everything's mix.
+    let mut order: Vec<String> = Vec::new();
     let mut stmt = conn.prepare(
         concat!(
             "SELECT c.key, r.cover_key, r.cover_color, c.handler, r.n, r.shape, r.aspect FROM \
@@ -753,27 +765,39 @@ fn tile_covers(conn: &Connection) -> AppResult<HashMap<String, Vec<TileCover>>> 
             photo_aspect!(),
             " AS aspect, row_number() OVER (PARTITION BY i.category_id ORDER BY i.added_at DESC, i.id DESC) AS n \
                 FROM items i WHERE i.cover_key IS NOT NULL) r \
-             JOIN categories c ON c.id = r.category_id WHERE r.n <= 3 ORDER BY r.added_at DESC, r.id DESC"
+             JOIN categories c ON c.id = r.category_id WHERE r.n <= ?1 ORDER BY r.added_at DESC, r.id DESC"
         ),
     )?;
-    for row in stmt.query_map([], |row| Ok((cover(row)?, row.get::<_, i64>(4)?)))? {
+    for row in stmt.query_map([TILE_POOL], |row| Ok((cover(row)?, row.get::<_, i64>(4)?)))? {
         let ((category, tile), n) = row?;
-        if n == 1 && newest_per_category.len() < 3 {
-            newest_per_category.push(tile.clone());
+        if n == 1 {
+            order.push(category.clone());
         }
         tiles.entry(category).or_default().push(tile);
     }
-    // "Everything" shows one cover from each of the most recently used categories.
-    tiles.insert("all".into(), newest_per_category);
+    // "Everything" mixes its categories: the newest of each, then the next of each, and so on.
+    let mut everything = Vec::new();
+    for round in 0..TILE_POOL as usize {
+        for category in &order {
+            if let Some(tile) = tiles.get(category).and_then(|list| list.get(round)) {
+                everything.push(tile.clone());
+            }
+        }
+        if everything.len() >= TILE_POOL as usize {
+            break;
+        }
+    }
+    everything.truncate(TILE_POOL as usize);
+    tiles.insert("all".into(), everything);
     // The same columns as above (each cover keeps its own category's shape).
     let favorites = conn
         .prepare(concat!(
             "SELECT c.key, i.cover_key, i.cover_color, c.handler, 1, json_extract(i.metadata, '$.coverShape'), ",
             photo_aspect!(),
             " FROM items i JOIN categories c ON c.id = i.category_id \
-             WHERE i.is_favorite = 1 AND i.cover_key IS NOT NULL ORDER BY i.updated_at DESC, i.id DESC LIMIT 3"
+             WHERE i.is_favorite = 1 AND i.cover_key IS NOT NULL ORDER BY i.updated_at DESC, i.id DESC LIMIT ?1"
         ))?
-        .query_map([], cover)?
+        .query_map([TILE_POOL], cover)?
         .map(|row| row.map(|(_, tile)| tile))
         .collect::<Result<_, _>>()?;
     tiles.insert("favorites".into(), favorites);
@@ -1213,11 +1237,6 @@ fn write_item(conn: &Connection, item_id: Option<i64>, edit: &ItemEdit) -> AppRe
             conn.last_insert_rowid()
         }
     };
-    // Movies & Series covers are always vertical (D-027).
-    conn.execute(
-        "UPDATE items SET metadata = json_remove(metadata, '$.coverShape') WHERE id = ?1          AND json_extract(metadata, '$.coverShape') = 'landscape' AND category_id = (SELECT id FROM categories WHERE key = 'video')",
-        [id],
-    )?;
     set_people(conn, id, &edit.people)?;
     reindex(conn, id)?;
     Ok(id)
@@ -1401,6 +1420,29 @@ mod dashboard_tests {
         assert_eq!(tiles["favorites"].len(), 1);
         assert_eq!(tiles["favorites"][0].category.as_deref(), Some("music"));
     }
+
+    /// D-177: each tile gets a pool to move through (newest first, at most 15), and Everything mixes
+    /// its categories, the newest of each first.
+    #[test]
+    fn tiles_get_a_pool_of_covers() {
+        let conn = crate::db::memory();
+        let id = |key: &str| conn.query_row("SELECT id FROM categories WHERE key = ?1", [key], |row| row.get::<_, i64>(0)).unwrap();
+        let (books, music) = (id("books"), id("music"));
+        for n in 0..20 {
+            conn.execute(
+                "INSERT INTO items (category_id, title, sort_title, cover_key, added_at) VALUES (?1, ?2, ?2, ?3, ?4)",
+                params![books, format!("Book {n}"), format!("b{n}"), format!("2026-01-{:02}T00:00:00Z", n + 1)],
+            )
+            .unwrap();
+        }
+        conn.execute("INSERT INTO items (category_id, title, sort_title, cover_key, added_at) VALUES (?1, 'Song', 'song', 'm0', '2026-02-01T00:00:00Z')", params![music]).unwrap();
+        let tiles = super::tile_covers(&conn).unwrap();
+        assert_eq!(tiles["books"].len(), 15);
+        assert_eq!(tiles["books"][0].key, "b19", "newest first");
+        let all: Vec<&str> = tiles["all"].iter().map(|t| t.key.as_str()).collect();
+        assert_eq!(&all[..3], ["m0", "b19", "b18"], "the newest of each category first, then the rest");
+        assert_eq!(all.len(), 15);
+    }
 }
 
 #[cfg(test)]
@@ -1483,12 +1525,15 @@ mod tests {
         let set = |conn: &mut Connection, ids: &[i64], to: Option<&str>| {
             crate::organize::apply_bulk(conn, ids, &[crate::organize::BulkOp::SetCoverShape { shape: to.map(String::from) }]).unwrap()
         };
-        // A CD shape for a book and a song together, or a horizontal Movies & Series cover, is refused.
+        // A CD shape for a book and a song together is refused; Movies & Series take either video shape (D-174).
         let refused = |conn: &mut Connection, ids: &[i64], to: &str| {
             crate::organize::apply_bulk(conn, ids, &[crate::organize::BulkOp::SetCoverShape { shape: Some(to.into()) }]).is_err()
         };
         assert!(refused(&mut conn, &[a, song], "disc"));
-        assert!(refused(&mut conn, &[film], "landscape"));
+        assert!(refused(&mut conn, &[film], "disc"));
+        set(&mut conn, &[film], Some("poster"));
+        assert_eq!(shape(&conn, film).as_deref(), Some("poster"));
+        set(&mut conn, &[film], None);
         set(&mut conn, &[song], Some("disc"));
         assert_eq!((shape(&conn, a), shape(&conn, song).as_deref(), shape(&conn, film)), (None, Some("disc"), None));
         set(&mut conn, &[song], None);

@@ -4,7 +4,7 @@
 // Also makes its cover (docs/manual/cover.html → Digitify-Manual-cover.png).
 // Run `npm run manual` after changing the manual, and raise VERSION in src-tauri/src/manual.rs.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -54,7 +54,23 @@ if (!browser) {
 }
 const out = join(root, "src-tauri/resources/manual/Digitify-Manual.pdf");
 mkdirSync(dirname(out), { recursive: true });
+// On Windows Edge hands the work to a browser process and returns before the file is written, so
+// each file is waited for (newer than this run, its size settled) before the next step, and above
+// all before the page it prints is deleted. Without it the old manual could stay in place.
+const started = Date.now() - 2000;
+const written = async (file, what) => {
+  let last = -1;
+  for (let tries = 0; tries < 160; tries++) {
+    const size = existsSync(file) && statSync(file).mtimeMs >= started ? statSync(file).size : -1;
+    if (size > 0 && size === last) return;
+    last = size;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  console.error(`Edge didn't write the manual's ${what} (${file}). Close any headless Edge left running and try again.`);
+  process.exit(1);
+};
 execFileSync(browser, ["--headless=new", "--disable-gpu", "--no-pdf-header-footer", "--virtual-time-budget=4000", `--user-data-dir=${join(work, "profile")}`, `--print-to-pdf=${out}`, pathToFileURL(page).href], { stdio: "inherit" });
+await written(out, "PDF");
 // Its own cover (D-150): book-shaped, 1200 × 1800, so Books shows it whole.
 const coverPage = join(work, "cover.html");
 writeFileSync(
@@ -67,6 +83,7 @@ writeFileSync(
 );
 const cover = join(dirname(out), "Digitify-Manual-cover.png");
 execFileSync(browser, ["--headless=new", "--disable-gpu", "--hide-scrollbars", "--window-size=600,900", "--force-device-scale-factor=2", "--run-all-compositor-stages-before-draw", "--virtual-time-budget=8000", `--user-data-dir=${join(work, "profile")}`, `--screenshot=${cover}`, pathToFileURL(coverPage).href], { stdio: "inherit" });
+await written(cover, "cover");
 // Edge may still be closing its profile: a few tries.
 rmSync(work, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
 console.log(`Manual (edition ${edition}, Digitify ${version}) written to ${out}`);

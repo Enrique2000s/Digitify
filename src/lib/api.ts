@@ -67,6 +67,10 @@ export interface ItemCard {
   discFormat: string | null;
   /** A photo's own proportions (width / height), so it's drawn whole at any height (D-073). */
   aspect?: number | null;
+  /** `series` for a series in Movies & Series; anything else there is a movie (D-174). */
+  kind?: string | null;
+  /** Finished: watched, read, or marked so (D-178). */
+  completed?: boolean;
   /** Set when this stands for a collection among a view's items (D-030); its id is then negative. */
   collection?: { id: number; covers: TileCover[]; itemCount: number; childCount: number };
 }
@@ -419,6 +423,13 @@ export interface Chapter {
   depth: number;
 }
 
+/** A picture's own proportions (width / height) from its details, as the library reads them (D-178). */
+export function photoAspect(metadata: Record<string, unknown> | null | undefined): number | null {
+  const width = Number(metadata?.width);
+  const height = Number(metadata?.height);
+  return width > 0 && height > 0 ? Math.max(0.4, Math.min(2.6, width / height)) : null;
+}
+
 export interface SeriesEntry {
   id: number;
   title: string;
@@ -427,6 +438,10 @@ export interface SeriesEntry {
   label: string | null;
   progress: number | null;
   completed: boolean;
+  /** A picture's own proportions (D-178). */
+  aspect?: number | null;
+  /** Its file's format, so a GIF moves in the row (D-178). */
+  format?: string | null;
 }
 
 /** The volumes of a series in reading order, and where the asked-for item sits. */
@@ -578,6 +593,10 @@ export interface Episode {
   progress: number;
   completed: boolean;
   seconds: number | null;
+  /** Its thumbnail's artwork key (always horizontal, D-174): a frame of it, or a picture chosen. */
+  thumb: string | null;
+  /** The thumbnail was chosen by hand. */
+  thumbOwn: boolean;
 }
 
 /** A page of a page-based book, or a place in an ebook. */
@@ -773,7 +792,7 @@ export const api = {
   backupRestore: (name: string) => invoke<void>("backup_restore", { name }),
   backupReveal: (name: string | null) => invoke<void>("backup_reveal", { name }),
   filesRelink: (folder: string) => invoke<RelinkReport>("files_relink", { folder }),
-  ambientPlaylist: (sources: MusicSource[]) => invoke<AmbientPlaylist>("ambient_playlist", { sources }),
+  ambientPlaylist: (sources: MusicSource[], slot: "main" | "settings" | "bigpicture" = "main") => invoke<AmbientPlaylist>("ambient_playlist", { sources, slot }),
   ambientTrackInfo: (generation: number, id: number) => invoke<TrackDetails>("ambient_track_info", { generation, id }),
 
   categories: () => invoke<Category[]>("categories_list"),
@@ -969,7 +988,16 @@ export const api = {
   watchProgressSave: (id: number, part: number | null, seconds: number, duration: number) =>
     invoke<void>("watch_progress_save", { id, part, seconds, duration }),
   watchMark: (id: number, part: number | null, watched: boolean) => invoke<void>("watch_mark", { id, part, watched }),
+  readMark: (id: number, read: boolean) => invoke<void>("read_mark", { id, read }),
+  /** Makes a video's hover preview if needed (D-179): its key, or null when it can't have one. */
+  videoPreview: (id: number) => invoke<string | null>("video_preview", { id }),
   episodesList: (id: number) => invoke<Episode[]>("episodes_list", { id }),
+  // Editing a series (D-174).
+  episodesArrange: (id: number, order: number[]) => invoke<void>("episodes_arrange", { id, order }),
+  episodeRemove: (id: number, part: number) => invoke<number>("episode_remove", { id, part }),
+  seriesAddFiles: (id: number, paths: string[], season: number | null, mode: ImportMode) => invoke<void>("series_add_files", { id, paths, season, mode }),
+  episodeSetThumb: (part: number, path: string | null) => invoke<void>("episode_set_thumb", { part, path }),
+  episodeThumbsFill: (id: number) => invoke<number>("episode_thumbs_fill", { id }),
 
   repositoryOpen: () => invoke<void>("repository_open"),
 };
@@ -1164,6 +1192,11 @@ export interface ArcadeScanReport {
 /** A photo's own file (D-033), served by the core's private `digitify` scheme. */
 export function pictureUrl(itemId: number): string {
   return `${MEDIA}/picture/${itemId}`;
+}
+
+/** A video's hover preview (D-179), once made; the key changes with its file. */
+export function previewUrl(itemId: number, key: string): string {
+  return `${MEDIA}/preview/${itemId}?k=${key}`;
 }
 
 /** A turn or mirror picked in the image viewer (D-033). */

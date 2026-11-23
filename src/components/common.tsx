@@ -26,7 +26,7 @@ import {
   type LucideProps,
   ListFilter,
 } from "lucide-react";
-import { artworkUrl, type Handler } from "../lib/api";
+import { artworkUrl, type Handler, pictureUrl } from "../lib/api";
 
 export function Logo({ size = 30 }: { size?: number }) {
   return (
@@ -115,6 +115,16 @@ interface CoverSource {
   handler: Handler;
   /** Without artwork: the color picked for the cover, if any. */
   coverColor?: string | null;
+  /** A picture's id and its file's format: a GIF plays in its own preview (D-178). */
+  id?: number;
+  formats?: string[];
+  versions?: { format: string | null }[];
+}
+
+/** A picture that's a GIF: its previews show the file itself, so it moves (D-178). */
+export function isGif(item: { handler: string; formats?: string[]; versions?: { format: string | null }[] }): boolean {
+  if (item.handler !== "image") return false;
+  return !!item.formats?.some((f) => f.toLowerCase() === "gif") || !!item.versions?.some((v) => v.format?.toLowerCase() === "gif");
 }
 
 /** A picked color for a cover without art, with readable text and icon on it. */
@@ -143,10 +153,11 @@ export function Cover({ item, size = "thumb", iconOnly = false }: { item: CoverS
       </div>
     );
   }
+  const animated = item.id != null && item.id > 0 && isGif(item);
   return (
     <img
       className="cover-img"
-      src={artworkUrl(item.coverKey, size)}
+      src={animated ? pictureUrl(item.id!) : artworkUrl(item.coverKey, size)}
       alt=""
       loading="lazy"
       decoding="async"

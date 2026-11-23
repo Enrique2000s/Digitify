@@ -10,13 +10,15 @@ const FADE = 650;
  * Big Picture's startup (D-070): the Digitify logo draws itself in the accent color, a sweep of
  * light crosses it, a chord sounds, and it opens onto Home. Any button, key or click skips it.
  */
-export function BigPictureIntro({ onDone }: { onDone: () => void }) {
+export function BigPictureIntro({ onLeaving, onDone }: { onLeaving?: () => void; onDone: () => void }) {
   const [leaving, setLeaving] = useState(false);
   const done = useRef(false);
   const finish = () => {
     if (done.current) return;
     done.current = true;
     setLeaving(true);
+    // Home starts arriving as the logo starts fading, so the two cross (D-176).
+    onLeaving?.();
     window.setTimeout(onDone, FADE);
   };
   useEffect(() => {

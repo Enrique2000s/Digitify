@@ -2,9 +2,10 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Disc3, FileMusic, FilePlus, Folder, FolderPlus, X } from "lucide-react";
+import type { MenuMusic } from "../../lib/preferences";
 import { api, type ItemCard, type MusicSource } from "../../lib/api";
 import { plural } from "../../lib/format";
-import { useAmbient } from "../../lib/ambient/AmbientProvider";
+import { useAmbient, type MenuId, type PlaylistInfo } from "../../lib/ambient/AmbientProvider";
 import { useCategories } from "../../lib/queries";
 import { Cover, Dialog, Switch } from "../../components/common";
 import { Setting } from "./Setting";
@@ -98,24 +99,19 @@ function AlbumPicker({ open: isOpen, onOpenChange, onAdd }: { open: boolean; onO
   );
 }
 
-/** Settings › Sound: ambient music (D-016) and interface sounds. */
-export function SoundSettings() {
-  const { music, updateMusic, playlist, interfaceSounds, setInterfaceSounds } = useAmbient();
+/** The songs, folders and library tracks one menu plays as "My music", with adding and removing. */
+function MusicSources({ sources, onChange, playlist, label }: { sources: MusicSource[]; onChange: (sources: MusicSource[]) => void; playlist: PlaylistInfo; label: string }) {
   const [picking, setPicking] = useState(false);
-  const custom = music.source === "custom";
-
   const addSources = (added: MusicSource[]) => {
-    const known = new Set(music.sources.map(sourceKey));
+    const known = new Set(sources.map(sourceKey));
     const fresh = added.filter((source) => !known.has(sourceKey(source)));
-    if (fresh.length) updateMusic({ sources: [...music.sources, ...fresh] });
+    if (fresh.length) onChange([...sources, ...fresh]);
   };
-
   const addSongs = async () => {
     const picked = await open({ multiple: true, title: "Choose music", filters: [{ name: "Music", extensions: MUSIC_EXTENSIONS }] });
     const paths = Array.isArray(picked) ? picked : typeof picked === "string" ? [picked] : [];
     addSources(paths.map((path) => ({ kind: "file", path })));
   };
-
   const addFolder = async () => {
     const picked = await open({ directory: true, multiple: false, title: "Choose a music folder" });
     if (typeof picked === "string") addSources([{ kind: "folder", path: picked }]);
@@ -124,13 +120,112 @@ export function SoundSettings() {
   let summary: string | null = null;
   if (playlist.loading) summary = "Finding your music…";
   else if (playlist.error) summary = `Couldn't read your music: ${playlist.error}`;
-  else if (music.sources.length > 0) {
-    summary =
-      playlist.tracks > 0
-        ? `${plural(playlist.tracks, "song")} ready${playlist.truncated ? " (the first 10,000)" : ""}.`
-        : "No playable music found in these sources.";
+  else if (sources.length > 0) {
+    summary = playlist.tracks > 0 ? `${plural(playlist.tracks, "song")} ready${playlist.truncated ? " (the first 10,000)" : ""}.` : "No playable music found in these sources.";
     if (playlist.unavailable > 0) summary += ` ${plural(playlist.unavailable, "source")} couldn't be found; the drive may be disconnected.`;
   }
+
+  return (
+    <div className="music-sources">
+      {sources.length === 0 ? (
+        <p className="hint">Add songs, a folder of music, or tracks from your library. Supported: MP3, AAC/M4A, FLAC, Ogg Vorbis, Opus, WAV and WebM audio.</p>
+      ) : (
+        <ul className="source-list" aria-label={label}>
+          {sources.map((source, index) => (
+            <li key={sourceKey(source)}>
+              {source.kind === "item" ? <Disc3 size={17} aria-hidden /> : source.kind === "folder" ? <Folder size={17} aria-hidden /> : <FileMusic size={17} aria-hidden />}
+              <span className={source.kind === "item" ? "label" : "path"} title={sourceLabel(source)}>
+                {sourceLabel(source)}
+              </span>
+              <button
+                type="button"
+                className="icon-btn"
+                style={{ width: 30, height: 30 }}
+                aria-label={`Remove ${sourceLabel(source)}`}
+                onClick={() => onChange(sources.filter((_, i) => i !== index))}
+              >
+                <X size={16} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="actions">
+        <button type="button" className="btn btn-sm" onClick={() => void addSongs()}>
+          <FilePlus size={15} /> Add songs…
+        </button>
+        <button type="button" className="btn btn-sm" onClick={() => void addFolder()}>
+          <FolderPlus size={15} /> Add a folder…
+        </button>
+        <button type="button" className="btn btn-sm" onClick={() => setPicking(true)}>
+          <Disc3 size={15} /> Add tracks from your library…
+        </button>
+      </div>
+      {summary && (
+        <p className="hint" role="status">
+          {summary}
+        </p>
+      )}
+      <AlbumPicker open={picking} onOpenChange={setPicking} onAdd={addSources} />
+    </div>
+  );
+}
+
+const MENU_THEMES: Record<MenuId, { name: string; place: string; about: string }> = {
+  settings: {
+    name: "Digitify Settings Music",
+    place: "Settings",
+    about: "light and bouncy, like a console's settings screen",
+  },
+  bigpicture: {
+    name: "Digitify Big Picture Music",
+    place: "Big Picture",
+    about: "spacious and warm, for the TV",
+  },
+};
+
+/** Settings' or Big Picture's own music (D-174): its theme, the main menu's music, or songs of its own. */
+function MenuMusicSettings({ menu }: { menu: MenuId }) {
+  const { music, updateMenuMusic, playlists } = useAmbient();
+  const own: MenuMusic = menu === "settings" ? music.settingsMusic : music.bigPictureMusic;
+  const theme = MENU_THEMES[menu];
+  const text =
+    own.source === "custom"
+      ? `Your own songs, played only in ${theme.place}: files, folders, or tracks from your Digitify library.`
+      : own.source === "main"
+        ? `${theme.place} keeps playing the main menu's music.`
+        : `“${theme.name}”, an original theme written for Digitify: ${theme.about}. Switching to and from ${theme.place} crossfades the music.`;
+  return (
+    <>
+      <Setting title={`${theme.place} music`} text={text}>
+        <div className="segmented" role="group" aria-label={`${theme.place} music`}>
+          <button type="button" aria-pressed={own.source === "original"} onClick={() => updateMenuMusic(menu, { source: "original" })}>
+            Digitify original
+          </button>
+          <button type="button" aria-pressed={own.source === "main"} onClick={() => updateMenuMusic(menu, { source: "main" })}>
+            Main menu's
+          </button>
+          <button type="button" aria-pressed={own.source === "custom"} onClick={() => updateMenuMusic(menu, { source: "custom" })}>
+            My music
+          </button>
+        </div>
+      </Setting>
+      {own.source === "custom" && (
+        <>
+          <MusicSources sources={own.sources} onChange={(sources) => updateMenuMusic(menu, { sources })} playlist={playlists[menu]} label={`${theme.place} music sources`} />
+          <Setting title="Shuffle" text={`Play ${theme.place}'s music in a random order.`}>
+            <Switch checked={own.shuffle} onChange={(shuffle) => updateMenuMusic(menu, { shuffle })} label={`Shuffle ${theme.place} music`} />
+          </Setting>
+        </>
+      )}
+    </>
+  );
+}
+
+/** Settings › Sound: ambient music (D-016), each menu's own music (D-174), and interface sounds. */
+export function SoundSettings() {
+  const { music, updateMusic, playlists, interfaceSounds, setInterfaceSounds } = useAmbient();
+  const custom = music.source === "custom";
 
   return (
     <section className="panel" id="sound">
@@ -138,15 +233,16 @@ export function SoundSettings() {
       <Setting title="Menu music" text="Plays softly while you browse, and pauses by itself while Digitify plays video. Also switched on and off next to Customize Home.">
         <Switch checked={music.enabled} onChange={(enabled) => updateMusic({ enabled })} label="Ambient music" />
       </Setting>
+      <h3 className="settings-subhead">Main menu</h3>
       <Setting
-        title="Music"
+        title="Main menu music"
         text={
           custom
             ? "Your own songs: files, folders, or tracks from your Digitify library."
             : "“Digitify Main Menu Music”, an original theme written for Digitify. It improvises a little, so it never plays exactly the same way twice."
         }
       >
-        <div className="segmented" role="group" aria-label="Music">
+        <div className="segmented" role="group" aria-label="Main menu music">
           <button type="button" aria-pressed={!custom} onClick={() => updateMusic({ source: "lounge" })}>
             Digitify original
           </button>
@@ -155,51 +251,18 @@ export function SoundSettings() {
           </button>
         </div>
       </Setting>
-      {custom && (
-        <div className="music-sources">
-          {music.sources.length === 0 ? (
-            <p className="hint">Add songs, a folder of music, or tracks from your library. Supported: MP3, AAC/M4A, FLAC, Ogg Vorbis, Opus, WAV and WebM audio.</p>
-          ) : (
-            <ul className="source-list" aria-label="Music sources">
-              {music.sources.map((source, index) => (
-                <li key={sourceKey(source)}>
-                  {source.kind === "item" ? <Disc3 size={17} aria-hidden /> : source.kind === "folder" ? <Folder size={17} aria-hidden /> : <FileMusic size={17} aria-hidden />}
-                  <span className={source.kind === "item" ? "label" : "path"} title={sourceLabel(source)}>
-                    {sourceLabel(source)}
-                  </span>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    style={{ width: 30, height: 30 }}
-                    aria-label={`Remove ${sourceLabel(source)}`}
-                    onClick={() => updateMusic({ sources: music.sources.filter((_, i) => i !== index) })}
-                  >
-                    <X size={16} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="actions">
-            <button type="button" className="btn btn-sm" onClick={() => void addSongs()}>
-              <FilePlus size={15} /> Add songs…
-            </button>
-            <button type="button" className="btn btn-sm" onClick={() => void addFolder()}>
-              <FolderPlus size={15} /> Add a folder…
-            </button>
-            <button type="button" className="btn btn-sm" onClick={() => setPicking(true)}>
-              <Disc3 size={15} /> Add tracks from your library…
-            </button>
-          </div>
-          {summary && <p className="hint" role="status">{summary}</p>}
-        </div>
-      )}
+      {custom && <MusicSources sources={music.sources} onChange={(sources) => updateMusic({ sources })} playlist={playlists.main} label="Music sources" />}
       {custom && (
         <Setting title="Shuffle" text="Play your music in a random order.">
           <Switch checked={music.shuffle} onChange={(shuffle) => updateMusic({ shuffle })} label="Shuffle" />
         </Setting>
       )}
-      <Setting title="Volume" text="Also in the music capsule at the top of the window.">
+      <h3 className="settings-subhead">Settings</h3>
+      <MenuMusicSettings menu="settings" />
+      <h3 className="settings-subhead">Big Picture</h3>
+      <MenuMusicSettings menu="bigpicture" />
+      <h3 className="settings-subhead">Everywhere</h3>
+      <Setting title="Volume" text="One volume for every menu's music. Also in the music capsule at the top of the window.">
         <div className="setting-control">
           <input
             type="range"
@@ -222,7 +285,6 @@ export function SoundSettings() {
       <Setting title="Interface sounds" text="Soft tones when you point at tiles and covers, and when you press buttons.">
         <Switch checked={interfaceSounds} onChange={setInterfaceSounds} label="Interface sounds" />
       </Setting>
-      <AlbumPicker open={picking} onOpenChange={setPicking} onAdd={addSources} />
     </section>
   );
 }

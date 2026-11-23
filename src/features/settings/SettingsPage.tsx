@@ -359,7 +359,7 @@ export function SettingsPage() {
                   ))}
                 </div>
               </Setting>
-              <Setting title="Video covers" text="For Videos: horizontal frames, or vertical posters. Each video can also be set on its own page. Movies & Series always use vertical posters.">
+              <Setting title="Video covers" text="For Videos: horizontal frames, or vertical posters. Each video can also be set on its own page.">
                 <div className="segmented" role="group" aria-label="Video covers">
                   {(
                     [
@@ -368,6 +368,20 @@ export function SettingsPage() {
                     ] as const
                   ).map(([value, label]) => (
                     <button key={value} type="button" aria-pressed={preferences.coverShapes.videos === value} onClick={() => update((c) => ({ coverShapes: { ...c.coverShapes, videos: value } }))}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </Setting>
+              <Setting title="Movies & Series covers" text="Horizontal, or vertical posters. Each movie or series can also be set on its own page; episodes are always horizontal.">
+                <div className="segmented" role="group" aria-label="Movies & Series covers">
+                  {(
+                    [
+                      ["landscape", "Horizontal"],
+                      ["poster", "Vertical"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button key={value} type="button" aria-pressed={preferences.coverShapes.films === value} onClick={() => update((c) => ({ coverShapes: { ...c.coverShapes, films: value } }))}>
                       {label}
                     </button>
                   ))}

@@ -1,6 +1,65 @@
-import type { CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { artworkUrl, type TileCover } from "../lib/api";
 import { useCoverShape } from "../lib/preferences";
+import { motionAllowed } from "../features/reader/chrome";
+
+/** How long each set of covers stays on a Home tile, and how long the outgoing set takes to leave (ms). */
+const ROTATE_EVERY = 8000;
+const LEAVE = 600;
+
+/** Three covers of `pool` from `start`, going round. */
+const windowOf = (pool: TileCover[], start: number) => (pool.length <= 3 ? pool : [0, 1, 2].map((i) => pool[(start + i) % pool.length]));
+
+/**
+ * A Home tile's covers, moving on through its pool (D-177): every few seconds the three shown float
+ * up and fade as the next three rise into place, the tiles taking turns (`turn`) rather than all
+ * changing at once. Each visit starts somewhere else in the pool; without animations (performance
+ * mode, reduced motion) that's the only change, so nothing moves while you look.
+ */
+export function RotatingCollage({ covers: given, turn = 0 }: { covers: TileCover[]; turn?: number }) {
+  // Each picture once (an album's songs share theirs), so a new set always looks new.
+  const covers = given.filter((cover, i) => given.findIndex((other) => other.key === cover.key) === i);
+  const [start, setStart] = useState(() => (covers.length > 3 ? Math.floor(Math.random() * covers.length) : 0));
+  const [leaving, setLeaving] = useState<{ id: number; covers: TileCover[] } | null>(null);
+  const current = useRef({ covers, start });
+  current.current = { covers, start };
+  const key = covers.map((c) => c.key).join("|");
+  useEffect(() => {
+    if (covers.length <= 3 || !motionAllowed()) return;
+    let timer = 0;
+    let clear = 0;
+    const next = () => {
+      const { covers: pool, start: from } = current.current;
+      if (!document.hidden) {
+        setLeaving({ id: Date.now(), covers: windowOf(pool, from) });
+        setStart((from + 3) % pool.length);
+        window.clearTimeout(clear);
+        clear = window.setTimeout(() => setLeaving(null), LEAVE + 200);
+      }
+      timer = window.setTimeout(next, ROTATE_EVERY);
+    };
+    // The tiles take turns: the first changes after a few seconds, each next one a little later.
+    timer = window.setTimeout(next, ROTATE_EVERY / 2 + turn * 1100);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearTimeout(clear);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, turn]);
+  const shown = windowOf(covers, start % Math.max(covers.length, 1));
+  return (
+    <>
+      {leaving && (
+        <div key={leaving.id} className="tile-collage leaving" aria-hidden>
+          <Collage covers={leaving.covers} />
+        </div>
+      )}
+      <div key={`${start}-${key}`} className="tile-collage">
+        <Collage covers={shown} />
+      </div>
+    </>
+  );
+}
 
 /**
  * Up to three covers fanned out on a tile's screen (home tiles, shelves, collections), each in the

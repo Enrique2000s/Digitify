@@ -60,6 +60,8 @@ export function ArcadeScreen({ scope }: { scope?: string }) {
         ))}
         <span className="bp-hint-key">RB</span>
       </div>
+      {/* Only what's under the tabs comes in when they change (D-180). */}
+      <div className="bp-tab-body" key={inCollections ? (open ? `c${open.id}` : "collections") : view.current}>
       {inCollections && !open && (
         <div className="bp-grid bp-collections">
           {allCollections(collections.data).map((collection, index) => {
@@ -85,7 +87,11 @@ export function ArcadeScreen({ scope }: { scope?: string }) {
           <span>{`${shown.length.toLocaleString()} ${shown.length === 1 ? "game" : "games"}`}</span>
         </div>
       )}
-      {running && <p className="bp-arcade-note">Playing {running.title}. Digitify's music is silent until the game closes (Menu › Music brings it back).</p>}
+      {running && (
+        <p className="bp-arcade-note">
+          <span className="arcade-running-dot" aria-hidden /> Playing {running.title}. Digitify's music is silent until the game closes (Menu › Music brings it back).
+        </p>
+      )}
       {starting && !running && <p className="bp-arcade-note">Starting through {starting.store}…</p>}
       {error && (
         <p className="bp-arcade-note error">
@@ -113,6 +119,7 @@ export function ArcadeScreen({ scope }: { scope?: string }) {
           ))}
         </div>
       )}
+      </div>
     </>
   );
 }

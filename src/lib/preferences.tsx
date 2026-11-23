@@ -86,7 +86,21 @@ export interface MusicPreferences {
   pauseWhenMinimized: boolean;
   /** The reader is a quiet place by default. */
   pauseWhileReading: boolean;
+  /** Settings' own music (D-174): its theme, the main menu's music, or music the user picked. */
+  settingsMusic: MenuMusic;
+  /** Big Picture's own music (D-174), the same choices. */
+  bigPictureMusic: MenuMusic;
 }
+
+/** What a menu other than the main one plays (D-174). */
+export interface MenuMusic {
+  /** Its own Digitify theme, whatever the main menu plays, or the user's own songs. */
+  source: "original" | "main" | "custom";
+  sources: MusicSource[];
+  shuffle: boolean;
+}
+
+export const DEFAULT_MENU_MUSIC: MenuMusic = { source: "original", sources: [], shuffle: true };
 
 /** How page-based items are shown (comics, manga, scans, PDFs). */
 export interface ReaderPreferences {
@@ -171,8 +185,8 @@ export interface Preferences {
   /** Last sort per view ("books", "all", "collection:3", "shelf:5"…). */
   sorts: Record<string, SortKey>;
   /** How albums and videos are shown unless an item has its own shape. */
-  /** Default cover shapes: music square or CD; Videos horizontal or vertical (Movies & Series are always vertical, D-027). */
-  coverShapes: { audio: "square" | "disc"; videos: "poster" | "landscape" };
+  /** Default cover shapes: music square or CD; Videos, and Movies & Series, horizontal or vertical (D-174). */
+  coverShapes: { audio: "square" | "disc"; videos: "poster" | "landscape"; films: "poster" | "landscape" };
   /** Big Picture (D-025): moving with the selection or with a cursor, and the cursor's speed. */
   /** Big Picture: how to move around, the cursor's speed, and its startup animation (D-070). */
   bigPicture: { navigation: "focus" | "cursor"; cursorSpeed: number; intro: boolean };
@@ -258,6 +272,8 @@ export const DEFAULT_MUSIC: MusicPreferences = {
   shuffle: true,
   pauseWhenMinimized: true,
   pauseWhileReading: true,
+  settingsMusic: DEFAULT_MENU_MUSIC,
+  bigPictureMusic: DEFAULT_MENU_MUSIC,
 };
 
 export const DEFAULT_READER: ReaderPreferences = {
@@ -312,7 +328,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   syncViews: true,
   ownership: {},
   sorts: {},
-  coverShapes: { audio: "square", videos: "landscape" },
+  coverShapes: { audio: "square", videos: "landscape", films: "landscape" },
   bigPicture: { navigation: "focus", cursorSpeed: 1000, intro: true },
   shelfStyle: "covers",
   shelfLook: "breeze",
@@ -371,6 +387,17 @@ function sanitizeMusic(raw: unknown): MusicPreferences {
     shuffle: pick("shuffle", isBoolean),
     pauseWhenMinimized: pick("pauseWhenMinimized", isBoolean),
     pauseWhileReading: pick("pauseWhileReading", isBoolean),
+    settingsMusic: sanitizeMenuMusic((raw as Raw<MusicPreferences>)?.settingsMusic),
+    bigPictureMusic: sanitizeMenuMusic((raw as Raw<MusicPreferences>)?.bigPictureMusic),
+  };
+}
+
+function sanitizeMenuMusic(raw: unknown): MenuMusic {
+  const pick = picker(raw, DEFAULT_MENU_MUSIC);
+  return {
+    source: pick("source", (v) => v === "original" || v === "main" || v === "custom"),
+    sources: pick("sources", Array.isArray).filter(isMusicSource),
+    shuffle: pick("shuffle", isBoolean),
   };
 }
 
@@ -540,14 +567,18 @@ function sanitizeArcade(raw: unknown): ArcadePreferences {
 }
 
 function sanitizeShapes(raw: unknown): Preferences["coverShapes"] {
-  const value = (raw && typeof raw === "object" ? raw : {}) as { audio?: unknown; videos?: unknown };
-  return { audio: value.audio === "disc" ? "disc" : "square", videos: value.videos === "poster" ? "poster" : "landscape" };
+  const value = (raw && typeof raw === "object" ? raw : {}) as { audio?: unknown; videos?: unknown; films?: unknown };
+  return {
+    audio: value.audio === "disc" ? "disc" : "square",
+    videos: value.videos === "poster" ? "poster" : "landscape",
+    films: value.films === "poster" ? "poster" : "landscape",
+  };
 }
 
 /** The image viewer's slideshow speeds, in seconds per photo. */
 export const SLIDESHOW_SECONDS = [3, 5, 8, 12, 20];
 
-/** Movies & Series: its covers are always vertical (D-027). */
+/** Movies & Series' category key: horizontal covers by default, vertical if chosen (D-174). */
 export const FILMS = "video";
 
 /** The shape an item's cover is shown in: its own, or the default for its kind. */
@@ -558,8 +589,8 @@ export function coverShapeOf(item: { handler: string; category?: string | null; 
   // A photo is wide, tall or square, as the core reads it from its proportions (D-033).
   if (item.handler === "image") return item.coverShape === "landscape" || item.coverShape === "poster" ? item.coverShape : "square";
   if (item.handler === "video") {
-    if (item.category === FILMS) return "poster";
-    return item.coverShape === "poster" || item.coverShape === "landscape" ? item.coverShape : defaults.videos;
+    const own = item.coverShape === "poster" || item.coverShape === "landscape" ? item.coverShape : null;
+    return own ?? (item.category === FILMS ? defaults.films : defaults.videos);
   }
   return "book";
 }

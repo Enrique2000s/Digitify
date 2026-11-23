@@ -7,7 +7,7 @@ import { api, errorText, onLinux, type ArcadeEmulator, type ArcadeEmulatorStatus
 import { usePreferences } from "../../lib/preferences";
 import { Dialog, Switch } from "../../components/common";
 import { EmulatorMark, LogoMark } from "./logos";
-import { PLATFORM_NAMES, playTime, listOf, scanSummary } from "./shared";
+import { PLATFORM_NAMES, playTime, listOf, scanSummary, CONSOLE_MAKERS } from "./shared";
 
 /** Emulators & folders (D-113): launchers, emulators, consoles, and folders and covers, in tabs. */
 
@@ -210,59 +210,58 @@ function ConsolesTab({ status, games }: { status: ArcadeStatus; games: ArcadeGam
   const count = (key: string) => (games ?? []).filter((g) => !g.missing && g.platform === key && !g.retroarch).length;
   const name = (key: ArcadeEmulator) => status.emulators.find((e) => e.key === key)?.name ?? key;
   const isFound = (key: ArcadeEmulator) => !!status.emulators.find((e) => e.key === key)?.found;
-  // Consoles with games first, then those with an emulator found, then the rest.
-  const rows = status.consoles
-    .filter((c) => c.players.length > 0)
-    .map((c) => ({ ...c, games: count(c.key), found: c.players.filter(isFound) }))
-    .sort((a, b) => Number(b.games > 0) - Number(a.games > 0) || Number(b.found.length > 0) - Number(a.found.length > 0));
+  const rows = status.consoles.filter((c) => c.players.length > 0).map((c) => ({ ...c, games: count(c.key), found: c.players.filter(isFound) }));
+  // By maker, as the views' menus are (D-177), each group's consoles with games first, then those
+  // with an emulator found, then the rest; consoles of no listed maker go with "More consoles".
+  const makerOf = (key: string) => CONSOLE_MAKERS.find(([, keys]) => keys.includes(key))?.[0] ?? "More consoles";
+  const rank = (r: (typeof rows)[number]) => (r.games > 0 ? 0 : r.found.length > 0 ? 1 : 2);
+  const groups = CONSOLE_MAKERS.map(([maker, keys]) => ({
+    maker,
+    rows: rows.filter((r) => makerOf(r.key) === maker).sort((a, b) => rank(a) - rank(b) || keys.indexOf(a.key) - keys.indexOf(b.key)),
+  })).filter((g) => g.rows.length > 0);
   return (
     <div className="arcade-setup-pane">
       <p className="muted">Which emulator each console's games open in. Games from RetroArch's playlists always open in RetroArch, with their core.</p>
-      <table className="arcade-consoles">
-        <thead>
-          <tr>
-            <th>Console</th>
-            <th>Games</th>
-            <th>Plays in</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const chosen = preferences.arcade.playsIn[row.key];
-            const current = chosen && row.found.includes(chosen) ? chosen : row.found[0];
-            return (
-              <tr key={row.key} className={row.games > 0 ? "" : "quiet"}>
-                <td>
-                  <span className="arcade-console-name">
-                    <LogoMark name={row.key} className="setup-logo" />
-                    {PLATFORM_NAMES[row.key]}
+      {groups.map((group) => (
+        <div key={group.maker} className="arcade-emulator-group">
+          <h3>{group.maker}</h3>
+          <ul className="arcade-rows arcade-console-cards">
+            {group.rows.map((row) => {
+              const chosen = preferences.arcade.playsIn[row.key];
+              const current = chosen && row.found.includes(chosen) ? chosen : row.found[0];
+              return (
+                <li key={row.key} className={row.games > 0 ? "found" : "absent"}>
+                  <LogoMark name={row.key} className="setup-logo" />
+                  <span className="arcade-console-card-name">
+                    <strong>{PLATFORM_NAMES[row.key]}</strong>
+                    <span className="muted">{row.games === 1 ? "1 game" : `${row.games.toLocaleString()} games`}</span>
                   </span>
-                </td>
-                <td>{row.games.toLocaleString()}</td>
-                <td>
-                  {row.found.length > 1 ? (
-                    <select
-                      value={current}
-                      aria-label={`${PLATFORM_NAMES[row.key]} games play in`}
-                      onChange={(event) => update((c) => ({ arcade: { ...c.arcade, playsIn: { ...c.arcade.playsIn, [row.key]: event.target.value as ArcadeEmulator } } }))}
-                    >
-                      {row.found.map((key) => (
-                        <option key={key} value={key}>
-                          {name(key)}
-                        </option>
-                      ))}
-                    </select>
-                  ) : row.found.length === 1 ? (
-                    <strong>{name(row.found[0])}</strong>
-                  ) : (
-                    <span className="muted">Needs {listOf(row.players.map(name), "or")}</span>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                  <span className="arcade-console-card-plays">
+                    {row.found.length > 1 ? (
+                      <select
+                        className="select"
+                        value={current}
+                        aria-label={`${PLATFORM_NAMES[row.key]} games play in`}
+                        onChange={(event) => update((c) => ({ arcade: { ...c.arcade, playsIn: { ...c.arcade.playsIn, [row.key]: event.target.value as ArcadeEmulator } } }))}
+                      >
+                        {row.found.map((key) => (
+                          <option key={key} value={key}>
+                            {name(key)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : row.found.length === 1 ? (
+                      <strong title="Plays in">{name(row.found[0])}</strong>
+                    ) : (
+                      <span className="muted">Needs {listOf(row.players.map(name), "or")}</span>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
     </div>
   );
 }

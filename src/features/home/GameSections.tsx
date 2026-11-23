@@ -20,11 +20,11 @@ export function useHomeGames() {
   const today = new Date();
   const day = Math.floor(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) / 86_400_000);
   const featured = pool.length ? [...pool].sort((a, b) => a.id - b.id)[(day * 7919) % pool.length] : undefined;
-  // The tile shows the last played (or else newest) covers.
+  // The tile moves on through the last played (or else newest) covers (D-177).
   const covers: TileCover[] = [...list]
     .filter((g) => g.coverKey)
     .sort((a, b) => (b.lastPlayedAt ?? b.addedAt).localeCompare(a.lastPlayedAt ?? a.addedAt))
-    .slice(0, 3)
+    .slice(0, 15)
     .map((g) => ({ key: g.coverKey!, color: g.coverColor, handler: "book" }));
   return { count: list.length, recent, favorites, featured, covers, starting, running: status.data?.running ?? null, loaded: games.isSuccess };
 }

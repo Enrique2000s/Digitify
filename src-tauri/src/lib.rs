@@ -34,6 +34,7 @@ mod organize;
 mod pages;
 mod pdf;
 mod pictures;
+mod previews;
 mod player;
 mod profile;
 mod reshape;
@@ -301,6 +302,11 @@ pub fn run() {
             history::history_retry,
             films::films_series,
             films::videos_to_films,
+            films::episodes_arrange,
+            films::episode_remove,
+            films::series_add_files,
+            films::episode_set_thumb,
+            films::episode_thumbs_fill,
             online::ytdlp_status,
             online::ytdlp_update,
             online::online_keys_set,
@@ -319,6 +325,8 @@ pub fn run() {
             watch::watch_open,
             watch::watch_progress_save,
             watch::watch_mark,
+            watch::read_mark,
+            previews::video_preview,
             watch::episodes_list,
             player::player_add_subtitle,
             music::music_tracks,

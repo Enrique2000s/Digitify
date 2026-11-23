@@ -13,9 +13,10 @@ import { LogoMark } from "./logos";
 import { CoverPicker } from "./CoverPicker";
 import { belongsTo, CollectionBar, CollectionsBoard, defaultCollection, useCollections } from "./Collections";
 import { GamePanel } from "./GamePanel";
+import { motionAllowed } from "../reader/chrome";
 import { BulkBar } from "./BulkBar";
 import { Setup } from "./Setup";
-import { consoleKey, consoleOf, GameBadge, GameMarks, gameAspect, FILTER_LABELS, inFilter, GameCover, playTime, reorderWithin, SORTS, useArcade, useArcadeFilters, useLaunch, useShownGames, addProgramGame, scanSummary } from "./shared";
+import { consoleKey, consoleOf, GameBadge, GameMarks, gameAspect, FILTER_LABELS, inFilter, GameCover, playTime, reorderWithin, SORTS, useArcade, useArcadeFilters, useLaunch, useShownGames, addProgramGame, scanSummary, CONSOLE_MAKERS } from "./shared";
 
 /** What Arcade shows (D-148, D-149): its games, the collections (their own screen, with a Back to
  *  the games), or one collection (Favorites is 0); in the address, so Back goes where it came from. */
@@ -109,6 +110,20 @@ export function ArcadePage() {
   // (a dropdown opens then and takes the click), and it closes when the pointer is let go: closing
   // sooner would move the page up under a dropdown just opened and put an option under the pointer.
   const setupToggle = useRef<HTMLButtonElement>(null);
+  // It opens and closes with a short animation (D-178): it stays a moment as it closes (not without
+  // motion: performance mode and animations off close it at once).
+  const [setupLeaving, setSetupLeaving] = useState(false);
+  const setupWasShown = useRef(showSetup);
+  useEffect(() => {
+    const was = setupWasShown.current;
+    setupWasShown.current = showSetup;
+    if (was && !showSetup && motionAllowed()) {
+      setSetupLeaving(true);
+      const timer = window.setTimeout(() => setSetupLeaving(false), 260);
+      return () => window.clearTimeout(timer);
+    }
+    setSetupLeaving(false);
+  }, [showSetup]);
   useEffect(() => {
     if (!showSetup) return;
     const CONTROL = "button, a[href], input, select, textarea, summary, [role='button'], [role='tab'], [role='option'], [role='menuitem'], [role='menuitemradio'], [role='menuitemcheckbox'], [role='combobox'], [role='switch'], [role='checkbox'], [role='radio']";
@@ -299,11 +314,22 @@ export function ArcadePage() {
         </div>
       )}
 
-      {showSetup && status.data && <Setup status={status.data} onChanged={refresh} onAddProgram={() => void addProgram()} />}
+      {(showSetup || setupLeaving) && status.data && (
+        <div className={`arcade-setup-wrap${showSetup ? "" : " leaving"}`}>
+          <div className="arcade-setup-clip">
+            <Setup status={status.data} onChanged={refresh} onAddProgram={() => void addProgram()} />
+          </div>
+        </div>
+      )}
 
-      {board === "collections" && <CollectionsBoard games={games.data} onOpen={(id) => setBoard(id)} onBack={() => setBoard("games")} />}
+      {/* The collections and the games each come in as a screen does (D-178). */}
+      {board === "collections" && (
+        <div key="collections" className="arcade-stage">
+          <CollectionsBoard games={games.data} onOpen={(id) => setBoard(id)} onBack={() => setBoard("games")} />
+        </div>
+      )}
       {board !== "collections" && (
-      <>
+      <div key={typeof board === "number" ? `collection-${board}` : "games"} className="arcade-stage">
       <div className="arcade-toolbar">
         {collection ? (
           <CollectionBar collection={collection} count={shown.length} games={games.data} onBack={() => setBoard("collections")} />
@@ -376,7 +402,7 @@ export function ArcadePage() {
           </div>
         </GridDragProvider>
       )}
-      </>
+      </div>
       )}
 
       {selecting && (
@@ -419,14 +445,6 @@ function ConsoleHeading({ view, count }: { view: ArcadeFilter; count: number }) 
 }
 
 /** The makers whose consoles share one view menu (D-121). */
-const CONSOLE_MAKERS: [string, readonly string[]][] = [
-  ["Nintendo", ["wii", "wiiu", "gamecube", "n64", "switch", "ds", "3ds", "nes", "snes", "gb", "gbc", "gba"]],
-  ["PlayStation", ["ps1", "ps2", "ps3", "psp"]],
-  ["Sega", ["sms", "genesis", "segacd", "gamegear", "saturn", "dreamcast"]],
-  ["Xbox consoles", ["ogxbox", "x360"]],
-  ["More consoles", ["pce", "arcade", "atari2600", "other"]],
-];
-
 /** The views in their order, a maker's consoles together in one menu where it has two or more. */
 function viewItems(filters: ArcadeFilter[]): (ArcadeFilter | { maker: string; filters: ArcadeFilter[] })[] {
   const out: (ArcadeFilter | { maker: string; filters: ArcadeFilter[] })[] = [];

@@ -7,12 +7,40 @@ import type { ItemCard } from "../lib/api";
 import { useSelectable } from "../lib/selection";
 import { Cover } from "./common";
 import { useCoverShape } from "../lib/preferences";
-import { SourceTag, sourceProps } from "./SourceTag";
+import { FilmTag, FormatTag, SourceTag, sourceProps } from "./SourceTag";
+import { CoverPreview } from "./CoverPreview";
 
 /** The case band (Blu-ray blue, DVD black) on a film or series that came from a disc (its disc format, D-029). */
 export function caseBand(item: ItemCard): "bluray" | "dvd" | null {
   if (!item.discFormat) return null;
   return item.discFormat === "dvd" ? "dvd" : "bluray";
+}
+
+/** Finished: watched, read or marked so (D-178). */
+export const isFinished = (item: { progress?: number | null; completed?: boolean }) => !!item.completed || (item.progress ?? 0) >= 0.999;
+
+/** The small check on a finished item's cover, bottom right, in the progress bar's color (D-178). */
+export function DoneBadge({ size = 13 }: { size?: number }) {
+  return (
+    <span className="done-badge" title="Finished" aria-label="Finished">
+      <Check size={size} strokeWidth={3.4} />
+    </span>
+  );
+}
+
+/**
+ * How far along an item is, on its cover (D-178): a bar while it's under way, the small check once
+ * it's finished; nothing for Videos, which always play from the start and keep no progress.
+ */
+export function ProgressMark({ item, className = "card-progress" }: { item: { progress?: number | null; completed?: boolean; category?: string | null }; className?: string }) {
+  if (item.category === "videos") return null;
+  if (isFinished(item)) return <DoneBadge />;
+  if (!item.progress || item.progress <= 0) return null;
+  return (
+    <div className={className}>
+      <span style={{ width: `${Math.round(item.progress * 100)}%` }} />
+    </div>
+  );
 }
 
 /** A cover card. In a library view (`index` given) it also takes part in multi-select. */
@@ -25,7 +53,10 @@ export const MediaCard = memo(function MediaCard({ item, width, index, transitio
     <Link to={itemPath(item)} params={{ id: String(item.id) }} className="card" style={width ? { width } : undefined} data-blip {...props}>
       <div className="card-art" data-shape={shape} data-vt={transitionId} style={{ aspectRatio: aspect }} {...sourceProps(item.source)}>
         <Cover item={item} />
+        <CoverPreview item={item} />
         <SourceTag service={item.source} />
+        <FilmTag item={item} />
+        <FormatTag item={item} />
         {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
         {(item.isFavorite || item.missing || item.online) && (
           <div className="card-badges" style={band ? { top: 28 } : undefined}>
@@ -42,11 +73,7 @@ export const MediaCard = memo(function MediaCard({ item, width, index, transitio
             )}
           </div>
         )}
-        {item.progress != null && item.progress > 0 && (
-          <div className="card-progress">
-            <span style={{ width: `${Math.round(item.progress * 100)}%` }} />
-          </div>
-        )}
+        <ProgressMark item={item} />
         {selecting && (
           <span className={`card-check${checked ? " on" : ""}`} aria-hidden>
             {checked && <Check size={16} strokeWidth={3.2} />}

@@ -321,7 +321,7 @@ pub fn bulk_actions(conn: &Connection, ids: &[i64]) -> AppResult<BulkActions> {
     let (total, tracks, videos, music, books, comics, download): (i64, i64, i64, i64, i64, i64, i64) = conn.query_row(
         "SELECT count(*), \
            coalesce(sum(c.handler = 'audio' AND EXISTS (SELECT 1 FROM parts p WHERE p.item_id = i.id AND p.kind = 'track')), 0), \
-           coalesce(sum(c.handler = 'video' AND c.key <> 'video'), 0), coalesce(sum(c.handler = 'audio'), 0), \
+           coalesce(sum(c.handler = 'video'), 0), coalesce(sum(c.handler = 'audio'), 0), \
            coalesce(sum(c.handler IN ('book', 'comic')), 0), coalesce(sum(c.handler = 'comic'), 0), \
            coalesce(sum(EXISTS (SELECT 1 FROM online_sources o WHERE o.item_id = i.id AND o.downloaded = 0 AND o.provider <> 'spotify' AND o.kind NOT IN ('playlist', 'album'))), 0) \
          FROM items i JOIN categories c ON c.id = i.category_id WHERE i.id IN (SELECT value FROM json_each(?1))",
@@ -405,11 +405,6 @@ pub fn apply_bulk(conn: &mut Connection, ids: &[i64], ops: &[BulkOp]) -> AppResu
                         &format!("UPDATE items SET category_id = ?2, collection_id = ?3, updated_at = {NOW} WHERE id = ?1"),
                         params![id, category, collection],
                     )?;
-                    // Into Movies & Series: a horizontal cover goes back to the vertical default.
-                    tx.execute(
-                        "UPDATE items SET metadata = json_remove(metadata, '$.coverShape') WHERE id = ?1                          AND json_extract(metadata, '$.coverShape') = 'landscape' AND category_id = (SELECT id FROM categories WHERE key = 'video')",
-                        [id],
-                    )?;
                 }
                 searchable = true;
             }
@@ -447,10 +442,10 @@ pub fn apply_bulk(conn: &mut Connection, ids: &[i64], ops: &[BulkOp]) -> AppResu
                     }
                 }
                 Some(shape @ ("square" | "disc" | "poster" | "landscape")) => {
-                    // Each kind takes only its own shapes; Movies & Series covers are always vertical (D-027).
+                    // Each kind takes only its own shapes: music square or a CD, videos and Movies & Series
+                    // horizontal or vertical (D-174; Movies & Series were only vertical before).
                     let fits = match shape {
                         "square" | "disc" => "c.handler = 'audio'",
-                        "landscape" => "c.handler = 'video' AND c.key <> 'video'",
                         _ => "c.handler = 'video'",
                     };
                     for id in ids {
@@ -569,7 +564,8 @@ mod tests {
         let actions = bulk_actions(&conn, &mixed).unwrap();
         assert!(!actions.playlist && actions.cover_shapes.is_empty());
         assert_eq!(bulk_actions(&conn, &[clip]).unwrap().cover_shapes, ["landscape", "poster"]);
-        assert!(bulk_actions(&conn, &[clip, film]).unwrap().cover_shapes.is_empty());
+        // Movies & Series take the same two shapes as Videos (D-174).
+        assert_eq!(bulk_actions(&conn, &[clip, film]).unwrap().cover_shapes, ["landscape", "poster"]);
         // The core refuses what doesn't fit, and adds what does.
         conn.execute("INSERT INTO playlists (id, name) VALUES (1, 'Mix')", []).unwrap();
         assert!(apply_bulk(&mut conn, &mixed, &[BulkOp::AddToPlaylist { playlist: 1 }]).is_err());

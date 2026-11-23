@@ -12,6 +12,34 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.10.0",
+    date: "2026-11-22",
+    added: [
+      { icon: "monitor", title: "Previews on hover", text: "Hold the mouse on a video in Videos and a short silent preview plays on its cover, as on video sites; in Big Picture, the selected one plays. Each video's cover also says what kind of file it is (MP4, MKV…)." },
+      { icon: "bookmark", title: "Finished at a glance", text: "A movie, series, book, comic or manga you've finished shows a small check on its cover instead of a full bar. Books, comics and manga have Mark as read, as films have Mark as watched." },
+      { icon: "image", title: "GIFs in Pictures", text: "GIFs move in their previews, everywhere they show. Each picture's cover says what it is (GIF, JPG, PNG…), and on its page it keeps its own shape, as do the pictures of its album." },
+      { icon: "gamepad", title: "Marks in Big Picture", text: "Mark a game completed, a movie or series watched, or a book read, from its screen in Big Picture." },
+      { icon: "music", title: "Music for Settings and Big Picture", text: "Settings and Big Picture each have an original theme of their own, on the same beat as the main menu's, flowing into each other in about a second as you move. Choose each one's music in Settings › Sound: its theme, the main menu's, or your own songs." },
+      { icon: "gamepad", title: "Episodes in Big Picture", text: "A series in Big Picture lists all its episodes, by season, with their pictures: pick the one to watch." },
+      { icon: "library", title: "Home's tiles come alive", text: "Each category's tile on Home moves on through its newest covers, a few at a time, so it isn't always the same picture. In performance mode they change when you come back to Home." },
+      { icon: "image", title: "Edit details holds it all", text: "An item's artwork, cover shape and color, and background are in Edit details now, beside its details, so its page has fewer buttons." },
+      { icon: "monitor", title: "Movies & Series, wide and tagged", text: "Covers in Movies & Series are horizontal now (vertical in Settings, or per movie), each tagged Movie or Series." },
+      { icon: "library", title: "Edit a series' episodes", text: "A series' Edit sets its episodes' order and pictures (always horizontal), adds episodes from files or from Videos, and takes one out, back to Videos." },
+      { icon: "gamepad", title: "Citra in Arcade", text: "Arcade finds Citra, the 3DS emulator, where its installer puts it (and as a Flatpak on Linux), and plays your 3DS games in it." },
+    ],
+    fixed: [
+      "Big Picture opens smoothly after its startup animation, without the screen flickering.",
+      "Arcade's Collections and Emulators & folders come in and go out smoothly, as the other screens do (at once in performance mode or with animations off).",
+      "Videos no longer show how far you watched: they always play from the start.",
+      "Pictures keep their own shape in Big Picture too.",
+      "In Big Picture, changing a tab in Library or Arcade brings in only what's under the tabs; Library's Collections tab comes first, as in Arcade; and a running game shows its green dot.",
+      "Emulators & folders › Consoles shows the consoles as cards by maker, using the whole width, so there's no long list to scroll.",
+      "A movie plays without previous and next buttons, and a series only steps through its own episodes, instead of moving on to another video.",
+      "Categories made in an early version of Digitify are gone: everyone has the same fixed categories.",
+      "The Digitify Manual in Books describes this version again (0.9.3 came with the one before).",
+    ],
+  },
+  {
     version: "0.9.3",
     date: "2026-11-22",
     added: [

@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import type { CSSProperties } from "react";
 import { api, type Handler } from "../../lib/api";
 import { Cover } from "../../components/common";
+import { DoneBadge } from "../../components/MediaCard";
 
 /** The other volumes of the item's series, in reading order (D-019). */
 export function SeriesPanel({ itemId, handler }: { itemId: number; handler: Handler }) {
@@ -24,13 +25,18 @@ export function SeriesPanel({ itemId, handler }: { itemId: number; handler: Hand
             to="/item/$id"
             params={{ id: String(entry.id) }}
             className="series-entry"
+            style={handler === "image" && entry.aspect ? { flexBasis: Math.round(138 * entry.aspect) } : undefined}
             aria-current={position === index ? "page" : undefined}
             title={entry.title}
           >
-            <div className="series-cover">
-              <Cover item={{ title: entry.title, coverKey: entry.coverKey, handler }} />
-              {entry.progress != null && entry.progress > 0 && (
-                <span className="series-progress" style={{ "--fill": `${(entry.completed ? 1 : entry.progress) * 100}%` } as CSSProperties} />
+            {/* Pictures keep their own proportions, all one height (D-178). */}
+            <div className="series-cover" style={handler === "image" && entry.aspect ? { aspectRatio: String(entry.aspect), width: Math.round(138 * entry.aspect) } : undefined}>
+              <Cover item={{ title: entry.title, coverKey: entry.coverKey, handler, id: entry.id, formats: entry.format ? [entry.format] : undefined }} />
+              {entry.completed ? (
+                <DoneBadge size={11} />
+              ) : (
+                entry.progress != null &&
+                entry.progress > 0 && <span className="series-progress" style={{ "--fill": `${entry.progress * 100}%` } as CSSProperties} />
               )}
             </div>
             <span>{entry.label ?? entry.title}</span>

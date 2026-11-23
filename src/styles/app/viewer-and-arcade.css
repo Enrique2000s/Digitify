@@ -458,6 +458,39 @@
   max-width: 640px;
   color: var(--muted);
 }
+/* Emulators & folders opens and closes (D-178): it unfolds and fades in, and folds away again. */
+.arcade-setup-wrap {
+  display: grid;
+  grid-template-rows: 1fr;
+  animation: arcade-setup-open 320ms var(--ease) both;
+}
+.arcade-setup-wrap.leaving {
+  animation: arcade-setup-close 240ms cubic-bezier(0.4, 0, 1, 1) both;
+  pointer-events: none;
+}
+.arcade-setup-clip {
+  min-height: 0;
+  overflow: clip;
+  overflow-clip-margin: 10px;
+}
+@keyframes arcade-setup-open {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+@keyframes arcade-setup-close {
+  to {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+/* Arcade's games and its collections come in as a screen does (D-178). */
+.arcade-stage {
+  animation: view-in 320ms var(--ease) both;
+}
 .arcade-setup {
   display: grid;
   gap: 16px;
@@ -1171,6 +1204,38 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+/* Emulators & folders › Consoles as cards by maker, like Launchers and Emulators (D-177). */
+.arcade-console-cards > li {
+  min-height: 56px;
+}
+.arcade-console-card-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.arcade-console-card-name strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.arcade-console-card-name .muted {
+  font-size: 12px;
+}
+.arcade-console-card-plays {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 55%;
+  text-align: right;
+  font-size: 12.5px;
+}
+.arcade-console-card-plays .select {
+  max-width: 100%;
+  height: 32px;
+  padding-block: 0;
+  font-size: 12.5px;
 }
 .arcade-consoles {
   width: 100%;

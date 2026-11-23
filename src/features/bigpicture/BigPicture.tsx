@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Marquee } from "../../components/Marquee";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { Award, BookOpen, CalendarHeart, ChartColumn, Star, ChevronLeft, ChevronRight, Delete, Gamepad2, Heart, House, LibraryBig, LogOut, MousePointer2, Pause, Play, Search, Settings2, SkipBack, SkipForward, Space, X, Eye, Joystick, Music, VolumeOff, Clapperboard } from "lucide-react";
+import { Award, BookOpen, CalendarHeart, ChartColumn, Star, ChevronLeft, ChevronRight, Delete, Gamepad2, Heart, House, LibraryBig, LogOut, MousePointer2, Pause, Play, Search, Settings2, SkipBack, SkipForward, Space, X, Eye, Joystick, Music, VolumeOff, Clapperboard, Circle, CircleCheck } from "lucide-react";
 import { photoContext, viewList } from "../../lib/routes";
 import { api, type ArcadeGame, type ItemCard } from "../../lib/api";
 import { exitBigPicture, focusFirst, moveFocus, takeIntro } from "../../lib/bigpicture";
@@ -22,13 +22,18 @@ import { useMusic } from "../../lib/music/MusicProvider";
 import { useCoverShape, usePreferences, type HomeSection } from "../../lib/preferences";
 import { StatsPanel } from "../home/Stats";
 import { SectionTitle } from "../home/HomePage";
-import { SourceTag, sourceProps } from "../../components/SourceTag";
+import { FilmTag, FormatTag, SourceTag, sourceProps } from "../../components/SourceTag";
+import { CoverPreview } from "../../components/CoverPreview";
 import { keys, libraryChanged, useCategories, useDashboard, useLibraryScope } from "../../lib/queries";
 import { BpCollectionCard } from "./BpCollectionCard";
 import { BpProfileScreen } from "../profile/BpProfile";
 import { useProfile } from "../profile/data";
 import { ProfileAvatar } from "../profile/Picture";
 import { CategoryIcon, Cover } from "../../components/common";
+import { EpisodeThumb, episodeCode, useEpisodeThumbs } from "../item/SeriesEpisodes";
+import { ProgressMark } from "../../components/MediaCard";
+import { isSeries } from "../item/WatchPanels";
+import { photoAspect, type ItemDetail } from "../../lib/api";
 
 /** Your picture in Big Picture's top bar (D-149). */
 function BpAvatar() {
@@ -81,13 +86,12 @@ function Tile({ item, autofocus, height = 300 }: { item: ItemCard; autofocus?: b
     >
       <span className="bp-tile-art" data-shape={shape} style={{ width, height }} {...sourceProps(item.source)}>
         <Cover item={item} size="cover" />
+        <CoverPreview item={item} />
         <SourceTag service={item.source} />
+        <FilmTag item={item} />
+        <FormatTag item={item} />
         {item.isFavorite && <Heart className="bp-tile-fav" size={22} fill="currentColor" aria-label="Favorite" />}
-        {item.progress != null && item.progress > 0 && item.progress < 1 && (
-          <span className="bp-tile-progress">
-            <span style={{ width: `${Math.round(item.progress * 100)}%` }} />
-          </span>
-        )}
+        <ProgressMark item={item} className="bp-tile-progress" />
       </span>
       <span className="bp-tile-title">
         <Marquee hover text={item.title} />
@@ -169,6 +173,8 @@ function FeaturedCard({ item }: { item: ItemCard }) {
         <span className="bp-featured-art" data-shape={shape} style={{ ["--a" as string]: aspect }} {...sourceProps(item.source)}>
           <Cover item={item} size="cover" />
           <SourceTag service={item.source} />
+          <FilmTag item={item} />
+          <FormatTag item={item} />
         </span>
         <span className="bp-featured-body">
           <strong>{item.title}</strong>
@@ -362,10 +368,11 @@ function LibraryScreen({ scope }: { scope: string }) {
   useEffect(() => {
     if (!inCollections && scope !== preferences.libraryScope && (scope !== "all" || preferences.showEverything)) update({ libraryScope: scope });
   }, [scope, inCollections, preferences.libraryScope, preferences.showEverything, update]);
+  // Collections first, as in Arcade (D-180).
   const tabs = [
+    { key: "collections", name: "Collections" },
     ...(preferences.showEverything ? [{ key: "all", name: "Everything" }] : []),
     ...(categories.data?.filter((c) => !c.isHidden).map((c) => ({ key: c.key, name: c.name })) ?? []),
-    { key: "collections", name: "Collections" },
   ];
   // LB and RB switch between the categories.
   usePad((action) => {
@@ -394,6 +401,7 @@ function LibraryScreen({ scope }: { scope: string }) {
         ))}
         <span className="bp-hint-key">RB</span>
       </div>
+      <div className="bp-tab-body" key={scope}>
       {inCollections ? (
         <LibraryCollectionsBP open={scope.startsWith("collection:") ? Number(scope.slice("collection:".length)) : null} />
       ) : (
@@ -407,6 +415,7 @@ function LibraryScreen({ scope }: { scope: string }) {
         </button>
       )}
       {!inCollections && items.data?.total === 0 && <p className="bp-empty">Nothing here yet.</p>}
+      </div>
     </>
   );
 }
@@ -484,6 +493,11 @@ function GameScreen({ id }: { id: number }) {
     await api.arcadeSetFavorite(game.id, !game.isFavorite);
     void queryClient.invalidateQueries({ queryKey: ["arcade-games"] });
   };
+  // Mark as completed, as in Arcade (D-178).
+  const complete = async () => {
+    await api.arcadeSetCompleted([game.id], !game.completedAt);
+    void queryClient.invalidateQueries({ queryKey: ["arcade-games"] });
+  };
   return (
     <div className="bp-item bp-game">
       <div className="bp-item-art arcade-bp-art" style={{ ["--a" as string]: gameAspect(game) }}>
@@ -506,14 +520,21 @@ function GameScreen({ id }: { id: number }) {
         )}
         {game.note && <p className="bp-item-description">“{game.note}”</p>}
         {starting?.id === game.id && running !== game.id && <p className="bp-arcade-note">Starting through {starting.store}…</p>}
-        {running === game.id && <p className="bp-arcade-note">Playing now. Digitify's music is silent until the game closes.</p>}
+        {running === game.id && (
+          <p className="bp-arcade-note">
+            <span className="arcade-running-dot" aria-hidden /> Playing now. Digitify's music is silent until the game closes.
+          </p>
+        )}
         {error && <p className="bp-arcade-note error">{error}</p>}
         <div className="bp-actions">
           <button type="button" className="bp-button primary" data-bp-focus data-bp-autofocus disabled={running != null} onClick={() => void launch(game)}>
-            <Play size={26} fill="currentColor" /> {running === game.id ? "Playing…" : "Play"}
+            {running === game.id ? <span className="arcade-running-dot" aria-hidden /> : <Play size={26} fill="currentColor" />} {running === game.id ? "Playing…" : "Play"}
           </button>
           <button type="button" className="bp-button" data-bp-focus aria-pressed={game.isFavorite} onClick={() => void favorite()}>
             <Heart size={24} fill={game.isFavorite ? "currentColor" : "none"} /> {game.isFavorite ? "Favorite" : "Add to favorites"}
+          </button>
+          <button type="button" className="bp-button" data-bp-focus aria-pressed={!!game.completedAt} onClick={() => void complete()}>
+            {game.completedAt ? <CircleCheck size={24} /> : <Circle size={24} />} {game.completedAt ? "Completed" : "Mark as completed"}
           </button>
         </div>
       </div>
@@ -551,8 +572,22 @@ function ItemScreen({ id }: { id: number }) {
   const shapeOf = useCoverShape();
   const data = item.data;
   if (!data) return null;
-  const { shape, aspect } = shapeOf({ handler: data.handler, category: data.category, coverShape: (data.metadata as Record<string, unknown>).coverShape as never });
+  const look = shapeOf({ handler: data.handler, category: data.category, coverShape: (data.metadata as Record<string, unknown>).coverShape as never });
+  const shape = look.shape;
+  // A picture in its own proportions (D-178), as in its tile.
+  const aspect = (data.handler === "image" ? photoAspect(data.metadata as Record<string, unknown>) : null) ?? look.aspect;
   const digital = data.versions.some((v) => v.kind === "digital");
+  // Watched or read, by hand (D-178): films and series (not Videos, which keep no progress), books, comics and manga.
+  const watchable = data.handler === "video" && data.category !== "videos";
+  const readable = data.handler === "book" || data.handler === "comic";
+  const finished = (data.progress ?? 0) >= 0.999;
+  const markFinished = async () => {
+    if (readable) await api.readMark(id, !finished);
+    else await api.watchMark(id, null, !finished);
+    libraryChanged(queryClient);
+    void queryClient.invalidateQueries({ queryKey: ["item", id] });
+    void queryClient.invalidateQueries({ queryKey: ["episodes", id] });
+  };
   const progress = data.progress ?? 0;
   // Videos always play from the start (D-027).
   const started = progress > 0.01 && progress < 0.999 && data.category !== "videos";
@@ -574,6 +609,9 @@ function ItemScreen({ id }: { id: number }) {
     <div className="bp-item">
       <div className="bp-item-art" data-shape={shape} style={{ ["--a" as string]: aspect }}>
         <Cover item={data} size="cover" />
+        <CoverPreview item={data} />
+        <FilmTag item={data} />
+        <FormatTag item={data} />
       </div>
       <div className="bp-item-body">
         <h1>{data.title}</h1>
@@ -588,7 +626,7 @@ function ItemScreen({ id }: { id: number }) {
           )}
           {digital && (data.handler === "book" || data.handler === "comic") && (
             <button type="button" className="bp-button primary" data-bp-focus data-bp-autofocus onClick={() => void navigate({ to: "/read/$id", params: { id: String(id) } })}>
-              <BookOpen size={26} /> {started ? `Continue · ${Math.round(progress * 100)}%` : "Read"}
+              <BookOpen size={26} /> {started ? `Continue · ${Math.round(progress * 100)}%` : finished ? "Read again" : "Read"}
             </button>
           )}
           {data.online && !data.online.downloaded && (
@@ -609,9 +647,55 @@ function ItemScreen({ id }: { id: number }) {
           <button type="button" className="bp-button" data-bp-focus aria-pressed={data.isFavorite} onClick={() => void favorite()}>
             <Heart size={24} fill={data.isFavorite ? "currentColor" : "none"} /> {data.isFavorite ? "Favorite" : "Add to favorites"}
           </button>
+          {digital && (watchable || readable) && (
+            <button type="button" className="bp-button" data-bp-focus aria-pressed={finished} onClick={() => void markFinished()}>
+              {finished ? <CircleCheck size={24} /> : <Circle size={24} />}{" "}
+              {finished ? (readable ? "Read" : "Watched") : readable ? "Mark as read" : isSeries(data) ? "Mark all watched" : "Mark as watched"}
+            </button>
+          )}
         </div>
       </div>
+      {isSeries(data) && <BpEpisodes item={data} />}
     </div>
+  );
+}
+
+/** A series' episodes in Big Picture (D-175), by season, each with its picture: pick one to play it. */
+function BpEpisodes({ item }: { item: ItemDetail }) {
+  const navigate = useNavigate();
+  const episodes = useQuery({ queryKey: ["episodes", item.id], queryFn: () => api.episodesList(item.id) });
+  useEpisodeThumbs(item.id, true);
+  const list = episodes.data ?? [];
+  if (!list.length) return null;
+  const seasons = [...new Set(list.map((e) => e.season ?? 0))];
+  return (
+    <section className="bp-episodes" aria-label="Episodes">
+      {seasons.map((season) => (
+        <div key={season} className="bp-season">
+          <h2>{seasons.length > 1 || season > 0 ? (season > 0 ? `Season ${season}` : "Specials") : "Episodes"}</h2>
+          <div className="bp-episode-row">
+            {list
+              .filter((e) => (e.season ?? 0) === season)
+              .map((episode) => (
+                <button
+                  key={episode.id}
+                  type="button"
+                  className={`bp-episode${episode.completed ? " watched" : ""}`}
+                  data-bp-focus
+                  onClick={() => void navigate({ to: "/watch/$id", params: { id: String(item.id) }, search: { part: episode.id } })}
+                >
+                  <span className="bp-episode-art">
+                    <EpisodeThumb episode={episode} className="bp-episode-thumb" />
+                    <ProgressMark item={{ progress: episode.progress, completed: episode.completed }} className="bp-tile-progress" />
+                  </span>
+                  <span className="bp-episode-code">{episodeCode(episode)}{episode.completed ? " · Watched" : ""}</span>
+                  <span className="bp-episode-title">{episode.title || `Episode ${episode.number ?? ""}`}</span>
+                </button>
+              ))}
+          </div>
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -835,7 +919,9 @@ export function BigPicturePage() {
   };
 
   // A new screen selects its first (or marked) element once it has drawn.
-  const key = `${screen}:${search.scope ?? ""}:${search.id ?? ""}`;
+  // Library's and Arcade's tabs change only what's under them (D-180): the screen itself stays.
+  const focusKey = `${screen}:${search.scope ?? ""}:${search.id ?? ""}`;
+  const key = screen === "library" || screen === "arcade" ? screen : focusKey;
   useEffect(() => {
     if (cursor) return;
     const timer = window.setTimeout(() => {
@@ -845,7 +931,7 @@ export function BigPicturePage() {
       if (main.current) focusFirst(main.current);
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [key, cursor]);
+  }, [focusKey, cursor]);
 
   // The selection never disappears: it's drawn with a class (not :focus, which goes when the window
   // loses focus), and if the selected element goes away, the selection comes back nearby.
@@ -965,9 +1051,10 @@ export function BigPicturePage() {
   const title = useMemo(() => ({ home: "Home", library: "Library", item: "", search: "Search", online: "", arcade: "Arcade", music: "", game: "", achievements: "", year: "", profile: "" })[screen], [screen]);
 
   return (
-    <div ref={shell} className={`bp${cursor ? " bp-cursor-mode" : ""}${arrived ? " after-intro" : ""}`}>
+    <div ref={shell} className={`bp${cursor ? " bp-cursor-mode" : ""}${intro ? " in-intro" : ""}${arrived ? " after-intro" : ""}`}>
       {intro && (
         <BigPictureIntro
+          onLeaving={() => setArrived(true)}
           onDone={() => {
             setIntro(false);
             setArrived(true);

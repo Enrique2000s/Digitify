@@ -474,6 +474,98 @@ body:has(.import-panel) .online-queue {
   position: relative;
 }
 
+/* Movie or Series on Movies & Series' covers (D-174), at the top left. */
+.film-tag {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  z-index: 3;
+  padding: 2px 8px;
+  border-radius: var(--pill);
+  background: rgba(10, 16, 28, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+.film-tag[data-kind="gif"] {
+  background: color-mix(in srgb, #e5487f 85%, transparent);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.film-tag[data-kind="series"] {
+  background: color-mix(in srgb, #7c4dff 82%, transparent);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.carousel-item .film-tag,
+.hero-cover .film-tag,
+.bp-tile-art .film-tag,
+.bp-item-art .film-tag,
+.bp-featured-art .film-tag {
+  font-size: 12px;
+  padding: 3px 10px;
+}
+.thumb .film-tag {
+  display: none;
+}
+/* A video's hover preview (D-179): over its cover, under its tags, fading in once it plays. */
+.hero-cover,
+.shelf-cover,
+.bp-item-art {
+  position: relative;
+}
+.cover-preview {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.hero-cover > .cover-preview {
+  inset: 6px;
+  border-radius: 12px;
+}
+.cover-preview video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 240ms var(--ease);
+}
+.cover-preview video.on {
+  opacity: 1;
+}
+/* The cover's badges stay above it. */
+.card-badges,
+.bp-tile-fav {
+  z-index: 3;
+}
+.bp-item-art .film-tag {
+  left: 14px;
+  top: 14px;
+}
+
+/* Below a disc's case band, and below a Missing chip, when the cover has one. */
+.card-art:has(.card-case) .film-tag {
+  top: 30px;
+}
+.card-art:has(.card-badges .chip.warning) .film-tag {
+  top: 42px;
+}
+.hero-cover:has(.film-tag) {
+  position: relative;
+}
+.hero-cover .film-tag {
+  left: 12px;
+  top: 12px;
+}
+
 /* ---------------------------------------------------------------- collections among the items (D-030) */
 
 .collection-art {

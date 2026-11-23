@@ -41,6 +41,7 @@ fn route<R: Runtime>(app: &AppHandle<R>, request: &Request<Vec<u8>>) -> Routed {
         (Some("book"), Some(version)) => ebook_file(app, version, request),
         (Some("cd"), Some(track)) => cd_track(track, request),
         (Some("picture"), Some(item)) => picture(app, item, request),
+        (Some("preview"), Some(item)) => preview(app, item, request),
         _ => Err((StatusCode::NOT_FOUND, format!("unknown resource {path}"))),
     }
 }
@@ -119,6 +120,21 @@ fn ebook_file<R: Runtime>(app: &AppHandle<R>, version: &str, request: &Request<V
         .map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?
         .ok_or_else(|| (StatusCode::NOT_FOUND, format!("copy {version} isn't an ebook")))?;
     stream(&path, ebooks::mime_type(&path), request)
+}
+
+/// A video's hover preview, `preview/<item>` (D-179), once it's been made.
+fn preview<R: Runtime>(app: &AppHandle<R>, item: &str, request: &Request<Vec<u8>>) -> Routed {
+    let item: i64 = item.parse().map_err(|_| (StatusCode::BAD_REQUEST, "invalid preview".to_string()))?;
+    let library = app
+        .state::<AppState>()
+        .library()
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+    let clip = crate::previews::clip_of(&library, item)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map(|(clip, ..)| clip)
+        .filter(|clip| clip.is_file())
+        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("no preview for {item}")))?;
+    stream(&clip, crate::previews::MIME, request)
 }
 
 /// A photo's own file, `picture/<item>` (D-033). Formats the web view can't show (TIFF) come

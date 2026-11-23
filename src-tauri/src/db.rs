@@ -44,6 +44,7 @@ pub const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0031_completed_no_smart_lists.sql"),
     include_str!("../migrations/0032_arcade_keywords.sql"),
     include_str!("../migrations/0033_no_tags_or_later.sql"),
+    include_str!("../migrations/0034_fixed_categories.sql"),
 ];
 
 pub struct Database {
@@ -161,4 +162,44 @@ fn migrate(conn: &mut Connection, backups: &Path) -> AppResult<()> {
         log::info!("applied database migration {version}");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// D-174: a category made in an early version goes on the way to schema 34, with what it held;
+    /// the fixed categories and their items stay.
+    #[test]
+    fn categories_made_in_early_versions_go() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        for (index, sql) in MIGRATIONS[..33].iter().enumerate() {
+            conn.execute_batch(sql).unwrap();
+            crate::reshape::after(&conn, index as i64 + 1).unwrap();
+        }
+        conn.execute("INSERT INTO categories (key, name, icon, handler, sort_order, is_builtin, settings) VALUES ('recipes', 'Recipes', 'book', 'book', 20, 0, '{}')", []).unwrap();
+        let custom = conn.last_insert_rowid();
+        conn.execute("INSERT INTO collections (category_id, name, sort_name) VALUES (?1, 'Desserts', 'desserts')", [custom]).unwrap();
+        for (category, title) in [(custom, "Pancakes"), (conn.query_row("SELECT id FROM categories WHERE key = 'books'", [], |r| r.get(0)).unwrap(), "A Book")] {
+            conn.execute("INSERT INTO items (category_id, title, sort_title) VALUES (?1, ?2, ?2)", rusqlite::params![category, title]).unwrap();
+            let item = conn.last_insert_rowid();
+            conn.execute("INSERT INTO versions (item_id, kind, format, is_primary) VALUES (?1, 'digital', 'pdf', 1)", [item]).unwrap();
+            let version = conn.last_insert_rowid();
+            conn.execute("INSERT INTO files (version_id, position, path, storage, size, status) VALUES (?1, 0, ?2, 'referenced', 1, 'ok')", rusqlite::params![version, format!("C:/{title}.pdf")]).unwrap();
+            crate::library::reindex(&conn, item).unwrap();
+        }
+        let builtin: i64 = conn.query_row("SELECT count(*) FROM categories WHERE is_builtin = 1", [], |r| r.get(0)).unwrap();
+
+        conn.execute_batch(MIGRATIONS[33]).unwrap();
+        crate::reshape::after(&conn, 34).unwrap();
+        let count = |sql: &str| conn.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap();
+        assert_eq!(count("SELECT count(*) FROM categories WHERE is_builtin = 0"), 0);
+        assert_eq!(count("SELECT count(*) FROM categories"), builtin);
+        assert_eq!(count("SELECT count(*) FROM items"), 1, "only the book is left");
+        assert_eq!(count("SELECT count(*) FROM files"), 1);
+        assert_eq!(count("SELECT count(*) FROM collections"), 0);
+        assert_eq!(count("SELECT count(*) FROM items_fts WHERE items_fts MATCH 'Pancakes'"), 0);
+        assert_eq!(count("SELECT count(*) FROM items_fts WHERE items_fts MATCH 'Book'"), 1);
+    }
 }
