@@ -19,7 +19,9 @@ use tauri::{AppHandle, Emitter};
 use crate::error::{AppError, AppResult};
 use crate::library::blocking;
 
-const LATEST: &str = "https://api.github.com/repos/Enrique2000s/Digitify/releases/latest";
+/// The repository by its number, which GitHub never changes or gives to anyone else, so a new
+/// account name (or someone taking the old one) can't redirect where updates come from (D-182).
+const LATEST: &str = "https://api.github.com/repositories/1440396331/releases/latest";
 
 /// The version this build is, or the one a test pretends to be (`DIGITIFY_FAKE_VERSION`).
 fn current() -> String {
@@ -300,14 +302,22 @@ pub async fn update_install(app: AppHandle, path: String) -> AppResult<()> {
     Ok(())
 }
 
-/// Opens a release's page in the browser (the popup's "See what's in it").
+/// Opens a release's page in the browser (the popup's "See its release page"): the address GitHub
+/// gave for it, so it follows the repository wherever it is; only GitHub release pages open.
 #[tauri::command]
-pub fn update_page_open(version: String) -> AppResult<()> {
-    if version.is_empty() || !version.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-') {
-        return Err(AppError::msg("That isn't a version."));
+pub fn update_page_open(page: String) -> AppResult<()> {
+    if !is_release_page(&page) {
+        return Err(AppError::msg("That isn't a release page on GitHub."));
     }
-    let page = format!("https://github.com/Enrique2000s/Digitify/releases/tag/v{version}");
     crate::tools::open_link(&page).map_err(|e| AppError::msg(format!("Couldn't open the browser: {e}")))
+}
+
+/// `https://github.com/<owner>/<repo>/releases/tag/<tag>` and nothing else.
+fn is_release_page(page: &str) -> bool {
+    let Some(rest) = page.strip_prefix("https://github.com/") else { return false };
+    let parts: Vec<&str> = rest.split('/').collect();
+    let plain = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
+    parts.len() == 5 && plain(parts[0]) && plain(parts[1]) && parts[2] == "releases" && parts[3] == "tag" && plain(parts[4])
 }
 
 #[cfg(test)]
@@ -343,6 +353,16 @@ mod tests {
         // Not offered: the same version, a release without this system's file.
         assert!(offer(&release, "0.11.0", Kind::Windows).is_none());
         assert!(offer(&release, "0.10.0", Kind::AppImage).is_none());
+    }
+
+    #[test]
+    fn only_github_release_pages_open() {
+        assert!(is_release_page("https://github.com/Ryken64/Digitify/releases/tag/v0.10.2"));
+        assert!(is_release_page("https://github.com/Enrique2000s/Digitify/releases/tag/v0.10.1"));
+        assert!(!is_release_page("https://github.com/Ryken64/Digitify/releases/tag/v0.10.2/../../x"));
+        assert!(!is_release_page("https://example.com/Ryken64/Digitify/releases/tag/v1"));
+        assert!(!is_release_page("http://github.com/Ryken64/Digitify/releases/tag/v1"));
+        assert!(!is_release_page("https://github.com/Ryken64/Digitify/releases/tag/v1?x=1"));
     }
 
     #[test]

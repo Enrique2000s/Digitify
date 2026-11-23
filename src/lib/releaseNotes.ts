@@ -12,6 +12,12 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.10.2",
+    date: "2026-11-23",
+    added: [],
+    fixed: ["Updates keep coming from Digitify's own page on GitHub even if its address changes, and from nowhere else."],
+  },
+  {
     version: "0.10.1",
     date: "2026-11-23",
     added: [

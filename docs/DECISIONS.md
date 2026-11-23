@@ -102,6 +102,12 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-182 · Updates come from the repository's number, not its owner's name
+- **Date:** 2026-11-23 · **Approved by:** project owner (renaming their GitHub account; agreed to make the update check name-proof first)
+- **Why:** 0.10.1 asks `api.github.com/repos/<account>/Digitify`. When the account is renamed, GitHub redirects that, but only until someone else takes the old name, who could then publish a "release" (with its own SHA256SUMS.txt) that those copies would offer.
+- **Now:** the check asks `api.github.com/repositories/1440396331/releases/latest`, the repository's number, which GitHub never changes or reuses, whatever the account or repository is called. The download addresses and the release page come from GitHub's answer, so they follow the repository; *See its release page* opens only `https://github.com/<owner>/<repo>/releases/tag/<tag>` addresses.
+- **Renaming the account:** do it after this version is out (copies on 0.10.1 reach it through GitHub's redirect meanwhile), then update the links that carry the name (README, package.json, Cargo.toml, Settings › About's GitHub link) and the local git remote.
+
 ### D-181 · Updates: a quiet check at startup, and an offer to install
 - **Date:** 2026-11-23 · **Approved by:** project owner (asked for it; chose download-and-install from inside Digitify, a setting with Check now, and Later / Skip this version)
 - **The check:** about 8 seconds after Digitify opens, once per start, it asks GitHub's public API for the newest release of its repository (`releases/latest`). Nothing about the person or their library is sent (the request is the same one anyone's browser can make; its only identification is `Digitify/<version>`). No connection is normal: the quiet check then says nothing. It's on by default and can be turned off in Settings › About (*Check for updates when Digitify starts*), where *Check now* asks at once and says when this is the newest, or why it couldn't check. This is a change to D-001's "fully offline" stance, made at the owner's request; the About text says so.

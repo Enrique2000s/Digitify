@@ -1004,7 +1004,7 @@ export const api = {
   updateCheck: (loud: boolean) => invoke<AppUpdate | null>("update_check", { loud }),
   updateDownload: (update: AppUpdate) => invoke<string>("update_download", { update: { url: update.url, file: update.file, size: update.size, sums: update.sums, deb: update.deb } }),
   updateInstall: (path: string) => invoke<void>("update_install", { path }),
-  updatePageOpen: (version: string) => invoke<void>("update_page_open", { version }),
+  updatePageOpen: (page: string) => invoke<void>("update_page_open", { page }),
 };
 
 /** Running on Linux (WebKitGTK), where some things differ from Windows (D-031). */

@@ -213,7 +213,7 @@ export function UpdateDialog() {
           </div>
           <footer className="whats-new-foot">
             {offer.version && !working ? (
-              <button type="button" className="link-button" onClick={() => void api.updatePageOpen(offer.version).catch(() => {})}>
+              <button type="button" className="link-button" onClick={() => void api.updatePageOpen(offer.page).catch(() => {})}>
                 See its release page
               </button>
             ) : (
