@@ -1000,6 +1000,11 @@ export const api = {
   episodeThumbsFill: (id: number) => invoke<number>("episode_thumbs_fill", { id }),
 
   repositoryOpen: () => invoke<void>("repository_open"),
+  /** Updates (D-181): the newest release when it's newer than this one; `loud` reports a failed check. */
+  updateCheck: (loud: boolean) => invoke<AppUpdate | null>("update_check", { loud }),
+  updateDownload: (update: AppUpdate) => invoke<string>("update_download", { update: { url: update.url, file: update.file, size: update.size, sums: update.sums, deb: update.deb } }),
+  updateInstall: (path: string) => invoke<void>("update_install", { path }),
+  updatePageOpen: (version: string) => invoke<void>("update_page_open", { version }),
 };
 
 /** Running on Linux (WebKitGTK), where some things differ from Windows (D-031). */
@@ -1192,6 +1197,19 @@ export interface ArcadeScanReport {
 /** A photo's own file (D-033), served by the core's private `digitify` scheme. */
 export function pictureUrl(itemId: number): string {
   return `${MEDIA}/picture/${itemId}`;
+}
+
+/** A newer version of Digitify on GitHub, with this computer's file (D-181). */
+export interface AppUpdate {
+  version: string;
+  current: string;
+  page: string;
+  kind: "windows" | "appImage" | "deb" | "arch";
+  file: string;
+  url: string;
+  size: number;
+  sums: string | null;
+  deb: string | null;
 }
 
 /** A video's hover preview (D-179), once made; the key changes with its file. */

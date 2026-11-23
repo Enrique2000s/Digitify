@@ -12,6 +12,14 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.10.1",
+    date: "2026-11-23",
+    added: [
+      { icon: "download", title: "Updates from inside Digitify", text: "When Digitify opens it checks quietly whether there's a newer version and, if there is, offers to install it: Update, Later, or Skip this version. It downloads the right file, checks it, and installs it for you. Turn the check off, or check now, in Settings › About." },
+    ],
+    fixed: [],
+  },
+  {
     version: "0.10.0",
     date: "2026-11-22",
     added: [

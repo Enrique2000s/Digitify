@@ -162,6 +162,8 @@ export interface Preferences {
   holdToQuit: boolean;
   /** What's new after an update (D-081): shown unless turned off; `seen` is the last version shown. */
   whatsNew: { show: boolean; seen: string | null };
+  /** Updates (D-181): look for a newer version when Digitify starts; `skipped` is a version not to offer again. */
+  updates: { check: boolean; skipped: string | null };
   /** Library's Everything view (D-074): off, every item is in its own category only. */
   showEverything: boolean;
   /** The Library section opened last (D-075), opened again by the Library button. */
@@ -318,6 +320,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   confirmClose: true,
   holdToQuit: true,
   whatsNew: { show: true, seen: null },
+  updates: { check: true, skipped: null },
   libraryScope: null,
   nightFilter: { schedule: false, from: "21:00", to: "07:00", strength: 35 },
   goals: { finished: 0, read: 0, watch: 0, listen: 0, play: 0 },
@@ -645,6 +648,10 @@ function sanitize(raw: unknown): Preferences {
     whatsNew: (() => {
       const w = ((raw as Raw<Preferences>)?.whatsNew ?? {}) as { show?: unknown; seen?: unknown };
       return { show: typeof w.show === "boolean" ? w.show : true, seen: typeof w.seen === "string" ? w.seen : null };
+    })(),
+    updates: (() => {
+      const u = ((raw as Raw<Preferences>)?.updates ?? {}) as { check?: unknown; skipped?: unknown };
+      return { check: typeof u.check === "boolean" ? u.check : true, skipped: typeof u.skipped === "string" ? u.skipped : null };
     })(),
     libraryScope: pick("libraryScope", (v) => v === null || (typeof v === "string" && v.length > 0 && v.length < 64)),
     nightFilter: sanitizeNightFilter((raw as Raw<Preferences>)?.nightFilter),

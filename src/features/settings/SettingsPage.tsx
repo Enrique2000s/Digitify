@@ -3,8 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { BackButton } from "../../components/BackButton";
 import { open } from "@tauri-apps/plugin-dialog";
-import { FolderOpen, Monitor, Moon, ScrollText, Settings, Sun } from "lucide-react";
-import { openWhatsNew } from "../app/AppDialogs";
+import { FolderOpen, Monitor, Moon, ScrollText, Settings, Sun, RefreshCw } from "lucide-react";
+import { openWhatsNew, checkForUpdate } from "../app/AppDialogs";
 import { api, errorText, onLinux } from "../../lib/api";
 import { ACCENT_PRESETS } from "../../lib/color";
 import { LOOK_ACCENTS, PALETTE_ACCENTS, SECTION_COLOR_NAMES, SECTION_COLORS, usePreferences, type Look, type MotionChoice, type Palette, type ThemeChoice } from "../../lib/preferences";
@@ -447,9 +447,24 @@ export function SettingsPage() {
               <h2>About</h2>
               <Setting
                 title={`Digitify ${status.data?.version ?? ""}`}
-                text="A home for all your media (Library) and a universal launcher for your games (Arcade). Works fully offline. No accounts, no telemetry, and nothing is uploaded. Helper engines: mpv (GPL) and FFmpeg (LGPL), run as separate programs. The ambient theme “Digitify Main Menu Music” is original to Digitify."
+                text="A home for all your media (Library) and a universal launcher for your games (Arcade). Works fully offline. No accounts, no telemetry, and nothing is uploaded; it goes online only for what you ask (links, covers) and, unless turned off below, to see on GitHub whether there's a newer version. Helper engines: mpv (GPL) and FFmpeg (LGPL), run as separate programs. The ambient theme “Digitify Main Menu Music” is original to Digitify."
               >
                 <span />
+              </Setting>
+              <Setting title="Check for updates when Digitify starts" text="A moment after it opens, Digitify asks GitHub whether there's a newer version (nothing about you or your library is sent) and, if there is, offers to install it.">
+                <Switch checked={preferences.updates.check} label="Check for updates when Digitify starts" onChange={(check) => update((c) => ({ updates: { ...c.updates, check } }))} />
+              </Setting>
+              <Setting title="Check now" text={preferences.updates.skipped ? `Looks for a newer version right away (${preferences.updates.skipped} was skipped; Check now offers it again).` : "Looks for a newer version right away."}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    update((c) => ({ updates: { ...c.updates, skipped: null } }));
+                    checkForUpdate();
+                  }}
+                >
+                  <RefreshCw size={16} /> Check now
+                </button>
               </Setting>
               <Setting title="What's new" text="What changed in this version and the ones before: new things and fixes.">
                 <button type="button" className="btn" onClick={openWhatsNew}>

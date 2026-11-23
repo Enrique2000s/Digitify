@@ -14,7 +14,7 @@ use crate::error::{AppError, AppResult};
 use crate::{AppState, Library};
 
 /// Raised whenever the manual's text changes, so libraries take the new one.
-pub const VERSION: i64 = 16;
+pub const VERSION: i64 = 17;
 const TITLE: &str = "Digitify Manual";
 const FILE: &str = "Digitify-Manual.pdf";
 /// Its own book-shaped cover (D-150), so Books shows it whole.

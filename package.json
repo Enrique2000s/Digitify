@@ -1,7 +1,7 @@
 {
   "name": "digitify",
   "private": true,
-  "version": "0.10.0",
+  "version": "0.10.1",
   "license": "MIT",
   "repository": "github:Enrique2000s/Digitify",
   "description": "Digitify: a home for all your media (Library) and a universal launcher for your games (Arcade).",

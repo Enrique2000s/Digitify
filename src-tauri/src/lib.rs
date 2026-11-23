@@ -35,6 +35,7 @@ mod pages;
 mod pdf;
 mod pictures;
 mod previews;
+mod updates;
 mod player;
 mod profile;
 mod reshape;
@@ -327,6 +328,10 @@ pub fn run() {
             watch::watch_mark,
             watch::read_mark,
             previews::video_preview,
+            updates::update_check,
+            updates::update_download,
+            updates::update_install,
+            updates::update_page_open,
             watch::episodes_list,
             player::player_add_subtitle,
             music::music_tracks,

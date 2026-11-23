@@ -102,6 +102,18 @@ Every product or architecture decision is recorded here with its reason. Anythin
   - Book scripts never run: chapters load in frames that inherit Digitify's Content Security Policy, which allows no inline or `blob:` scripts.
   - Copy-protected books (an `encryption.xml` that encrypts more than fonts, or a MOBI/AZW header that declares encryption) are refused with an explanation. Nothing is decrypted (D-007).
 
+### D-181 · Updates: a quiet check at startup, and an offer to install
+- **Date:** 2026-11-23 · **Approved by:** project owner (asked for it; chose download-and-install from inside Digitify, a setting with Check now, and Later / Skip this version)
+- **The check:** about 8 seconds after Digitify opens, once per start, it asks GitHub's public API for the newest release of its repository (`releases/latest`). Nothing about the person or their library is sent (the request is the same one anyone's browser can make; its only identification is `Digitify/<version>`). No connection is normal: the quiet check then says nothing. It's on by default and can be turned off in Settings › About (*Check for updates when Digitify starts*), where *Check now* asks at once and says when this is the newest, or why it couldn't check. This is a change to D-001's "fully offline" stance, made at the owner's request; the About text says so.
+- **The offer:** a newer release (not a draft or pre-release) with this computer's file brings up a popup: the version, the one installed, the download's size, and what happens next. *Update*, *Later* (asks again next start) or *Skip this version* (quiet until a newer one; Check now offers it again). It never covers a book, a video, a picture, a disc or Big Picture: it waits until they're closed.
+- **Installing:** this computer's file from the release is downloaded with its progress shown, then checked against the release's `SHA256SUMS.txt`; a file that doesn't match is thrown away, and a release without the list isn't installed from inside Digitify. Then:
+  - Windows: the installer runs in its passive mode (`/P /UPDATE /R`: only its progress, no questions) and opens Digitify again; Digitify closes first.
+  - Linux AppImage: the new AppImage takes the old one's place (written next to it, then renamed over it) and starts.
+  - Linux .deb: `pkexec apt-get install` (the system asks for the password in its own window), then Digitify starts again; without pkexec it says the command to run.
+  - Arch-based Linux: the release's install script and the .deb are downloaded, and the script runs in a terminal (Konsole, GNOME Terminal, Xfce Terminal, kitty, Alacritty or xterm), where it asks for sudo.
+  Which applies is decided by the core: Windows; `APPIMAGE` set; `/etc/arch-release` or pacman; otherwise .deb. Downloads wait in the system's temporary folder (`digitify-update`), cleared before each download.
+- **Testing:** `DIGITIFY_FAKE_VERSION` makes Digitify report an older version so the offer appears; in that mode it downloads and checks but never installs.
+
 ### D-180 · Big Picture: tabs change only what's under them, Collections first, the green dot while playing
 - **Date:** 2026-11-22 · **Approved by:** project owner (asked for each)
 - **Tabs:** changing a tab in Big Picture's Library or Arcade (a category, a console, Collections, a collection) no longer brings the whole screen in again: the title and the tabs stay, and only what's under them comes in (fading and rising, 320 ms; at once in performance mode or with animations off). The selection still lands on the first item of the new tab when the old one went.

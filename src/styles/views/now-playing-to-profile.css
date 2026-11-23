@@ -387,6 +387,43 @@ a.mini-player-open {
   margin-top: 3px;
   color: var(--accent-text);
 }
+/* Updates (D-181). */
+.update-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+.update-body {
+  padding-top: 6px;
+}
+.update-body p {
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+.update-error {
+  color: var(--danger, #e5484d);
+  font-weight: 600;
+}
+.update-progress {
+  display: grid;
+  gap: 8px;
+  font-weight: 700;
+}
+.update-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2, rgba(127, 127, 127, 0.2));
+  overflow: hidden;
+}
+.update-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-bright, var(--accent));
+  transition: width 200ms linear;
+}
+.update-actions {
+  display: flex;
+  gap: 8px;
+}
 .whats-new-foot {
   display: flex;
   align-items: center;

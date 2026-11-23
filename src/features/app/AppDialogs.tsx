@@ -1,9 +1,10 @@
 import { useEffect, useState, type ComponentType } from "react";
+import { useRouterState } from "@tanstack/react-router";
 import { listen } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import { Dialog as RadixDialog } from "radix-ui";
 import { BookmarkCheck, ChartColumn, Check, Download, Gamepad2, Image as ImageIcon, LibraryBig, MonitorSmartphone, Music, Power, Search, ShieldCheck, Wrench, X, type LucideProps } from "lucide-react";
-import { api } from "../../lib/api";
+import { api, errorText, type AppUpdate } from "../../lib/api";
 import { usePreferences } from "../../lib/preferences";
 import { notesSince, RELEASE_NOTES, type ReleaseNote } from "../../lib/releaseNotes";
 import { Logo } from "../../components/common";
@@ -70,6 +71,180 @@ const ICONS: Record<string, ComponentType<LucideProps>> = {
 };
 
 const longDate = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+
+/** Asks for a newer version from anywhere (Settings › About › Check now); the popup answers. */
+export const checkForUpdate = () => window.dispatchEvent(new Event("digitify:check-update"));
+
+/** The quiet check runs once per start, even if the popup's place is drawn again (Big Picture and back). */
+let checkedThisStart = false;
+
+const megabytes = (bytes: number) => `${(bytes / 1e6).toFixed(bytes > 1e8 ? 0 : 1)} MB`;
+
+/**
+ * Updates (D-181). A while after Digitify opens, it asks GitHub quietly whether there's a newer
+ * version (unless turned off in Settings › About); if there is, and it wasn't skipped, this asks,
+ * but never over a book, a video, a picture or Big Picture: it waits until those are closed.
+ * Update downloads and checks this computer's file, then installs it; Later asks again next time;
+ * Skip this version stays quiet until a newer one. Check now (in About) asks at once and says so
+ * when this is the newest.
+ */
+export function UpdateDialog() {
+  const { preferences, update: setPreferences } = usePreferences();
+  const busyScreen = useRouterState({ select: (s) => /^\/(read|watch|view|disc|bp)\b/.test(s.location.pathname) });
+  const [offer, setOffer] = useState<AppUpdate | null>(null);
+  const [state, setState] = useState<"ask" | "downloading" | "installing" | "error" | "latest">("ask");
+  const [progress, setProgress] = useState(0);
+  const [message, setMessage] = useState<string | null>(null);
+
+  // Once per start, quietly, a while after the window opens (after What's new, if it shows).
+  useEffect(() => {
+    if (checkedThisStart || !preferences.updates.check) return;
+    checkedThisStart = true;
+    const t = window.setTimeout(() => {
+      void api
+        .updateCheck(false)
+        .then((found) => {
+          if (found && found.version !== preferences.updates.skipped) {
+            setState("ask");
+            setOffer(found);
+          }
+        })
+        .catch(() => {});
+    }, 8000);
+    return () => window.clearTimeout(t);
+  }, [preferences.updates.check, preferences.updates.skipped]);
+
+  // Check now: at once, and it says so either way.
+  useEffect(() => {
+    const onCheck = () => {
+      void api
+        .updateCheck(true)
+        .then((found) => {
+          setMessage(null);
+          setState(found ? "ask" : "latest");
+          setOffer(found ?? ({ version: "", current: "" } as AppUpdate));
+        })
+        .catch((e) => {
+          setState("error");
+          setMessage(errorText(e));
+          setOffer({ version: "", current: "" } as AppUpdate);
+        });
+    };
+    window.addEventListener("digitify:check-update", onCheck);
+    return () => window.removeEventListener("digitify:check-update", onCheck);
+  }, []);
+
+  useEffect(() => {
+    const off = listen<{ received: number; total: number }>("update-progress", (e) => setProgress(e.payload.total ? e.payload.received / e.payload.total : 0));
+    return () => void off.then((f) => f());
+  }, []);
+
+  const install = async () => {
+    if (!offer) return;
+    setState("downloading");
+    setProgress(0);
+    setMessage(null);
+    try {
+      const path = await api.updateDownload(offer);
+      setState("installing");
+      await api.updateInstall(path);
+      // Arch: the terminal does the rest; elsewhere Digitify has closed by now.
+      if (offer.kind === "arch") setMessage("The installer is running in a terminal. When it's done, open Digitify again.");
+    } catch (e) {
+      setState("error");
+      setMessage(errorText(e));
+    }
+  };
+  const close = () => {
+    if (state === "downloading" || state === "installing") return;
+    setOffer(null);
+  };
+  const skip = () => {
+    if (offer) setPreferences((c) => ({ updates: { ...c.updates, skipped: offer.version } }));
+    setOffer(null);
+  };
+
+  if (!offer || (busyScreen && state === "ask")) return null;
+  const working = state === "downloading" || state === "installing";
+  return (
+    <RadixDialog.Root open onOpenChange={(o) => !o && close()}>
+      <RadixDialog.Portal>
+        <RadixDialog.Overlay className="dialog-overlay" />
+        <RadixDialog.Content className="dialog whats-new update-dialog" aria-describedby={undefined} onEscapeKeyDown={(e) => working && e.preventDefault()} onInteractOutside={(e) => working && e.preventDefault()}>
+          <header className="whats-new-head">
+            <Logo size={46} />
+            <div>
+              <RadixDialog.Title className="whats-new-title">{offer.version ? `Digitify ${offer.version} is available` : state === "latest" ? "Digitify is up to date" : "Couldn't check for updates"}</RadixDialog.Title>
+              {offer.version ? (
+                <span className="whats-new-version">
+                  You have {offer.current} · {megabytes(offer.size)} to download
+                </span>
+              ) : null}
+            </div>
+            {!working && (
+              <RadixDialog.Close className="icon-btn whats-new-close" aria-label="Close">
+                <X size={18} />
+              </RadixDialog.Close>
+            )}
+          </header>
+          <div className="whats-new-body update-body">
+            {state === "latest" && <p>This is the newest version.</p>}
+            {state === "ask" && (
+              <p>
+                {offer.kind === "windows"
+                  ? "Digitify downloads it, closes, installs it and opens again by itself. Your library and settings stay as they are."
+                  : offer.kind === "appImage"
+                    ? "Digitify downloads the new AppImage, puts it in place of this one and opens again. Your library and settings stay as they are."
+                    : offer.kind === "deb"
+                      ? "Digitify downloads the new package and installs it; your system asks for your password. Your library and settings stay as they are."
+                      : "Digitify downloads the new package and its installer, which runs in a terminal and asks for your password. Your library and settings stay as they are."}{" "}
+                What's new shows once it's updated.
+              </p>
+            )}
+            {working && (
+              <div className="update-progress" role="status">
+                <span>{state === "downloading" ? `Downloading… ${Math.round(progress * 100)}%` : "Checking and installing…"}</span>
+                <div className="update-bar">
+                  <span style={{ width: `${Math.round((state === "installing" ? 1 : progress) * 100)}%` }} />
+                </div>
+              </div>
+            )}
+            {message && <p className={state === "error" ? "update-error" : undefined}>{message}</p>}
+          </div>
+          <footer className="whats-new-foot">
+            {offer.version && !working ? (
+              <button type="button" className="link-button" onClick={() => void api.updatePageOpen(offer.version).catch(() => {})}>
+                See its release page
+              </button>
+            ) : (
+              <span />
+            )}
+            <div className="update-actions">
+              {offer.version && state !== "installing" && state !== "downloading" && (
+                <>
+                  <button type="button" className="btn" onClick={skip}>
+                    Skip this version
+                  </button>
+                  <button type="button" className="btn" onClick={close}>
+                    Later
+                  </button>
+                  <button type="button" className="btn btn-primary" onClick={() => void install()}>
+                    <Download size={16} /> {state === "error" ? "Try again" : "Update"}
+                  </button>
+                </>
+              )}
+              {!offer.version && (
+                <button type="button" className="btn btn-primary" onClick={close}>
+                  OK
+                </button>
+              )}
+            </div>
+          </footer>
+        </RadixDialog.Content>
+      </RadixDialog.Portal>
+    </RadixDialog.Root>
+  );
+}
 
 /** Opens What's new from anywhere (Settings › About). */
 export const openWhatsNew = () => window.dispatchEvent(new Event("digitify:whats-new"));

@@ -25,7 +25,7 @@ import { FloatingVideo } from "../features/player/FloatingVideo";
 import { AchievementNotice } from "../features/home/YearViews";
 import { ResumeNotice } from "../features/home/ResumeNotice";
 import { PerfWatch } from "../lib/perfWatch";
-import { CloseConfirm, WhatsNew } from "../features/app/AppDialogs";
+import { CloseConfirm, WhatsNew, UpdateDialog } from "../features/app/AppDialogs";
 import { BigPictureCursor, BigPictureLauncher } from "../features/bigpicture/Launcher";
 import { blockHistoryKeys } from "../components/BackButton";
 import { BusyIndicator } from "./BusyIndicator";
@@ -116,6 +116,7 @@ export function Root() {
                   <PerfWatch />
                   <ResumeNotice />
                   <WhatsNew />
+                  <UpdateDialog />
                 </>
               )}
             </ImportUrlContext.Provider>

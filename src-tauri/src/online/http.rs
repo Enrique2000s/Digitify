@@ -16,7 +16,7 @@ const SPACING: Duration = Duration::from_millis(150);
 /// The longest wait a "too many requests" answer is honored for before giving up.
 const MAX_RETRY_AFTER: u64 = 30;
 
-fn agent() -> AppResult<&'static ureq::Agent> {
+pub(crate) fn agent() -> AppResult<&'static ureq::Agent> {
     static AGENT: OnceLock<ureq::Agent> = OnceLock::new();
     if let Some(agent) = AGENT.get() {
         return Ok(agent);
