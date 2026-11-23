@@ -161,7 +161,7 @@ pub fn library_reveal(state: State<'_, AppState>) -> AppResult<()> {
 
 /// Shows the third-party notices file shipped next to the app.
 /// Digitify's page (D-172): its code, its releases and their installers, its license.
-pub const REPOSITORY: &str = "https://github.com/Enrique2000s/Digitify";
+pub const REPOSITORY: &str = "https://github.com/Ryken64/Digitify";
 
 /// Opens Digitify's page in the browser (only that address).
 #[tauri::command]

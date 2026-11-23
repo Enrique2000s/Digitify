@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Enrique2000s/Digitify/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Enrique2000s/Digitify?label=download&color=1592d0"></a>
+  <a href="https://github.com/Ryken64/Digitify/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Ryken64/Digitify?label=download&color=1592d0"></a>
   <img alt="Windows and Linux" src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-2d3748">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-29a383"></a>
 </p>
@@ -19,16 +19,16 @@ No accounts, no cloud, no telemetry: it goes online only when you ask it to, suc
 
 ## Download
 
-**[⬇ Get the latest version](https://github.com/Enrique2000s/Digitify/releases/latest)** · free, no account, no ads.
+**[⬇ Get the latest version](https://github.com/Ryken64/Digitify/releases/latest)** · free, no account, no ads.
 
 | Your computer | Download | Then |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | [**Digitify-Setup-Windows-x64.exe**](https://github.com/Enrique2000s/Digitify/releases/latest/download/Digitify-Setup-Windows-x64.exe) | Open it and follow the steps. |
-| **Ubuntu, Debian, Linux Mint, Pop!_OS** | [**Digitify-Linux-amd64.deb**](https://github.com/Enrique2000s/Digitify/releases/latest/download/Digitify-Linux-amd64.deb) | `sudo apt install ./Digitify-Linux-amd64.deb` |
-| **Arch, Manjaro, EndeavourOS, CachyOS** | [the .deb](https://github.com/Enrique2000s/Digitify/releases/latest/download/Digitify-Linux-amd64.deb) and [**Digitify-Arch-install.sh**](https://github.com/Enrique2000s/Digitify/releases/latest/download/Digitify-Arch-install.sh) | `bash Digitify-Arch-install.sh` (in the folder with both) |
-| **Any other Linux** | [**Digitify-Linux-x86_64.AppImage**](https://github.com/Enrique2000s/Digitify/releases/latest/download/Digitify-Linux-x86_64.AppImage) | Install `mpv` and `ffmpeg`, then `chmod +x` it and run it. |
+| **Windows 10 / 11** (64-bit) | [**Digitify-Setup-Windows-x64.exe**](https://github.com/Ryken64/Digitify/releases/latest/download/Digitify-Setup-Windows-x64.exe) | Open it and follow the steps. |
+| **Ubuntu, Debian, Linux Mint, Pop!_OS** | [**Digitify-Linux-amd64.deb**](https://github.com/Ryken64/Digitify/releases/latest/download/Digitify-Linux-amd64.deb) | `sudo apt install ./Digitify-Linux-amd64.deb` |
+| **Arch, Manjaro, EndeavourOS, CachyOS** | [the .deb](https://github.com/Ryken64/Digitify/releases/latest/download/Digitify-Linux-amd64.deb) and [**Digitify-Arch-install.sh**](https://github.com/Ryken64/Digitify/releases/latest/download/Digitify-Arch-install.sh) | `bash Digitify-Arch-install.sh` (in the folder with both) |
+| **Any other Linux** | [**Digitify-Linux-x86_64.AppImage**](https://github.com/Ryken64/Digitify/releases/latest/download/Digitify-Linux-x86_64.AppImage) | Install `mpv` and `ffmpeg`, then `chmod +x` it and run it. |
 
-Each release also has `SHA256SUMS.txt` to check the files. Older versions: [all releases](https://github.com/Enrique2000s/Digitify/releases).
+Each release also has `SHA256SUMS.txt` to check the files. Older versions: [all releases](https://github.com/Ryken64/Digitify/releases).
 
 > **Windows says "Windows protected your PC"?** The installer isn't signed with a paid certificate yet. Click **More info**, then **Run anyway**.
 

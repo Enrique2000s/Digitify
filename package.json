@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.10.2",
   "license": "MIT",
-  "repository": "github:Enrique2000s/Digitify",
+  "repository": "github:Ryken64/Digitify",
   "description": "Digitify: a home for all your media (Library) and a universal launcher for your games (Arcade).",
   "type": "module",
   "scripts": {
