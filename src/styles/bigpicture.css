@@ -1665,8 +1665,11 @@ html.bp-mode .pv-side {
   height: 260px;
   margin: 0 6px;
   overflow: hidden;
-  border-radius: 26px;
-  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.45);
+  border-radius: 26px 26px 0 0;
+  /* The picture fades into the screen toward its bottom, as the profile's banner fades into its
+     panel outside Big Picture (D-185), so the name and motto over it read on a light picture too. */
+  -webkit-mask-image: linear-gradient(180deg, #000 34%, rgba(0, 0, 0, 0.35) 66%, transparent 92%);
+  mask-image: linear-gradient(180deg, #000 34%, rgba(0, 0, 0, 0.35) 66%, transparent 92%);
 }
 .bp-profile-banner .profile-banner-drift img {
   display: block;

@@ -16,10 +16,16 @@ export const photoContext: { params: Omit<QueryParams, "offset" | "limit"> | nul
 /**
  * The items of `handler` in the view something was opened from, in its order, when `id` is among
  * them (D-091); otherwise null. `withFiles` leaves out online items, which no player here plays
- * (D-140).
+ * (D-140). `category`, the item's own, keeps a view of everything to that category (D-185): from
+ * Everything, a video's next is the next video, never a movie or a series.
  */
-export async function viewList(id: number, handler: Handler, withFiles = false): Promise<number[] | null> {
+export async function viewList(id: number, handler: Handler, withFiles = false, category?: string | null): Promise<number[] | null> {
   if (!photoContext.params) return null;
-  const ids = await api.queryIds({ ...photoContext.params, handler, ...(withFiles ? { ownership: "digital" as const } : {}) });
+  const ids = await api.queryIds({
+    ...photoContext.params,
+    ...(category && !photoContext.params.category ? { category } : {}),
+    handler,
+    ...(withFiles ? { ownership: "digital" as const } : {}),
+  });
   return ids.includes(id) ? ids : null;
 }

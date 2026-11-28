@@ -8,6 +8,24 @@
   background-image: repeating-linear-gradient(0deg, var(--stripe) 0 2px, transparent 2px 7px);
 }
 
+/* Nothing fixed is selected or dragged out (D-185): no words, pictures or covers picked up by a
+   drag, a double click or Ctrl+A; only what you type in (fields, editable text) is selectable. */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+img,
+svg,
+video,
+a {
+  -webkit-user-drag: none;
+}
 /* A button's words are never selected by a drag or a double click (D-183). */
 button,
 .btn,

@@ -140,11 +140,8 @@
   align-items: center;
   gap: 10px;
 }
-/* Interface sounds as a compact toggle, like the light/night switch: lit when on. */
-.round-btn.sound-toggle[aria-pressed="true"] {
-  color: var(--accent-text);
-  box-shadow: var(--glow-sm);
-}
+/* Interface sounds and menu music as compact toggles, like the light/night switch: their icons say
+   on or off, without a lit button (D-185). */
 /* Off: the note is struck through. */
 .menu-music-toggle {
   position: relative;
@@ -158,6 +155,16 @@
   background: currentColor;
   /* The same way as the interface sounds' off icon: from top left to bottom right. */
   transform: rotate(45deg);
+}
+/* Home's Add in the accent, as Library's Add is (D-185). */
+.round-btn.round-btn-primary {
+  border-color: var(--accent-edge);
+  background: var(--gel);
+  color: var(--accent-ink);
+  box-shadow: 0 6px 14px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+.round-btn.round-btn-primary:hover {
+  box-shadow: 0 0 0 3px var(--accent-ring), 0 8px 18px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 .btn[aria-pressed="true"].glow-when-on {
   box-shadow: var(--glow);

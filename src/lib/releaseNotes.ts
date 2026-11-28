@@ -12,6 +12,27 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.11.1",
+    date: "2026-11-28",
+    added: [
+      { icon: "film", title: "Hold for 2×", text: "Hold the picture down while a video plays and it goes at double speed until you let go, as on YouTube." },
+      { icon: "gamepad", title: "Play and more, on every game", text: "Point at a game in Arcade or on Home for a Play button across its cover and a ⋯ button in its corner that marks it a favorite or completed, or puts it in a collection, without opening it." },
+    ],
+    fixed: [
+      "Add to a collection lists only your collections; Favorites and Completed have their own buttons.",
+      "Right-clicking no longer opens the browser's menu (text fields keep copy and paste), and words and pictures can't be selected or dragged out by accident.",
+      "Arcade's icon takes Arcade's color when colors per section are on.",
+      "Home's sound and music switches no longer glow while on (their icons tell), and Home's + is in your color, as Library's Add.",
+      "Big Picture's profile banner fades into the screen, so your name reads over a light picture.",
+      "The menu music goes quiet as soon as your computer locks, not only once the PIN shows.",
+      "The video in the corner moves from anywhere on it, holding its picture still in the box while you drag it (the sound plays on), opens big with a double click, and never shows your desktop, also on its way to the corner.",
+      "From Everything, a video's next and previous are videos, never a movie or a series.",
+      "The video and music volume stays where you left it, instead of going back to 100% now and then.",
+      "Home Shortcuts' long names slide to show themselves whole.",
+      "Collections' Back is no longer cut at its edge when selected.",
+    ],
+  },
+  {
     version: "0.11.0",
     date: "2026-11-27",
     added: [

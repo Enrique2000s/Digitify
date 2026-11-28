@@ -1009,6 +1009,8 @@ export const api = {
   playerOpen: (path: string) => invoke<void>("player_open", { path }),
   playerCommand: (args: unknown[]) => invoke<void>("player_command", { args }),
   playerSetRect: (rect: Rect) => invoke<void>("player_set_rect", { ...rect }),
+  /** A still of the video window's picture, as JPEG bytes (D-185). */
+  playerSnapshot: () => invoke<ArrayBuffer>("player_snapshot"),
   playerClose: () => invoke<void>("player_close"),
   playerAddSubtitle: (path: string) => invoke<void>("player_add_subtitle", { path }),
   itemSetBackdrop: (id: number, path: string | null) => invoke<void>("item_set_backdrop", { id, path }),

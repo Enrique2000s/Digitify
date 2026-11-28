@@ -6,8 +6,8 @@ The banner, the tour and the screenshots show a **demo library** made for them, 
 The demo uses well-known titles so the screenshots look like a real collection. Their names and cover art belong to their owners and are shown only to illustrate what Digitify does; Digitify includes none of them.
 
 - **Albums, comics, manga and novels** (Gorillaz, Bad Bunny, supercell feat. Hatsune Miku, Hiiragi Magnetite feat. Kasane Teto, Satsuki feat. Hatsune Miku & Kasane Teto; Dragon Ball; DC and Marvel): covers from Apple's public iTunes Search API.
-- **Movies and series** (Marvel, DC, *Loki*, *Thomas & Friends*): posters as published on Wikipedia.
-- **Games**: the covers their launchers (Steam, Epic Games, Xbox, Minecraft) provide, as Arcade shows them.
+- **Movies and series** (Marvel, DC, *Loki*, *Thomas & Friends*): wide artwork (backdrops with their titles) from [The Movie Database (TMDB)](https://www.themoviedb.org/), shown as Movies & Series' horizontal covers.
+- **Games**: the covers their launchers (Steam, Epic Games, Xbox, Minecraft) provide, as Arcade shows them; the GameCube and Nintendo 64 games (played through Dolphin and Project64) show box art from the [libretro thumbnails](https://github.com/libretro-thumbnails/libretro-thumbnails), as Arcade finds it. No game files are included.
 - The songs, films, episodes and comic pages behind those covers are stand-ins generated for the screenshots: tones, still frames and earlier demo art.
 
 ## Photos and clips of dachshunds and raccoons

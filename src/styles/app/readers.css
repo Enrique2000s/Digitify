@@ -517,6 +517,30 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
 .watch.calm .watch-surface {
   cursor: none;
 }
+/* Held down on the picture: 2× while held (D-185). */
+.watch-fast {
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 900;
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: watch-fast-in 160ms var(--ease) both;
+}
+@keyframes watch-fast-in {
+  from {
+    opacity: 0;
+  }
+}
 .watch-bar {
   flex-direction: column;
   align-items: stretch;

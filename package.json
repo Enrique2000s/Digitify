@@ -1,7 +1,7 @@
 {
   "name": "digitify",
   "private": true,
-  "version": "0.11.0",
+  "version": "0.11.1",
   "license": "MIT",
   "repository": "github:Ryken64/Digitify",
   "description": "Digitify: a home for all your media (Library) and a universal launcher for your games (Arcade).",

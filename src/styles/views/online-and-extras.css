@@ -1414,6 +1414,9 @@ body:has(.import-panel) .online-queue {
   right: 20px;
   bottom: 20px;
   z-index: 55;
+  /* Dragged from anywhere on it but its buttons (D-185). */
+  cursor: grab;
+  touch-action: none;
   display: flex;
   flex-direction: column;
   width: 384px;
@@ -1433,17 +1436,25 @@ body:has(.import-panel) .online-queue {
 .pip-frame {
   /* Black where the picture hasn't arrived yet while it's moved (D-146), never the desktop. */
   background: #000;
-  cursor: pointer;
+}
+/* The still shown while the card is held (D-185). */
+.pip-still {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 .pip-bar {
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 6px 6px 6px 12px;
-  cursor: grab;
-  touch-action: none;
   user-select: none;
 }
+.pip .icon-btn {
+  cursor: pointer;
+}
+.pip.dragging,
 .pip.dragging .pip-bar {
   cursor: grabbing;
 }

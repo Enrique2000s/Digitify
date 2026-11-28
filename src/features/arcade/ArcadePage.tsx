@@ -3,8 +3,8 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import { Marquee } from "../../components/Marquee";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { DropdownMenu } from "radix-ui";
-import { useQueryClient } from "@tanstack/react-query";
-import { Dices, Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Joystick, Layers, ListChecks, LoaderCircle, Play, Search, Settings2, X, LayoutGrid } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Dices, Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Joystick, Layers, ListChecks, LoaderCircle, Search, Settings2, X, LayoutGrid, ArrowLeft } from "lucide-react";
 import { api, errorText, onLinux, type ArcadeGame } from "../../lib/api";
 import type { ArcadeFilter } from "../../lib/preferences";
 import { usePreferences } from "../../lib/preferences";
@@ -12,7 +12,7 @@ import { GridDragProvider, useGridDragProps } from "../../lib/gridDrag";
 import { CardSizeSlider } from "../../components/common";
 import { LogoMark } from "./logos";
 import { CoverPicker } from "./CoverPicker";
-import { belongsTo, CollectionBar, CollectionsBoard, defaultCollection, useCollections } from "./Collections";
+import { belongsTo, CollectionBar, CollectionsBoard, defaultCollection, useCollections, GameQuick } from "./Collections";
 import { GamePanel } from "./GamePanel";
 import { motionAllowed } from "../reader/chrome";
 import { BulkBar } from "./BulkBar";
@@ -251,7 +251,7 @@ export function ArcadePage() {
       <div className="arcade-chrome">
       <header className={`arcade-head${arriving ? " arriving" : ""}`}>
         <div className="arcade-head-title">
-          <span className="arcade-logo" aria-hidden>
+          <span className={`arcade-logo${preferences.sectionColors.enabled && preferences.look === "breeze" ? " tinted" : ""}`} aria-hidden>
             <Joystick size={26} strokeWidth={2.3} />
           </span>
           <div>
@@ -281,6 +281,14 @@ export function ArcadePage() {
           </button>
         </div>
       </header>
+      {board === "collections" && (
+        // The collections' Back, in the same place as a collection's (D-185), never clipped.
+        <div className="arcade-toolbar arcade-collections-toolbar">
+          <button type="button" className="btn page-back arcade-collection-back" onClick={() => setBoard("games")}>
+            <ArrowLeft size={16} /> Back
+          </button>
+        </div>
+      )}
       {board !== "collections" && (
         <div className={`arcade-toolbar${arriving ? " arriving" : ""}`}>
           {collection ? (
@@ -376,7 +384,7 @@ export function ArcadePage() {
       {/* The collections and the games each come in as a screen does (D-178). */}
       {board === "collections" && (
         <div key="collections" className="arcade-stage">
-          <CollectionsBoard games={games.data} onOpen={(id) => setBoard(id)} onBack={() => setBoard("games")} />
+          <CollectionsBoard games={games.data} onOpen={(id) => setBoard(id)} />
         </div>
       )}
       {board !== "collections" && (
@@ -638,27 +646,27 @@ function ViewStrip({ filters, current, onChoose, games }: { filters: ArcadeFilte
 
 export function GameTile({ game, index, running, selecting, checked, onOpen, onPlay }: { game: ArcadeGame; index: number; running: boolean; selecting: boolean; checked: boolean; onOpen: () => void; onPlay: () => void }) {
   const drag = useGridDragProps(game.id);
+  const allGames = useQuery({ queryKey: ["arcade-games"], queryFn: api.arcadeGames }).data;
   return (
     <div className={`arcade-tile${running ? " running" : ""}${checked ? " checked" : ""}`} data-platform={game.platform} data-game-id={game.id} style={{ ["--i" as string]: index, ["--aspect" as string]: gameAspect(game) }} {...drag}>
-      <button
-        type="button"
-        className="arcade-tile-art"
-        style={{ aspectRatio: gameAspect(game) }}
-        onClick={onOpen}
-        aria-label={`${game.title}, ${consoleOf(game)}`}
-        aria-pressed={selecting ? checked : undefined}
-        data-blip
-      >
-        <GameCover game={game} />
-        <GameBadge game={game} />
-        <GameMarks game={game} />
-        {selecting && <span className={`card-check${checked ? " on" : ""}`} aria-hidden>{checked && <Check size={15} strokeWidth={3.2} />}</span>}
-      </button>
-      {!selecting && (
-        <button type="button" className="arcade-play" aria-label={`Play ${game.title}`} title="Play" onClick={onPlay} data-no-drag>
-          <Play size={18} fill="currentColor" />
+      <div className="arcade-tile-frame">
+        <button
+          type="button"
+          className="arcade-tile-art"
+          style={{ aspectRatio: gameAspect(game) }}
+          onClick={onOpen}
+          aria-label={`${game.title}, ${consoleOf(game)}`}
+          aria-pressed={selecting ? checked : undefined}
+          data-blip
+        >
+          <GameCover game={game} />
+          <GameBadge game={game} />
+          <GameMarks game={game} />
+          {selecting && <span className={`card-check${checked ? " on" : ""}`} aria-hidden>{checked && <Check size={15} strokeWidth={3.2} />}</span>}
         </button>
-      )}
+        {/* Play along the bottom, the quick menu at the top left (D-185). */}
+        {!selecting && <GameQuick game={game} running={running} onPlay={onPlay} games={allGames} />}
+      </div>
       <div className="arcade-tile-text">
         <strong>
           <Marquee hover text={game.title} />

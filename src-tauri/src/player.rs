@@ -172,7 +172,11 @@ pub async fn start_with(
     }
     send(&commands, json!({ "command": ["loadfile", source] }));
 
-    *lock(state)? = Some(Session { child, host, commands });
+    *lock(state)? = Some(Session {
+        child,
+        host,
+        commands,
+    });
     log::info!("video player started (mpv pid {})", lock(state)?.as_ref().map_or(0, |s| s.child.id()));
     Ok(())
 }
@@ -200,14 +204,60 @@ pub fn player_command(state: State<'_, PlayerState>, args: Vec<Value>) -> AppRes
     Ok(())
 }
 
-/// Places the video surface, in physical pixels relative to the window's client area.
-/// Synchronous commands run on the main thread, which owns the host window.
+/// Places the video surface, in physical pixels relative to the window's client area. The window
+/// is moved on the main thread, which owns it. On Windows the answer waits until the move is on
+/// screen (D-185): the page opens its hole over the new place only then, so the hole is never ahead
+/// of the picture and the desktop behind the see-through app window never shows in the gap while
+/// the corner video is dragged. (Placing the picture with mpv's margins in a still window was tried
+/// for that and dropped: mpv redraws for every margin, and the picture trailed far behind the box.)
 #[tauri::command]
-pub fn player_set_rect(state: State<'_, PlayerState>, x: i32, y: i32, width: i32, height: i32) -> AppResult<()> {
-    if let Some(session) = lock(&state)?.as_ref() {
-        video_host::place(session.host, x, y, width.max(1), height.max(1));
+pub async fn player_set_rect(app: AppHandle, state: State<'_, PlayerState>, x: i32, y: i32, width: i32, height: i32) -> AppResult<()> {
+    let Some(host) = lock(&state)?.as_ref().map(|session| session.host) else {
+        return Ok(());
+    };
+    on_main_thread(&app, move || video_host::place(host, x, y, width.max(1), height.max(1))).await?;
+    #[cfg(windows)]
+    {
+        // Two compositions: the one the move lands in, and one more for it to be presented.
+        let _ = tokio::task::spawn_blocking(|| unsafe {
+            windows_sys::Win32::Graphics::Dwm::DwmFlush();
+            windows_sys::Win32::Graphics::Dwm::DwmFlush();
+        })
+        .await;
     }
     Ok(())
+}
+
+/// A still of what the video window shows, as a JPEG at the window's own size (D-185): the corner
+/// video shows it while it's dragged, so the picture is drawn by the page and is always exactly in
+/// the box, and the window stays put under the page meanwhile. mpv writes it to a file of its own;
+/// it's read once mpv has finished writing it, and removed.
+#[tauri::command]
+pub async fn player_snapshot(app: AppHandle, state: State<'_, PlayerState>) -> AppResult<tauri::ipc::Response> {
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    let dir = app.path().app_cache_dir()?.join("snapshots");
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join(format!("still-{}.jpg", NEXT.fetch_add(1, Ordering::Relaxed)));
+    {
+        let guard = lock(&state)?;
+        let session = guard.as_ref().ok_or_else(|| AppError::msg("no video is open"))?;
+        send(&session.commands, json!({ "command": ["screenshot-to-file", path.to_string_lossy(), "window"] }));
+    }
+    // Written in one go: a size that stays the same twice in a row is the whole file.
+    let started = Instant::now();
+    let mut last = 0u64;
+    while started.elapsed() < Duration::from_millis(1500) {
+        tokio::time::sleep(Duration::from_millis(15)).await;
+        let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        if size > 0 && size == last {
+            let bytes = std::fs::read(&path)?;
+            let _ = std::fs::remove_file(&path);
+            return Ok(tauri::ipc::Response::new(bytes));
+        }
+        last = size;
+    }
+    let _ = std::fs::remove_file(&path);
+    Err(AppError::msg("the video's picture couldn't be taken"))
 }
 
 #[tauri::command]
@@ -431,7 +481,9 @@ mod video_host {
     /// Moves the host and stretches mpv's own window to fill it.
     pub fn place(host: isize, x: i32, y: i32, width: i32, height: i32) {
         unsafe {
-            SetWindowPos(host as HWND, HWND_BOTTOM, x, y, width, height, SWP_NOACTIVATE);
+            // The host was put under the page when it was made; a move leaves the order alone (D-185:
+            // reordering on every move went with a frame, now and then, where the whole app vanished).
+            SetWindowPos(host as HWND, std::ptr::null_mut(), x, y, width, height, SWP_NOACTIVATE | SWP_NOZORDER);
             let packed = ((width as i64) << 32) | (height as i64 & 0xFFFF_FFFF);
             EnumChildWindows(host as HWND, Some(fill_child), packed as LPARAM);
         }

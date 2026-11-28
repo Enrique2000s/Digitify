@@ -1,6 +1,6 @@
 [package]
 name = "digitify"
-version = "0.11.0"
+version = "0.11.1"
 description = "Digitify: a home for all your media (Library) and a universal launcher for your games (Arcade)"
 authors = ["Digitify contributors"]
 license = "MIT"
@@ -59,6 +59,7 @@ souvlaki = "0.8"
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
+    "Win32_Graphics_Dwm",
     "Win32_Security",
     "Win32_Storage_FileSystem",
     "Win32_System_IO",
@@ -68,6 +69,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_UI_Shell",
     "Win32_System_Registry",
     "Win32_System_StationsAndDesktops",
+    "Win32_System_RemoteDesktop",
 ] }
 
 # Linux (D-031): drive ioctls, the X11 video host inside the GTK window, and the desktop keyring.

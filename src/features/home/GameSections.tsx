@@ -2,9 +2,10 @@ import type { ReactNode } from "react";
 import { Marquee } from "../../components/Marquee";
 import { RowScroller } from "../../components/RowScroller";
 import { Link } from "@tanstack/react-router";
-import { Gamepad2, Play } from "lucide-react";
+import { Gamepad2 } from "lucide-react";
 import type { ArcadeGame, TileCover } from "../../lib/api";
 import { artworkUrl } from "../../lib/api";
+import { GameQuick } from "../arcade/Collections";
 import { consoleOf, GameBadge, GameMarks, GameCover, lastPlayed, gameAspect, playTime, useArcade, useLaunch } from "../arcade/shared";
 
 /** Arcade's games for Home (D-041): recently played, favorites, one featured a day, and the tile's covers. */
@@ -39,14 +40,15 @@ export function GameCard({ game, running, onPlay }: { game: ArcadeGame; running:
   const when = lastPlayed(game.lastPlayedAt);
   return (
     <div className={`arcade-tile home-game${running ? " running" : ""}`} style={{ width: Math.round(GAME_ART_HEIGHT * aspect) }}>
-      <Link to="/arcade" search={{ game: game.id }} className="arcade-tile-art" style={{ aspectRatio: aspect }} aria-label={`${game.title}, ${consoleOf(game)}`} data-blip>
-        <GameCover game={game} />
-        <GameBadge game={game} />
-        <GameMarks game={game} />
-      </Link>
-      <button type="button" className="arcade-play" aria-label={`Play ${game.title}`} title="Play" onClick={onPlay}>
-        <Play size={18} fill="currentColor" />
-      </button>
+      <div className="arcade-tile-frame">
+        <Link to="/arcade" search={{ game: game.id }} className="arcade-tile-art" style={{ aspectRatio: aspect }} aria-label={`${game.title}, ${consoleOf(game)}`} data-blip>
+          <GameCover game={game} />
+          <GameBadge game={game} />
+          <GameMarks game={game} />
+        </Link>
+        {/* As in Arcade (D-185): Play along the bottom, the quick menu at the top left. */}
+        <GameQuick game={game} running={running} onPlay={onPlay} games={undefined} />
+      </div>
       <div className="arcade-tile-text">
         <strong>
           <Marquee hover text={game.title} />

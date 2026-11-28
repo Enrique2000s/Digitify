@@ -24,6 +24,7 @@ import {
   PictureInPicture2,
   Bookmark as BookmarkIcon,
   Trash2,
+  FastForward,
 } from "lucide-react";
 import { Marquee } from "../../components/Marquee";
 import { api, artworkUrl, errorText, onLinux, type WatchTarget } from "../../lib/api";
@@ -69,6 +70,8 @@ interface Playback {
   duration: number;
   paused: boolean;
   volume: number;
+  /** Whether `volume` is mpv's own (it reported it), not a stand-in (D-185). */
+  volumeKnown: boolean;
   muted: boolean;
   speed: number;
   ended: boolean;
@@ -80,7 +83,7 @@ interface Playback {
   buffering: boolean;
 }
 
-const EMPTY: Playback = { time: 0, duration: 0, paused: false, volume: 100, muted: false, speed: 1, ended: false, tracks: [], chapters: [], chapter: -1, seeking: false, buffering: false };
+const EMPTY: Playback = { time: 0, duration: 0, paused: false, volume: 100, volumeKnown: false, muted: false, speed: 1, ended: false, tracks: [], chapters: [], chapter: -1, seeking: false, buffering: false };
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const SAVE_EVERY_MS = 5000;
 const NEXT_COUNTDOWN = 8;
@@ -94,7 +97,7 @@ function apply(state: Playback, name: string, data: unknown): Playback {
     case "pause":
       return { ...state, paused: data === true };
     case "volume":
-      return typeof data === "number" ? { ...state, volume: data } : state;
+      return typeof data === "number" ? { ...state, volume: data, volumeKnown: true } : state;
     case "mute":
       return { ...state, muted: data === true };
     case "speed":
@@ -301,7 +304,7 @@ function VideoPlayer({ source }: { source: Source }) {
     if (!target || target.itemId === 0) return;
     keepRunning.current = true;
     const now = latest.current;
-    pip.set({ target, time: now.time, duration: now.duration, paused: now.paused });
+    pip.set({ target, time: now.time, duration: now.duration, paused: now.paused, volume: now.volumeKnown ? now.volume : undefined });
     if (window.history.length > 1) window.history.back();
     else void navigate({ to: "/item/$id", params: { id: String(target.itemId) } });
   }, [target, navigate]);
@@ -332,7 +335,8 @@ function VideoPlayer({ source }: { source: Source }) {
     setTarget(null);
     setReady(false);
     setError(null);
-    setPlayback(EMPTY);
+    // Shown at the volume mpv is told to start at, until mpv reports it.
+    setPlayback({ ...EMPTY, volume: preferences.volumes.video });
     setCountdown(null);
     // A video coming back from the corner (D-053): take over its running session.
     const corner = pip.get();
@@ -340,7 +344,8 @@ function VideoPlayer({ source }: { source: Source }) {
       pip.set(null);
       setTarget(corner.target);
       setResumed(false);
-      setPlayback({ ...EMPTY, time: corner.time, duration: corner.duration, paused: corner.paused });
+      // mpv won't report its volume again (it hasn't changed): the corner hands it over (D-185).
+      setPlayback({ ...EMPTY, time: corner.time, duration: corner.duration, paused: corner.paused, volume: corner.volume ?? preferences.volumes.video, volumeKnown: corner.volume != null });
       setReady(true);
       return () => {
         if (!keepRunning.current) void api.playerClose().catch(() => {});
@@ -489,12 +494,14 @@ function VideoPlayer({ source }: { source: Source }) {
   const watched = useItem(Number(id) || 0, source.kind === "item" && !!id);
   const inFilms = watched.data?.category === FILMS;
   const list = useQuery({
-    queryKey: ["video-list", id],
+    queryKey: ["video-list", id, watched.data?.category],
     enabled: source.kind === "item" && !!id && watched.isSuccess && !inFilms,
     staleTime: Infinity,
     // Online videos play in their service's player, not here, so previous and next pass them by;
     // past the last video it goes round to the first, and before the first to the last (D-140).
-    queryFn: () => viewList(Number(id), "video", true).catch(() => null),
+    // From Everything, only the videos (D-185): Movies & Series share the video player but not its
+    // previous and next.
+    queryFn: () => viewList(Number(id), "video", true, watched.data?.category).catch(() => null),
   });
   const at = list.data ? list.data.indexOf(Number(id)) : -1;
   const count = list.data?.length ?? 0;
@@ -528,14 +535,33 @@ function VideoPlayer({ source }: { source: Source }) {
     return () => window.clearTimeout(timer);
   }, [waiting]);
 
-  // The volume is remembered for next time (mpv starts at it).
+  // The volume is remembered for next time (mpv starts at it), once mpv has reported it: the
+  // stand-in 100 the player starts with was saved now and then (D-185), so the next video started
+  // at full volume — coming back from the corner every time, since mpv doesn't report it again.
+  // A change still waiting when the player closes (Back, or to the corner, within the wait) is
+  // saved then, not dropped.
+  const pendingVolume = useRef<number | null>(null);
+  const saveVolume = useCallback((volume: number) => update((current) => ({ volumes: { ...current.volumes, video: volume } })), [update]);
   useEffect(() => {
-    if (!target) return;
+    if (!target || !playback.volumeKnown) return;
     const volume = Math.round(Math.min(100, playback.volume));
-    if (volume === preferences.volumes.video) return;
-    const timer = window.setTimeout(() => update((current) => ({ volumes: { ...current.volumes, video: volume } })), 600);
+    if (volume === preferences.volumes.video) {
+      pendingVolume.current = null;
+      return;
+    }
+    pendingVolume.current = volume;
+    const timer = window.setTimeout(() => {
+      pendingVolume.current = null;
+      saveVolume(volume);
+    }, 600);
     return () => window.clearTimeout(timer);
-  }, [playback.volume, target]);
+  }, [playback.volume, playback.volumeKnown, target]);
+  useEffect(
+    () => () => {
+      if (pendingVolume.current != null) saveVolume(pendingVolume.current);
+    },
+    [saveVolume],
+  );
 
   // ------------------------------------------------------------------ keyboard
 
@@ -595,7 +621,11 @@ function VideoPlayer({ source }: { source: Source }) {
   const duration = playback.duration;
   const audio = playback.tracks.filter((t) => t.type === "audio");
   const subs = playback.tracks.filter((t) => t.type === "sub");
-  const showBars = shown || driving || playback.paused || menu !== null || !target || countdown !== null;
+  /** Held down on the picture: playing at 2× (D-185). */
+  const [fast, setFast] = useState(false);
+  // On Linux the video window covers the page where it is: at 2× the bars stay, so the 2× tag in
+  // the top bar shows (D-185).
+  const showBars = shown || driving || playback.paused || menu !== null || !target || countdown !== null || (fast && onLinux);
   // What the Linux video window keeps clear of (see `place`), read when it's placed again.
   latestLayout.current = { shown: showBars, menu: menu !== null, ready: ready && !leaving };
   useEffect(() => {
@@ -614,6 +644,38 @@ function VideoPlayer({ source }: { source: Source }) {
     }
   }
   // The keyboard's and headphones' media keys, and the system's now-playing card (D-058).
+  // Held down on the picture, the video plays at 2× until it's let go (D-185), as on YouTube; it
+  // goes back to the speed it had. Only while playing; a long press is never a click (no pause).
+  const hold = useRef<{ timer: number; was: number | null; swallow: boolean }>({ timer: 0, was: null, swallow: false });
+  const holdStart = (event: React.PointerEvent) => {
+    if (event.button !== 0 || !target) return;
+    window.clearTimeout(hold.current.timer);
+    hold.current.swallow = false;
+    hold.current.timer = window.setTimeout(() => {
+      // A long press is never a click, paused or not.
+      hold.current.swallow = true;
+      const now = latest.current;
+      if (now.paused || now.ended) return;
+      hold.current.was = now.speed;
+      command(["set_property", "speed", 2]);
+      setFast(true);
+    }, 350);
+  };
+  const holdEnd = () => {
+    window.clearTimeout(hold.current.timer);
+    if (hold.current.was != null) {
+      command(["set_property", "speed", hold.current.was]);
+      hold.current.was = null;
+      setFast(false);
+    }
+  };
+  const surfaceClick = () => {
+    if (hold.current.swallow) {
+      hold.current.swallow = false;
+      return;
+    }
+    if (target) togglePlay();
+  };
   const togglePlayRef = useRef(togglePlay);
   togglePlayRef.current = togglePlay;
   useEffect(() => {
@@ -645,7 +707,21 @@ function VideoPlayer({ source }: { source: Source }) {
       style={accentVariables(preferences.accent, "dark") as CSSProperties}
       onMouseMove={poke}
     >
-      <div ref={surface} className="watch-surface" onClick={() => target && togglePlay()} onDoubleClick={() => void toggleFullscreen()} />
+      <div
+        ref={surface}
+        className="watch-surface"
+        onClick={surfaceClick}
+        onDoubleClick={() => void toggleFullscreen()}
+        onPointerDown={holdStart}
+        onPointerUp={holdEnd}
+        onPointerCancel={holdEnd}
+        onPointerLeave={holdEnd}
+      />
+      {fast && (
+        <div className="watch-fast" aria-live="polite">
+          2× <FastForward size={16} fill="currentColor" />
+        </div>
+      )}
       <Curtain itemId={source.kind === "item" ? Number(id) : null} title={target?.title} shown={(!ready || leaving) && !error} />
 
       {target && busy && (

@@ -375,6 +375,7 @@ pub fn run() {
             player::player_open,
             player::player_command,
             player::player_set_rect,
+            player::player_snapshot,
             player::player_close,
             setup::repository_open,
         ])

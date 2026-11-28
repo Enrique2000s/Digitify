@@ -11,6 +11,9 @@ export interface PipSession {
   time: number;
   duration: number;
   paused: boolean;
+  /** mpv's volume as last reported (D-185): mpv doesn't report it again when the player takes the
+   *  session back, so it's handed over with it. */
+  volume?: number;
 }
 
 let session: PipSession | null = null;

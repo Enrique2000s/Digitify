@@ -58,6 +58,17 @@ export function Root() {
   useLibraryEvents();
   // A page's Back is the one way back (D-138): no mouse side buttons or Alt+←/→.
   useEffect(() => blockHistoryKeys(), []);
+  // No right-click menu (D-185) unless a part of the app gives one of its own, or in a text field
+  // (copy and paste).
+  useEffect(() => {
+    const block = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("input, textarea, [contenteditable='true'], [data-context-menu]")) return;
+      event.preventDefault();
+    };
+    window.addEventListener("contextmenu", block);
+    return () => window.removeEventListener("contextmenu", block);
+  }, []);
   // The manual that comes with Digitify (D-149), once a library is open: added the first time,
   // replaced by a newer one, or left gone if it was deleted.
   const libraryReady = status.data?.libraryOpen ?? false;

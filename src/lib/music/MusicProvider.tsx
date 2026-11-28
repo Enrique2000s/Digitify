@@ -23,12 +23,14 @@ interface Playback {
   time: number;
   duration: number;
   volume: number;
+  /** Whether `volume` is mpv's own (it reported it), not a stand-in (D-185). */
+  volumeKnown: boolean;
   muted: boolean;
   repeat: Repeat;
   idle: boolean;
 }
 
-const IDLE: Playback = { playlist: [], index: -1, paused: true, time: 0, duration: 0, volume: 100, muted: false, repeat: "off", idle: true };
+const IDLE: Playback = { playlist: [], index: -1, paused: true, time: 0, duration: 0, volume: 100, volumeKnown: false, muted: false, repeat: "off", idle: true };
 
 export interface MusicContext extends Playback {
   /** The queue in play order, as library tracks. */
@@ -75,7 +77,7 @@ function apply(state: Playback, name: string, data: unknown): Playback {
     case "playlist":
       return Array.isArray(data) ? { ...state, playlist: (data as { filename: string }[]).map((entry) => entry.filename) } : state;
     case "volume":
-      return typeof data === "number" ? { ...state, volume: data } : state;
+      return typeof data === "number" ? { ...state, volume: data, volumeKnown: true } : state;
     case "mute":
       return { ...state, muted: data === true };
     case "loop-file":
@@ -121,14 +123,14 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       return next;
     });
 
-  // The volume is remembered for next time (mpv starts at it).
+  // The volume is remembered for next time (mpv starts at it), once mpv has reported it (D-185).
   useEffect(() => {
-    if (playback.idle || playback.playlist.length === 0) return;
+    if (playback.idle || playback.playlist.length === 0 || !playback.volumeKnown) return;
     const volume = Math.round(Math.min(100, playback.volume));
     if (volume === startVolume.current) return;
     const timer = window.setTimeout(() => update((current) => ({ volumes: { ...current.volumes, music: volume } })), 600);
     return () => window.clearTimeout(timer);
-  }, [playback.volume, playback.idle, playback.playlist.length, update]);
+  }, [playback.volume, playback.volumeKnown, playback.idle, playback.playlist.length, update]);
 
   const queue = useMemo(() => playback.playlist.map((path) => tracks.get(path)).filter((t): t is Track => !!t), [playback.playlist, tracks]);
 

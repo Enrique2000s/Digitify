@@ -18,8 +18,10 @@ const SAVE_EVERY_MS = 10_000;
 /**
  * The video in the corner (D-053): mpv keeps playing in a small frame in a corner while you
  * browse. On Windows the picture sits under the window, so the page gets a hole there; on Linux it
- * sits above the page in the frame. Play/pause, make it big again, or close it. Dragged by its bar,
- * it follows the mouse and settles in the nearest corner when let go, and stays there (D-145).
+ * sits above the page in the frame. Play/pause, make it big again, or close it. Dragged from
+ * anywhere on it but its buttons (D-185; it was only its bar), it follows the mouse and settles in
+ * the nearest corner when let go, and stays there (D-145). A double click anywhere but the buttons
+ * makes it big again.
  */
 export function FloatingVideo() {
   const session = usePip();
@@ -37,14 +39,26 @@ function Floating() {
   const corner = preferences.pipCorner;
   /** Places the picture where the frame is; set by the layout effect below. */
   const placeNow = useRef<() => void>(() => {});
+  /** Why the picture is held where it is, under the page, with the hole closed (Windows, D-185):
+   *  while the card arrives and while it's dragged. Let go of the last reason, it's placed. */
+  const held = useRef(new Set<string>(onLinux ? [] : ["arrive"]));
+  const hold = (reason: string) => {
+    if (!onLinux) held.current.add(reason);
+  };
+  const release = (reason: string) => {
+    if (held.current.delete(reason) && held.current.size === 0) placeNow.current();
+  };
+  /** A still of the picture, shown in the card while it's held (D-185). */
+  const [still, setStill] = useState<string | null>(null);
+  useEffect(() => () => setStill((old) => (old && URL.revokeObjectURL(old), null)), []);
   const [paused, setPaused] = useState(session.paused);
-  const state = useRef({ time: session.time, duration: session.duration, paused: session.paused, ended: false });
+  const state = useRef({ time: session.time, duration: session.duration, paused: session.paused, ended: false, volume: session.volume });
   useAmbientHold("video", true);
 
   // The page is see-through where the frame is (Windows), and the picture goes there. The hole only
   // ever opens where the picture surely is (D-146): while it's being moved, over where it was and
-  // where it's going both, and over its new place once it's there. Opened ahead of the picture,
-  // the window showed the desktop through it for a moment when the video was dragged quickly.
+  // every place it's on its way to, and over its new place once that's on screen (D-185). Opened
+  // ahead of the picture, the window showed the desktop through it when the video was dragged fast.
   useLayoutEffect(() => {
     const element = frame.current;
     if (!element) return;
@@ -67,25 +81,41 @@ function Floating() {
       return w > 0 && h > 0 ? { x, y, w, h } : null;
     };
     const same = (a: Box | null, b: Box | null) => !!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
-    /** Where the picture is, where it's being sent, and where the frame is now. */
+    /** Where the picture surely is on screen, the places it's been sent to and hasn't reached yet
+     *  (oldest first), and where the frame is now. Every move is sent straight away, so the picture
+     *  keeps up with the frame; each answer comes once that move is on screen (D-185), and the hole
+     *  is only ever where the picture is in all of them. */
     let at: Box | null = null;
-    let sending: Box | null = null;
+    const sending: Box[] = [];
     let wanted: Box | null = null;
     let gone = false;
     const step = () => {
       if (gone || !wanted) return;
-      hole(sending ? overlap(overlap(at, sending), wanted) : same(at, wanted) ? wanted : overlap(at, wanted));
-      if (sending || same(at, wanted)) return;
+      // Held (Windows, D-185): the page covers the picture, which stays where it is. The window and
+      // the page are drawn apart, so a picture moved along with the card never quite kept up with
+      // it: either the hole was ahead (the desktop showed through) or the picture trailed behind.
+      if (held.current.size) {
+        hole(null);
+        return;
+      }
+      let safe: Box | null = at;
+      for (const box of sending) safe = overlap(safe, box);
+      hole(sending.length ? overlap(safe, wanted) : same(at, wanted) ? wanted : overlap(at, wanted));
+      const last = sending.length ? sending[sending.length - 1] : at;
+      if (same(last, wanted)) return;
       const to = wanted;
-      sending = to;
+      sending.push(to);
       const s = window.devicePixelRatio;
       void api
         .playerSetRect({ x: Math.round(to.x * s), y: Math.round(to.y * s), width: Math.round(to.w * s), height: Math.round(to.h * s) })
         .catch(() => {})
         .finally(() => {
+          // Answers come back in order: this move and every one before it are on screen.
+          // A later move answered first already covers this one.
+          const index = sending.indexOf(to);
+          if (index < 0) return;
+          sending.splice(0, index + 1);
           at = to;
-          sending = null;
-          // The page shows the new hole a frame later; the picture is already there by then.
           requestAnimationFrame(step);
         });
     };
@@ -99,14 +129,18 @@ function Floating() {
     const observer = new ResizeObserver(place);
     observer.observe(document.body);
     window.addEventListener("resize", place);
-    // Placed again once the card has slid into place (it moves while it arrives).
+    // Placed once the card has slid into place (it moves while it arrives), and only once the page
+    // around it has been drawn: coming from the full player, the window kept its full size under
+    // the page until then; shrunk at once, the player's last see-through frame still on screen
+    // showed the desktop across the whole window for a moment (D-185).
     const card = element.closest(".pip");
-    card?.addEventListener("animationend", place);
-    const settle = window.setTimeout(place, 400);
+    const arrived = () => requestAnimationFrame(() => requestAnimationFrame(() => release("arrive")));
+    card?.addEventListener("animationend", arrived);
+    const settle = window.setTimeout(arrived, 400);
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", place);
-      card?.removeEventListener("animationend", place);
+      card?.removeEventListener("animationend", arrived);
       window.clearTimeout(settle);
       gone = true;
       root.classList.remove("pip-mode");
@@ -131,6 +165,7 @@ function Floating() {
       if (payload.event === "property-change") {
         if (payload.name === "time-pos" && typeof payload.data === "number") state.current.time = payload.data;
         if (payload.name === "duration" && typeof payload.data === "number") state.current.duration = payload.data;
+        if (payload.name === "volume" && typeof payload.data === "number") state.current.volume = payload.data;
         if (payload.name === "pause") {
           state.current.paused = payload.data === true;
           setPaused(payload.data === true);
@@ -187,6 +222,8 @@ function Floating() {
     element.style.transition = "transform 260ms var(--ease)";
     element.style.transform = "none";
     follow(320);
+    // Settled: the picture goes to the card's new place (D-185).
+    window.setTimeout(() => release("drag"), 300);
   };
   useLayoutEffect(() => {
     const from = dropped.current;
@@ -200,6 +237,15 @@ function Floating() {
     window.getSelection()?.removeAllRanges();
     drag.current = { x: event.clientX, y: event.clientY, moved: false };
     event.currentTarget.setPointerCapture(event.pointerId);
+    // A still of the picture for the card to show while it's dragged (Windows, D-185).
+    if (!onLinux)
+      void api
+        .playerSnapshot()
+        .then((bytes) => {
+          const url = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
+          setStill((old) => (old && URL.revokeObjectURL(old), url));
+        })
+        .catch(() => {});
   };
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const moving = drag.current;
@@ -208,6 +254,7 @@ function Floating() {
     const dx = event.clientX - moving.x;
     const dy = event.clientY - moving.y;
     if (!moving.moved && Math.hypot(dx, dy) < 4) return;
+    if (!moving.moved) hold("drag");
     moving.moved = true;
     element.classList.add("dragging");
     element.style.animation = "none";
@@ -232,14 +279,30 @@ function Floating() {
 
   const expand = () => {
     // The player takes the running session back.
-    pip.set({ ...session, time: state.current.time, duration: state.current.duration, paused: state.current.paused });
+    pip.set({ ...session, time: state.current.time, duration: state.current.duration, paused: state.current.paused, volume: state.current.volume });
     void navigate({ to: "/watch/$id", params: { id: String(session.target.itemId) }, search: session.target.partId != null ? { part: session.target.partId } : {} });
   };
 
   return (
-    <div ref={card} className="pip" data-corner={corner} role="region" aria-label="Video in the corner" onDragStart={(event) => event.preventDefault()}>
-      <div ref={frame} className="pip-frame" style={{ width: WIDTH, height: HEIGHT }} onDoubleClick={expand} />
-      <div className="pip-bar" title="Drag to move it to another corner" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
+    <div
+      ref={card}
+      className="pip"
+      data-corner={corner}
+      role="region"
+      aria-label="Video in the corner"
+      title="Drag to move it to another corner, double-click to make it big"
+      onDragStart={(event) => event.preventDefault()}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onDoubleClick={(event) => !(event.target as HTMLElement).closest("button") && expand()}
+    >
+      <div ref={frame} className="pip-frame" style={{ width: WIDTH, height: HEIGHT }}>
+        {/* Seen only while the hole is closed: while the card arrives or is dragged (D-185). */}
+        {still && <img className="pip-still" src={still} alt="" draggable={false} />}
+      </div>
+      <div className="pip-bar">
         <div className="pip-title">
           <Marquee className="pip-name" text={session.target.title} />
           {session.target.episode && <Marquee className="pip-sub" text={session.target.episode} />}

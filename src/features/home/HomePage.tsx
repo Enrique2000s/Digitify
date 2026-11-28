@@ -1,4 +1,5 @@
 import { DropdownMenu } from "radix-ui";
+import { Marquee } from "../../components/Marquee";
 import { open as openFile } from "@tauri-apps/plugin-dialog";
 import { DEFAULT_VIEW, PictureAdjuster, viewStyle } from "../profile/Picture";
 import { useState, type ComponentPropsWithoutRef, type CSSProperties, type ReactNode } from "react";
@@ -136,7 +137,10 @@ export function TileBody({ label, screen, covers, icon, count, add, turn, tile }
         <span className="tile-badge" aria-hidden>
           {icon}
         </span>
-        <strong>{label}</strong>
+        {/* A name too long for the card slides to show itself whole, rather than ending in "…" (D-185). */}
+        <strong>
+          <Marquee text={label} />
+        </strong>
         {count != null && !add && <span className="count">{count.toLocaleString()}</span>}
         <ChevronRight size={18} strokeWidth={2.8} aria-hidden style={count != null && !add ? undefined : { marginLeft: "auto" }} />
       </div>
@@ -672,7 +676,7 @@ export function HomePage() {
               )
             }
           >
-            <button type="button" className="round-btn lg" aria-label="Add" title="Add">
+            <button type="button" className="round-btn lg round-btn-primary" aria-label="Add" title="Add">
               <Plus size={20} strokeWidth={2.6} />
             </button>
           </AddMenu>

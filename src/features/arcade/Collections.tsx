@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu } from "radix-ui";
-import { BadgeCheck, Check, ChevronDown, Ellipsis, FolderPlus, Heart, Joystick, Layers, ListFilter, Pencil, Plus, Trash, ArrowLeft } from "lucide-react";
+import { BadgeCheck, Check, ChevronDown, Ellipsis, FolderPlus, Heart, Joystick, Layers, ListFilter, Pencil, Plus, Trash, ArrowLeft, ChevronRight, Play } from "lucide-react";
 import { api, errorText, type ArcadeCollection, type ArcadeCollectionRules, type ArcadeGame } from "../../lib/api";
 import { ARCADE_FILTER_ORDER, type ArcadeFilter } from "../../lib/preferences";
 import { Dialog, Field, Switch } from "../../components/common";
@@ -103,7 +103,7 @@ const countGames = (n: number) => plural(n, "game");
 
 type Editing = { collection?: ArcadeCollection; dynamic: boolean; games?: number[] };
 
-export function CollectionsBoard({ games, onOpen, onBack }: { games: ArcadeGame[] | undefined; onOpen: (id: number) => void; onBack: () => void }) {
+export function CollectionsBoard({ games, onOpen }: { games: ArcadeGame[] | undefined; onOpen: (id: number) => void }) {
   const collections = useCollections();
   const [editing, setEditing] = useState<Editing | null>(null);
   const [deleting, setDeleting] = useState<ArcadeCollection | null>(null);
@@ -112,10 +112,7 @@ export function CollectionsBoard({ games, onOpen, onBack }: { games: ArcadeGame[
     <section className="arcade-collections" aria-label="Collections">
       <div className="arcade-collections-head">
         <div className="arcade-collections-title">
-          {/* A Back like every other screen's (D-184). */}
-          <button type="button" className="btn page-back arcade-collections-back" onClick={onBack}>
-            <ArrowLeft size={16} /> Back
-          </button>
+
           <h2>Collections</h2>
           <p className="muted">Favorites, Completed, your own, and dynamic ones that fill themselves by their filters.</p>
         </div>
@@ -509,19 +506,6 @@ export function CollectionMenu({ ids, games, onNotice, children, side = "bottom"
   const [creating, setCreating] = useState(false);
   const mine = (collections.data ?? []).filter((c) => !c.dynamic);
   const single = ids.length === 1;
-  const favorite = single && !!games?.find((g) => g.id === ids[0])?.isFavorite;
-  const favor = (on: boolean) =>
-    run(async () => {
-      await (single ? api.arcadeSetFavorite(ids[0], on) : api.arcadeSetFavoriteMany(ids, on));
-      await queryClient.invalidateQueries({ queryKey: ["arcade-games"] });
-    }, single ? undefined : `${countGames(ids.length)} in Favorites`);
-  // Completed is a collection too (D-169): in it is marked as completed.
-  const done = single && !!games?.find((g) => g.id === ids[0])?.completedAt;
-  const complete = (on: boolean) =>
-    run(async () => {
-      await api.arcadeSetCompleted(ids, on);
-      await queryClient.invalidateQueries({ queryKey: ["arcade-games"] });
-    }, single ? undefined : `${countGames(ids.length)} marked as completed`);
   const run = async (action: () => Promise<unknown>, done?: string) => {
     try {
       await action();
@@ -537,27 +521,7 @@ export function CollectionMenu({ ids, games, onNotice, children, side = "bottom"
         <DropdownMenu.Trigger asChild>{children}</DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenu.Content className="menu collection-menu" side={side} align="start" sideOffset={8}>
-            {single ? (
-              <DropdownMenu.CheckboxItem className="menu-item" checked={favorite} onSelect={(event) => event.preventDefault()} onCheckedChange={(on) => void favor(on)}>
-                <span className="menu-check">{favorite && <Check size={15} strokeWidth={3} aria-label="In Favorites" />}</span>
-                Favorites
-              </DropdownMenu.CheckboxItem>
-            ) : (
-              <DropdownMenu.Item className="menu-item" onSelect={() => void favor(true)}>
-                <Heart size={17} /> Favorites
-              </DropdownMenu.Item>
-            )}
-            {single ? (
-              <DropdownMenu.CheckboxItem className="menu-item" checked={done} onSelect={(event) => event.preventDefault()} onCheckedChange={(on) => void complete(on)}>
-                <span className="menu-check">{done && <Check size={15} strokeWidth={3} aria-label="Completed" />}</span>
-                Completed
-              </DropdownMenu.CheckboxItem>
-            ) : (
-              <DropdownMenu.Item className="menu-item" onSelect={() => void complete(true)}>
-                <BadgeCheck size={17} /> Completed
-              </DropdownMenu.Item>
-            )}
-            {mine.length > 0 && <DropdownMenu.Separator className="menu-separator" />}
+            {/* Your own collections only (D-185): Favorites and Completed have their own buttons. */}
             {mine.map((collection) => {
               const inIt = single && collection.games.includes(ids[0]);
               return single ? (
@@ -577,7 +541,7 @@ export function CollectionMenu({ ids, games, onNotice, children, side = "bottom"
                 </DropdownMenu.Item>
               );
             })}
-            <DropdownMenu.Separator className="menu-separator" />
+            {mine.length > 0 && <DropdownMenu.Separator className="menu-separator" />}
             <DropdownMenu.Item className="menu-item" onSelect={() => setCreating(true)}>
               <Plus size={17} /> New collection…
             </DropdownMenu.Item>
@@ -595,6 +559,76 @@ export function CollectionMenu({ ids, games, onNotice, children, side = "bottom"
           }}
         />
       )}
+    </>
+  );
+}
+
+/**
+ * A game's cover in Arcade and Home (D-185): a Play bar along its bottom and a small ⋯ button at
+ * its top left, both shown on hover, the ⋯ opening a quick menu — favorite, completed, and your
+ * collections (and a new one).
+ */
+export function GameQuick({ game, running, onPlay, games }: { game: ArcadeGame; running: boolean; onPlay: () => void; games: ArcadeGame[] | undefined }) {
+  const queryClient = useQueryClient();
+  const collections = useCollections();
+  const [creating, setCreating] = useState(false);
+  const mine = (collections.data ?? []).filter((c) => !c.dynamic);
+  const refresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["arcade-games"] });
+    await queryClient.invalidateQueries({ queryKey: COLLECTIONS_KEY });
+  };
+  return (
+    <>
+      <button type="button" className="arcade-play-bar" disabled={running} aria-label={`Play ${game.title}`} onClick={onPlay} data-no-drag>
+        <Play size={15} fill="currentColor" /> {running ? "Playing" : "Play"}
+      </button>
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger asChild>
+          <button type="button" className="arcade-quick-button" aria-label={`More for ${game.title}`} title="More" data-no-drag>
+            <Ellipsis size={16} strokeWidth={2.6} />
+          </button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content className="menu arcade-quick-menu" align="start" sideOffset={6}>
+            <DropdownMenu.CheckboxItem className="menu-item" checked={game.isFavorite} onSelect={(e) => e.preventDefault()} onCheckedChange={(on) => void api.arcadeSetFavorite(game.id, on).then(refresh)}>
+              <Heart size={16} fill={game.isFavorite ? "currentColor" : "none"} /> {game.isFavorite ? "Favorite" : "Add to favorites"}
+            </DropdownMenu.CheckboxItem>
+            <DropdownMenu.CheckboxItem className="menu-item" checked={!!game.completedAt} onSelect={(e) => e.preventDefault()} onCheckedChange={(on) => void api.arcadeSetCompleted([game.id], on).then(refresh)}>
+              <BadgeCheck size={16} /> {game.completedAt ? "Completed" : "Mark as completed"}
+            </DropdownMenu.CheckboxItem>
+            <DropdownMenu.Separator className="menu-separator" />
+            <DropdownMenu.Sub>
+              <DropdownMenu.SubTrigger className="menu-item">
+                <Layers size={16} /> Add to a collection <ChevronRight size={14} className="menu-sub-arrow" />
+              </DropdownMenu.SubTrigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.SubContent className="menu collection-menu" sideOffset={6}>
+                  {mine.map((collection) => {
+                    const inIt = collection.games.includes(game.id);
+                    return (
+                      <DropdownMenu.CheckboxItem
+                        key={collection.id}
+                        className="menu-item"
+                        checked={inIt}
+                        onSelect={(e) => e.preventDefault()}
+                        onCheckedChange={(on) => void (on ? api.arcadeCollectionAdd(collection.id, [game.id]) : api.arcadeCollectionRemove(collection.id, [game.id])).then(refresh)}
+                      >
+                        <span className="menu-check">{inIt && <Check size={15} strokeWidth={3} aria-label="In this collection" />}</span>
+                        {collection.name}
+                      </DropdownMenu.CheckboxItem>
+                    );
+                  })}
+                  {mine.length > 0 && <DropdownMenu.Separator className="menu-separator" />}
+                  <DropdownMenu.Item className="menu-item" onSelect={() => setCreating(true)}>
+                    <Plus size={16} /> New collection…
+                  </DropdownMenu.Item>
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Sub>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+      {creating && <CollectionEditor editing={{ dynamic: false, games: [game.id] }} games={games} onClose={() => setCreating(false)} onSaved={() => setCreating(false)} />}
     </>
   );
 }
