@@ -1055,7 +1055,8 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
   grid-template-columns: 44px minmax(0, 1fr) minmax(0, 140px) 56px 36px 36px;
   align-items: center;
   gap: 8px;
-  height: 46px;
+  /* Music's tabs size their rows with the Size slider (D-184). */
+  height: var(--row, 46px);
   padding: 0 8px;
   border-radius: 12px;
 }
@@ -1117,10 +1118,17 @@ input[type="range"][dir="rtl"]::-webkit-slider-runnable-track {
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
+/* Artists and playlists scroll on their own (D-183): the view is the window's height, so a long
+   list would otherwise run off its bottom. */
 .artist-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-min, 170px), 1fr));
+  align-content: start;
   gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 4px 24px;
 }
 .artist-card {
   display: grid;

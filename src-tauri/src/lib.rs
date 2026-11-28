@@ -36,6 +36,7 @@ mod pdf;
 mod pictures;
 mod previews;
 mod updates;
+mod session;
 mod player;
 mod profile;
 mod reshape;
@@ -158,6 +159,8 @@ pub fn run() {
             setup::spawn_maintenance(app.handle().clone());
             backup::watch_auto(app.handle().clone());
             watched::watch(app.handle().clone());
+            // The lock screen holds the menu music (D-183).
+            session::watch(app.handle().clone());
             Ok(())
         })
         // Closing the window can keep Digitify running in the tray (D-059).
@@ -215,10 +218,12 @@ pub fn run() {
             year::year_review,
             year::week_review,
             year::achievements_list,
+            year::profile_extras,
             library::dashboard_get,
             library::item_get,
             library::item_update,
             library::item_set_favorite,
+            library::item_set_cover_view,
             library::item_set_review,
             library::resume_get,
             tray::app_quit,
@@ -246,11 +251,13 @@ pub fn run() {
             arcade::arcade_scan,
             arcade::arcade_games,
             arcade::arcade_set_favorite,
+            arcade::arcade_set_cover_view,
             arcade::arcade_set_cover,
             arcade::arcade_forget,
             arcade::arcade_reveal,
             arcade::play::arcade_launch,
             arcade::arcade_add_program,
+            arcade::arcade_programs,
             arcade::arcade_ignore_emulator,
             arcade::covers::arcade_cover_choices,
             arcade::covers::arcade_choose_cover,
@@ -281,6 +288,7 @@ pub fn run() {
             profile::profile_set_view,
             profile::profile_set_frame,
             profile::profile_set_image,
+            profile::artwork_import,
             profile::profile_clear_image,
             profile::profile_save_png,
             arcade::collections::arcade_collections,

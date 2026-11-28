@@ -106,6 +106,13 @@ export function LibraryPage() {
   const { collection, tab } = useSearch({ from: "/library/$scope" });
   const categories = useCategories();
   const { preferences, update } = usePreferences();
+  const go = useNavigate();
+  // Comics and Manga are kinds in Books now (D-183): an old address opens Books, showing that kind.
+  useEffect(() => {
+    if (scope !== "comics" && scope !== "manga") return;
+    update({ booksKind: scope === "comics" ? "comic" : "manga" });
+    void go({ to: "/library/$scope", params: { scope: "books" }, replace: true });
+  }, [scope, update, go]);
   // The section opened last is where the Library button goes next time (D-075).
   useEffect(() => {
     const remembered = (scope === "all" && preferences.showEverything) || !!categories.data?.some((c) => c.key === scope);

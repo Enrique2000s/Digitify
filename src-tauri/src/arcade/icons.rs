@@ -59,7 +59,7 @@ pub fn icons(found: &[(Emulator, Program)], cache: &Path) -> HashMap<&'static st
     out
 }
 
-fn data_url(path: &Path) -> Option<String> {
+pub(super) fn data_url(path: &Path) -> Option<String> {
     let bytes = std::fs::read(path).ok().filter(|b| !b.is_empty() && b.len() < 512 * 1024)?;
     let mime = if super::games::extension(path) == "svg" { "image/svg+xml" } else { "image/png" };
     Some(format!("data:{mime};base64,{}", crate::tools::base64(&bytes)))
@@ -68,7 +68,7 @@ fn data_url(path: &Path) -> Option<String> {
 /// Saves each program's icon as a PNG, in one run of Windows PowerShell (its drawing library reads
 /// a program's icon). The list goes in an environment variable, the script as an encoded command.
 #[cfg(windows)]
-fn extract_windows(pairs: &[(&Path, &Path)]) {
+pub(super) fn extract_windows(pairs: &[(&Path, &Path)]) {
     let list: Vec<serde_json::Value> = pairs.iter().map(|(exe, png)| serde_json::json!({ "exe": exe.display().to_string(), "png": png.display().to_string() })).collect();
     let script = "Add-Type -AssemblyName System.Drawing; \
         foreach ($p in ($env:DIGITIFY_ICON_LIST | ConvertFrom-Json)) { \
@@ -82,6 +82,12 @@ fn extract_windows(pairs: &[(&Path, &Path)]) {
     if let Err(e) = result {
         log::warn!("arcade: couldn't read the emulators' icons: {e}");
     }
+}
+
+/// A program's icon on Linux as a data URL (D-183's list of programs).
+#[cfg(not(windows))]
+pub(super) fn linux_program_icon(program: &Path) -> Option<String> {
+    linux_icon(&Program::Native(program.to_path_buf())).and_then(|p| data_url(&p))
 }
 
 /// A Linux program's icon: a Flatpak's exported one, or the one its desktop entry names.

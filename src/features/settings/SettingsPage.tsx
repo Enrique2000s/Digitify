@@ -1,3 +1,4 @@
+import { ControllerSettings } from "./ControllerSettings";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -101,6 +102,7 @@ export const SETTINGS_TABS = [
   ["library", "Library"],
   ["arcade", "Arcade"],
   ["sound", "Sound"],
+  ["controller", "Controller"],
   ["keyboard", "Keyboard"],
   ["about", "About"],
 ] as const;
@@ -436,6 +438,7 @@ export function SettingsPage() {
             <SoundSettings />
           </>
         )}
+        {tab === "controller" && <ControllerSettings />}
         {tab === "keyboard" && (
           <>
             <KeyboardSettings />

@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu } from "radix-ui";
-import { BadgeCheck, Check, ChevronLeft, Ellipsis, FolderPlus, Heart, Joystick, Layers, ListFilter, Pencil, Plus, Trash } from "lucide-react";
+import { BadgeCheck, Check, ChevronDown, Ellipsis, FolderPlus, Heart, Joystick, Layers, ListFilter, Pencil, Plus, Trash, ArrowLeft } from "lucide-react";
 import { api, errorText, type ArcadeCollection, type ArcadeCollectionRules, type ArcadeGame } from "../../lib/api";
 import { ARCADE_FILTER_ORDER, type ArcadeFilter } from "../../lib/preferences";
 import { Dialog, Field, Switch } from "../../components/common";
@@ -112,19 +112,40 @@ export function CollectionsBoard({ games, onOpen, onBack }: { games: ArcadeGame[
     <section className="arcade-collections" aria-label="Collections">
       <div className="arcade-collections-head">
         <div className="arcade-collections-title">
-          <button type="button" className="btn btn-sm btn-ghost arcade-collections-back" onClick={onBack}>
-            <ChevronLeft size={16} /> All games
+          {/* A Back like every other screen's (D-184). */}
+          <button type="button" className="btn page-back arcade-collections-back" onClick={onBack}>
+            <ArrowLeft size={16} /> Back
           </button>
           <h2>Collections</h2>
           <p className="muted">Favorites, Completed, your own, and dynamic ones that fill themselves by their filters.</p>
         </div>
         <div className="arcade-collections-actions">
-          <button type="button" className="btn" onClick={() => setEditing({ dynamic: false })}>
-            <FolderPlus size={16} /> New collection
-          </button>
-          <button type="button" className="btn" onClick={() => setEditing({ dynamic: true })}>
-            <ListFilter size={16} /> New dynamic collection
-          </button>
+          {/* One New collection (D-184), asking which kind: games you put in it, or one that fills itself. */}
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button type="button" className="btn btn-primary">
+                <Plus size={16} /> New collection <ChevronDown size={14} />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content className="menu new-collection-menu" align="end" sideOffset={8}>
+                <DropdownMenu.Item className="menu-item" onSelect={() => setEditing({ dynamic: false })}>
+                  <FolderPlus size={17} />
+                  <span>
+                    <strong>Collection</strong>
+                    <small>Games you put in it, from their panel or by selecting several.</small>
+                  </span>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item className="menu-item" onSelect={() => setEditing({ dynamic: true })}>
+                  <ListFilter size={17} />
+                  <span>
+                    <strong>Dynamic collection</strong>
+                    <small>Fills itself with the games that match its filters, and keeps up to date.</small>
+                  </span>
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
         </div>
       </div>
       {collections.isSuccess && list.length === 2 && (
@@ -231,8 +252,9 @@ export function CollectionBar({ collection, count, games, onBack }: { collection
   const [deleting, setDeleting] = useState(false);
   return (
     <div className="arcade-collection-bar">
-      <button type="button" className="btn btn-sm btn-ghost" onClick={onBack}>
-        <ChevronLeft size={16} /> Collections
+      {/* A Back like the collections' screen's and every other screen's (D-184): to the collections. */}
+      <button type="button" className="btn page-back arcade-collection-back" onClick={onBack}>
+        <ArrowLeft size={16} /> Back
       </button>
       <h2 title={collection.name}>{collection.name}</h2>
       <span className="count">{count.toLocaleString()}</span>

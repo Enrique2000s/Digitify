@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
@@ -6,12 +6,13 @@ import { DropdownMenu } from "radix-ui";
 import { AudioLines, Check, ChevronDown, ChevronUp, Disc3, GripVertical, Heart, ListEnd, ListMusic, ListPlus, MoreHorizontal, Pencil, Play, Plus, Shuffle, X } from "lucide-react";
 import { api, errorText, type Playlist, type Track, type TrackFilter } from "../../lib/api";
 import { duration } from "../../lib/format";
+import { usePreferences } from "../../lib/preferences";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { usePlayAndShow } from "./playAndShow";
 import { Dialog, Field } from "../../components/common";
 import { arrayMove, useVirtualReorder } from "../../lib/reorder";
 
-const ROW = 46;
+const BASE_ROW = 46;
 
 export function shuffled<T>(list: T[]): T[] {
   const copy = [...list];
@@ -263,18 +264,35 @@ function TrackMenu({ track, onEdit, onNewPlaylist, onAlready, playlist }: {
  * A list of tracks to play: "Play" and "Shuffle" for all of them, and per track play, favorite and
  * a menu. Long lists are virtualized. In a playlist, tracks can be moved and removed.
  */
-export function TrackList({ filter, empty, playlistId, showAlbum = true, compact = false }: {
+export function TrackList({ filter, empty, playlistId, showAlbum = true, compact = false, find = "", sort = "" }: {
   filter: TrackFilter;
   empty: string;
   playlistId?: number;
   showAlbum?: boolean;
   /** Inside an item page: no own scrolling. */
   compact?: boolean;
+  /** Music's tabs (D-184): words to find in a title, artist, album or genre, and a sort. */
+  find?: string;
+  sort?: string;
 }) {
   const music = useMusic();
   const playAndShow = usePlayAndShow();
   const queryClient = useQueryClient();
-  const tracks = useTracks(filter);
+  const { preferences } = usePreferences();
+  // Rows as big as the Size slider says (D-184), from 38 to 66 px; a playlist's rows keep theirs.
+  const ROW = playlistId != null || compact ? BASE_ROW : Math.round(38 + ((preferences.cardSize - 110) / 150) * 28);
+  const fetched = useTracks(filter);
+  const tracks = useMemo(() => {
+    if (!fetched.data || playlistId != null) return fetched;
+    const w = find.trim().toLowerCase();
+    let list = w ? fetched.data.filter((t) => [t.title, t.artist, t.album, t.genre].some((x) => x?.toLowerCase().includes(w))) : [...fetched.data];
+    const text = (a: string | null, b: string | null) => (a ?? "\uffff").localeCompare(b ?? "\uffff", undefined, { numeric: true, sensitivity: "base" });
+    if (sort === "title") list = list.sort((a, b) => text(a.title, b.title));
+    if (sort === "artist") list = list.sort((a, b) => text(a.artist, b.artist) || text(a.title, b.title));
+    if (sort === "album") list = list.sort((a, b) => text(a.album, b.album) || (a.number ?? 0) - (b.number ?? 0));
+    if (sort === "duration") list = list.sort((a, b) => (b.durationMs ?? 0) - (a.durationMs ?? 0));
+    return { ...fetched, data: list };
+  }, [fetched, find, sort, playlistId]);
   const [editing, setEditing] = useState<Track | null>(null);
   const [creating, setCreating] = useState<number[] | null>(null);
   const [already, setAlready] = useState<{ track: Track; playlist: Playlist } | null>(null);
@@ -295,6 +313,8 @@ export function TrackList({ filter, empty, playlistId, showAlbum = true, compact
     },
   });
 
+  // A new size from the slider: the rows are measured again (D-184).
+  useEffect(() => virtual.measure(), [ROW, virtual]);
   const favorite = async (track: Track) => {
     await api.musicSetFavorite(track.id, !track.favorite);
     music.updateTrack({ ...track, favorite: !track.favorite });
@@ -316,7 +336,7 @@ export function TrackList({ filter, empty, playlistId, showAlbum = true, compact
       <div
         key={`${track.id}:${index}`}
         className={`track-row${playing ? " playing" : ""}${playlistId != null ? " reorderable" : ""}`}
-        style={playlistId != null ? { ...style, ...reorder.style(index) } : style}
+        style={playlistId != null ? { ...style, ...reorder.style(index) } : { ...style, "--row": `${ROW}px` } as React.CSSProperties}
         onDoubleClick={() => void playAndShow(ids, index)}
       >
         {playlistId != null && !compact && (
@@ -379,7 +399,7 @@ export function TrackList({ filter, empty, playlistId, showAlbum = true, compact
       </div>
       {music.error && <div className="dialog-error">{music.error}</div>}
       {!tracks.isLoading && list.length === 0 ? (
-        <p className="hint">{empty}</p>
+        <p className="hint">{find.trim() && fetched.data?.length ? `No track matches “${find.trim()}”.` : empty}</p>
       ) : compact ? (
         <div className="track-rows">{list.map((track, index) => row(track, index))}</div>
       ) : (

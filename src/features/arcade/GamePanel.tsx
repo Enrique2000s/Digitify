@@ -1,10 +1,12 @@
+import { CoverAdjustDialog } from "../../components/CoverAdjust";
+import { coverViewOf } from "../../components/common";
 import { useEffect, useState } from "react";
 import { ReviewPanel } from "../../components/Review";
 import { createPortal } from "react-dom";
 import { DropdownMenu } from "radix-ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { BadgeCheck, Info, Tag, ChevronDown, Clock, FolderOpen, Heart, ImageDown, ImagePlus, Layers, Pencil, Play, RotateCcw, Trash, X } from "lucide-react";
+import { BadgeCheck, Info, Tag, ChevronDown, Clock, FolderOpen, Heart, ImageDown, ImagePlus, Layers, Pencil, Play, RotateCcw, Trash, X, Move } from "lucide-react";
 import { api, errorText, type ArcadeEmulator, type ArcadeGame } from "../../lib/api";
 import { usePreferences } from "../../lib/preferences";
 import { CoverPicker } from "./CoverPicker";
@@ -109,6 +111,7 @@ export function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame
   const [error, setError] = useState<string | null>(null);
   const [naming, setNaming] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  const [adjusting, setAdjusting] = useState(false);
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["arcade-games"] });
   const run = async (action: () => Promise<unknown>) => {
     setError(null);
@@ -279,12 +282,28 @@ export function GamePanel({ game, running, onClose, onPlay }: { game: ArcadeGame
                 <DropdownMenu.Item className="menu-item" onSelect={() => void changeCover()}>
                   <ImagePlus size={17} /> Choose a picture…
                 </DropdownMenu.Item>
+                {/* Framed as you like (D-184), as a profile picture is. */}
+                {game.coverKey && (
+                  <DropdownMenu.Item className="menu-item" onSelect={() => setAdjusting(true)}>
+                    <Move size={17} /> Adjust…
+                  </DropdownMenu.Item>
+                )}
                 <DropdownMenu.Item className="menu-item" onSelect={() => void run(() => api.arcadeFindCovers([game.id], preferences.arcade.downloadCovers, true))}>
                   <RotateCcw size={17} /> {pc ? "Its launcher's cover" : "Default cover"}
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
+          {adjusting && game.coverKey && (
+            <CoverAdjustDialog
+              title={`${game.title}: its cover`}
+              coverKey={game.coverKey}
+              aspect={gameAspect(game)}
+              view={coverViewOf(game)}
+              onSave={(view) => run(() => api.arcadeSetCoverView(game.id, view))}
+              onClose={() => setAdjusting(false)}
+            />
+          )}
           <CollectionMenu ids={[game.id]} games={games.data}>
             <button type="button" className="btn">
               <Layers size={16} /> Collections <ChevronDown size={14} />

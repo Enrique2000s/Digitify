@@ -1,12 +1,13 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { DropdownMenu } from "radix-ui";
-import { ArrowLeft, Clock, ListMusic, ListPlus, Mic2, MoreHorizontal, Music2, Pencil, Play, Plus, Trash, Star } from "lucide-react";
+import { ArrowLeft, Clock, ListMusic, ListPlus, Mic2, MoreHorizontal, Music2, Pencil, Play, Plus, Search, Trash, Star } from "lucide-react";
 import { api, errorText, type Category, type Playlist } from "../../lib/api";
 import { usePlayAndShow } from "./playAndShow";
 import { AddMusicDialog } from "./AddMusic";
-import { CategoryIcon } from "../../components/common";
+import { CardSizeSlider, CategoryIcon } from "../../components/common";
+import { usePreferences } from "../../lib/preferences";
 import { CategoryStrip } from "../../components/CategoryStrip";
 import { AddMenu } from "../../components/AddMenu";
 import { useArrival } from "../../lib/arrival";
@@ -48,11 +49,83 @@ export function MusicTabs({ category, tab }: { category: Category; tab: MusicTab
   );
 }
 
-function Header({ category, tab, onNewPlaylist }: { category: Category; tab: MusicTab; onNewPlaylist: () => void }) {
+/** Each tab's sorts (D-184); the first is how the list comes. */
+const SORTS: Record<Exclude<MusicTab, "tracks">, [string, string][]> = {
+  artists: [
+    ["", "Name"],
+    ["name-desc", "Name, Z to A"],
+    ["tracks", "Most tracks"],
+  ],
+  playlists: [
+    ["", "Name"],
+    ["name-desc", "Name, Z to A"],
+    ["tracks", "Most tracks"],
+    ["duration", "Longest"],
+  ],
+  recent: [
+    ["", "Last played"],
+    ["title", "Title"],
+    ["artist", "Artist"],
+    ["album", "Album"],
+    ["duration", "Duration"],
+  ],
+  favorites: [
+    ["", "Title"],
+    ["artist", "Artist"],
+    ["album", "Album"],
+    ["duration", "Duration"],
+  ],
+};
+/** The sort chosen on each tab, kept while Digitify is open. */
+const chosenSorts: Partial<Record<MusicTab, string>> = {};
+
+/** What a music tab's tools set (D-184): words to find, and a sort. */
+interface MusicTools {
+  find: string;
+  sort: string;
+}
+
+/**
+ * Music's other tabs have the Tracks tab's tools beside the categories (D-184): Find in this view,
+ * Size (the cards of Artists and Playlists, the rows of the track lists) and Sort.
+ */
+function Tools({ tab, tools, setTools }: { tab: Exclude<MusicTab, "tracks">; tools: MusicTools; setTools: (next: MusicTools) => void }) {
+  const { preferences, update } = usePreferences();
+  return (
+    <>
+      <label className="arcade-search view-find">
+        <Search size={15} aria-hidden />
+        <input type="search" placeholder="Find in this view" value={tools.find} onChange={(event) => setTools({ ...tools, find: event.target.value })} aria-label="Find in this view" />
+      </label>
+      <label className="arcade-size">
+        <span>Size</span>
+        <CardSizeSlider value={preferences.cardSize} onChange={(cardSize) => update({ cardSize })} />
+      </label>
+      <label className="arcade-sort">
+        <span>Sort</span>
+        <select
+          value={tools.sort}
+          onChange={(event) => {
+            chosenSorts[tab] = event.target.value;
+            setTools({ ...tools, sort: event.target.value });
+          }}
+        >
+          {SORTS[tab].map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+    </>
+  );
+}
+
+function Header({ category, tab, onNewPlaylist, tools }: { category: Category; tab: MusicTab; onNewPlaylist: () => void; tools: ReactNode }) {
   const titleArriving = useArrival(`title:${category.name}`);
   return (
     <>
-      <CategoryStrip />
+      <CategoryStrip tools={tools} />
       <div className="page-header">
         <div className={`title-row${titleArriving ? " arriving" : ""}`}>
           <span className="title-badge">
@@ -87,8 +160,18 @@ function Header({ category, tab, onNewPlaylist }: { category: Category; tab: Mus
   );
 }
 
-function Artists() {
+/** Words found in any of these texts, ignoring case. */
+const matches = (words: string, ...texts: (string | null | undefined)[]) => {
+  const w = words.trim().toLowerCase();
+  return !w || texts.some((t) => t?.toLowerCase().includes(w));
+};
+
+/** The cards' size from the Size slider, as the library's covers (D-184). */
+const gridSize = (cardSize: number) => ({ "--card-min": `${Math.round(cardSize * 1.06)}px` }) as CSSProperties;
+
+function Artists({ tools }: { tools: MusicTools }) {
   const artists = useQuery({ queryKey: ["artists"], queryFn: api.musicArtists });
+  const { preferences } = usePreferences();
   const [artist, setArtist] = useState<string | null>(null);
   if (artist) {
     return (
@@ -97,14 +180,18 @@ function Artists() {
           <ArrowLeft size={15} /> All artists
         </button>
         <h2 className="music-sub">{artist}</h2>
-        <TrackList filter={{ artist }} empty="No tracks." />
+        <TrackList filter={{ artist }} empty="No tracks." find={tools.find} />
       </>
     );
   }
   if (!artists.data?.length) return <p className="hint">{artists.isLoading ? "" : "No artists yet. Import some music."}</p>;
+  const shown = artists.data.filter((entry) => matches(tools.find, entry.name));
+  if (tools.sort === "name-desc") shown.reverse();
+  if (tools.sort === "tracks") shown.sort((a, b) => b.tracks - a.tracks);
+  if (!shown.length) return <p className="hint">No artist matches “{tools.find.trim()}”.</p>;
   return (
-    <div className="artist-grid">
-      {artists.data.map((entry) => (
+    <div className="artist-grid" style={gridSize(preferences.cardSize)}>
+      {shown.map((entry) => (
         <button key={entry.name} type="button" className="artist-card" onClick={() => setArtist(entry.name)}>
           <span className="artist-avatar">{entry.name.slice(0, 1).toUpperCase()}</span>
           <strong>{entry.name}</strong>
@@ -256,16 +343,23 @@ function PlaylistCard({ playlist, onOpen, onAdd }: { playlist: Playlist; onOpen:
   );
 }
 
-function Playlists({ creating, setCreating }: { creating: boolean; setCreating: (open: boolean) => void }) {
+function Playlists({ creating, setCreating, tools }: { creating: boolean; setCreating: (open: boolean) => void; tools: MusicTools }) {
   const playlists = usePlaylists();
+  const { preferences } = usePreferences();
   const [open, setOpen] = useState<{ id: number; adding: boolean } | null>(null);
   const current = playlists.data?.find((p) => p.id === open?.id);
   if (current && open) return <PlaylistView key={current.id} playlist={current} startAdding={open.adding} onBack={() => setOpen(null)} />;
+  const shown = (playlists.data ?? []).filter((p) => matches(tools.find, p.name));
+  if (tools.sort === "name-desc") shown.reverse();
+  if (tools.sort === "tracks") shown.sort((a, b) => b.tracks - a.tracks);
+  if (tools.sort === "duration") shown.sort((a, b) => (b.durationMs ?? 0) - (a.durationMs ?? 0));
   return (
     <>
-      {playlists.data?.length ? (
-        <div className="artist-grid">
-          {playlists.data.map((playlist) => (
+      {playlists.data?.length && !shown.length ? (
+        <p className="hint">No playlist matches “{tools.find.trim()}”.</p>
+      ) : playlists.data?.length ? (
+        <div className="artist-grid" style={gridSize(preferences.cardSize)}>
+          {shown.map((playlist) => (
             <PlaylistCard
               key={playlist.id}
               playlist={playlist}
@@ -285,15 +379,24 @@ function Playlists({ creating, setCreating }: { creating: boolean; setCreating: 
 /** A music category's lists beyond its tracks: artists, playlists, recently played, favorites. */
 export function MusicPage({ category, tab }: { category: Category; tab: Exclude<MusicTab, "tracks"> }) {
   const [creating, setCreating] = useState(false);
+  // Find, Size and Sort work here as on the Tracks tab (D-184); each tab starts with nothing to find.
+  const [tools, setTools] = useState<MusicTools>({ find: "", sort: chosenSorts[tab] ?? "" });
+  useEffect(() => setTools({ find: "", sort: chosenSorts[tab] ?? "" }), [tab]);
+  const [finding, setFinding] = useState("");
+  useEffect(() => {
+    const timer = window.setTimeout(() => setFinding(tools.find), 200);
+    return () => window.clearTimeout(timer);
+  }, [tools.find]);
+  const shown = { find: finding, sort: tools.sort };
   return (
     <div className="library-view">
       <div className="music-page">
-      <Header category={category} tab={tab} onNewPlaylist={() => setCreating(true)} />
-      <div className="view-stage music-stage" key={tab}>
-        {tab === "artists" && <Artists />}
-        {tab === "playlists" && <Playlists creating={creating} setCreating={setCreating} />}
-        {tab === "recent" && <TrackList filter={{ recent: true }} empty="Nothing played yet." />}
-        {tab === "favorites" && <TrackList filter={{ favorites: true }} empty="No favorite tracks yet. Use the heart next to a track." />}
+      <Header category={category} tab={tab} onNewPlaylist={() => setCreating(true)} tools={<Tools tab={tab} tools={tools} setTools={setTools} />} />
+      <div className="view-stage music-stage" key={`${tab}:${tools.sort}`}>
+        {tab === "artists" && <Artists tools={shown} />}
+        {tab === "playlists" && <Playlists creating={creating} setCreating={setCreating} tools={shown} />}
+        {tab === "recent" && <TrackList filter={{ recent: true }} empty="Nothing played yet." find={shown.find} sort={shown.sort} />}
+        {tab === "favorites" && <TrackList filter={{ favorites: true }} empty="No favorite tracks yet. Use the heart next to a track." find={shown.find} sort={shown.sort} />}
       </div>
       </div>
     </div>

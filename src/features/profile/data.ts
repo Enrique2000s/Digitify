@@ -12,6 +12,11 @@ import { useAchievements } from "../home/YearViews";
 
 export const PROFILE_KEY = ["profile"];
 
+/** Level, ratings and most played songs (D-183). */
+export function useProfileExtras() {
+  return useQuery({ queryKey: ["profile-extras"], queryFn: api.profileExtras, staleTime: 30_000 });
+}
+
 export function useProfile() {
   return useQuery({ queryKey: PROFILE_KEY, queryFn: api.profile, staleTime: Infinity });
 }

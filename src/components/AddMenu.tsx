@@ -37,11 +37,20 @@ function CategoryItems({ category, onFromVideos }: { category: Category; onFromV
           <Clapperboard size={17} /> From Videos…
         </DropdownMenu.Item>
       )}
-      {pages && (
-        <DropdownMenu.Item className="menu-item" onSelect={() => openBuilder(category.key)}>
-          <BookImage size={17} /> {category.key === "comics" ? "Comic" : category.key === "manga" ? "Manga" : "Book"} from images…
-        </DropdownMenu.Item>
-      )}
+      {/* Books holds books, comics and manga (D-183): each can be made from images. */}
+      {pages &&
+        (category.key === "books"
+          ? ([
+              ["book", "Book"],
+              ["comic", "Comic"],
+              ["manga", "Manga"],
+            ] as const)
+          : ([["book", "Book"]] as const)
+        ).map(([kind, label]) => (
+          <DropdownMenu.Item key={kind} className="menu-item" onSelect={() => openBuilder(kind === "book" ? category.key : `${category.key}:${kind}`)}>
+            <BookImage size={17} /> {label} from images…
+          </DropdownMenu.Item>
+        ))}
       {disc && (
         <DropdownMenu.Item className="menu-item" onSelect={() => void navigate({ to: "/discs" })}>
           <Disc3 size={17} /> From a disc…

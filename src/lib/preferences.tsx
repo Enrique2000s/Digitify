@@ -1,3 +1,4 @@
+import { DEFAULT_CONTROLLER, type ControllerSettings } from "./gamepad";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, ARCADE_CONSOLES, type ArcadeConsole, type ArcadeEmulator, type ArcadeStore, type CoverShape, type DownloadQuality, type ImportMode, type MusicSource, type Ownership, type SortKey } from "./api";
 import { accentVariables } from "./color";
@@ -14,15 +15,16 @@ export type Palette = "breeze" | "sunset" | "midnight" | "contrast";
 /** What the shelves in the shelf view are made of (D-023). */
 export type ShelfLook = "breeze" | "wood" | "glass" | "metal";
 
-/** Each section's own color, when colors per section are on (D-054). */
+/**
+ * Each section's own color, when colors per section are on (D-054); Home Shortcuts' backgrounds
+ * always (D-184), these or the ones chosen. Comics and Manga are part of Books since D-183.
+ */
 export const SECTION_COLORS: Record<string, string> = {
   pictures: "#0ea5e9",
   music: "#16a34a",
   videos: "#ea580c",
   video: "#dc2626",
   books: "#2563eb",
-  comics: "#d97706",
-  manga: "#db2777",
   arcade: "#7c3aed",
 };
 export const SECTION_COLOR_NAMES: Record<string, string> = {
@@ -31,17 +33,23 @@ export const SECTION_COLOR_NAMES: Record<string, string> = {
   videos: "Videos",
   video: "Movies & Series",
   books: "Books",
-  comics: "Comics",
-  manga: "Manga",
   arcade: "Arcade",
 };
 
-/** Home's sections (D-023), in their default order. */
+/** A section's color for its Home Shortcut (D-184): the one chosen while colors per section are on, else its own. */
+export function shortcutColor(tile: string, sectionColors: { enabled: boolean; colors: Record<string, string> }): string | undefined {
+  return (sectionColors.enabled ? sectionColors.colors[tile] : undefined) ?? SECTION_COLORS[tile];
+}
+
+/**
+ * Home's sections (D-023), in their default order. "featured" is the Spotlight (D-184): Featured
+ * today and Game of the day together, each switched on or off by itself ("featured" and
+ * "featuredGame" in the hidden list).
+ */
 export const HOME_SECTIONS = [
   "discs",
   "tiles",
   "featured",
-  "featuredGame",
   "upNext",
   "favorites",
   "favoriteGames",
@@ -66,10 +74,16 @@ const OLD_HOME_ORDERS = [
   // Before Later and Because you liked (D-062, D-064).
   "discs,tiles,featured,featuredGame,upNext,favorites,favoriteGames,continueWatching,continuePlaying,continueReading,recentlyAdded,recentlyOpened,stats",
 ];
-export type HomeSection = (typeof HOME_SECTIONS)[number];
+export type HomeSection = (typeof HOME_SECTIONS)[number] | "featuredGame";
 export interface HomeLayout {
   order: HomeSection[];
   hidden: HomeSection[];
+}
+
+/** Whether a section is left out of Home: the Spotlight only when both of its halves are (D-184). */
+export function homeSectionHidden(home: HomeLayout, section: HomeSection): boolean {
+  if (section === "featured") return home.hidden.includes("featured") && home.hidden.includes("featuredGame");
+  return home.hidden.includes(section);
 }
 
 /** Ambient music (decision D-016). */
@@ -162,6 +176,15 @@ export interface Preferences {
   holdToQuit: boolean;
   /** What's new after an update (D-081): shown unless turned off; `seen` is the last version shown. */
   whatsNew: { show: boolean; seen: string | null };
+  /** Home's tiles' own backgrounds (D-183), by tile (a category's key, "all", "favorites", "arcade"):
+   *  a picture from the artwork store and how it sits (zoom and middle point, as profile pictures). */
+  tileBackgrounds: Record<string, { key: string; view: { zoom: number; x: number; y: number } }>;
+  /** Settings › Controller (D-183). */
+  controller: ControllerSettings;
+  /** Books' filter (D-183): every kind, or books, comics or manga only. */
+  booksKind: "" | "book" | "comic" | "manga";
+  /** Movies & Series' filter (D-184): both, or movies or series only. */
+  filmsKind: "" | "movie" | "series";
   /** Updates (D-181): look for a newer version when Digitify starts; `skipped` is a version not to offer again. */
   updates: { check: boolean; skipped: string | null };
   /** Library's Everything view (D-074): off, every item is in its own category only. */
@@ -178,6 +201,8 @@ export interface Preferences {
   sectionColors: { enabled: boolean; colors: Record<string, string> };
   /** Cover width in the grid and shelf views, in pixels. */
   cardSize: number;
+  /** Arcade's own cover size (D-183), apart from the Library's. */
+  arcadeCardSize: number;
   /** Last layout used per view (all, favorites, a category key, search), or for every view under "*". */
   layouts: Record<string, Layout>;
   /** The same layout and copies filter in every view (under "*"), rather than one per view. */
@@ -226,7 +251,15 @@ export type ArcadeFilter = "all" | "all-pc" | "all-roms" | ArcadeStore | "others
 
 /** Their default order: All games first (D-169), then PC games and ROM games, the stores, the consoles. */
 // Favorites is a collection now (D-149), not a view.
-export const ARCADE_FILTER_ORDER: ArcadeFilter[] = ["all", "all-pc", "all-roms", "steam", "epic", "xbox", "minecraft", "gog", "ubisoft", "ea", "battlenet", "rockstar", "riot", "amazon", "itch", "heroic", "lutris", "others", ...ARCADE_CONSOLES];
+/** Each maker's consoles from the newest to the oldest (D-183), the makers in their usual order. */
+export const CONSOLES_NEWEST_FIRST: ArcadeConsole[] = [
+  "switch", "wiiu", "3ds", "wii", "ds", "gamecube", "gba", "gbc", "n64", "snes", "gb", "nes",
+  "ps3", "psp", "ps2", "ps1",
+  "dreamcast", "saturn", "segacd", "gamegear", "genesis", "sms",
+  "x360", "ogxbox",
+  "pce", "arcade", "atari2600", "other",
+];
+export const ARCADE_FILTER_ORDER: ArcadeFilter[] = ["all", "all-pc", "all-roms", "steam", "epic", "xbox", "minecraft", "gog", "ubisoft", "ea", "battlenet", "rockstar", "riot", "amazon", "itch", "heroic", "lutris", "others", ...CONSOLES_NEWEST_FIRST];
 
 export interface ArcadePreferences {
   downloadCovers: boolean;
@@ -247,6 +280,10 @@ export interface ArcadePreferences {
   sort: "title" | "played" | "most" | "added" | "rating" | "console" | "custom";
   /** Games' badges (D-148): the console's or store's logo and name, the logo alone, or none. */
   badge: "full" | "logo" | "none";
+  /** Every store's and console's view, even one without games (D-183; off: only those with games). */
+  showEmptyViews: boolean;
+  /** Steam's hours kept up to date by themselves (D-183), instead of only when asked. */
+  steamHoursAuto: boolean;
 }
 
 /** The page color under each look and palette, for accent text contrast. */
@@ -321,12 +358,17 @@ export const DEFAULT_PREFERENCES: Preferences = {
   holdToQuit: true,
   whatsNew: { show: true, seen: null },
   updates: { check: true, skipped: null },
+  booksKind: "",
+  filmsKind: "",
+  tileBackgrounds: {},
+  controller: DEFAULT_CONTROLLER,
   libraryScope: null,
   nightFilter: { schedule: false, from: "21:00", to: "07:00", strength: 35 },
   goals: { finished: 0, read: 0, watch: 0, listen: 0, play: 0 },
   sectionColors: { enabled: false, colors: { ...SECTION_COLORS } },
   autoBackup: { every: "off", folder: null, keep: 8 },
   cardSize: 160,
+  arcadeCardSize: 160,
   layouts: {},
   syncViews: true,
   ownership: {},
@@ -355,9 +397,11 @@ export const DEFAULT_PREFERENCES: Preferences = {
     platform: "all",
     filterOrder: [...ARCADE_FILTER_ORDER],
     hiddenFilters: [],
-    defaults: 170,
+    defaults: 183,
     whilePlaying: "stay",
     sort: "title",
+    showEmptyViews: false,
+    steamHoursAuto: true,
   },
 };
 
@@ -556,16 +600,32 @@ function sanitizeArcade(raw: unknown): ArcadePreferences {
   }
   // D-169 had moved Title to Console for a while; Title is the default again (D-170), once.
   if (defaults === 169 && sort === "console") sort = "title";
+  // Each maker's consoles newest first (D-183), once: they keep the places they had, in that order.
+  if (defaults < 183) {
+    const makers: ArcadeConsole[][] = [
+      ["switch", "wiiu", "3ds", "wii", "ds", "gamecube", "gba", "gbc", "n64", "snes", "gb", "nes"],
+      ["ps3", "psp", "ps2", "ps1"],
+      ["dreamcast", "saturn", "segacd", "gamegear", "genesis", "sms"],
+      ["x360", "ogxbox"],
+    ];
+    for (const maker of makers) {
+      const at = order.map((f, i) => (maker.includes(f as ArcadeConsole) ? i : -1)).filter((i) => i >= 0);
+      const newestFirst = maker.filter((c) => order.includes(c));
+      at.forEach((i, k) => (order[i] = newestFirst[k]));
+    }
+  }
   return {
     downloadCovers: pick("downloadCovers", isBoolean),
     playsIn: sanitizePlaysIn(value),
     platform,
     filterOrder: order,
     hiddenFilters,
-    defaults: 170,
+    defaults: 183,
     whilePlaying: pick("whilePlaying", (v) => v === "stay" || v === "hide" || v === "quit"),
     sort,
     badge: pick("badge", (v) => v === "full" || v === "logo" || v === "none"),
+    showEmptyViews: pick("showEmptyViews", isBoolean),
+    steamHoursAuto: pick("steamHoursAuto", isBoolean),
   };
 }
 
@@ -611,12 +671,15 @@ export function useCoverShape() {
   };
 }
 
-const isHomeSection = (v: unknown): v is HomeSection => HOME_SECTIONS.includes(v as HomeSection);
+const isOrdered = (v: unknown): v is HomeSection => (HOME_SECTIONS as readonly string[]).includes(v as string);
+const isHomeSection = (v: unknown): v is HomeSection => isOrdered(v) || v === "featuredGame";
+// Game of the day has no place of its own since the Spotlight (D-184): old orders read without it.
+const OLD_ORDERS = OLD_HOME_ORDERS.map((order) => order.split(",").filter((s) => s !== "featuredGame").join(","));
 
 function sanitizeHome(raw: unknown): HomeLayout {
   const value = (raw && typeof raw === "object" ? raw : {}) as Raw<HomeLayout>;
-  let order = Array.isArray(value.order) ? [...new Set(value.order.filter(isHomeSection))] : [];
-  if (OLD_HOME_ORDERS.includes(order.join(","))) order = [...HOME_SECTIONS];
+  let order = Array.isArray(value.order) ? [...new Set(value.order.filter(isOrdered))] : [];
+  if (OLD_ORDERS.includes(order.join(","))) order = [...HOME_SECTIONS];
   // Sections added in later versions join at their default place.
   for (const [index, section] of HOME_SECTIONS.entries()) {
     if (!order.includes(section)) order.splice(Math.min(index, order.length), 0, section);
@@ -653,12 +716,54 @@ function sanitize(raw: unknown): Preferences {
       const u = ((raw as Raw<Preferences>)?.updates ?? {}) as { check?: unknown; skipped?: unknown };
       return { check: typeof u.check === "boolean" ? u.check : true, skipped: typeof u.skipped === "string" ? u.skipped : null };
     })(),
-    libraryScope: pick("libraryScope", (v) => v === null || (typeof v === "string" && v.length > 0 && v.length < 64)),
+    // Comics and Manga are kinds in Books now (D-183).
+    libraryScope: ((scope) => (scope === "comics" || scope === "manga" ? "books" : scope))(pick("libraryScope", (v) => v === null || (typeof v === "string" && v.length > 0 && v.length < 64))),
+    booksKind: pick("booksKind", (v) => v === "" || v === "book" || v === "comic" || v === "manga"),
+    filmsKind: pick("filmsKind", (v) => v === "" || v === "movie" || v === "series"),
+    controller: (() => {
+      const c = ((raw as Raw<Preferences>)?.controller ?? {}) as Partial<Record<keyof ControllerSettings, unknown>>;
+      const num = (n: unknown, low: number, high: number, d: number) => (typeof n === "number" && n >= low && n <= high ? n : d);
+      const remap: ControllerSettings["remap"] = {};
+      if (c.remap && typeof c.remap === "object") {
+        for (const [action, index] of Object.entries(c.remap as Record<string, unknown>)) if (typeof index === "number" && index >= 0 && index < 24) remap[action as keyof ControllerSettings["remap"]] = index;
+      }
+      return {
+        swapConfirm: c.swapConfirm === true,
+        glyphs: c.glyphs === "xbox" || c.glyphs === "playstation" ? c.glyphs : "auto",
+        remap,
+        deadZone: num(c.deadZone, 0.05, 0.5, DEFAULT_CONTROLLER.deadZone),
+        scrollSpeed: num(c.scrollSpeed, 0.25, 3, 1),
+        invertScroll: c.invertScroll === true,
+        stickMoves: c.stickMoves !== false,
+        pad: typeof c.pad === "string" && c.pad.length < 300 ? c.pad : null,
+        homeOpensBigPicture: c.homeOpensBigPicture === true,
+      };
+    })(),
+    tileBackgrounds: (() => {
+      const raw2 = (raw as Raw<Preferences>)?.tileBackgrounds;
+      const out: Preferences["tileBackgrounds"] = {};
+      if (raw2 && typeof raw2 === "object") {
+        for (const [tile, value] of Object.entries(raw2 as Record<string, unknown>)) {
+          const v = value as { key?: unknown; view?: { zoom?: unknown; x?: unknown; y?: unknown } };
+          if (typeof v?.key !== "string" || !/^[A-Za-z0-9]{1,64}$/.test(v.key)) continue;
+          const num = (n: unknown, low: number, high: number, d: number) => (typeof n === "number" && n >= low && n <= high ? n : d);
+          out[tile] = { key: v.key, view: { zoom: num(v.view?.zoom, 1, 4, 1), x: num(v.view?.x, 0, 100, 50), y: num(v.view?.y, 0, 100, 50) } };
+        }
+      }
+      return out;
+    })(),
     nightFilter: sanitizeNightFilter((raw as Raw<Preferences>)?.nightFilter),
     goals: sanitizeGoals((raw as Raw<Preferences>)?.goals),
     sectionColors: sanitizeSectionColors((raw as Raw<Preferences>)?.sectionColors),
     autoBackup: sanitizeAutoBackup((raw as Raw<Preferences>)?.autoBackup),
     cardSize: pick("cardSize", (v) => typeof v === "number" && v >= 110 && v <= 260),
+    // Arcade's starts where the shared one was, the first time.
+    arcadeCardSize: (() => {
+      const own = (raw as Raw<Preferences>)?.arcadeCardSize;
+      const shared = (raw as Raw<Preferences>)?.cardSize;
+      const ok = (v: unknown) => typeof v === "number" && v >= 110 && v <= 260;
+      return (ok(own) ? own : ok(shared) ? shared : DEFAULT_PREFERENCES.arcadeCardSize) as number;
+    })(),
     layouts: pick("layouts", (v) => !!v && typeof v === "object"),
     syncViews: pick("syncViews", isBoolean),
     // Only Digital and Online are left (D-029); "On the shelf" and "Not digitized" fall back to All.

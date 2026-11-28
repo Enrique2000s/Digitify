@@ -510,7 +510,7 @@ mod tests {
     fn the_new_category_order() {
         let conn = crate::db::memory();
         let keys: Vec<String> = conn.prepare("SELECT key FROM categories ORDER BY sort_order").unwrap().query_map([], |row| row.get(0)).unwrap().collect::<Result<_, _>>().unwrap();
-        assert_eq!(keys, ["pictures", "music", "videos", "video", "books", "comics", "manga"]);
+        assert_eq!(keys, ["pictures", "music", "videos", "video", "books"], "comics and manga are kinds in Books (D-183)");
     }
 
     #[test]

@@ -294,10 +294,151 @@ pub async fn achievements_list(state: State<'_, AppState>) -> AppResult<Vec<Achi
     with_library(&state, |library| library.db.with(|conn| achievements(conn))).await
 }
 
+// ---------------------------------------------------------------------------------------------
+// The profile's level, ratings and most played songs (D-183)
+
+/// XP from one level to the next: 100 for the first, 50 more for each one after.
+pub fn level_step(level: i64) -> i64 {
+    100 + 50 * (level - 1)
+}
+
+/// The level a total of XP reaches, the XP into it, and the XP the next one takes.
+pub fn level_of(xp: i64) -> (i64, i64, i64) {
+    let (mut level, mut left) = (1, xp.max(0));
+    while left >= level_step(level) {
+        left -= level_step(level);
+        level += 1;
+    }
+    (level, left, level_step(level))
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Level {
+    pub level: i64,
+    pub xp: i64,
+    /// XP into this level, and what the next one takes.
+    pub into: i64,
+    pub step: i64,
+    /// Where the XP came from.
+    pub time: i64,
+    pub finished: i64,
+    pub achievements: i64,
+    pub ratings: i64,
+}
+
+/// The XP earned (D-183): a point per minute with the library or Arcade, at most 300 a day (so
+/// something left running doesn't count for more); 50 per thing finished or game completed; 100 to
+/// 300 per achievement, by its step (I to V); 10 per item or game rated or written about.
+pub fn level(conn: &Connection) -> AppResult<Level> {
+    let time: i64 = conn.query_row(&format!("SELECT coalesce(sum(min(300, s / 60)), 0) FROM (SELECT day, sum(seconds) AS s FROM {ALL} GROUP BY day)"), [], |row| row.get(0))?;
+    let finished: i64 = 50
+        * conn.query_row(
+            "SELECT (SELECT count(*) FROM progress WHERE part_id = 0 AND completed = 1) + (SELECT count(*) FROM arcade_games WHERE completed_at IS NOT NULL)",
+            [],
+            |row| row.get::<_, i64>(0),
+        )?;
+    let unlocked: std::collections::HashSet<String> = conn.prepare("SELECT key FROM achievements")?.query_map([], |row| row.get(0))?.collect::<Result<_, _>>()?;
+    let mut ladders: Vec<(&str, Vec<i64>)> = LADDERS.iter().map(|(key, _, _, _, steps)| (*key, steps.to_vec())).collect();
+    ladders.push(("streak", vec![3, 7, 30, 100, 365]));
+    let achievements: i64 = ladders
+        .iter()
+        .flat_map(|(key, steps)| steps.iter().enumerate().filter(|(_, goal)| unlocked.contains(&format!("{key}-{goal}"))).map(|(i, _)| 100 + 50 * i as i64).collect::<Vec<_>>())
+        .sum();
+    let ratings: i64 = 10
+        * conn.query_row(
+            "SELECT (SELECT count(*) FROM items WHERE rating IS NOT NULL OR coalesce(trim(note), '') <> '')                   + (SELECT count(*) FROM arcade_games WHERE rating IS NOT NULL OR coalesce(trim(note), '') <> '')",
+            [],
+            |row| row.get::<_, i64>(0),
+        )?;
+    let xp = time + finished + achievements + ratings;
+    let (level, into, step) = level_of(xp);
+    Ok(Level { level, xp, into, step, time, finished, achievements, ratings })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Rated {
+    /// "item" or "game".
+    pub kind: String,
+    pub id: i64,
+    pub title: String,
+    pub rating: i64,
+    pub cover_key: Option<String>,
+    /// The item's category, or the game's console.
+    pub place: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TopTrack {
+    pub id: i64,
+    pub title: String,
+    pub artist: Option<String>,
+    pub cover_key: Option<String>,
+    pub plays: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileExtras {
+    pub level: Level,
+    /// Everything you rated, best first.
+    pub ratings: Vec<Rated>,
+    /// The songs played most (from the recent plays Digitify keeps).
+    pub top_tracks: Vec<TopTrack>,
+}
+
+pub fn profile_extras_of(conn: &Connection) -> AppResult<ProfileExtras> {
+    let ratings = conn
+        .prepare(
+            "SELECT 'item', i.id, i.title, i.rating, i.cover_key, c.name FROM items i JOIN categories c ON c.id = i.category_id WHERE i.rating IS NOT NULL              UNION ALL SELECT 'game', g.id, g.title, g.rating, g.cover_key, g.platform FROM arcade_games g WHERE g.rating IS NOT NULL AND g.hidden = 0              ORDER BY 4 DESC, 3 COLLATE NOCASE",
+        )?
+        .query_map([], |row| Ok(Rated { kind: row.get(0)?, id: row.get(1)?, title: row.get(2)?, rating: row.get(3)?, cover_key: row.get(4)?, place: row.get(5)? }))?
+        .collect::<Result<_, _>>()?;
+    let top_tracks = conn
+        .prepare(
+            "SELECT i.id, i.title, (SELECT pe.name FROM item_people ip JOIN people pe ON pe.id = ip.person_id WHERE ip.item_id = i.id ORDER BY ip.position LIMIT 1),                     i.cover_key, count(*) AS n              FROM plays pl JOIN parts p ON p.id = pl.part_id JOIN items i ON i.id = p.item_id GROUP BY i.id ORDER BY n DESC, i.title COLLATE NOCASE LIMIT 5",
+        )?
+        .query_map([], |row| Ok(TopTrack { id: row.get(0)?, title: row.get(1)?, artist: row.get(2)?, cover_key: row.get(3)?, plays: row.get(4)? }))?
+        .collect::<Result<_, _>>()?;
+    Ok(ProfileExtras { level: level(conn)?, ratings, top_tracks })
+}
+
+#[tauri::command]
+pub async fn profile_extras(state: State<'_, AppState>) -> AppResult<ProfileExtras> {
+    with_library(&state, |library| library.db.with(|conn| profile_extras_of(conn))).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::db;
+
+    #[test]
+    fn levels_take_a_little_more_each_time() {
+        assert_eq!(level_of(0), (1, 0, 100));
+        assert_eq!(level_of(99), (1, 99, 100));
+        assert_eq!(level_of(100), (2, 0, 150));
+        assert_eq!(level_of(250), (3, 0, 200));
+        assert_eq!(level_of(260), (3, 10, 200));
+    }
+
+    #[test]
+    fn xp_comes_from_time_finishing_achievements_and_ratings() {
+        let conn = db::memory();
+        conn.execute("INSERT INTO items (category_id, title, sort_title, rating) VALUES ((SELECT id FROM categories WHERE key = 'books'), 'Dune', 'dune', 5)", []).unwrap();
+        // Ten hours in one day count as 300 minutes; 20 minutes another day as 20.
+        conn.execute("INSERT INTO activity (day, item_id, kind, seconds) VALUES ('2026-01-01', 1, 'read', 36000), ('2026-01-02', 1, 'read', 1200)", []).unwrap();
+        conn.execute("INSERT INTO progress (item_id, part_id, fraction, completed) VALUES (1, 0, 1.0, 1)", []).unwrap();
+        conn.execute("INSERT INTO achievements (key) VALUES ('read-1'), ('read-10')", []).unwrap();
+        let l = level(&conn).unwrap();
+        assert_eq!((l.time, l.finished, l.achievements, l.ratings), (320, 50, 250, 10));
+        assert_eq!(l.xp, 630);
+        let extras = profile_extras_of(&conn).unwrap();
+        assert_eq!(extras.ratings.len(), 1);
+        assert_eq!((extras.ratings[0].title.as_str(), extras.ratings[0].rating), ("Dune", 5));
+    }
 
     #[test]
     fn the_week_has_seven_days_and_its_time() {

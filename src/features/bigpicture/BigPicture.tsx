@@ -9,29 +9,30 @@ import { exitBigPicture, focusFirst, moveFocus, takeIntro } from "../../lib/bigp
 import { ambientEngine } from "../../lib/ambient/engine";
 import { BigPictureIntro } from "./Intro";
 import { NowPlayingScreen } from "./NowPlayingScreen";
-import { controllerKind, onControllerChange, usePad, useSticks, type PadAction } from "../../lib/gamepad";
+import { controllerKind, onControllerChange, usePad, useSticks, type PadAction, buttonNames } from "../../lib/gamepad";
 import { Cursor } from "./Cursor";
 import { OnlineScreen } from "./OnlineScreen";
 import { ArcadeScreen, ArcadeTile } from "../arcade/ArcadeScreen";
-import { consoleOf, GameCover, lastPlayed, matchingGames, gameAspect, playTime, useArcade, useLaunch } from "../arcade/shared";
+import { consoleOf, GameBadge, GameCover, GameMarks, lastPlayed, matchingGames, gameAspect, playTime, useArcade, useLaunch } from "../arcade/shared";
 import { PlatformLogo } from "../arcade/logos";
 import { AchievementsList, YearReviewBody } from "../home/YearViews";
 import { useHomeGames } from "../home/GameSections";
 import { useAmbient } from "../../lib/ambient/AmbientProvider";
 import { useMusic } from "../../lib/music/MusicProvider";
-import { useCoverShape, usePreferences, type HomeSection } from "../../lib/preferences";
+import { useCoverShape, usePreferences, type HomeSection, homeSectionHidden } from "../../lib/preferences";
 import { StatsPanel } from "../home/Stats";
-import { SectionTitle } from "../home/HomePage";
+import { SCREENS, SectionTitle, TileBody, shortcutColumns } from "../home/HomePage";
 import { FilmTag, FormatTag, SourceTag, sourceProps } from "../../components/SourceTag";
 import { CoverPreview } from "../../components/CoverPreview";
 import { keys, libraryChanged, useCategories, useDashboard, useLibraryScope } from "../../lib/queries";
 import { BpCollectionCard } from "./BpCollectionCard";
 import { BpProfileScreen } from "../profile/BpProfile";
+import { ControllerScreen } from "./ControllerScreen";
 import { useProfile } from "../profile/data";
 import { ProfileAvatar } from "../profile/Picture";
 import { CategoryIcon, Cover } from "../../components/common";
 import { EpisodeThumb, episodeCode, useEpisodeThumbs } from "../item/SeriesEpisodes";
-import { ProgressMark } from "../../components/MediaCard";
+import { CoverMarks, ProgressMark } from "../../components/MediaCard";
 import { isSeries } from "../item/WatchPanels";
 import { photoAspect, type ItemDetail } from "../../lib/api";
 
@@ -41,7 +42,7 @@ function BpAvatar() {
   return <ProfileAvatar profile={profile.data} size={44} />;
 }
 
-export type BigPictureScreen = "home" | "library" | "item" | "search" | "online" | "arcade" | "music" | "game" | "achievements" | "year" | "profile";
+export type BigPictureScreen = "home" | "library" | "item" | "search" | "online" | "arcade" | "music" | "game" | "achievements" | "year" | "profile" | "controller";
 export interface BigPictureSearch {
   screen?: BigPictureScreen;
   scope?: string;
@@ -52,8 +53,9 @@ export interface BigPictureSearch {
 function useButtons() {
   const [kind, setKind] = useState(controllerKind);
   useEffect(() => onControllerChange(() => setKind(controllerKind())), []);
-  const ps = kind === "playstation";
-  return { kind, a: ps ? "✕" : "A", b: ps ? "○" : "B", x: ps ? "□" : "X", y: ps ? "△" : "Y", start: ps ? "Options" : "Menu", view: ps ? "Create" : "View" };
+  // As set up in Settings › Controller (D-183): the names chosen, the actions on their buttons.
+  const { preferences } = usePreferences();
+  return { ...buttonNames(preferences.controller), kind };
 }
 
 function Clock() {
@@ -154,16 +156,12 @@ function Row({ title, items, first, height }: { title: ReactNode; items: ItemCar
   );
 }
 
-/** "Featured today", as on Home: one item, big, with its description. */
+/** "Featured today", as on Home: one item, big, with its description; half of the Spotlight (D-184). */
 function FeaturedCard({ item }: { item: ItemCard }) {
   const navigate = useNavigate();
   const blurb = useQuery({ queryKey: ["blurb", item.id], queryFn: () => api.blurbs([item.id]).then((list) => list[0] ?? null) });
   const { shape, aspect } = useCoverShape()(item);
   return (
-    <section className="bp-row">
-      <h2>
-        <Award size={26} /> Featured today <span className="section-source">(Library)</span>
-      </h2>
       <button type="button" className="bp-featured" data-bp-focus onClick={() => void navigate({ to: "/bp", search: { screen: "item", id: item.id } })}>
         {item.coverKey && (
           <span className="bp-featured-backdrop" aria-hidden>
@@ -172,18 +170,18 @@ function FeaturedCard({ item }: { item: ItemCard }) {
         )}
         <span className="bp-featured-art" data-shape={shape} style={{ ["--a" as string]: aspect }} {...sourceProps(item.source)}>
           <Cover item={item} size="cover" />
-          <SourceTag service={item.source} />
-          <FilmTag item={item} />
-          <FormatTag item={item} />
+          <CoverMarks item={item} />
         </span>
         <span className="bp-featured-body">
+          <span className="bp-featured-eyebrow">
+            <Award size={20} /> Featured today <span className="section-source">(Library)</span>
+          </span>
           <strong>{item.title}</strong>
           {(item.subtitle || item.year) && <span className="bp-featured-sub">{[item.subtitle, item.year].filter(Boolean).join(" · ")}</span>}
           {blurb.data && blurb.data.facts.length > 0 && <span className="bp-featured-facts">{blurb.data.facts.join(" · ")}</span>}
           {blurb.data?.description && <span className="bp-featured-description">{blurb.data.description}</span>}
         </span>
       </button>
-    </section>
   );
 }
 
@@ -234,14 +232,10 @@ function UpNextBP({ watching, reading, next, games }: { watching: ItemCard[]; re
   );
 }
 
-/** "Game of the day" in Big Picture: A opens its screen (D-120). */
+/** "Game of the day" in Big Picture: A opens its screen (D-120); half of the Spotlight (D-184). */
 function FeaturedGameBP({ game }: { game: ArcadeGame }) {
   const open = useOpenGame();
   return (
-    <section className="bp-row">
-      <h2>
-        <Gamepad2 size={26} /> Game of the day <span className="section-source">(Arcade)</span>
-      </h2>
       <button type="button" className="bp-featured" data-bp-focus onClick={() => open(game)}>
         {game.coverKey && (
           <span className="bp-featured-backdrop" aria-hidden>
@@ -250,13 +244,28 @@ function FeaturedGameBP({ game }: { game: ArcadeGame }) {
         )}
         <span className="bp-featured-art arcade-bp-art" style={{ ["--a" as string]: gameAspect(game) }}>
           <GameCover game={game} size="cover" />
+          <GameBadge game={game} />
+          <GameMarks game={game} big />
         </span>
         <span className="bp-featured-body">
+          <span className="bp-featured-eyebrow">
+            <Gamepad2 size={20} /> Game of the day <span className="section-source">(Arcade)</span>
+          </span>
           <strong>{game.title}</strong>
           <span className="bp-featured-sub">{consoleOf(game)}</span>
           <span className="bp-featured-facts">{game.playSeconds > 0 ? `${playTime(game.playSeconds)} played` : "Not played yet"}</span>
         </span>
       </button>
+  );
+}
+
+/** The Spotlight in Big Picture (D-184): Featured today and Game of the day, side by side as on Home. */
+function SpotlightBP({ item, game }: { item: ItemCard | null; game: ArcadeGame | null }) {
+  if (!item && !game) return null;
+  return (
+    <section className={`bp-row bp-spotlight${item && game ? " both" : ""}`} aria-label="Spotlight">
+      {item && <FeaturedCard item={item} />}
+      {game && <FeaturedGameBP game={game} />}
     </section>
   );
 }
@@ -273,41 +282,43 @@ function HomeScreen() {
   const data = dashboard.data;
   if (!data) return null;
   const sections: Partial<Record<HomeSection, ReactNode>> = {
-    tiles: (
-      <section className="bp-row">
-        <h2>Library</h2>
-        <Scroller>
-          {/* The same order as everywhere: Everything (when turned on, D-074), the categories, then Favorites. */}
-          {preferences.showEverything && (
-            <button type="button" className="bp-category" data-bp-focus data-bp-autofocus onClick={() => void navigate({ to: "/bp", search: { screen: "library", scope: "all" } })}>
-              <LibraryBig size={46} />
-              <strong>Everything</strong>
-              <span>{data.totals.items.toLocaleString()}</span>
-            </button>
-          )}
-          {categories.data
-            ?.filter((c) => !c.isHidden)
-            .map((category) => (
-              <button
-                key={category.key}
-                type="button"
-                className="bp-category"
-                data-bp-focus
-                onClick={() => void navigate({ to: "/bp", search: { screen: "library", scope: category.key } })}
-              >
-                <CategoryIcon icon={category.icon} size={46} />
-                <strong>{category.name}</strong>
-                <span>{category.itemCount.toLocaleString()}</span>
+    // Home Shortcuts (D-184): the same cards as on Home, the covers fanning out when selected.
+    tiles: (() => {
+      const shown = categories.data?.filter((c) => !c.isHidden) ?? [];
+      const columns = shortcutColumns(shown.length + (preferences.showEverything ? 2 : 1));
+      const go = (search: BigPictureSearch) => void navigate({ to: "/bp", search });
+      return (
+        <section className="bp-row">
+          <h2>
+            <SectionTitle section="tiles" />
+          </h2>
+          <div className="bp-shortcuts" style={{ ["--cols" as string]: columns }}>
+            {preferences.showEverything && (
+              <button type="button" className="bp-shortcut" data-bp-focus data-bp-autofocus onClick={() => go({ screen: "library", scope: "all" })}>
+                <TileBody label="Everything" screen={SCREENS.all} covers={data.tileCovers.all ?? []} icon={<LibraryBig size={36} />} count={data.totals.items} tile="all" />
+              </button>
+            )}
+            {shown.map((category, index) => (
+              <button key={category.key} type="button" className="bp-shortcut" data-bp-focus onClick={() => go({ screen: "library", scope: category.key })}>
+                <TileBody
+                  label={category.name}
+                  screen={SCREENS[category.key] ?? index % 5}
+                  covers={data.tileCovers[category.key] ?? []}
+                  icon={<CategoryIcon icon={category.icon} size={36} />}
+                  count={category.itemCount}
+                  turn={index + 1}
+                  tile={category.key}
+                 
+                />
               </button>
             ))}
-          <button type="button" className="bp-category" data-bp-focus onClick={() => void navigate({ to: "/bp", search: { screen: "arcade" } })}>
-            <Joystick size={46} />
-            <strong>Arcade</strong>
-            <span>{games.count.toLocaleString()}</span>
-          </button>
-        </Scroller>
-      </section>
-    ),
+            <button type="button" className="bp-shortcut" data-bp-focus onClick={() => go({ screen: "arcade" })}>
+              <TileBody label="Arcade" screen={SCREENS.arcade} covers={games.covers} icon={<Joystick size={36} />} count={games.count} turn={shown.length + 1} tile="arcade" />
+            </button>
+          </div>
+        </section>
+      );
+    })(),
     continuePlaying: <GameRowBP title={<SectionTitle section="continuePlaying" />} games={games.recent} />,
     because: data.because && (
       <Row
@@ -321,8 +332,7 @@ function HomeScreen() {
     ),
     upNext: <UpNextBP watching={data.continueWatching} reading={data.continueItems} next={data.nextVolumes} games={games.recent} />,
     favoriteGames: <GameRowBP title={<SectionTitle section="favoriteGames" />} games={games.favorites} />,
-    featuredGame: games.featured && <FeaturedGameBP game={games.featured} />,
-    featured: data.featured && <FeaturedCard item={data.featured} />,
+    featured: <SpotlightBP item={preferences.home.hidden.includes("featured") ? null : data.featured} game={preferences.home.hidden.includes("featuredGame") ? null : games.featured ?? null} />,
     favorites: <Row title={<SectionTitle section="favorites" />} items={data.favorites} />,
     // Smaller than the other rows, as before.
     continueWatching: <Row title={<SectionTitle section="continueWatching" />} items={data.continueWatching} height={190} />,
@@ -341,7 +351,7 @@ function HomeScreen() {
   return (
     <>
       {preferences.home.order
-        .filter((section) => !preferences.home.hidden.includes(section))
+        .filter((section) => !homeSectionHidden(preferences.home, section))
         .map((section) => (sections[section] ? <div key={section}>{sections[section]}</div> : null))}
     </>
   );
@@ -856,6 +866,18 @@ function Menu({ onClose }: { onClose: () => void }) {
             </button>
           </div>
         </div>
+        {/* Settings › Controller, inside Big Picture (D-184). */}
+        <button
+          type="button"
+          className="bp-button"
+          data-bp-focus
+          onClick={() => {
+            onClose();
+            void navigate({ to: "/bp", search: { screen: "controller" } });
+          }}
+        >
+          <Gamepad2 size={22} /> Controller settings
+        </button>
         <button type="button" className="bp-button" data-bp-focus onClick={() => void exitBigPicture(() => void navigate({ to: "/" }))}>
           <LogOut size={22} /> Exit Big Picture
         </button>
@@ -986,8 +1008,11 @@ export function BigPicturePage() {
       case "right":
         // With the cursor on, only the cursor selects (the stick moves it; the D-pad does nothing).
         if (cursor) return true;
-        // Everything on screen is reachable: the top bar, the content and the music.
-        if (shell.current) moveFocus(shell.current, action);
+        // Everything on screen is reachable: the top bar, the content and the music. With nothing
+        // more that way, up and down scroll the page, so what's after the last element shows (D-184).
+        if (shell.current && !moveFocus(shell.current, action) && (action === "up" || action === "down") && main.current) {
+          main.current.scrollBy({ top: (action === "down" ? 1 : -1) * window.innerHeight * 0.6, behavior: "smooth" });
+        }
         break;
       case "accept":
         // In cursor mode A clicks where the cursor is (the cursor handles it).
@@ -1048,7 +1073,7 @@ export function BigPicturePage() {
       {icon} {label}
     </button>
   );
-  const title = useMemo(() => ({ home: "Home", library: "Library", item: "", search: "Search", online: "", arcade: "Arcade", music: "", game: "", achievements: "", year: "", profile: "" })[screen], [screen]);
+  const title = useMemo(() => ({ home: "Home", library: "Library", item: "", search: "Search", online: "", arcade: "Arcade", music: "", game: "", achievements: "", year: "", profile: "", controller: "" })[screen], [screen]);
 
   return (
     <div ref={shell} className={`bp${cursor ? " bp-cursor-mode" : ""}${intro ? " in-intro" : ""}${arrived ? " after-intro" : ""}`}>
@@ -1100,6 +1125,7 @@ export function BigPicturePage() {
         {screen === "achievements" && <AchievementsScreen />}
         {screen === "year" && <YearScreen year={search.id ?? new Date().getFullYear()} />}
         {screen === "profile" && <BpProfileScreen />}
+        {screen === "controller" && <ControllerScreen />}
       </main>
       <footer className="bp-hints">
         <span>

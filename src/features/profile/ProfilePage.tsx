@@ -3,13 +3,14 @@ import { Marquee } from "../../components/Marquee";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { Award, BadgeCheck, BookOpen, Camera, Clapperboard, Copy, Download, Flame, Gamepad2, Headphones, ImagePlus, LibraryBig, Pencil, Share2, Trash, Trophy, Move, RotateCcw } from "lucide-react";
-import { api, artworkUrl, errorText, type ArcadeGame, type ProfileView } from "../../lib/api";
+import { Award, BadgeCheck, BookOpen, Camera, Clapperboard, Copy, Download, Flame, Gamepad2, Headphones, ImagePlus, LibraryBig, Pencil, Share2, Star, Trash, Trophy, Move, RotateCcw } from "lucide-react";
+import { api, artworkUrl, errorText, type ArcadeGame, type ProfileLevel, type ProfileView } from "../../lib/api";
 import { usePreferences } from "../../lib/preferences";
-import { CategoryIcon, Dialog, Field } from "../../components/common";
+import { CategoryIcon, Cover, Dialog, Field } from "../../components/common";
 import { BackButton } from "../../components/BackButton";
-import { GameCover, gameAspect } from "../arcade/shared";
-import { hours, PROFILE_KEY, sinceLabel, useProfile, useProfileSummary, type ProfileSummary } from "./data";
+import { FILTER_LABELS, GameCover, gameAspect } from "../arcade/shared";
+import { LogoMark } from "../arcade/logos";
+import { hours, PROFILE_KEY, sinceLabel, useProfile, useProfileExtras, useProfileSummary, type ProfileSummary } from "./data";
 import { drawShareCard } from "./shareCard";
 import { DEFAULT_VIEW, PictureAdjuster, ProfileAvatar, ProfileBanner } from "./Picture";
 
@@ -23,6 +24,7 @@ import { DEFAULT_VIEW, PictureAdjuster, ProfileAvatar, ProfileBanner } from "./P
 export function ProfilePage() {
   const profile = useProfile();
   const summary = useProfileSummary();
+  const extras = useProfileExtras();
   const [editing, setEditing] = useState(false);
   const [sharing, setSharing] = useState(false);
   const name = profile.data?.name || "My Digitify";
@@ -51,6 +53,7 @@ export function ProfilePage() {
                 </span>
               )}
             </div>
+            {extras.data && <LevelBar level={extras.data.level} />}
           </div>
           <div className="profile-actions">
             <button type="button" className="btn" onClick={() => setEditing(true)}>
@@ -184,6 +187,8 @@ function ProfileBody({ summary }: { summary: ProfileSummary }) {
         detail={(g) => new Date(g.completedAt!).toLocaleDateString(undefined, { dateStyle: "medium" })}
         index={4}
       />
+
+      <ProfileExtrasSections />
 
       <section className="panel profile-section" style={{ ["--i" as string]: 5 }}>
         <div className="profile-section-head">
@@ -404,6 +409,134 @@ function ProfileEditor({ onClose }: { onClose: () => void }) {
 }
 
 /** Moving a picture in its frame (D-150), with a live preview; Save keeps it. */
+/** The level (D-183): its number, the XP into it and what the next takes; what earned it on hover. */
+export function LevelBar({ level: l }: { level: ProfileLevel }) {
+  const why = `${l.xp.toLocaleString()} XP: ${l.time.toLocaleString()} from time, ${l.finished.toLocaleString()} from finishing, ${l.achievements.toLocaleString()} from achievements, ${l.ratings.toLocaleString()} from ratings`;
+  return (
+    <div className="profile-level" title={why}>
+      <span className="profile-level-badge">
+        Level {l.level}
+      </span>
+      <span className="profile-level-track" role="progressbar" aria-valuenow={l.into} aria-valuemin={0} aria-valuemax={l.step} aria-label={`Level ${l.level}: ${l.into} of ${l.step} XP to the next`}>
+        <span style={{ width: `${(l.into / Math.max(1, l.step)) * 100}%` }} />
+      </span>
+      <span className="profile-level-xp">
+        {l.into.toLocaleString()} / {l.step.toLocaleString()} XP
+      </span>
+    </div>
+  );
+}
+
+/** Consoles and launchers in use, everything rated, and the songs played most (D-183). */
+function ProfileExtrasSections() {
+  const extras = useProfileExtras();
+  const status = useQuery({ queryKey: ["arcade-status"], queryFn: api.arcadeStatus });
+  const games = useQuery({ queryKey: ["arcade-games"], queryFn: api.arcadeGames });
+  const [allRatings, setAllRatings] = useState(false);
+  const launchers = (status.data?.stores ?? []).filter((s) => s.found);
+  const emulators = (status.data?.emulators ?? []).filter((e) => e.found && !e.ignored);
+  const consoles = [...new Set((games.data ?? []).filter((g) => !g.missing && g.platform !== "pc").map((g) => g.platform))];
+  const ratings = extras.data?.ratings ?? [];
+  const tracks = extras.data?.topTracks ?? [];
+  return (
+    <>
+      <div className="profile-columns">
+        <section className="panel profile-section" style={{ ["--i" as string]: 5 }}>
+          <h2>Consoles &amp; launchers</h2>
+          {launchers.length + consoles.length + emulators.length === 0 ? (
+            <p className="muted">Arcade shows here the stores, emulators and consoles it finds.</p>
+          ) : (
+            <>
+              {launchers.length > 0 && <h3>Launchers</h3>}
+              <ul className="profile-systems">
+                {launchers.map((s) => (
+                  <li key={s.key}>
+                    <LogoMark name={s.key} className="setup-logo" /> {s.name}
+                    <span className="muted">{s.games.toLocaleString()}</span>
+                  </li>
+                ))}
+              </ul>
+              {consoles.length > 0 && <h3>Consoles</h3>}
+              <ul className="profile-systems">
+                {consoles.map((c) => (
+                  <li key={c}>
+                    <LogoMark name={c} className="setup-logo" /> {FILTER_LABELS[c as keyof typeof FILTER_LABELS] ?? c}
+                    <span className="muted">{(games.data ?? []).filter((g) => !g.missing && g.platform === c).length.toLocaleString()}</span>
+                  </li>
+                ))}
+              </ul>
+              {emulators.length > 0 && <h3>Emulators</h3>}
+              <ul className="profile-systems">
+                {emulators.map((e) => (
+                  <li key={e.key}>{e.name}</li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+        <section className="panel profile-section" style={{ ["--i" as string]: 6 }}>
+          <h2>Most listened</h2>
+          {tracks.length === 0 ? (
+            <p className="muted">Play some music and your favourite songs show here.</p>
+          ) : (
+            <ol className="profile-tracks">
+              {tracks.map((t, i) => (
+                <li key={t.id}>
+                  <span className="profile-track-rank">{i + 1}</span>
+                  <span className="profile-track-art">
+                    <Cover item={{ title: t.title, coverKey: t.coverKey, handler: "audio" }} iconOnly />
+                  </span>
+                  <span className="profile-track-text">
+                    <Link to="/item/$id" params={{ id: String(t.id) }}>
+                      <Marquee hover text={t.title} />
+                    </Link>
+                    <span className="muted">{t.artist ?? ""}</span>
+                  </span>
+                  <span className="muted">{t.plays === 1 ? "1 play" : `${t.plays} plays`}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      </div>
+      <section className="panel profile-section" style={{ ["--i" as string]: 7 }}>
+        <div className="profile-section-head">
+          <h2>Your ratings</h2>
+          {ratings.length > 12 && (
+            <button type="button" className="btn btn-sm" onClick={() => setAllRatings(!allRatings)}>
+              {allRatings ? "Show fewer" : `Show all ${ratings.length}`}
+            </button>
+          )}
+        </div>
+        {ratings.length === 0 ? (
+          <p className="muted">Give a book, film, song or game your stars from its page or panel, and it shows here.</p>
+        ) : (
+          <ul className="profile-ratings">
+            {(allRatings ? ratings : ratings.slice(0, 12)).map((r) => (
+              <li key={`${r.kind}-${r.id}`}>
+                <Link to={r.kind === "game" ? "/arcade" : "/item/$id"} params={r.kind === "game" ? undefined : { id: String(r.id) }} search={r.kind === "game" ? { game: r.id } : undefined} className="profile-rating">
+                  <span className="profile-rating-art">
+                    <Cover item={{ title: r.title, coverKey: r.coverKey, handler: r.kind === "game" ? "generic" : "book" }} iconOnly />
+                  </span>
+                  <span className="profile-rating-text">
+                    <Marquee hover text={r.title} />
+                    <span className="muted">{r.kind === "game" ? (FILTER_LABELS[r.place as keyof typeof FILTER_LABELS] ?? r.place) : r.place}</span>
+                  </span>
+                  <span className="profile-rating-stars" aria-label={`${r.rating} of 5 stars`}>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <Star key={n} size={14} fill={n <= r.rating ? "currentColor" : "none"} aria-hidden />
+                    ))}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </>
+  );
+}
+
 function AdjustDialog({ kind, onClose, onSave }: { kind: "avatar" | "banner"; onClose: () => void; onSave: (view: ProfileView) => void }) {
   const profile = useProfile();
   const picture = kind === "avatar" ? profile.data?.avatar : profile.data?.banner;
@@ -468,17 +601,18 @@ function CoverChooser({ kind, onClose, onChosen }: { kind: "avatar" | "banner"; 
 function ShareDialog({ onClose }: { onClose: () => void }) {
   const profile = useProfile();
   const summary = useProfileSummary();
+  const extras = useProfileExtras();
   const [card, setCard] = useState<{ blob: Blob; url: string } | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const made = useRef(false);
   useEffect(() => {
-    if (made.current || !profile.data || !summary) return;
+    if (made.current || !profile.data || !summary || extras.isLoading) return;
     made.current = true;
-    drawShareCard(profile.data, summary).then(
+    drawShareCard(profile.data, summary, extras.data ?? null).then(
       (blob) => setCard({ blob, url: URL.createObjectURL(blob) }),
       (reason) => setNote(errorText(reason)),
     );
-  }, [profile.data, summary]);
+  }, [profile.data, summary, extras.isLoading, extras.data]);
   useEffect(
     () => () => {
       if (card) URL.revokeObjectURL(card.url);

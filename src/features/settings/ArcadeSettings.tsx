@@ -5,7 +5,8 @@ import { Switch } from "../../components/common";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, errorText } from "../../lib/api";
-import { addProgramGame, arcadeFilters, FILTER_LABELS, filledFilters } from "../arcade/shared";
+import { addProgramGame, arcadeFilters, CONSOLE_MAKERS, FILTER_LABELS, filledFilters } from "../arcade/shared";
+import { LogoMark } from "../arcade/logos";
 import { Setup } from "../arcade/Setup";
 import { Setting } from "./Setting";
 
@@ -44,8 +45,13 @@ export function ArcadeSettings() {
       });
       return { arcade: { ...c.arcade, filterOrder: order } };
     });
-  const move = (index: number, delta: number) => arrange(arrayMove(rows, index, index + delta));
-  const order = useReorder((from, to) => arrange(arrayMove(rows, from, to)));
+  // A maker's consoles are one row with its consoles inside (D-183), as in Arcade's own menu: the
+  // groups and the views move among themselves, and a group's consoles within it.
+  const entries = groupViews(rows);
+  const flatten = (list: ViewEntry[]) => list.flatMap((e) => (typeof e === "string" ? [e] : e.filters));
+  const move = (index: number, delta: number) => arrange(flatten(arrayMove(entries, index, index + delta)));
+  const order = useReorder((from, to) => arrange(flatten(arrayMove(entries, from, to))));
+  const arrangeIn = (maker: string, filters: ArcadeFilter[]) => arrange(flatten(entries.map((e) => (typeof e !== "string" && e.maker === maker ? { maker, filters } : e))));
   const show = (filter: ArcadeFilter, shown: boolean) =>
     update((c) => {
       const hidden = c.arcade.hiddenFilters.filter((f) => f !== filter);
@@ -92,14 +98,56 @@ export function ArcadeSettings() {
           ))}
         </div>
       </Setting>
-      <Setting title="“All games” view" text="Every game together in one view, first in Arcade and shown when it opens. Switched off, Arcade starts at your next view.">
+      <Setting
+        title="“All games” view"
+        text="Every game together in one view, first in Arcade and shown when it opens, in place of PC games and ROM games. Switched off, PC games and ROM games are two views instead."
+      >
         <Switch checked={!arcade.hiddenFilters.includes("all")} label="Show All games" onChange={(shown) => show("all", shown)} />
       </Setting>
-      <p className="hint" style={{ margin: "14px 0 10px" }}>
-        Drag the views (or use the arrows) to set the order of Arcade's buttons; switch off the ones you don't use. A store or console shows here once Arcade has one of its games.
+      <Setting title="Every console and launcher" text="Show a view for every store and console Digitify knows, even those you have no games for yet. Off, a view shows once Arcade has one of its games.">
+        <Switch checked={arcade.showEmptyViews} label="Show every console and launcher" onChange={(showEmptyViews) => update((c) => ({ arcade: { ...c.arcade, showEmptyViews } }))} />
+      </Setting>
+      {/* Titled as Library's categories are in Settings (D-184). */}
+      <h3 className="settings-subhead">Categories</h3>
+      <p className="hint" style={{ margin: "4px 0 10px" }}>
+        Drag the views (or use the arrows) to set the order of Arcade's buttons, and the consoles inside a maker's group the same way; switch off the ones you don't use.
       </p>
       <ul ref={order.listRef} className="category-list">
-        {rows.map((filter, index) => {
+        {entries.map((entry, index) => {
+          if (typeof entry !== "string") {
+            const allHidden = entry.filters.every((f) => arcade.hiddenFilters.includes(f));
+            return (
+              <li key={`maker:${entry.maker}`} className={`maker-group${allHidden ? " hidden" : ""}`} data-reorder style={order.style(index)}>
+                <div className="maker-group-head">
+                  <span {...order.handle(index)} aria-label={`Drag ${entry.maker}`}>
+                    <GripVertical size={18} />
+                  </span>
+                  <span className="label">
+                    <strong>{entry.maker}</strong>
+                    <span className="muted"> · {entry.filters.length} consoles</span>
+                  </span>
+                  <button type="button" className="icon-btn" aria-label={`Move ${entry.maker} up`} disabled={index === 0} onClick={() => move(index, -1)}>
+                    <ArrowUp size={16} />
+                  </button>
+                  <button type="button" className="icon-btn" aria-label={`Move ${entry.maker} down`} disabled={index === entries.length - 1} onClick={() => move(index, 1)}>
+                    <ArrowDown size={16} />
+                  </button>
+                  <Switch
+                    checked={!allHidden}
+                    label={`Show ${entry.maker}`}
+                    onChange={(shown) =>
+                      update((c) => {
+                        const rest = c.arcade.hiddenFilters.filter((f) => !entry.filters.includes(f));
+                        return { arcade: { ...c.arcade, hiddenFilters: shown ? rest : [...rest, ...entry.filters] } };
+                      })
+                    }
+                  />
+                </div>
+                <MakerConsoles maker={entry.maker} filters={entry.filters} hidden={arcade.hiddenFilters} onArrange={arrangeIn} onShow={show} />
+              </li>
+            );
+          }
+          const filter = entry;
           const hidden = arcade.hiddenFilters.includes(filter);
           const label = FILTER_LABELS[filter];
           return (
@@ -113,7 +161,7 @@ export function ArcadeSettings() {
               <button type="button" className="icon-btn" aria-label={`Move ${label} up`} disabled={index === 0} onClick={() => move(index, -1)}>
                 <ArrowUp size={16} />
               </button>
-              <button type="button" className="icon-btn" aria-label={`Move ${label} down`} disabled={index === rows.length - 1} onClick={() => move(index, 1)}>
+              <button type="button" className="icon-btn" aria-label={`Move ${label} down`} disabled={index === entries.length - 1} onClick={() => move(index, 1)}>
                 <ArrowDown size={16} />
               </button>
               <Switch checked={!hidden} label={`Show ${label}`} onChange={(shown) => show(filter, shown)} />
@@ -128,6 +176,63 @@ export function ArcadeSettings() {
       {status.data && <Setup status={status.data} onChanged={refresh} onAddProgram={() => void addGame()} />}
       {addError && <p className="notice danger">{addError}</p>}
     </section>
+  );
+}
+
+type ViewEntry = ArcadeFilter | { maker: string; filters: ArcadeFilter[] };
+
+/** The views with each maker's consoles together, where the first of them stands (D-183). */
+function groupViews(filters: ArcadeFilter[]): ViewEntry[] {
+  const out: ViewEntry[] = [];
+  for (const filter of filters) {
+    const maker = CONSOLE_MAKERS.find(([, keys]) => keys.includes(filter));
+    const together = maker ? filters.filter((f) => maker[1].includes(f)) : [];
+    if (!maker || together.length < 2) out.push(filter);
+    else if (together[0] === filter) out.push({ maker: maker[0], filters: together });
+  }
+  return out;
+}
+
+/** A maker's consoles, in their order inside its group: dragged or moved with the arrows, each one shown or not. */
+function MakerConsoles({
+  maker,
+  filters,
+  hidden,
+  onArrange,
+  onShow,
+}: {
+  maker: string;
+  filters: ArcadeFilter[];
+  hidden: ArcadeFilter[];
+  onArrange: (maker: string, filters: ArcadeFilter[]) => void;
+  onShow: (filter: ArcadeFilter, shown: boolean) => void;
+}) {
+  const order = useReorder((from, to) => onArrange(maker, arrayMove(filters, from, to)));
+  return (
+    <ul ref={order.listRef} className="category-list maker-consoles">
+      {filters.map((filter, index) => {
+        const off = hidden.includes(filter);
+        const label = FILTER_LABELS[filter];
+        return (
+          <li key={filter} className={off ? "hidden" : undefined} data-reorder style={order.style(index)}>
+            <span {...order.handle(index)} aria-label={`Drag ${label}`}>
+              <GripVertical size={16} />
+            </span>
+            <LogoMark name={filter} className="setup-logo" />
+            <span className="label">
+              <strong>{label}</strong>
+            </span>
+            <button type="button" className="icon-btn" aria-label={`Move ${label} up`} disabled={index === 0} onClick={() => onArrange(maker, arrayMove(filters, index, index - 1))}>
+              <ArrowUp size={15} />
+            </button>
+            <button type="button" className="icon-btn" aria-label={`Move ${label} down`} disabled={index === filters.length - 1} onClick={() => onArrange(maker, arrayMove(filters, index, index + 1))}>
+              <ArrowDown size={15} />
+            </button>
+            <Switch checked={!off} label={`Show ${label}`} onChange={(shown) => onShow(filter, shown)} />
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

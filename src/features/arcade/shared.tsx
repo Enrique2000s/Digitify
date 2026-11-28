@@ -1,9 +1,10 @@
+import { useSharpArtwork, coverViewOf, framedStyle } from "../../components/common";
+import { pickPrograms } from "./ProgramPicker";
 import { useEffect, useMemo, useState } from "react";
 import { BadgeCheck, Heart } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { api, ARCADE_CONSOLES, artworkUrl, errorText, onLinux, type ArcadeConsole, type ArcadeGame, type ArcadePlatform, type ArcadeScanReport, type ArcadeStatus, type ArcadeStore } from "../../lib/api";
+import { api, ARCADE_CONSOLES, errorText, onLinux, type ArcadeConsole, type ArcadeGame, type ArcadePlatform, type ArcadeScanReport, type ArcadeStatus, type ArcadeStore } from "../../lib/api";
 import { plural } from "../../lib/format";
 import { usePreferences, type ArcadeFilter, type ArcadePreferences } from "../../lib/preferences";
 import { hasPlatformLogo, PlatformLogo } from "./logos";
@@ -91,7 +92,9 @@ export const STORE_NAMES: Record<ArcadeStore, string> = {
  *  jewel cases and handheld boxes about square, PC capsules 2:3. */
 /** The shape of a store's own cover art (D-149): Steam's library capsules are 600 × 900, Epic's
  *  (and Heroic's) 3 : 4, GOG's vertical covers 342 × 482; the others as Steam's. */
-const STORE_ASPECT: Partial<Record<ArcadeStore, number>> = { epic: 0.75, heroic: 0.75, gog: 0.71 };
+// Epic's (and Heroic's) games have the same box as Steam's and the other PC games' (D-184), their
+// launcher's taller art filling it.
+const STORE_ASPECT: Partial<Record<ArcadeStore, number>> = { gog: 0.71 };
 
 /** A game's box shape: its store's cover for a PC game, its console's box for the others. */
 export function gameAspect(game: Pick<ArcadeGame, "platform" | "store">): number {
@@ -254,13 +257,49 @@ export function filledFilters(games: ArcadeGame[] | undefined): Set<ArcadeFilter
   return filled;
 }
 
+/**
+ * Steam's hours by themselves (D-183): with the option on (Emulators & folders › Launchers › Steam,
+ * the default), the time Steam records comes in a moment after Digitify opens and every ten minutes
+ * after, the same way "Use Steam's hours" brings it in by hand (only ever up to Steam's total).
+ */
+export function SteamHoursAuto() {
+  const { preferences } = usePreferences();
+  const queryClient = useQueryClient();
+  const on = preferences.arcade.steamHoursAuto;
+  useEffect(() => {
+    if (!on) return;
+    const bring = () =>
+      void api
+        .arcadeSteamHoursApply()
+        .then((changed) => {
+          if (changed > 0) {
+            void queryClient.invalidateQueries({ queryKey: ["arcade-games"] });
+            void queryClient.invalidateQueries({ queryKey: ["arcade-steam-hours"] });
+            void queryClient.invalidateQueries({ queryKey: ["stats"] });
+          }
+        })
+        .catch(() => {});
+    const first = window.setTimeout(bring, 15_000);
+    const every = window.setInterval(bring, 10 * 60_000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(every);
+    };
+  }, [on, queryClient]);
+  return null;
+}
+
 /** The views in their order: on this system, hidden ones left out, PC and ROM combined if asked,
  *  and (given `filled`) only the store and console views with games. */
 export function arcadeFilters(arcade: ArcadePreferences, withHidden = false, filled: Set<ArcadeFilter> | null = null): ArcadeFilter[] {
   const out: ArcadeFilter[] = [];
+  // All games stands in for PC games and ROM games (D-183): one or the other two, never all three.
+  const allGames = !arcade.hiddenFilters.includes("all");
   for (const filter of arcade.filterOrder) {
     if (!filterAvailable(filter)) continue;
-    if (filled && !ALWAYS.includes(filter) && !filled.has(filter)) continue;
+    if (filter === "all" && !allGames) continue;
+    if ((filter === "all-pc" || filter === "all-roms") && allGames) continue;
+    if (filled && !arcade.showEmptyViews && !ALWAYS.includes(filter) && !filled.has(filter)) continue;
     if (!withHidden && arcade.hiddenFilters.includes(filter)) continue;
     out.push(filter);
   }
@@ -378,10 +417,9 @@ export function matchingGames(games: ArcadeGame[] | undefined, q: string): Arcad
  * Adds a PC game by its program (D-107): asks for the program, adds it, and gives its id (null when
  * nothing was chosen). From Arcade, Emulators & folders and Home's Add menu (D-124).
  */
+/** Adds games by their program (D-183): the list of programs on this computer to pick from, or Browse…; the first added. */
 export async function addProgramGame(downloadCovers: boolean): Promise<number | null> {
-  const path = await openDialog({ multiple: false, title: "Choose the game's program", filters: onLinux ? undefined : [{ name: "Programs", extensions: ["exe"] }] });
-  if (typeof path !== "string") return null;
-  return api.arcadeAddProgram(path, downloadCovers);
+  return pickPrograms(downloadCovers);
 }
 
 /** Starting a game, with its error (a missing emulator, a moved file) kept to show. */
@@ -427,26 +465,38 @@ export function lastPlayed(at: string | null): string | null {
 export function GameCover({ game, size = "thumb", fill = false }: { game: ArcadeGame; size?: "thumb" | "cover"; fill?: boolean }) {
   const [failed, setFailed] = useState(false);
   const [whole, setWhole] = useState(false);
+  // Sharp at any size (D-183): the full-size art once the cover is drawn bigger than the small copy.
+  const sharp = useSharpArtwork(game.coverKey, size);
   useEffect(() => {
     setFailed(false);
     setWhole(false);
   }, [game.coverKey]);
   if (game.coverKey && !failed) {
-    const src = artworkUrl(game.coverKey, size);
+    const src = sharp.src!;
+    // Framed as adjusted (D-184): filling the box, zoomed and moved as chosen.
+    const view = coverViewOf(game);
+    if (view) {
+      return (
+        <span className="arcade-cover-img cover-view">
+          <img ref={sharp.ref} src={src} alt="" decoding="async" draggable={false} style={framedStyle(view)} onError={() => setFailed(true)} />
+        </span>
+      );
+    }
     if (whole) {
       return (
         <span className="arcade-cover-whole">
           <img className="arcade-cover-back" src={src} alt="" aria-hidden draggable={false} />
-          <img className="arcade-cover-img" src={src} alt="" decoding="async" draggable={false} onError={() => setFailed(true)} />
+          <img ref={sharp.ref} className="arcade-cover-img" src={src} alt="" decoding="async" draggable={false} onError={() => setFailed(true)} />
         </span>
       );
     }
     const measure = (event: React.SyntheticEvent<HTMLImageElement>) => {
-      if (fill) return;
+      // The launcher's own art fills the box, as Steam's does, never shown whole with bands (D-184).
+      if (fill || game.store === "epic" || game.store === "heroic") return;
       const { naturalWidth: width, naturalHeight: height } = event.currentTarget;
       if (width > 0 && height > 0) setWhole(Math.abs(width / height / gameAspect(game) - 1) > 0.06);
     };
-    return <img className="arcade-cover-img" src={src} alt="" loading="lazy" decoding="async" draggable={false} onLoad={measure} onError={() => setFailed(true)} />;
+    return <img ref={sharp.ref} className="arcade-cover-img" src={src} alt="" loading="lazy" decoding="async" draggable={false} onLoad={measure} onError={() => setFailed(true)} />;
   }
   return (
     <span className="arcade-cover-blank" data-platform={game.platform} data-store={game.store ?? undefined}>

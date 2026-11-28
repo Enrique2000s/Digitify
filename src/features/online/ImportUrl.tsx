@@ -379,13 +379,19 @@ export function OnlineQueuePanel() {
   const initial = useQuery({ queryKey: ["online-queue"], queryFn: api.onlineQueue });
   const [jobs, setJobs] = useState<OnlineJob[]>([]);
   const [open, setOpen] = useState(true);
+  // Once everything is done the corner clears by itself (D-183): soon when all went well, a little
+  // later when something failed. The history stays in the title bar's Downloads button.
+  const [away, setAway] = useState(false);
   useEffect(() => {
     if (initial.data) setJobs(initial.data);
   }, [initial.data]);
   useEffect(() => {
     const stop = listen<OnlineJob[]>("online-queue", ({ payload }) => {
       setJobs(payload);
-      if (payload.some((job) => job.state === "pending" || job.state === "working")) setOpen(true);
+      if (payload.some((job) => job.state === "pending" || job.state === "working")) {
+        setOpen(true);
+        setAway(false);
+      }
     });
     return () => void stop.then((unlisten) => unlisten());
   }, []);
@@ -394,7 +400,13 @@ export function OnlineQueuePanel() {
   useEffect(() => {
     if (finishedCount) libraryChanged(queryClient);
   }, [finishedCount, queryClient]);
-  if (jobs.length === 0) return null;
+  const anyFailed = jobs.some((job) => job.state === "failed");
+  useEffect(() => {
+    if (jobs.length === 0 || running.length > 0) return;
+    const timer = window.setTimeout(() => setAway(true), anyFailed ? 12_000 : 6_000);
+    return () => window.clearTimeout(timer);
+  }, [jobs.length, running.length, anyFailed]);
+  if (jobs.length === 0 || away) return null;
   const failed = jobs.filter((job) => job.state === "failed").length;
   const finished = jobs.length - running.length;
   const fraction = jobs.length ? (finished + running.reduce((sum, job) => sum + (job.progress ?? 0), 0)) / jobs.length : 0;

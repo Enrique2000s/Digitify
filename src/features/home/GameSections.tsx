@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { Marquee } from "../../components/Marquee";
-import { Link, useNavigate } from "@tanstack/react-router";
-import { Gamepad2, Info, Play } from "lucide-react";
+import { RowScroller } from "../../components/RowScroller";
+import { Link } from "@tanstack/react-router";
+import { Gamepad2, Play } from "lucide-react";
 import type { ArcadeGame, TileCover } from "../../lib/api";
 import { artworkUrl } from "../../lib/api";
 import { consoleOf, GameBadge, GameMarks, GameCover, lastPlayed, gameAspect, playTime, useArcade, useLaunch } from "../arcade/shared";
@@ -25,7 +26,7 @@ export function useHomeGames() {
     .filter((g) => g.coverKey)
     .sort((a, b) => (b.lastPlayedAt ?? b.addedAt).localeCompare(a.lastPlayedAt ?? a.addedAt))
     .slice(0, 15)
-    .map((g) => ({ key: g.coverKey!, color: g.coverColor, handler: "book" }));
+    .map((g) => ({ key: g.coverKey!, color: g.coverColor, handler: "book", box: gameAspect(g) }));
   return { count: list.length, recent, favorites, featured, covers, starting, running: status.data?.running ?? null, loaded: games.isSuccess };
 }
 
@@ -71,53 +72,46 @@ export function GameRow({ title, games, running, starting }: { title: ReactNode;
           {error ?? `Starting ${startingHere!.title} through ${starting!.store}…`}
         </p>
       )}
-      <div className="row-scroller home-games">
+      <RowScroller className="home-games">
         {games.map((game) => (
           <GameCard key={game.id} game={game} running={running === game.id} onPlay={() => void launch(game)} />
         ))}
-      </div>
+      </RowScroller>
     </section>
   );
 }
 
-/** "Game of the day": one of Arcade's games, big, like the library's Featured today. */
+/**
+ * "Game of the day": one of Arcade's games, big, like the library's Featured today. The whole card
+ * opens its panel in Arcade (D-184), as Big Picture opens its screen; its box carries its badge and
+ * marks as in Arcade.
+ */
 export function FeaturedGame({ game, running }: { game: ArcadeGame; running: boolean }) {
-  const { launch, error } = useLaunch();
-  const navigate = useNavigate();
   const aspect = gameAspect(game);
   const when = lastPlayed(game.lastPlayedAt);
   return (
-    <section className="section" aria-label="Game of the day">
-      <div className="featured-card" style={game.coverColor ? { ["--tint" as string]: game.coverColor } : undefined}>
-        {game.coverKey && (
-          <div className="featured-backdrop" aria-hidden>
-            <img src={artworkUrl(game.coverKey, "cover")} alt="" />
-          </div>
-        )}
-        <Link to="/arcade" search={{ game: game.id }} className="featured-cover" style={{ aspectRatio: aspect, height: aspect > 1 ? 104 : undefined }} tabIndex={-1} data-blip>
-          <GameCover game={game} size="cover" />
-        </Link>
-        <div className="featured-body">
-          <span className="featured-eyebrow-row">
-            <span className="featured-eyebrow">
-              <Gamepad2 size={16} strokeWidth={2.6} aria-hidden /> Game of the day
-            </span>
-            <span className="section-source">(Arcade)</span>
-          </span>
-          <h2 className="display featured-title">{game.title}</h2>
-          <p className="featured-sub">{consoleOf(game)}</p>
-          <p className="featured-facts">{game.playSeconds > 0 ? `${playTime(game.playSeconds)} played${when ? ` · last ${when}` : ""}` : "Not played yet"}</p>
-          {error && <p className="home-game-note error" role="alert">{error}</p>}
-          <div className="featured-actions">
-            <button type="button" className="btn btn-primary" disabled={running} onClick={() => void launch(game)}>
-              <Play size={17} /> {running ? "Playing" : "Play"}
-            </button>
-            <button type="button" className="btn" onClick={() => void navigate({ to: "/arcade", search: { game: game.id } })}>
-              <Info size={17} /> Details
-            </button>
-          </div>
+    <Link to="/arcade" search={{ game: game.id }} className="featured-card featured-link" aria-label={`Game of the day: ${game.title}`} style={game.coverColor ? { ["--tint" as string]: game.coverColor } : undefined} data-blip>
+      {game.coverKey && (
+        <div className="featured-backdrop" aria-hidden>
+          <img src={artworkUrl(game.coverKey, "cover")} alt="" />
         </div>
+      )}
+      <div className="featured-cover" style={{ aspectRatio: aspect, height: aspect > 1 ? 104 : undefined }}>
+        <GameCover game={game} size="cover" />
+        <GameBadge game={game} />
+        <GameMarks game={game} />
       </div>
-    </section>
+      <div className="featured-body">
+        <span className="featured-eyebrow-row">
+          <span className="featured-eyebrow">
+            <Gamepad2 size={16} strokeWidth={2.6} aria-hidden /> Game of the day
+          </span>
+          <span className="section-source">(Arcade)</span>
+        </span>
+        <h2 className="display featured-title">{game.title}</h2>
+        <p className="featured-sub">{consoleOf(game)}</p>
+        <p className="featured-facts">{running ? "Playing now" : game.playSeconds > 0 ? `${playTime(game.playSeconds)} played${when ? ` · last ${when}` : ""}` : "Not played yet"}</p>
+      </div>
+    </Link>
   );
 }

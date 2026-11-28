@@ -699,6 +699,46 @@ html.bp-cursor-on * {
   -webkit-box-orient: vertical;
 }
 
+/* The Spotlight (D-184): Featured today and Game of the day side by side, of one height, as on Home. */
+.bp-spotlight {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+}
+.bp-spotlight.both {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.bp-spotlight .bp-featured {
+  height: 100%;
+  min-width: 0;
+}
+.bp-spotlight.both .bp-featured-art {
+  height: 210px;
+}
+.bp-spotlight.both .bp-featured-body strong {
+  font-size: 30px;
+}
+.bp-spotlight.both .bp-featured-description {
+  -webkit-line-clamp: 2;
+  font-size: 17px;
+}
+.bp-featured-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--bp-ring);
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.bp-featured-eyebrow .section-source {
+  color: var(--bp-muted);
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 /* Home's statistics, in Big Picture's colors and sizes. */
 .bp-stats .stats.panel {
   --panel: var(--bp-panel);
@@ -1711,4 +1751,330 @@ html.bp-mode .pv-side {
   border-radius: 18px;
   background: var(--bp-panel);
   font-size: 18px;
+}
+
+/* D-184: the whole profile in Big Picture — level, chips, the year, the library, consoles and
+   launchers, most listened, ratings and achievements, each block selectable. */
+.bp-profile-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.bp-profile-chips .bp-profile-since {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bp-profile-level .profile-level {
+  max-width: 620px;
+  margin-top: 14px;
+  --text: var(--bp-text);
+  --muted: var(--bp-muted);
+}
+.bp-profile-level .profile-level-badge {
+  font-size: 18px;
+  padding: 6px 16px;
+}
+.bp-profile-level .profile-level-track {
+  height: 14px;
+}
+.bp-profile-level .profile-level-xp {
+  font-size: 17px;
+}
+.bp-profile-figures {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.bp-profile-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin: 0 6px;
+}
+.bp-profile-panel {
+  min-width: 0;
+  padding: 24px 28px;
+  border-radius: 26px;
+  background: var(--bp-panel);
+  outline: none;
+}
+.bp-profile-panel h2 {
+  margin: 0 0 10px;
+  font-size: 26px;
+  font-weight: 900;
+}
+.bp-profile-panel h3 {
+  margin: 16px 0 8px;
+  color: var(--bp-muted);
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.bp-profile-note {
+  margin: 0;
+  color: var(--bp-muted);
+  font-size: 18px;
+  font-weight: 700;
+}
+.bp-profile-bars {
+  display: grid;
+  gap: 14px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.bp-profile-bars li {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  font-size: 18px;
+  font-weight: 800;
+}
+.bp-profile-bar-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.bp-profile-bar-track {
+  height: 14px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bp-panel-strong);
+}
+.bp-profile-bar-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+.bp-profile-bar-value {
+  color: var(--bp-muted);
+}
+.bp-profile-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.bp-profile-categories .bp-button strong {
+  margin-right: 2px;
+}
+.bp-profile-systems {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bp-profile-systems li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 14px;
+  background: var(--bp-panel-strong);
+  font-size: 17px;
+  font-weight: 800;
+}
+.bp-profile-systems li span {
+  color: var(--bp-muted);
+}
+.bp-profile-systems .setup-logo {
+  width: 24px;
+  height: 24px;
+}
+.bp-profile-tracks {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bp-profile-entry {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--bp-panel-strong);
+  color: var(--bp-text);
+  font: inherit;
+  font-size: 18px;
+  text-align: left;
+  cursor: pointer;
+}
+.bp-profile-rank {
+  flex: none;
+  width: 28px;
+  color: var(--bp-ring);
+  font-size: 22px;
+  font-weight: 900;
+  text-align: center;
+}
+.bp-profile-entry-art {
+  flex: none;
+  width: 58px;
+  height: 58px;
+  overflow: hidden;
+  border-radius: 12px;
+}
+.bp-profile-entry-art .cover-img,
+.bp-profile-entry-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.bp-profile-entry-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  font-weight: 800;
+}
+.bp-profile-entry-text > span:last-child,
+.bp-profile-entry-end {
+  color: var(--bp-muted);
+  font-size: 16px;
+  font-weight: 700;
+}
+.bp-profile-entry-end {
+  flex: none;
+}
+.bp-profile-ratings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 6px;
+}
+.bp-profile-stars {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  color: #f2b33d;
+}
+.bp-profile-panel .profile-achievement-meter {
+  --track: var(--bp-panel-strong);
+  --bar: var(--accent-bright);
+  height: 14px;
+}
+.bp-profile-medal small {
+  display: block;
+  color: var(--bp-muted);
+  font-size: 15px;
+  font-weight: 700;
+}
+.bp-profile-more {
+  margin: 16px 6px 0;
+}
+
+/* D-184: Settings › Controller inside Big Picture. */
+.bp-controller {
+  display: grid;
+  gap: 26px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.bp-screen-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  font-size: 44px;
+  font-weight: 900;
+}
+.bp-settings-panel {
+  padding: 26px 30px;
+  border-radius: 28px;
+  background: var(--bp-panel);
+  outline: none;
+}
+.bp-settings-panel h2 {
+  margin: 0 0 12px;
+  font-size: 28px;
+  font-weight: 900;
+}
+.bp-settings-panel h3 {
+  margin: 22px 0 4px;
+  font-size: 22px;
+  font-weight: 900;
+}
+.bp-setting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 30px;
+  padding: 16px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.bp-setting-text {
+  display: grid;
+  gap: 4px;
+  max-width: 640px;
+}
+.bp-setting-text strong {
+  font-size: 22px;
+  font-weight: 900;
+}
+.bp-setting-text span,
+.bp-setting-note {
+  color: var(--bp-muted);
+  font-size: 17px;
+  font-weight: 700;
+}
+.bp-setting .bp-choice {
+  align-items: center;
+}
+.bp-round-button {
+  padding: 14px;
+}
+.bp-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.bp-stepper-value {
+  min-width: 90px;
+  font-size: 24px;
+  font-weight: 900;
+  text-align: center;
+}
+.bp-controller-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+.bp-controller-action {
+  justify-content: space-between;
+  border-radius: 20px;
+  padding: 16px 22px;
+}
+.bp-controller-action b {
+  color: var(--bp-ring);
+  font-weight: 900;
+}
+.bp-controller-action.choosing {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.bp-controller-action.choosing b {
+  color: inherit;
+}
+/* The live test, in Big Picture's colours. */
+.bp-controller-test {
+  --panel: var(--bp-panel);
+  --raised: var(--bp-panel-strong);
+  --line: rgba(255, 255, 255, 0.12);
+  --text: var(--bp-text);
+  --muted: var(--bp-muted);
+  color: var(--bp-text);
+  font-size: 18px;
+}
+.bp-controller-test-body h2 {
+  margin: 0 0 8px;
+}
+.bp-controller-listen {
+  margin: 14px 0;
 }

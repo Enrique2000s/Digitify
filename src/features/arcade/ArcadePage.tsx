@@ -1,9 +1,10 @@
+import { useArrival } from "../../lib/arrival";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Marquee } from "../../components/Marquee";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { DropdownMenu } from "radix-ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { Dices, Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Joystick, Layers, ListChecks, LoaderCircle, Play, Search, Settings2, X } from "lucide-react";
+import { Dices, Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Joystick, Layers, ListChecks, LoaderCircle, Play, Search, Settings2, X, LayoutGrid } from "lucide-react";
 import { api, errorText, onLinux, type ArcadeGame } from "../../lib/api";
 import type { ArcadeFilter } from "../../lib/preferences";
 import { usePreferences } from "../../lib/preferences";
@@ -110,20 +111,24 @@ export function ArcadePage() {
   // (a dropdown opens then and takes the click), and it closes when the pointer is let go: closing
   // sooner would move the page up under a dropdown just opened and put an option under the pointer.
   const setupToggle = useRef<HTMLButtonElement>(null);
+  // Laid out as Library is (D-184): the title, the views and the tools stay where they are and only
+  // what's under them scrolls; they come in together, once, when Arcade opens.
+  const arriving = useArrival("arcade-chrome");
   // It opens and closes with a short animation (D-178): it stays a moment as it closes (not without
   // motion: performance mode and animations off close it at once).
+  // Worked out while drawing (D-183), not in an effect after it: an effect let one frame through
+  // without the panel before its closing animation began, so it blinked.
   const [setupLeaving, setSetupLeaving] = useState(false);
-  const setupWasShown = useRef(showSetup);
+  const [setupWasShown, setSetupWasShown] = useState(showSetup);
+  if (setupWasShown !== showSetup) {
+    setSetupWasShown(showSetup);
+    setSetupLeaving(!showSetup && motionAllowed());
+  }
   useEffect(() => {
-    const was = setupWasShown.current;
-    setupWasShown.current = showSetup;
-    if (was && !showSetup && motionAllowed()) {
-      setSetupLeaving(true);
-      const timer = window.setTimeout(() => setSetupLeaving(false), 260);
-      return () => window.clearTimeout(timer);
-    }
-    setSetupLeaving(false);
-  }, [showSetup]);
+    if (!setupLeaving) return;
+    const timer = window.setTimeout(() => setSetupLeaving(false), 260);
+    return () => window.clearTimeout(timer);
+  }, [setupLeaving]);
   useEffect(() => {
     if (!showSetup) return;
     const CONTROL = "button, a[href], input, select, textarea, summary, [role='button'], [role='tab'], [role='option'], [role='menuitem'], [role='menuitemradio'], [role='menuitemcheckbox'], [role='combobox'], [role='switch'], [role='checkbox'], [role='radio']";
@@ -242,8 +247,9 @@ export function ArcadePage() {
   const unseenGame = notSeen != null ? games.data?.find((g) => g.id === notSeen) : undefined;
 
   return (
-    <div className="page arcade-page">
-      <header className="arcade-head">
+    <div className={`arcade-view${selecting ? " selecting" : ""}`}>
+      <div className="arcade-chrome">
+      <header className={`arcade-head${arriving ? " arriving" : ""}`}>
         <div className="arcade-head-title">
           <span className="arcade-logo" aria-hidden>
             <Joystick size={26} strokeWidth={2.3} />
@@ -259,16 +265,61 @@ export function ArcadePage() {
               <LoaderCircle size={16} className="spin" /> Looking for games…
             </span>
           )}
-          {/* Goes to the collections' own screen (D-149), which has its Back to the games. */}
-          <button type="button" className="btn arcade-collections-button" aria-current={board !== "games" ? "page" : undefined} onClick={() => board !== "collections" && setBoard("collections")}>
-            <Layers size={16} /> Collections
-          </button>
+          {/* Collections' own screen (D-149); on it, and inside a collection, the same place goes back
+              to all the games (D-184). */}
+          {board !== "games" ? (
+            <button type="button" className="btn arcade-collections-button" onClick={() => setBoard("games")}>
+              <LayoutGrid size={16} /> All games
+            </button>
+          ) : (
+            <button type="button" className="btn arcade-collections-button" aria-current={board !== "games" ? "page" : undefined} onClick={() => setBoard("collections")}>
+              <Layers size={16} /> Collections
+            </button>
+          )}
           <button ref={setupToggle} type="button" className="btn glow-when-on" aria-pressed={showSetup} onClick={() => setSetup(!showSetup)}>
             <Settings2 size={16} /> Emulators & folders
           </button>
         </div>
       </header>
+      {board !== "collections" && (
+        <div className={`arcade-toolbar${arriving ? " arriving" : ""}`}>
+          {collection ? (
+            <CollectionBar collection={collection} count={shown.length} games={games.data} onBack={() => setBoard("collections")} />
+          ) : (
+            <ViewStrip filters={view.filters} current={view.current} onChoose={view.choose} games={games.data} />
+          )}
+          {/* Find, Size, Select and Sort: the same tools, in the same order, as the Library's (D-044). */}
+          <div className="view-tools">
+          <label className="arcade-search">
+            <Search size={15} aria-hidden />
+            <input type="search" placeholder="Find a game" value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Find a game" />
+          </label>
+          <label className="arcade-size">
+            <span>Size</span>
+            <CardSizeSlider value={preferences.arcadeCardSize} onChange={(arcadeCardSize) => update({ arcadeCardSize })} />
+          </label>
+          {shown.length > 1 && (
+            <button type="button" className="btn btn-sm surprise-btn" title="Surprise me: a game from here you haven't completed, at random" onClick={surprise}>
+              <Dices size={15} /> Surprise me
+            </button>
+          )}
+          <button type="button" className="btn btn-sm glow-when-on" aria-pressed={selecting} onClick={() => (selecting ? stopSelecting() : setSelecting(true))}>
+            <ListChecks size={15} /> {selecting ? "Selecting" : "Select"}
+          </button>
+          <label className="arcade-sort">
+            <span>Sort</span>
+            <select value={arcade.sort} onChange={(event) => setArcade({ sort: event.target.value as typeof arcade.sort })}>
+              {SORTS.map((sort) => (
+                <option key={sort.key} value={sort.key}>{sort.label}</option>
+              ))}
+            </select>
+          </label>
+          </div>
+        </div>
+      )}
+      </div>
 
+      <div className="page arcade-page">
       {running && (
         <div className="arcade-running" role="status">
           <span className="arcade-running-dot" aria-hidden />
@@ -330,40 +381,6 @@ export function ArcadePage() {
       )}
       {board !== "collections" && (
       <div key={typeof board === "number" ? `collection-${board}` : "games"} className="arcade-stage">
-      <div className="arcade-toolbar">
-        {collection ? (
-          <CollectionBar collection={collection} count={shown.length} games={games.data} onBack={() => setBoard("collections")} />
-        ) : (
-          <ViewStrip filters={view.filters} current={view.current} onChoose={view.choose} games={games.data} />
-        )}
-        {/* Find, Size, Select and Sort: the same tools, in the same order, as the Library's (D-044). */}
-        <div className="view-tools">
-        <label className="arcade-search">
-          <Search size={15} aria-hidden />
-          <input type="search" placeholder="Find a game" value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Find a game" />
-        </label>
-        <label className="arcade-size">
-          <span>Size</span>
-          <CardSizeSlider value={preferences.cardSize} onChange={(cardSize) => update({ cardSize })} />
-        </label>
-        {shown.length > 1 && !selecting && (
-          <button type="button" className="btn btn-sm surprise-btn" title="Surprise me: a game from here you haven't completed, at random" onClick={surprise}>
-            <Dices size={15} /> Surprise me
-          </button>
-        )}
-        <button type="button" className="btn btn-sm glow-when-on" aria-pressed={selecting} onClick={() => (selecting ? stopSelecting() : setSelecting(true))}>
-          <ListChecks size={15} /> Select
-        </button>
-        <label className="arcade-sort">
-          <span>Sort</span>
-          <select value={arcade.sort} onChange={(event) => setArcade({ sort: event.target.value as typeof arcade.sort })}>
-            {SORTS.map((sort) => (
-              <option key={sort.key} value={sort.key}>{sort.label}</option>
-            ))}
-          </select>
-        </label>
-        </div>
-      </div>
       {canArrange && shown.length > 1 && <p className="arcade-hint">Drag the games into the order you like{view.current === "all" && !search.trim() && !collection ? "" : "; the others keep their places"}.</p>}
 
       {games.data && shown.length === 0 ? (
@@ -384,7 +401,8 @@ export function ArcadePage() {
         </div>
       ) : (
         <GridDragProvider value={drag}>
-          <div key={stageKey} className={`arcade-grid${selecting ? " selecting" : ""}${canArrange ? " arranging-in-place" : ""}${entering ? " entering" : ""}${bySection ? " by-section" : ""}`} style={{ ["--card" as string]: `${preferences.cardSize}px` }}>
+          <div key={stageKey} className={`arcade-grid${selecting ? " selecting" : ""}${canArrange ? " arranging-in-place" : ""}${entering ? " entering" : ""}${bySection ? " by-section" : ""}`} style={{ ["--card" as string]: `${preferences.arcadeCardSize}px` }}>
+            {!bySection && !collection && <ViewHeading view={view.current} count={shown.length} />}
             {shown.map((g, index) => (
               <Fragment key={g.id}>
                 {bySection && (index === 0 || consoleKey(shown[index - 1]) !== consoleKey(g)) && <ConsoleHeading view={consoleKey(g)} count={sectionCounts.get(consoleKey(g)) ?? 0} />}
@@ -428,12 +446,26 @@ export function ArcadePage() {
           }}
         />
       )}
+      </div>
       {game && !selecting && <GamePanel game={game} running={status.data?.running ?? null} onClose={() => setSelected(null)} onPlay={() => void launch(game)} />}
     </div>
   );
 }
 
 /** A console's or launcher's heading in the Console sort (D-149): its symbol, its name, how many games, and a line. */
+/** One line over a view's games when they aren't sorted by console (D-183): "All games", "All Xbox games"… */
+function ViewHeading({ view, count }: { view: ArcadeFilter; count: number }) {
+  const name =
+    view === "all" ? "All games" : view === "all-pc" ? "All PC games" : view === "all-roms" ? "All ROM games" : view === "others" ? "All other PC games" : `All ${FILTER_LABELS[view]} games`;
+  return (
+    <div className="arcade-section" role="heading" aria-level={2}>
+      {view === "all" || view === "all-roms" ? <Joystick size={18} className="arcade-section-logo" aria-hidden /> : <LogoMark name={view === "others" || view === "all-pc" ? "pc" : view} size={18} className="arcade-section-logo" />}
+      <span className="arcade-section-name">{name}</span>
+      <span className="count">{count.toLocaleString()}</span>
+    </div>
+  );
+}
+
 function ConsoleHeading({ view, count }: { view: ArcadeFilter; count: number }) {
   return (
     <div className="arcade-section" role="heading" aria-level={2}>
@@ -631,7 +663,9 @@ export function GameTile({ game, index, running, selecting, checked, onOpen, onP
         <strong>
           <Marquee hover text={game.title} />
         </strong>
-        <span>{game.playSeconds > 0 ? `${consoleOf(game)} · ${playTime(game.playSeconds)}` : consoleOf(game)}</span>
+        <span className="arcade-tile-sub">
+          <Marquee hover text={game.playSeconds > 0 ? `${consoleOf(game)} · ${playTime(game.playSeconds)}` : consoleOf(game)} />
+        </span>
       </div>
     </div>
   );

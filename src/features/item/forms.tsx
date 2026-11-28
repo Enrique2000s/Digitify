@@ -115,6 +115,7 @@ export function EditItemDialog({ item, open, onOpenChange }: { item: ItemDetail;
       ...Object.fromEntries(Object.values(METADATA_FIELDS).flat().map(({ key }) => [key, str(metadata[key])])),
       readingDirection: str(metadata.readingDirection),
       discFormat: str(metadata.discFormat),
+      kind: str(metadata.kind) || (item.handler === "comic" ? "comic" : "book"),
     });
     setError(null);
     // Only when the dialog opens: changes made meanwhile (the appearance, applied at once) must not
@@ -122,10 +123,11 @@ export function EditItemDialog({ item, open, onOpenChange }: { item: ItemDetail;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, item.id]);
 
-  const handler = categoryInfo?.handler ?? item.handler;
+  // In Books, what an item is (D-183) decides its details: a comic or manga reads as a comic.
+  const handler = category === "books" ? (fields.kind === "comic" || fields.kind === "manga" ? "comic" : "book") : (categoryInfo?.handler ?? item.handler);
   // A series' own details: its episodes are edited below, so the per-episode fields don't apply (D-174).
   const metadataFields = isSeries(item) ? [] : METADATA_FIELDS[handler];
-  const defaultDirection = categoryInfo?.settings.readingDirection ?? (category === "manga" ? "rtl" : "ltr");
+  const defaultDirection = categoryInfo?.settings.readingDirection ?? (fields.kind === "manga" ? "rtl" : "ltr");
 
   const save = async () => {
     const metadata: Record<string, unknown> = { ...(item.metadata ?? {}) };
@@ -134,6 +136,7 @@ export function EditItemDialog({ item, open, onOpenChange }: { item: ItemDetail;
       if (value === null) delete metadata[key];
       else metadata[key] = value;
     }
+    if (category === "books") metadata.kind = fields.kind || "book";
     if (handler === "comic") metadata.readingDirection = fields.readingDirection || defaultDirection;
     if (category === "video" && fields.discFormat) metadata.discFormat = fields.discFormat;
     else delete metadata.discFormat;
@@ -205,6 +208,15 @@ export function EditItemDialog({ item, open, onOpenChange }: { item: ItemDetail;
             </Field>
           ))}
         </div>
+      )}
+      {category === "books" && (
+        <Field label="What it is" hint="A book, a comic or a manga: it's tagged so on its cover, and a manga reads right to left.">
+          <select className="select" value={fields.kind || "book"} onChange={(e) => setFields({ ...fields, kind: e.target.value, ...(e.target.value === "manga" && !fields.readingDirection ? { readingDirection: "rtl" } : {}) })}>
+            <option value="book">Book</option>
+            <option value="comic">Comic</option>
+            <option value="manga">Manga</option>
+          </select>
+        </Field>
       )}
       {handler === "comic" && (
         <Field label="Reading direction">

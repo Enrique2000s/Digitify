@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useRef, useState, type CSSProperties, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import { UserRound } from "lucide-react";
 import type { Profile, ProfileView } from "../../lib/api";
 import { initials } from "./data";
@@ -62,7 +62,28 @@ export function ProfileBanner({ profile }: { profile: Profile | undefined }) {
  * Moving a picture in its frame (D-150): drag it to put another part in the middle, the slider (or
  * the wheel) to zoom in. Gives the view as it changes.
  */
-export function PictureAdjuster({ picture, view, onChange, kind, shape }: { picture: string; view: ProfileView; onChange: (view: ProfileView) => void; kind: "avatar" | "banner"; shape?: string }) {
+export function PictureAdjuster({
+  picture,
+  view,
+  onChange,
+  kind,
+  shape,
+  overlay,
+  aspect,
+  round,
+}: {
+  picture: string;
+  view: ProfileView;
+  onChange: (view: ProfileView) => void;
+  /** A tile is a Home Shortcut's screen (D-184), its own shape; a cover, an item's or a game's box (`aspect`). */
+  kind: "avatar" | "banner" | "tile" | "cover";
+  shape?: string;
+  /** What's drawn over the picture where it's used (a shortcut's covers), not in the way of dragging. */
+  overlay?: ReactNode;
+  /** A cover's shape (width ÷ height), and whether it's a round CD. */
+  aspect?: number;
+  round?: boolean;
+}) {
   const frame = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<{ x: number; y: number; view: ProfileView } | null>(null);
   const clamp = (v: number, low: number, high: number) => Math.min(high, Math.max(low, v));
@@ -78,8 +99,9 @@ export function PictureAdjuster({ picture, view, onChange, kind, shape }: { pict
     <div className="picture-adjuster">
       <div
         ref={frame}
-        className={`picture-adjuster-frame ${kind}`}
+        className={`picture-adjuster-frame ${kind}${round ? " round" : ""}`}
         data-shape={kind === "avatar" ? shape : undefined}
+        style={kind === "cover" && aspect ? ({ aspectRatio: String(aspect), width: aspect >= 1 ? "min(100%, 560px)" : `${Math.round(400 * aspect)}px` } as CSSProperties) : undefined}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId);
           setDragging({ x: event.clientX, y: event.clientY, view });
@@ -90,6 +112,7 @@ export function PictureAdjuster({ picture, view, onChange, kind, shape }: { pict
         onWheel={(event) => onChange({ ...view, zoom: clamp(Math.round((view.zoom - event.deltaY / 600) * 100) / 100, 1, 4) })}
       >
         <img src={picture} alt="" style={viewStyle(view)} draggable={false} />
+        {overlay}
       </div>
       <label className="picture-adjuster-zoom">
         <span>Zoom</span>

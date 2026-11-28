@@ -95,10 +95,23 @@ export function Cursor({ speed, autoHide = false, mouseOnly = false }: { speed: 
       hover(true);
     }
     if (sticks.rx || sticks.ry) {
+      // Up and down scroll what scrolls up and down under the cursor, sideways what scrolls sideways
+      // (D-184): over a row of covers, up and down still scroll the page, not just the row (which
+      // only scrolls sideways), and a clipped name or cover (overflow hidden) never takes it.
       const p = position.current;
-      let element = document.elementFromPoint(p.x, p.y) as HTMLElement | null;
-      while (element && !(element.scrollHeight > element.clientHeight + 2 || element.scrollWidth > element.clientWidth + 2)) element = element.parentElement;
-      element?.scrollBy({ left: sticks.rx * 1600 * dt, top: sticks.ry * 1600 * dt, behavior: "instant" });
+      const under = document.elementFromPoint(p.x, p.y) as HTMLElement | null;
+      const scroller = (axis: "x" | "y", amount: number) => {
+        for (let e = under; e; e = e.parentElement) {
+          const style = getComputedStyle(e);
+          const overflow = axis === "y" ? style.overflowY : style.overflowX;
+          if (overflow !== "auto" && overflow !== "scroll") continue;
+          const room = axis === "y" ? (amount > 0 ? e.scrollHeight - e.clientHeight - e.scrollTop : e.scrollTop) : amount > 0 ? e.scrollWidth - e.clientWidth - e.scrollLeft : e.scrollLeft;
+          if (room > 1) return e;
+        }
+        return null;
+      };
+      if (sticks.ry) scroller("y", sticks.ry)?.scrollBy({ top: sticks.ry * 1600 * dt, behavior: "instant" });
+      if (sticks.rx) scroller("x", sticks.rx)?.scrollBy({ left: sticks.rx * 1600 * dt, behavior: "instant" });
     }
   });
 

@@ -131,6 +131,25 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   }, [playback.volume, playback.idle, playback.playlist.length, update]);
 
   const queue = useMemo(() => playback.playlist.map((path) => tracks.get(path)).filter((t): t is Track => !!t), [playback.playlist, tracks]);
+
+  // Songs removed from the library leave the queue (D-183); an empty queue stops.
+  useEffect(() => {
+    const onRemoved = (event: Event) => {
+      const removed = new Set((event as CustomEvent<number[]>).detail);
+      const { playlist } = latest.current;
+      const gone = playlist.map((path, index) => (removed.has(tracks.get(path)?.itemId ?? -1) ? index : -1)).filter((index) => index >= 0);
+      if (gone.length === 0) return;
+      if (gone.length === playlist.length) {
+        void api.musicStop().catch(() => {});
+        setPlayback(IDLE);
+        return;
+      }
+      // From the end, so the indexes still to remove don't shift.
+      for (const index of gone.reverse()) command(["playlist-remove", index]);
+    };
+    window.addEventListener("digitify:items-removed", onRemoved);
+    return () => window.removeEventListener("digitify:items-removed", onRemoved);
+  }, [tracks]);
   const current = playback.index >= 0 ? (tracks.get(playback.playlist[playback.index]) ?? null) : null;
   const active = playback.playlist.length > 0 && !playback.idle;
   useAmbientHold("media", active && !playback.paused);

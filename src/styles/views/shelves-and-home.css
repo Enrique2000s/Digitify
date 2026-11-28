@@ -468,6 +468,46 @@
 
 /* ---------------------------------------------------------------- Home: featured today */
 
+/* The Spotlight (D-184): Featured today and Game of the day as two cards of one height, side by side
+   (one above the other in a narrow window); either alone takes the whole width. */
+.home-spotlight {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: stretch;
+}
+.home-spotlight.both {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.home-spotlight .featured-card {
+  height: 100%;
+  min-width: 0;
+}
+.home-spotlight.both .featured-body {
+  align-self: stretch;
+  justify-content: center;
+}
+.home-spotlight.both .featured-description {
+  -webkit-line-clamp: 2;
+}
+.home-spotlight.both .featured-actions {
+  margin-top: auto;
+  padding-top: 6px;
+}
+@media (max-width: 1150px) {
+  .home-spotlight.both {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* Customize Home: the Spotlight's two switches. */
+.home-edit-halves {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.home-edit-half[aria-pressed="false"] {
+  opacity: 0.62;
+}
 .featured-card {
   position: relative;
   display: flex;
@@ -558,4 +598,52 @@
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 6px;
+}
+
+/* A tile's own background (D-183), and the button that changes it, shown on hover. */
+.tile-screen {
+  position: relative;
+}
+.tile-background {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+.tile-menu-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  background: rgba(10, 16, 28, 0.62);
+  color: #fff;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 160ms var(--ease);
+}
+.tile:hover .tile-menu-button,
+.tile-menu-button:focus-visible,
+.tile-menu-button[data-state="open"] {
+  opacity: 1;
+}
+.tile-menu-error {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 6px;
+  z-index: 4;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(190, 40, 50, 0.85);
+  color: #fff;
+  font-size: 11px;
 }

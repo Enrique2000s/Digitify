@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
-import { ImagePlus, Trash } from "lucide-react";
+import { ImagePlus, Move, Trash } from "lucide-react";
 import { api, artworkUrl, errorText, type CoverShape, type ItemDetail } from "../../lib/api";
 import { coverShapeOf, SHAPE_ASPECT, usePreferences } from "../../lib/preferences";
 import { libraryChanged } from "../../lib/queries";
-import { Cover } from "../../components/common";
+import { Cover, coverViewOf } from "../../components/common";
+import { CoverAdjustDialog } from "../../components/CoverAdjust";
 
 const COVER_COLORS = ["#1592d0", "#3fae49", "#f2a516", "#ef5f4f", "#d94f8c", "#8a63d2", "#2b3442", "#c9ced6"];
 const IMAGES = ["jpg", "jpeg", "png", "webp", "gif", "bmp"];
@@ -19,6 +20,7 @@ export function ItemAppearance({ item }: { item: ItemDetail }) {
   const queryClient = useQueryClient();
   const { preferences } = usePreferences();
   const [error, setError] = useState<string | null>(null);
+  const [adjusting, setAdjusting] = useState(false);
   const metadata = item.metadata as Record<string, unknown>;
   const backdrop = metadata.backdropKey as string | undefined;
   const ownShape = metadata.coverShape as CoverShape | undefined;
@@ -58,6 +60,17 @@ export function ItemAppearance({ item }: { item: ItemDetail }) {
 
   return (
     <section className="appearance" aria-label="Appearance">
+      {adjusting && item.coverKey && (
+        <CoverAdjustDialog
+          title={`${item.title}: its cover`}
+          coverKey={item.coverKey}
+          aspect={SHAPE_ASPECT[shape]}
+          round={shape === "disc"}
+          view={coverViewOf(item)}
+          onSave={(view) => api.itemSetCoverView(item.id, view).then(() => libraryChanged(queryClient))}
+          onClose={() => setAdjusting(false)}
+        />
+      )}
       <div className="appearance-head">
         <span className="appearance-title">Appearance</span>
         <span className="muted">changes here show at once</span>
@@ -73,6 +86,12 @@ export function ItemAppearance({ item }: { item: ItemDetail }) {
               <button type="button" className="btn btn-sm" onClick={() => void pick("Choose artwork").then((path) => (path ? run(() => api.itemSetCover(item.id, path)) : undefined))}>
                 <ImagePlus size={14} /> Change artwork…
               </button>
+              {/* Framed as you like (D-184), as a profile picture is. */}
+              {item.coverKey && (
+                <button type="button" className="btn btn-sm" onClick={() => setAdjusting(true)}>
+                  <Move size={14} /> Adjust…
+                </button>
+              )}
             </div>
           )}
           {shapes && (

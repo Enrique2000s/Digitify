@@ -161,6 +161,16 @@ pub fn profile_set_frame(app: AppHandle, shape: String, ring: String) -> AppResu
 
 /// A picture of the user's (`path`) or a cover from the library (`artwork`, its key) as the
 /// profile's picture or banner, cut to its shape.
+/// A picture of the user's kept in the library's artwork store (D-183: a Home tile's background); its key.
+#[tauri::command]
+pub async fn artwork_import(state: State<'_, AppState>, path: String) -> AppResult<String> {
+    crate::library::with_library(&state, move |library| {
+        let bytes = std::fs::read(&path).map_err(|e| AppError::msg(format!("That picture couldn't be read: {e}")))?;
+        Ok(crate::artwork::store(&library.folder, &bytes)?.key)
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn profile_set_image(app: AppHandle, state: State<'_, AppState>, kind: String, path: Option<String>, artwork: Option<String>) -> AppResult<()> {
     let (name, size) = kind_of(&kind)?;

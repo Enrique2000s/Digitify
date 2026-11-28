@@ -79,7 +79,18 @@ pub async fn watched_set_category(state: State<'_, AppState>, id: i64, category:
             Ok(())
         })
     })
-    .await
+    .await?;
+    // A new category takes what the old one skipped (D-183): those files are tried again.
+    forget_tried();
+    Ok(())
+}
+
+/// Files the importer skipped are tried again at the next look (D-183): after a folder's category
+/// changes, or when asked to look now.
+fn forget_tried() {
+    if let Ok(mut tried) = TRIED.lock() {
+        *tried = None;
+    }
 }
 
 /// Stops watching a folder; what was imported from it stays.
@@ -175,6 +186,7 @@ pub fn look(app: &AppHandle) -> AppResult<usize> {
 /// Looks now (Settings' "Look now").
 #[tauri::command]
 pub async fn watched_look_now(app: AppHandle) -> AppResult<usize> {
+    forget_tried();
     crate::library::blocking(move || look(&app)).await
 }
 

@@ -90,9 +90,26 @@ export function focusFirst(root: ParentNode) {
   if (first) select(first);
 }
 
+/** The nearest ancestor that scrolls up and down, if any. */
+function scrollParent(element: HTMLElement): HTMLElement | null {
+  for (let e = element.parentElement; e; e = e.parentElement) {
+    const overflow = getComputedStyle(e).overflowY;
+    if ((overflow === "auto" || overflow === "scroll") && e.scrollHeight > e.clientHeight + 1) return e;
+  }
+  return null;
+}
+
 /**
- * Moves the selection to the nearest selectable element in a direction: the closest one ahead,
- * preferring those in line with the current one.
+ * Moves the selection to the nearest selectable element in a direction (D-184):
+ * - up and down go to the next row first (the nearest band of elements ahead), then to the one most
+ *   in line with the current one, so no row is skipped for one further on that's more in line;
+ * - elements in the same row (or column) never count as above or below (or beside), whatever their
+ *   heights, so the selection can't bounce between covers of different shapes;
+ * - after the right stick has scrolled the selection out of sight, it starts again from what's on
+ *   screen;
+ * - it never jumps past what hasn't been seen: when the next element is more than a screen away
+ *   (a tall panel between), the page scrolls toward it instead, a step at a time.
+ * Returns false when there's nothing that way.
  */
 export function moveFocus(root: HTMLElement, direction: "up" | "down" | "left" | "right", selector = FOCUSABLE): boolean {
   const list = focusables(root, selector);
@@ -103,47 +120,85 @@ export function moveFocus(root: HTMLElement, direction: "up" | "down" | "left" |
     return !!first;
   }
   const from = current.getBoundingClientRect();
+  const height = window.innerHeight;
+  // Scrolled out of sight (the right stick): the element on screen nearest the middle, toward the
+  // direction pressed.
+  if (from.bottom < 0 || from.top > height) {
+    // Only within what scrolled (the page), not the top bar that stays on screen.
+    const area = scrollParent(current);
+    let near: HTMLElement | null = null;
+    let nearest = Infinity;
+    for (const candidate of list) {
+      if (area && !area.contains(candidate)) continue;
+      const r = candidate.getBoundingClientRect();
+      if (r.bottom <= 0 || r.top >= height || r.right <= 0 || r.left >= window.innerWidth) continue;
+      const y = r.top + r.height / 2;
+      const target = direction === "down" ? height * 0.25 : direction === "up" ? height * 0.75 : height / 2;
+      const distance = Math.abs(y - target) + Math.abs(r.left - from.left) * 0.25;
+      if (distance < nearest) {
+        nearest = distance;
+        near = candidate;
+      }
+    }
+    if (near) {
+      select(near);
+      return true;
+    }
+  }
   const cx = from.left + from.width / 2;
   const cy = from.top + from.height / 2;
-  let best: HTMLElement | null = null;
-  let bestScore = Infinity;
+  const vertical = direction === "up" || direction === "down";
+  const found: { element: HTMLElement; along: number; across: number }[] = [];
   for (const candidate of list) {
     if (candidate === current || candidate.contains(current) || current.contains(candidate)) continue;
     const r = candidate.getBoundingClientRect();
     const x = r.left + r.width / 2;
     const y = r.top + r.height / 2;
-    // How far ahead the candidate is, and how far off the line of travel (0 when they overlap).
-    const overlapY = Math.min(from.bottom, r.bottom) - Math.max(from.top, r.top) > 0;
-    const overlapX = Math.min(from.right, r.right) - Math.max(from.left, r.left) > 0;
-    let along: number;
-    let across: number;
+    const overlapY = Math.min(from.bottom, r.bottom) - Math.max(from.top, r.top);
+    const overlapX = Math.min(from.right, r.right) - Math.max(from.left, r.left);
+    const sameRow = overlapY > 0.5 * Math.min(from.height, r.height);
+    const sameColumn = overlapX > 0.5 * Math.min(from.width, r.width);
+    const gapX = Math.max(0, r.left - from.right, from.left - r.right);
+    const gapY = Math.max(0, r.top - from.bottom, from.top - r.bottom);
     switch (direction) {
-      case "right":
-        if (x <= cx + 2) continue;
-        along = Math.max(0, r.left - from.right);
-        across = overlapY ? 0 : Math.abs(y - cy);
-        break;
-      case "left":
-        if (x >= cx - 2) continue;
-        along = Math.max(0, from.left - r.right);
-        across = overlapY ? 0 : Math.abs(y - cy);
-        break;
       case "down":
-        if (y <= cy + 2) continue;
-        along = Math.max(0, r.top - from.bottom);
-        across = overlapX ? 0 : Math.min(Math.abs(r.left - from.left), Math.abs(x - cx));
+        if (sameRow || y <= cy + 2) continue;
+        found.push({ element: candidate, along: Math.max(0, r.top - from.bottom), across: overlapX > 0 ? 0 : gapX });
+        break;
+      case "up":
+        if (sameRow || y >= cy - 2) continue;
+        found.push({ element: candidate, along: Math.max(0, from.top - r.bottom), across: overlapX > 0 ? 0 : gapX });
+        break;
+      case "right":
+        if (sameColumn || x <= cx + 2) continue;
+        found.push({ element: candidate, along: Math.max(0, r.left - from.right), across: overlapY > 0 ? 0 : gapY });
         break;
       default:
-        if (y >= cy - 2) continue;
-        along = Math.max(0, from.top - r.bottom);
-        across = overlapX ? 0 : Math.min(Math.abs(r.left - from.left), Math.abs(x - cx));
-    }
-    const score = along + across * 2.5;
-    if (score < bestScore) {
-      bestScore = score;
-      best = candidate;
+        if (sameColumn || x >= cx - 2) continue;
+        found.push({ element: candidate, along: Math.max(0, from.left - r.right), across: overlapY > 0 ? 0 : gapY });
     }
   }
-  if (best) select(best);
-  return !!best;
+  if (!found.length) return false;
+  let best: (typeof found)[number];
+  if (vertical) {
+    // The next row: those starting within a little of the nearest, then the most in line.
+    const nearest = Math.min(...found.map((f) => f.along));
+    const row = found.filter((f) => f.along <= nearest + 48);
+    best = row.reduce((a, b) => (b.across < a.across || (b.across === a.across && b.along < a.along) ? b : a));
+  } else {
+    // Sideways: in the same row when there is one, else the nearest.
+    const inRow = found.filter((f) => f.across === 0);
+    best = (inRow.length ? inRow : found).reduce((a, b) => (b.along + b.across * 2.5 < a.along + a.across * 2.5 ? b : a));
+  }
+  // Never past what hasn't been seen: a tall stretch between (a panel with nothing to select) is
+  // scrolled through first.
+  if (vertical && best.along > height * 0.85) {
+    const scroller = scrollParent(best.element);
+    if (scroller) {
+      scroller.scrollBy({ top: (direction === "down" ? 1 : -1) * height * 0.6, behavior: "smooth" });
+      return true;
+    }
+  }
+  select(best.element);
+  return true;
 }

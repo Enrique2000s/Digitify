@@ -24,7 +24,7 @@ export type PadAction =
   | "start" // Menu / Options
   | "guide"; // Xbox / PS (also Start + Select together)
 
-/** Standard-layout button index → action. */
+/** Standard-layout button index → action, before Settings › Controller changes it (D-183). */
 const BUTTONS: Record<number, PadAction> = {
   0: "accept",
   1: "back",
@@ -45,7 +45,80 @@ const BUTTONS: Record<number, PadAction> = {
 const REPEATS = new Set<PadAction>(["up", "down", "left", "right", "lb", "rb"]);
 const REPEAT_DELAY = 380;
 const REPEAT_EVERY = 110;
-const DEAD_ZONE = 0.22;
+
+/**
+ * Settings › Controller (D-183): confirm and back swapped (Nintendo-style or Japanese layouts), the
+ * button names shown, any action on another button, the sticks' dead zone (drift), how fast and which
+ * way the right stick scrolls, whether the left stick moves the selection, and which controller is
+ * listened to when several are connected.
+ */
+export interface ControllerSettings {
+  swapConfirm: boolean;
+  glyphs: "auto" | "xbox" | "playstation";
+  remap: Partial<Record<PadAction, number>>;
+  deadZone: number;
+  scrollSpeed: number;
+  invertScroll: boolean;
+  stickMoves: boolean;
+  /** A controller's id to listen to alone; null for any. */
+  pad: string | null;
+  /** The Xbox / PS button (or Start + Select) opens Big Picture from anywhere (D-184); off at first. */
+  homeOpensBigPicture: boolean;
+}
+export const DEFAULT_CONTROLLER: ControllerSettings = { swapConfirm: false, glyphs: "auto", remap: {}, deadZone: 0.22, scrollSpeed: 1, invertScroll: false, stickMoves: true, pad: null, homeOpensBigPicture: false };
+let settings: ControllerSettings = DEFAULT_CONTROLLER;
+export function setControllerSettings(next: ControllerSettings) {
+  settings = next;
+}
+
+/** The button an action is on now: its own choice, else the usual one (confirm and back swapped if asked). */
+export function buttonFor(action: PadAction, s: ControllerSettings = settings): number | undefined {
+  const own = s.remap[action];
+  if (own != null) return own;
+  if (s.swapConfirm && action === "accept") return 1;
+  if (s.swapConfirm && action === "back") return 0;
+  const found = Object.entries(BUTTONS).find(([, a]) => a === action);
+  return found ? Number(found[0]) : undefined;
+}
+
+/** Index → action as set up now: the actions moved to other buttons take those, the rest stay. */
+function mapping(): Map<number, PadAction> {
+  const out = new Map<number, PadAction>();
+  for (const action of new Set(Object.values(BUTTONS))) {
+    const index = buttonFor(action);
+    if (index != null) out.set(index, action);
+  }
+  return out;
+}
+
+const XBOX_NAMES = ["A", "B", "X", "Y", "LB", "RB", "LT", "RT", "View", "Menu", "LS", "RS", "Up", "Down", "Left", "Right", "Xbox"];
+const PS_NAMES = ["✕", "○", "□", "△", "L1", "R1", "L2", "R2", "Create", "Options", "L3", "R3", "Up", "Down", "Left", "Right", "PS"];
+
+/** The names printed on the controller: the one in use, or the ones chosen in Settings › Controller. */
+export function glyphKind(s: ControllerSettings = settings): "xbox" | "playstation" | "other" | null {
+  return s.glyphs === "auto" ? controllerKind() : s.glyphs;
+}
+
+/** A button's name on the controller, by its index. */
+export function buttonName(index: number | undefined, kind = glyphKind()): string {
+  if (index == null) return "—";
+  return (kind === "playstation" ? PS_NAMES : XBOX_NAMES)[index] ?? `Button ${index + 1}`;
+}
+
+/** The names of the buttons Big Picture's hints name, as set up now. */
+export function buttonNames(s: ControllerSettings = settings) {
+  const kind = glyphKind(s);
+  const name = (action: PadAction) => buttonName(buttonFor(action, s), kind);
+  return { kind, a: name("accept"), b: name("back"), x: name("x"), y: name("y"), start: name("start"), view: name("select") };
+}
+
+/** While a button is being chosen for an action, the controller does nothing else (D-183). */
+const rawListeners = new Set<(index: number) => void>();
+export function onRawButton(listener: (index: number) => void): () => void {
+  rawListeners.add(listener);
+  return () => void rawListeners.delete(listener);
+}
+let rawHeld = new Set<number>();
 
 export interface Sticks {
   lx: number;
@@ -68,7 +141,8 @@ const held = new Map<PadAction, number>();
 let comboUsed = false;
 
 function deadZone(v: number): number {
-  return Math.abs(v) < DEAD_ZONE ? 0 : (v - Math.sign(v) * DEAD_ZONE) / (1 - DEAD_ZONE);
+  const dead = settings.deadZone;
+  return Math.abs(v) < dead ? 0 : (v - Math.sign(v) * dead) / (1 - dead);
 }
 
 function emit(action: PadAction) {
@@ -83,11 +157,22 @@ function poll(now: number) {
   last = now;
   const pressed = new Set<PadAction>();
   const sticks: Sticks = { lx: 0, ly: 0, rx: 0, ry: 0 };
-  for (const pad of navigator.getGamepads?.() ?? []) {
-    if (!pad || !pad.connected) continue;
+  const pads = [...(navigator.getGamepads?.() ?? [])].filter((p): p is Gamepad => !!p && p.connected);
+  // One controller listened to, when chosen and connected; otherwise all of them.
+  const chosen = settings.pad ? pads.filter((p) => p.id === settings.pad) : [];
+  const map = mapping();
+  const raw = new Set<number>();
+  // Actions whose button was already down last frame: when a press changes which action a button
+  // has (swapping confirm and back), the button still held mustn't do the new one too (D-184).
+  const stale = new Set<PadAction>();
+  for (const pad of chosen.length ? chosen : pads) {
     pad.buttons.forEach((button, index) => {
-      const action = BUTTONS[index];
-      if (action && (button.pressed || button.value > 0.6)) pressed.add(action);
+      if (button.pressed || button.value > 0.6) raw.add(index);
+      const action = map.get(index);
+      if (action && (button.pressed || button.value > 0.6)) {
+        pressed.add(action);
+        if (rawHeld.has(index)) stale.add(action);
+      }
     });
     const [lx = 0, ly = 0, rx = 0, ry = 0] = pad.axes;
     sticks.lx += deadZone(lx);
@@ -95,8 +180,21 @@ function poll(now: number) {
     sticks.rx += deadZone(rx);
     sticks.ry += deadZone(ry);
   }
-  // The left stick also moves the selection, like the D-pad, unless it's moving a cursor.
-  if (!cursorClaims) {
+  // A button being chosen for an action (Settings › Controller): only that, nothing else happens.
+  if (rawListeners.size) {
+    for (const index of raw) if (!rawHeld.has(index)) rawListeners.forEach((l) => l(index));
+    rawHeld = raw;
+    held.clear();
+    frame = requestAnimationFrame(poll);
+    return;
+  }
+  rawHeld = raw;
+  // The right stick scrolls at the speed and in the direction chosen.
+  const scroll = settings.scrollSpeed * (settings.invertScroll ? -1 : 1);
+  sticks.rx *= scroll;
+  sticks.ry *= scroll;
+  // The left stick also moves the selection, like the D-pad, unless it's moving a cursor (or turned off).
+  if (!cursorClaims && settings.stickMoves) {
     if (sticks.lx < -0.6) pressed.add("left");
     if (sticks.lx > 0.6) pressed.add("right");
     if (sticks.ly < -0.6) pressed.add("up");
@@ -118,7 +216,7 @@ function poll(now: number) {
     const next = held.get(action);
     if (next === undefined) {
       held.set(action, now + REPEAT_DELAY);
-      if (action !== "start" && action !== "select") emit(action);
+      if (action !== "start" && action !== "select" && !stale.has(action)) emit(action);
     } else if (REPEATS.has(action) && now >= next) {
       held.set(action, now + REPEAT_EVERY);
       emit(action);

@@ -25,66 +25,70 @@ export function NowPlayingPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const track = music.current;
+  // With nothing playing the player still shows (D-183): its controls resting, the queue empty.
+  const idle = !track;
 
-  if (!track) {
-    return (
-      <div className="page now-page">
-        <BackButton className="now-back" />
-        <div className="empty now-empty">
-          <Music size={44} />
-          <p>Nothing is playing. Play a song or a playlist from Music, and it shows here.</p>
-          <button type="button" className="btn btn-primary" onClick={() => void navigate({ to: "/library/$scope", params: { scope: "music" } })}>
-            Open Music
-          </button>
-        </div>
-      </div>
-    );
-  }
   const favorite = async () => {
+    if (!track) return;
     await api.musicSetFavorite(track.id, !track.favorite);
     music.updateTrack({ ...track, favorite: !track.favorite });
     void queryClient.invalidateQueries({ queryKey: ["tracks"] });
   };
-  const cover = track.coverKey ? artworkUrl(track.coverKey, "cover") : null;
+  const cover = track?.coverKey ? artworkUrl(track.coverKey, "cover") : null;
   const last = music.queue.length - 1;
   return (
     <div className="page now-page">
       {cover && <div className="now-backdrop" style={{ backgroundImage: `url("${cover}")` }} aria-hidden />}
       <BackButton className="now-back" />
-      <div className="now-stage">
-        <div className={`now-art${music.paused ? "" : " playing"}`}>
-          <Cover item={{ title: track.title, coverKey: track.coverKey, handler: "audio" }} size="cover" />
+      <div className={`now-stage${idle ? " idle" : ""}`}>
+        <div className={`now-art${music.paused || idle ? "" : " playing"}`}>
+          {track ? (
+            <Cover item={{ title: track.title, coverKey: track.coverKey, handler: "audio" }} size="cover" />
+          ) : (
+            <span className="now-art-empty" aria-hidden>
+              <Music size={64} strokeWidth={1.8} />
+            </span>
+          )}
         </div>
         <div className="now-main">
-          <span className="now-kicker">{music.paused ? "Paused" : "Now playing"}</span>
+          <span className="now-kicker">{idle ? "Nothing playing" : music.paused ? "Paused" : "Now playing"}</span>
           <h1 className="display now-title">
-            <Marquee text={track.title} />
+            <Marquee text={track ? track.title : "Pick something to play"} />
           </h1>
           <div className="now-sub">
-            <Marquee text={[track.artist, track.album].filter(Boolean).join(" · ") || "Unknown artist"} />
-            <button type="button" className="icon-btn" aria-pressed={track.favorite} aria-label={track.favorite ? "Remove from favorites" : "Add to favorites"} onClick={() => void favorite()}>
-              <Heart size={19} fill={track.favorite ? "currentColor" : "none"} />
-            </button>
+            {track ? (
+              <>
+                <Marquee text={[track.artist, track.album].filter(Boolean).join(" · ") || "Unknown artist"} />
+                <button type="button" className="icon-btn" aria-pressed={track.favorite} aria-label={track.favorite ? "Remove from favorites" : "Add to favorites"} onClick={() => void favorite()}>
+                  <Heart size={19} fill={track.favorite ? "currentColor" : "none"} />
+                </button>
+              </>
+            ) : (
+              <button type="button" className="link-button" onClick={() => void navigate({ to: "/library/$scope", params: { scope: "music" } })}>
+                Open Music
+              </button>
+            )}
           </div>
           <div className="now-page-seek">
-            <SeekBar time={music.time} duration={music.duration} clock={clock} timeClassName="now-time" onSeek={(s) => music.seek(s)} />
+            <SeekBar time={idle ? 0 : music.time} duration={idle ? 0 : music.duration} clock={clock} timeClassName="now-time" onSeek={(s) => !idle && music.seek(s)} />
           </div>
-          <div className="now-page-controls">
-            <button type="button" className="icon-btn" aria-pressed={music.shuffled} aria-label="Shuffle" title="Shuffle" onClick={music.toggleShuffle}>
+          <div className="now-page-controls" aria-disabled={idle || undefined}>
+            <button type="button" className="icon-btn" disabled={idle} aria-pressed={music.shuffled} aria-label="Shuffle" title="Shuffle" onClick={music.toggleShuffle}>
               <Shuffle size={20} />
             </button>
-            <button type="button" className="round-btn lg" aria-label="Previous track" onClick={music.previous}>
+            <button type="button" className="round-btn lg" disabled={idle} aria-label="Previous track" onClick={music.previous}>
               <SkipBack size={20} />
             </button>
-            <button type="button" className="round-btn now-page-play" aria-label={music.paused ? "Play" : "Pause"} onClick={music.toggle}>
-              {music.paused ? <Play size={30} fill="currentColor" strokeWidth={0} /> : <Pause size={30} fill="currentColor" strokeWidth={0} />}
+            <button type="button" className="round-btn now-page-play" disabled={idle} aria-label={music.paused ? "Play" : "Pause"} onClick={music.toggle}>
+              {music.paused || idle ? <Play size={30} fill="currentColor" strokeWidth={0} /> : <Pause size={30} fill="currentColor" strokeWidth={0} />}
             </button>
-            <button type="button" className="round-btn lg" aria-label="Next track" onClick={music.next}>
+            <button type="button" className="round-btn lg" disabled={idle} aria-label="Next track" onClick={music.next}>
               <SkipForward size={20} />
             </button>
             <button
               type="button"
               className="icon-btn"
+              disabled={idle}
               aria-pressed={music.repeat !== "off"}
               aria-label={`Repeat: ${music.repeat}`}
               title={music.repeat === "one" ? "Repeat this track" : music.repeat === "all" ? "Repeat the queue" : "Repeat off"}
@@ -114,10 +118,11 @@ export function NowPlayingPage() {
           <div className="now-queue-head">
             <h2>Queue</h2>
             <span className="now-queue-count">{music.queue.length === 1 ? "1 track" : `${music.queue.length} tracks`}</span>
-            <button type="button" className="btn btn-sm btn-ghost" onClick={music.stop}>
+            <button type="button" className="btn btn-sm btn-ghost" disabled={idle} onClick={music.stop}>
               <Square size={13} /> Stop and clear
             </button>
           </div>
+          {idle && <p className="now-queue-empty">The queue is empty. Play a song, an album or a playlist from Music, or add songs to the queue from their menu.</p>}
           <ol className="now-page-list">
             {music.queue.map((queued, index) => (
               <li key={`${index}:${queued.id}`} aria-current={index === music.index ? "true" : undefined} className={index < music.index ? "played" : undefined}>

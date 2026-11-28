@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { moveFocus, useBigPicture } from "../../lib/bigpicture";
-import { controllerKind, onControllerChange, pressShortcut, usePad, type PadAction } from "../../lib/gamepad";
+import { controllerKind, onControllerChange, pressShortcut, usePad, type PadAction, buttonNames } from "../../lib/gamepad";
 import { usePreferences } from "../../lib/preferences";
 import { ambientEngine } from "../../lib/ambient/engine";
 import type { ShortcutId } from "../../lib/shortcuts";
@@ -165,8 +165,9 @@ export function usePlayerController(root: RefObject<HTMLElement | null>, quick: 
 export function useButtonNames() {
   const [kind, setKind] = useState(controllerKind);
   useEffect(() => onControllerChange(() => setKind(controllerKind())), []);
-  const ps = kind === "playstation";
-  return { kind, a: ps ? "✕" : "A", b: ps ? "○" : "B", x: ps ? "□" : "X", y: ps ? "△" : "Y", start: ps ? "Options" : "Menu", view: ps ? "Create" : "View" };
+  // As set up in Settings › Controller (D-183).
+  const { preferences } = usePreferences();
+  return { ...buttonNames(preferences.controller), kind };
 }
 
 export interface Hint {

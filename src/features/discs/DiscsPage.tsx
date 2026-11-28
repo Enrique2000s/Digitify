@@ -9,7 +9,6 @@ import { DISC_KINDS, useDiscs } from "../../lib/discs";
 import { useMusic } from "../../lib/music/MusicProvider";
 import { bytes } from "../../lib/format";
 import { libraryChanged } from "../../lib/queries";
-import { CategoryStrip } from "../../components/CategoryStrip";
 
 function clock(seconds: number): string {
   const s = Math.round(seconds);
@@ -391,8 +390,8 @@ export function DiscsPage() {
   return (
     <div className="library-view">
       <div className="discs-page">
+        {/* A screen of its own (D-184): no Library header or categories above it. */}
         <BackButton />
-        <CategoryStrip />
         <div className="page-header">
           <div className="title-row">
             <span className="title-badge">

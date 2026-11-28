@@ -25,11 +25,31 @@
 .now-back {
   margin-bottom: 18px;
 }
+/* The cover, the track and its controls centered in the page's height, as in Big Picture (D-183);
+   the queue beside them. */
 .now-stage {
   display: grid;
   grid-template-columns: minmax(240px, 380px) minmax(0, 1fr) minmax(300px, 400px);
-  align-items: start;
+  align-items: center;
   gap: 40px;
+  min-height: calc(100vh - 190px);
+}
+.now-art-empty {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  background: var(--surface);
+  color: var(--muted);
+}
+.now-stage.idle .now-page-controls,
+.now-stage.idle .now-page-seek {
+  opacity: 0.55;
+}
+.now-queue-empty {
+  margin: 4px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
 }
 .now-art {
   aspect-ratio: 1;
@@ -52,7 +72,6 @@
   display: grid;
   gap: 12px;
   min-width: 0;
-  padding-top: 18px;
 }
 .now-kicker {
   font-size: 13px;
@@ -1006,7 +1025,7 @@ a.mini-player-open {
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 900;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -1107,7 +1126,7 @@ a.mini-player-open {
   gap: 2px;
 }
 .arcade-collections-back {
-  margin: 0 0 6px -10px;
+  margin: 0 0 12px;
 }
 .arcade-collections-hint {
   margin: -8px 0 18px;
@@ -1137,6 +1156,27 @@ a.mini-player-open {
 }
 /* D-149: the Console sort's headings: a console's or launcher's symbol, name and count, and a line
    across the grid. */
+/* The line above Music's and Videos' online items under All (D-183), like Arcade's console lines. */
+.online-divider {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 4px;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 900;
+}
+.online-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
 .arcade-grid > .arcade-section {
   display: flex;
   flex: 0 0 100%;
@@ -1860,4 +1900,600 @@ a.mini-player-open {
 .picture-adjuster .hint {
   margin: 0;
   text-align: center;
+}
+
+/* ---------------------------------------------------------------- Home Shortcuts (D-184) */
+
+/* Cards in one row (up to seven), taller than the old strips but leaving most of the screen for
+   what's below: the covers fanned on the category's colour, a light drifting slowly across it, a
+   shine passing over on hover; the icon, name and count underneath. */
+@property --shortcut-light {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 25%;
+}
+.tiles.shortcuts {
+  --tile-gap: 16px;
+  gap: 16px;
+  margin-top: 22px;
+}
+.shortcuts .tile {
+  gap: 9px;
+  padding: 8px 8px 10px;
+  border-radius: 24px;
+}
+.shortcuts .tile-screen,
+.bp-shortcut .tile-screen {
+  aspect-ratio: 1.6 / 1;
+  border-radius: 18px;
+  background:
+    radial-gradient(120% 90% at var(--shortcut-light) 0%, rgba(255, 255, 255, 0.34), transparent 62%),
+    var(--screen, var(--screen-5));
+  animation: shortcut-light 16s ease-in-out infinite alternate;
+}
+@keyframes shortcut-light {
+  from {
+    --shortcut-light: 15%;
+  }
+  to {
+    --shortcut-light: 85%;
+  }
+}
+.shortcuts .tile-screen .tile-cover,
+.bp-shortcut .tile-screen .tile-cover {
+  border-radius: 8px;
+}
+/* The shine sweeps across inside the card (its picture moves, not the element), so it never shows
+   outside the card while the covers pop out of it. */
+.tile-shine {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.32) 50%, transparent 65%) no-repeat;
+  background-size: 300% 100%;
+  background-position: 120% 0;
+}
+.shortcuts .tile:hover .tile-shine,
+.shortcuts .tile:focus-visible .tile-shine,
+.bp-shortcut.bp-selected .tile-shine {
+  background-position: -20% 0;
+  transition: background-position 900ms var(--ease);
+}
+.tile-badge {
+  display: none;
+}
+.shortcuts .tile-badge,
+.bp-shortcut .tile-badge {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-bright) 18%, transparent);
+  color: var(--accent-bright);
+}
+.shortcuts .tile-label,
+.bp-shortcut .tile-label {
+  gap: 9px;
+  padding: 0 4px;
+}
+.shortcuts .tile-label .tile-badge svg {
+  width: 17px;
+  height: 17px;
+}
+.shortcuts .tile-label strong {
+  font-size: 16px;
+}
+.shortcuts .tile-label .count,
+.bp-shortcut .tile-label .count {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--raised);
+  font-size: 12px;
+}
+.shortcuts .tile-label > svg:last-child,
+.bp-shortcut .tile-label > svg:last-child {
+  width: 18px;
+  height: 18px;
+  transition: transform 200ms var(--spring);
+}
+.shortcuts .tile:hover .tile-label > svg:last-child,
+.bp-shortcut.bp-selected .tile-label > svg:last-child {
+  transform: translateX(4px);
+}
+.shortcuts .tile:hover .tile-badge {
+  transform: rotate(-6deg) scale(1.08);
+}
+.tile-badge {
+  transition: transform 260ms var(--spring);
+}
+
+/* Big Picture's Home Shortcuts: the same cards, bigger, the covers fanning out when selected. */
+.bp-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+}
+.bp-shortcut {
+  flex: 0 0 calc((100% - (var(--cols, 6) - 1) * 20px) / var(--cols, 6));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 10px 12px;
+  border: 0;
+  border-radius: 26px;
+  background: var(--bp-panel);
+  color: var(--bp-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 220ms var(--spring);
+  animation: pop-in 380ms var(--spring) both;
+}
+.bp-shortcut .tile-screen {
+  border-radius: 19px;
+}
+.bp-shortcut.bp-selected {
+  transform: scale(1.04);
+}
+.bp-shortcut.bp-selected .tile-cover,
+.bp-shortcut:hover .tile-cover {
+  transform: translate(calc(var(--side, 0) * 16%), calc(var(--drop, 0%) - 7%)) rotate(calc(var(--tilt, 0deg) * 1.7)) scale(1.05);
+}
+.bp-shortcut .tile-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+}
+.bp-shortcut .tile-badge svg {
+  width: 21px;
+  height: 21px;
+}
+.bp-shortcut .tile-label strong {
+  overflow: hidden;
+  font-size: 19px;
+  font-weight: 900;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.bp-shortcut .tile-label .count {
+  margin-left: auto;
+  background: var(--bp-panel-strong);
+  color: var(--bp-muted);
+  font-size: 14px;
+  font-weight: 800;
+}
+/* The selection ring says where A goes: no arrow, so a long name like Movies & Series fits. */
+.bp-shortcut .tile-label > svg:last-child {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- Customize Home (D-184) */
+
+.home-edit-notice {
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--accent-bright) 35%, var(--line));
+  border-radius: var(--radius-lg);
+}
+.home-edit-notice-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: var(--accent);
+  color: var(--accent-ink, #fff);
+}
+.home-edit-notice-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 360px;
+}
+.home-edit-notice-text strong {
+  font-size: 17px;
+  font-weight: 900;
+}
+.home-edit-notice-text span {
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.home-arrange .home-edit-bar {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  transition: box-shadow 180ms var(--ease), opacity 180ms var(--ease);
+}
+.home-arrange .home-edit-bar.is-hidden {
+  opacity: 0.68;
+}
+.home-edit-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px 10px 8px;
+}
+.home-edit-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--accent-bright) 16%, transparent);
+  color: var(--accent-bright);
+}
+.home-edit-bar.is-hidden .home-edit-icon {
+  background: var(--raised);
+  color: var(--muted);
+}
+.home-edit-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.home-edit-from {
+  padding: 2px 8px;
+  border-radius: var(--pill);
+  background: var(--raised);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 800;
+}
+.home-edit-moves {
+  display: inline-flex;
+  gap: 2px;
+}
+.home-edit-show[aria-pressed="false"] {
+  color: var(--muted);
+}
+.home-edit-chevron {
+  transition: transform 200ms var(--ease);
+}
+.home-edit-bar.is-open .home-edit-chevron {
+  transform: rotate(180deg);
+}
+.home-edit-backgrounds {
+  padding: 4px 16px 16px;
+  border-top: 1px solid var(--line);
+  animation: view-in 260ms var(--ease) both;
+}
+.home-edit-hint {
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.home-edit-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+}
+.home-edit-shortcut {
+  display: grid;
+  gap: 8px;
+}
+.home-edit-shortcut .shortcut-preview {
+  cursor: default;
+  gap: 8px;
+  padding: 7px 7px 9px;
+  border-radius: 20px;
+}
+.home-edit-shortcut .shortcut-preview:hover {
+  transform: none;
+  box-shadow: var(--raise);
+}
+.home-edit-shortcut .tile-screen {
+  aspect-ratio: 1.6 / 1;
+  border-radius: 14px;
+}
+.home-edit-shortcut .tile-label strong {
+  font-size: 14px;
+}
+.home-edit-shortcut .tile-label > svg:last-child {
+  display: none;
+}
+.home-edit-shortcut .tile-badge {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  place-items: center;
+  background: color-mix(in srgb, var(--accent-bright) 18%, transparent);
+  color: var(--accent-bright);
+}
+.home-edit-shortcut .tile-badge svg {
+  width: 15px;
+  height: 15px;
+}
+.home-edit-shortcut-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* A shortcut's own picture sits behind its covers (D-184), a little dimmed so they stand out. */
+.tile-screen.with-background .tile-background {
+  z-index: 0;
+  filter: brightness(0.82) saturate(1.05);
+}
+.tile-screen.with-background .tile-collage {
+  z-index: 1;
+}
+
+/* Adjusting it: a frame of the card's own shape, the covers drawn over the picture as on Home. */
+.picture-adjuster-frame.tile {
+  width: min(100%, 560px);
+  aspect-ratio: 1.6 / 1;
+  border-radius: 18px;
+}
+.tile-screen-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.tile-screen-overlay .tile-cover {
+  animation: none;
+}
+
+/* Tags with their symbol (D-184): video formats, Movie and Series, Book, Comic and Manga. */
+.film-tag:has(svg) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.film-tag svg {
+  flex: none;
+}
+
+/* The Spotlight's cards are each one link (D-184), as Big Picture's are: the whole card lifts and
+   rings on hover; its cover carries its tags and badges as a card's does. */
+.featured-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 220ms var(--spring), box-shadow 200ms var(--ease);
+}
+.featured-link:hover,
+.featured-link:focus-visible {
+  transform: translateY(-3px);
+  box-shadow: var(--glow), var(--raise);
+  outline: none;
+}
+.featured-link:active {
+  transform: scale(0.995);
+}
+.featured-link .featured-cover {
+  position: relative;
+}
+.featured-link:hover .featured-cover {
+  transform: translateY(-4px) rotate(-1deg);
+}
+.featured-link .featured-cover .card-badges {
+  left: 8px;
+  right: 8px;
+  top: 8px;
+}
+
+/* Home Shortcuts' covers pop out of their card on hover or selection (D-184), in Big Picture too:
+   the card clips them while they rest, and lets them rise above its top and past its sides when
+   they fan out, bigger. */
+.shortcuts .tile-screen,
+.bp-shortcut .tile-screen {
+  overflow: visible;
+  clip-path: inset(0 round 18px);
+  transition: clip-path 360ms var(--spring);
+}
+.shortcuts .tile:hover .tile-screen,
+.shortcuts .tile:focus-visible .tile-screen,
+.bp-shortcut.bp-selected .tile-screen,
+.bp-shortcut:hover .tile-screen {
+  /* Room for any cover, tall boxes and wide frames alike, so none is cut while it pops out. */
+  clip-path: inset(-150% -80% -20% -80% round 18px);
+}
+.shortcuts .tile:hover .tile-cover,
+.shortcuts .tile:focus-visible .tile-cover,
+.bp-shortcut.bp-selected .tile-cover,
+.bp-shortcut:hover .tile-cover {
+  transform: translate(calc(var(--side, 0) * 22%), calc(var(--drop, 0%) - 20%)) rotate(calc(var(--tilt, 0deg) * 1.9)) scale(1.14);
+  box-shadow: 0 16px 30px rgba(10, 20, 40, 0.42);
+}
+.shortcuts .tile:hover,
+.shortcuts .tile:focus-visible,
+.bp-shortcut.bp-selected {
+  position: relative;
+  z-index: 3;
+}
+.home-edit-shortcut .tile-screen {
+  clip-path: none;
+  overflow: hidden;
+}
+
+/* A missing file over the middle of its cover (D-184), the cover dimmed behind it, for any shape. */
+.missing-mark {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: rgba(8, 12, 20, 0.42);
+  pointer-events: none;
+}
+.missing-mark > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 16px);
+  padding: 5px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: var(--pill);
+  background: color-mix(in srgb, #e0a21a 90%, transparent);
+  color: #1d1400;
+  font-size: 12.5px;
+  font-weight: 900;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.missing-mark svg {
+  flex: none;
+}
+
+/* The card itself stays exactly as it is while its covers pop out (D-184): no growing or lifting,
+   and its gloss keeps the card's rounded corners (it used to show square ones once the clip opened). */
+.shortcuts .tile:hover,
+.shortcuts .tile:focus-visible,
+.bp-shortcut.bp-selected,
+.bp-shortcut:hover {
+  transform: none;
+}
+.shortcuts .tile-screen::after,
+.bp-shortcut .tile-screen::after {
+  border-radius: 18px 18px 0 0;
+}
+
+/* Home's sideways rows have arrows at their ends (D-184), as Big Picture's do: each shows only
+   while there's more that way. */
+.row-scroll-wrap {
+  position: relative;
+}
+.row-arrow {
+  position: absolute;
+  top: calc(50% - 32px);
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--surface, var(--panel)) 88%, transparent);
+  color: var(--text);
+  box-shadow: var(--raise);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.85);
+  transition: opacity 180ms var(--ease), transform 180ms var(--spring), box-shadow 180ms var(--ease);
+}
+.row-arrow.left {
+  left: -14px;
+}
+.row-arrow.right {
+  right: -14px;
+}
+.row-arrow.shown {
+  opacity: 0.86;
+  pointer-events: auto;
+  transform: none;
+}
+.row-scroll-wrap:hover .row-arrow.shown,
+.row-arrow.shown:focus-visible {
+  opacity: 1;
+}
+.row-arrow.shown:hover {
+  box-shadow: var(--glow), var(--raise);
+  transform: scale(1.06);
+}
+
+/* Selecting in Library: the check stays on top at the cover's top left, its tag making room (D-184). */
+.card-art > .card-check {
+  z-index: 6;
+}
+.library-view.selecting .card-art > .film-tag {
+  left: 42px;
+}
+
+/* Customize Home: the Spotlight's menu, a tick beside each half that's shown (D-184). */
+.home-edit-half .home-edit-check {
+  margin-left: auto;
+  padding-left: 18px;
+  color: var(--accent-text);
+}
+
+/* Every section's Shown (and the Spotlight's menu) one width, so changing what it says never moves
+   the arrows beside it (D-184). */
+.home-edit-show {
+  justify-content: center;
+  min-width: 118px;
+}
+
+/* Library's items scroll up to just under its tabs, as Arcade's games do under its tools (D-184):
+   6 px between them instead of 20, the first row keeping its room inside for a lifted card. */
+.library-view .toolbar.arcade-toolbar,
+.music-page .toolbar.arcade-toolbar {
+  margin-bottom: 6px;
+}
+.library-view .view-scroll {
+  padding-top: 14px;
+}
+
+/* Home Shortcuts on their sections' colors (D-184), deep enough for the covers to stand out, in light
+   and dark and in Big Picture. */
+.tile-screen.tinted {
+  --screen: color-mix(in srgb, var(--tile-tint) 42%, var(--tile-base, var(--panel)));
+}
+:root[data-theme="light"] .tile-screen.tinted {
+  --screen: color-mix(in srgb, var(--tile-tint) 30%, #ffffff);
+}
+:root .bp-shortcut .tile-screen.tinted,
+:root[data-theme="light"] .bp-shortcut .tile-screen.tinted {
+  --tile-base: var(--bp-panel);
+  --screen: color-mix(in srgb, var(--tile-tint) 42%, var(--bp-panel));
+}
+
+/* Collections' screen as close under the title as a collection's own bar is (D-184). */
+.arcade-view > .arcade-page > .arcade-stage > .arcade-collections {
+  /* Right under the title, as a collection's bar is, so the two Backs are in the same place: the
+     page's own top padding taken back. */
+  margin-top: -10px;
+}
+.arcade-collections .arcade-collections-head {
+  margin-top: 0;
+}
+.arcade-collection-bar .arcade-collection-back {
+  align-self: center;
+  margin: 0;
+}
+/* New collection's menu: each kind with what it is. */
+.new-collection-menu .menu-item {
+  align-items: flex-start;
+  max-width: 340px;
+}
+.new-collection-menu .menu-item > span {
+  display: grid;
+  gap: 2px;
+}
+.new-collection-menu small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: normal;
+}
+/* A cover framed as adjusted (D-184): the box clips the zoomed picture. */
+.cover-img.cover-view,
+.arcade-cover-img.cover-view {
+  display: block;
+  overflow: hidden;
+}
+.cover-view > img {
+  display: block;
+}
+.picture-adjuster-frame.cover {
+  border-radius: 14px;
+}
+.picture-adjuster-frame.cover.round {
+  border-radius: 50%;
 }

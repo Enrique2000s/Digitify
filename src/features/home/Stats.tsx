@@ -73,8 +73,8 @@ function DaysChart({ days }: { days: LibraryStats["days"] }) {
         ))}
         {empty && <p className="stats-empty">Nothing recorded in the last 14 days.</p>}
       </div>
-      <details className="stats-table">
-        <summary>Show as a table</summary>
+      {/* The same days as a table, always shown under the chart (D-184), filling the column beside the lists. */}
+      <div className="stats-table">
         <table>
           <thead>
             <tr>
@@ -95,7 +95,7 @@ function DaysChart({ days }: { days: LibraryStats["days"] }) {
             ))}
           </tbody>
         </table>
-      </details>
+      </div>
     </figure>
   );
 }
@@ -211,12 +211,14 @@ export function StatsPanel({ bigPicture = false }: { bigPicture?: boolean }) {
   const s = stats.data;
   if (!s) return <div className="stats panel stats-loading" aria-busy />;
   const largest = Math.max(...s.categories.map((c) => c.count), 1);
+  // In Big Picture each block can be selected, so the controller reaches every one (D-184).
+  const focus = bigPicture ? { "data-bp-focus": true, tabIndex: -1 } : {};
   return (
     <div className="stats panel viz-root">
       <WeekLine bigPicture={bigPicture} />
       <div className="stat-tiles">
         {SERIES.map((series) => (
-          <div key={series.key} className="stat-tile">
+          <div key={series.key} className="stat-tile" {...focus}>
             <span className="stat-label">
               <i className={`stats-swatch series-${series.key}`} aria-hidden />
               {series.label} this month
@@ -225,14 +227,14 @@ export function StatsPanel({ bigPicture = false }: { bigPicture?: boolean }) {
             <span className="stat-note">{timeLabel(s.year[series.key])} this year</span>
           </div>
         ))}
-        <div className="stat-tile streak-tile">
+        <div className="stat-tile streak-tile" {...focus}>
           <span className="stat-label">
             <Flame size={14} aria-hidden /> Streak
           </span>
           <strong className="stat-value">{s.streak === 1 ? "1 day" : `${s.streak.toLocaleString()} days`}</strong>
           <span className="stat-note">Best: {s.bestStreak === 1 ? "1 day" : `${s.bestStreak.toLocaleString()} days`} in a row</span>
         </div>
-        <div className="stat-tile">
+        <div className="stat-tile" {...focus}>
           <span className="stat-label">Finished this month</span>
           <strong className="stat-value">{s.finishedMonth.toLocaleString()}</strong>
           <span className="stat-note">
@@ -241,23 +243,31 @@ export function StatsPanel({ bigPicture = false }: { bigPicture?: boolean }) {
         </div>
       </div>
       <GoalsRow stats={s} editable={!bigPicture} />
+      {/* The year's calendar across the card, its review a button in its own header (D-183). */}
       <div className="calendar-row">
-        <ActivityCalendar year={year} onYear={setYear} />
-        {bigPicture ? (
-          <button type="button" className="bp-button year-button" data-bp-focus onClick={() => void navigate({ to: "/bp", search: { screen: "year", id: year } })}>
-            <CalendarHeart size={22} /> Your {year}
-          </button>
-        ) : (
-          <button type="button" className="btn year-button" onClick={() => setReview(true)}>
-            <CalendarHeart size={16} /> Your {year}
-          </button>
-        )}
+        <ActivityCalendar
+          year={year}
+          onYear={setYear}
+          extra={
+            bigPicture ? (
+              <button type="button" className="bp-button year-button" data-bp-focus onClick={() => void navigate({ to: "/bp", search: { screen: "year", id: year } })}>
+                <CalendarHeart size={22} /> Your {year}
+              </button>
+            ) : (
+              <button type="button" className="btn btn-sm year-button" onClick={() => setReview(true)}>
+                <CalendarHeart size={15} /> Your {year}
+              </button>
+            )
+          }
+        />
       </div>
       <YearReview year={year} open={review} onOpenChange={setReview} />
       <div className="stats-row">
-        <DaysChart days={s.days} />
+        <div className="stats-days" {...focus}>
+          <DaysChart days={s.days} />
+        </div>
         <div className="stats-lists">
-          <section>
+          <section {...focus}>
             <h3>Most played artists this year</h3>
             {s.topArtists.length === 0 ? (
               <p className="stats-none">Nothing played yet this year.</p>
@@ -273,7 +283,7 @@ export function StatsPanel({ bigPicture = false }: { bigPicture?: boolean }) {
             )}
           </section>
           {s.topGames.length > 0 && (
-            <section>
+            <section {...focus}>
               <h3>Most played games this year</h3>
               <ol className="stats-artists">
                 {s.topGames.map((game) => (
@@ -286,7 +296,7 @@ export function StatsPanel({ bigPicture = false }: { bigPicture?: boolean }) {
             </section>
           )}
           <AchievementsSummary bigPicture={bigPicture} />
-          <section>
+          <section {...focus}>
             <h3>Your library</h3>
             <ul className="stats-categories">
               {s.categories.map((category) => (

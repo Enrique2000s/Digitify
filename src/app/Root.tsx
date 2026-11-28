@@ -20,6 +20,9 @@ import { useSegmentedGlide } from "../lib/segmentedGlide";
 import { MediaKeys } from "../lib/mediaKeys";
 import { SleepTimerRunner } from "../lib/sleepTimer";
 import { TrayHold } from "../lib/trayHold";
+import { SteamHoursAuto } from "../features/arcade/shared";
+import { ProgramPicker } from "../features/arcade/ProgramPicker";
+import { ControllerSync } from "../features/settings/ControllerSettings";
 import { CommandPalette } from "../features/palette/CommandPalette";
 import { FloatingVideo } from "../features/player/FloatingVideo";
 import { AchievementNotice } from "../features/home/YearViews";
@@ -75,6 +78,9 @@ export function Root() {
         <MediaKeys />
         <SleepTimerRunner />
         <TrayHold />
+        <SteamHoursAuto />
+        <ProgramPicker />
+        <ControllerSync />
         <CloseConfirm />
         <SectionColor />
         <ArcadeSession />

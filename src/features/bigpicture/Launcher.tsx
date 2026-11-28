@@ -8,15 +8,19 @@ import type { ShortcutId } from "../../lib/shortcuts";
 // Lets automated tests press controller buttons without a controller.
 (window as unknown as { __digitifyPad?: (action: PadAction) => void }).__digitifyPad = simulatePad;
 
-/** Opens Big Picture with the Xbox / PS button (or Start + Select) from anywhere in the app. */
+/**
+ * Opens Big Picture with the Xbox / PS button (or Start + Select) from anywhere in the app, when
+ * turned on in Settings › Controller (D-184; off at first).
+ */
 export function BigPictureLauncher() {
   const navigate = useNavigate();
   const active = useBigPicture();
+  const { preferences } = usePreferences();
   usePad((action) => {
     if (action !== "guide") return;
     void enterBigPicture(() => void navigate({ to: "/bp" }));
     return true;
-  }, !active);
+  }, !active && preferences.controller.homeOpensBigPicture);
   return null;
 }
 

@@ -386,6 +386,10 @@ textarea {
 .segmented button:hover {
   color: var(--text);
 }
+/* The choice's highlight moves over softly (D-184). */
+.segmented button {
+  transition: background-color 200ms var(--ease), color 200ms var(--ease), border-color 200ms var(--ease), box-shadow 200ms var(--ease);
+}
 .segmented button[aria-pressed="true"] {
   border-color: var(--line);
   background: var(--gloss);

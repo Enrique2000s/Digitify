@@ -24,7 +24,7 @@ fn named(row: &Row<'_>) -> rusqlite::Result<NamedRef> {
 }
 
 fn cover(row: &Row<'_>) -> rusqlite::Result<TileCover> {
-    Ok(TileCover { key: row.get(0)?, color: row.get(1)?, handler: row.get(2)?, category: None, cover_shape: None, aspect: None })
+    Ok(TileCover { key: row.get(0)?, color: row.get(1)?, handler: row.get(2)?, category: None, cover_shape: None, aspect: None, gif: None })
 }
 
 /// A name as typed: trimmed, inner whitespace collapsed, at most `max` characters.
@@ -131,12 +131,12 @@ pub fn collections(conn: &Connection, category: &str, parent: Option<i64>) -> Ap
         .collect::<Result<_, _>>()?;
     let mut count = conn.prepare(&format!("{SUBTREE} SELECT count(*) FROM items WHERE collection_id IN subtree"))?;
     let mut covers = conn.prepare(&format!(
-        "{SUBTREE} SELECT i.cover_key, i.cover_color, c.handler FROM items i JOIN categories c ON c.id = i.category_id \
+        "{SUBTREE} SELECT i.cover_key, i.cover_color, CASE WHEN json_extract(i.metadata, '$.kind') IN ('comic', 'manga') THEN 'comic' ELSE c.handler END FROM items i JOIN categories c ON c.id = i.category_id \
          WHERE i.collection_id IN subtree AND i.cover_key IS NOT NULL ORDER BY i.sort_title LIMIT 3"
     ))?;
     // A cover picked for the collection (an album's, D-033) is shown alone instead of the collage.
     let mut chosen = conn.prepare(
-        "SELECT i.cover_key, i.cover_color, c.handler FROM collections k JOIN items i ON i.cover_key = k.cover_key \
+        "SELECT i.cover_key, i.cover_color, CASE WHEN json_extract(i.metadata, '$.kind') IN ('comic', 'manga') THEN 'comic' ELSE c.handler END FROM collections k JOIN items i ON i.cover_key = k.cover_key \
          JOIN categories c ON c.id = i.category_id WHERE k.id = ?1 LIMIT 1",
     )?;
     for child in &mut children {
@@ -322,7 +322,7 @@ pub fn bulk_actions(conn: &Connection, ids: &[i64]) -> AppResult<BulkActions> {
         "SELECT count(*), \
            coalesce(sum(c.handler = 'audio' AND EXISTS (SELECT 1 FROM parts p WHERE p.item_id = i.id AND p.kind = 'track')), 0), \
            coalesce(sum(c.handler = 'video'), 0), coalesce(sum(c.handler = 'audio'), 0), \
-           coalesce(sum(c.handler IN ('book', 'comic')), 0), coalesce(sum(c.handler = 'comic'), 0), \
+           coalesce(sum(c.handler IN ('book', 'comic')), 0), coalesce(sum(c.handler = 'comic' OR json_extract(i.metadata, '$.kind') IN ('comic', 'manga')), 0), \
            coalesce(sum(EXISTS (SELECT 1 FROM online_sources o WHERE o.item_id = i.id AND o.downloaded = 0 AND o.provider <> 'spotify' AND o.kind NOT IN ('playlist', 'album'))), 0) \
          FROM items i JOIN categories c ON c.id = i.category_id WHERE i.id IN (SELECT value FROM json_each(?1))",
         [list],
@@ -518,24 +518,24 @@ mod tests {
     #[test]
     fn collections_are_one_level_and_delete_without_losing_items() {
         let mut conn = db::memory();
-        let piece = create_collection(&conn, "manga", None, "One Piece").unwrap();
+        let piece = create_collection(&conn, "books", None, "One Piece").unwrap();
         // One level only (D-090): nothing goes inside a collection but items.
-        assert!(create_collection(&conn, "manga", Some(piece), "East Blue").is_err());
-        let other = create_collection(&conn, "manga", None, "Naruto").unwrap();
+        assert!(create_collection(&conn, "books", Some(piece), "East Blue").is_err());
+        let other = create_collection(&conn, "books", None, "Naruto").unwrap();
         assert!(move_collection(&mut conn, other, Some(piece)).is_err());
-        let volume = item(&conn, "manga", "Volume 1");
-        apply_bulk(&mut conn, &[volume], &[BulkOp::Move { category: "manga".into(), collection: Some(piece) }]).unwrap();
+        let volume = item(&conn, "books", "Volume 1");
+        apply_bulk(&mut conn, &[volume], &[BulkOp::Move { category: "books".into(), collection: Some(piece) }]).unwrap();
 
         // Search finds the item through its collection, and the collection counts it.
         assert_eq!(search(&conn, "one piece"), vec![volume]);
-        let level = collections(&conn, "manga", None).unwrap();
+        let level = collections(&conn, "books", None).unwrap();
         let found = level.children.iter().find(|c| c.id == piece).unwrap();
         assert_eq!((found.item_count, found.child_count), (1, 0));
 
         // No moving into another category's collection, nor into another category (D-126).
-        let books = create_collection(&conn, "books", None, "Classics").unwrap();
-        assert!(apply_bulk(&mut conn, &[volume], &[BulkOp::Move { category: "manga".into(), collection: Some(books) }]).is_err());
-        assert!(apply_bulk(&mut conn, &[volume], &[BulkOp::Move { category: "books".into(), collection: None }]).is_err());
+        let films = create_collection(&conn, "video", None, "Classics").unwrap();
+        assert!(apply_bulk(&mut conn, &[volume], &[BulkOp::Move { category: "books".into(), collection: Some(films) }]).is_err());
+        assert!(apply_bulk(&mut conn, &[volume], &[BulkOp::Move { category: "video".into(), collection: None }]).is_err());
 
         // Deleting a collection leaves its items in the category.
         delete_collection(&mut conn, piece).unwrap();

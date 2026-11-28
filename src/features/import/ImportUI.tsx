@@ -127,12 +127,14 @@ export function ImportPanel() {
   const job = jobs.length ? jobs[jobs.length - 1] : null;
   const clean = job?.phase === "done" && job.failed === 0 && job.errors.length === 0;
 
-  // A clean finish dismisses itself; failures stay until the user has seen them.
+  // A finished import clears itself (D-183): soon when it went well, a little later when something
+  // failed (what failed stays in the title bar's Downloads history, with Retry).
+  const finished = job?.phase === "done" || job?.phase === "cancelled";
   useEffect(() => {
-    if (!job || !clean) return;
-    const timer = window.setTimeout(() => dismiss(job.jobId), 6000);
+    if (!job || !finished) return;
+    const timer = window.setTimeout(() => dismiss(job.jobId), clean ? 6000 : 12000);
     return () => window.clearTimeout(timer);
-  }, [job, clean, dismiss]);
+  }, [job, finished, clean, dismiss]);
 
   if (!job) return null;
   const running = job.phase === "scanning" || job.phase === "importing";

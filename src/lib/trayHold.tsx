@@ -16,8 +16,10 @@ export function TrayHold() {
   const latest = useRef(music);
   latest.current = music;
   const [hidden, setHidden] = useState(false);
+  // The computer locked (D-183): the menu music waits until it's unlocked.
+  const [locked, setLocked] = useState(false);
   const resume = useRef(false);
-  useAmbientHold("hidden", hidden);
+  useAmbientHold("hidden", hidden || locked);
 
   useEffect(() => {
     void getCurrentWindow()
@@ -36,9 +38,11 @@ export function TrayHold() {
       if (resume.current && latest.current.paused) latest.current.toggle();
       resume.current = false;
     });
+    const offLocked = listen<boolean>("session-locked", (event) => setLocked(event.payload));
     return () => {
       void offHidden.then((off) => off());
       void offShown.then((off) => off());
+      void offLocked.then((off) => off());
     };
   }, []);
   return null;

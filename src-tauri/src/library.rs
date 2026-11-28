@@ -115,6 +115,14 @@ macro_rules! photo_aspect {
     };
 }
 
+/// An item's kind of reader (D-183): a comic or manga in Books reads as a comic, everything else as
+/// its category says. Books, comics and manga share one category, each item keeping its `kind`.
+macro_rules! item_handler {
+    () => {
+        "CASE WHEN json_extract(i.metadata, '$.kind') IN ('comic', 'manga') THEN 'comic' ELSE c.handler END"
+    };
+}
+
 macro_rules! photo_shape {
     () => {
         "(CASE WHEN json_extract(i.metadata, '$.width') >= 1.2 * json_extract(i.metadata, '$.height') THEN 'landscape' \
@@ -197,6 +205,9 @@ pub struct QueryParams {
     /// `unstarted`, `inProgress` or `finished` (Surprise me looks at what isn't finished, D-163).
     #[serde(default)]
     pub progress: Option<String>,
+    /// Books' kinds (D-183): `book`, `comic` or `manga`.
+    #[serde(default)]
+    pub kind: Option<String>,
 }
 
 
@@ -231,6 +242,34 @@ pub struct ItemCard {
     pub kind: Option<String>,
     /// Finished: watched, read, or marked so (its cover shows a check instead of a full bar, D-178).
     pub completed: bool,
+    /// How its cover is framed, when adjusted (D-184).
+    pub cover_view: Option<CoverView>,
+}
+
+/**
+ * How a cover is framed in its box (D-184), as a profile picture is: zoomed (1 to 4) around a middle
+ * (0 to 100 % across and down), for the cover it was made for (`key`): another cover starts framed
+ * as it comes.
+ */
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CoverView {
+    pub zoom: f64,
+    pub x: f64,
+    pub y: f64,
+    pub key: String,
+}
+
+impl CoverView {
+    /// Within its bounds, or nothing when it frames the cover as it comes.
+    pub fn tidy(self) -> Option<CoverView> {
+        let view = CoverView { zoom: self.zoom.clamp(1.0, 4.0), x: self.x.clamp(0.0, 100.0), y: self.y.clamp(0.0, 100.0), key: self.key };
+        let plain = (view.zoom - 1.0).abs() < 0.001 && (view.x - 50.0).abs() < 0.01 && (view.y - 50.0).abs() < 0.01;
+        (!plain && !view.key.is_empty()).then_some(view)
+    }
+
+    pub fn from_json(text: Option<String>) -> Option<CoverView> {
+        text.and_then(|t| serde_json::from_str(&t).ok())
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -258,7 +297,7 @@ pub async fn library_query_shapes(state: State<'_, AppState>, params: QueryParam
                         let QueryParts { joins, filter, args, order, .. } = QueryParts::new(&params);
             let photo = photo_shape!();
             let mut stmt = conn.prepare(&format!(
-                "SELECT (SELECT CASE c.key WHEN 'video' THEN 'm' ELSE substr(c.handler, 1, 1) END FROM categories c WHERE c.id = i.category_id),                  coalesce(substr(json_extract(i.metadata, '$.coverShape'), 1, 1), CASE WHEN (SELECT c.handler FROM categories c WHERE c.id = i.category_id) = 'image' THEN substr({photo}, 1, 1) END, '-')                  FROM items i{joins}{filter} ORDER BY {order} LIMIT 100000"
+                "SELECT (SELECT CASE c.key WHEN 'video' THEN 'm' ELSE substr(CASE WHEN json_extract(i.metadata, '$.kind') IN ('comic', 'manga') THEN 'comic' ELSE c.handler END, 1, 1) END FROM categories c WHERE c.id = i.category_id),                  coalesce(substr(json_extract(i.metadata, '$.coverShape'), 1, 1), CASE WHEN (SELECT c.handler FROM categories c WHERE c.id = i.category_id) = 'image' THEN substr({photo}, 1, 1) END, '-')                  FROM items i{joins}{filter} ORDER BY {order} LIMIT 100000"
             ))?;
             let mut out = String::new();
             let mut rows = stmt.query(params_from_iter(args.iter()))?;
@@ -316,7 +355,7 @@ pub(crate) const DURATION_SORT: &str = "coalesce(json_extract(i.metadata, '$.dur
 const CARD_COLUMNS: &str = concat!("i.id, i.title, \
     COALESCE((SELECT p.name FROM item_people ip JOIN people p ON p.id = ip.person_id \
               WHERE ip.item_id = i.id ORDER BY ip.position LIMIT 1), i.subtitle), \
-    i.year, c.key, c.handler, i.cover_key, i.cover_color, i.is_favorite, \
+    i.year, c.key, ", item_handler!(), ", i.cover_key, i.cover_color, i.is_favorite, \
     (SELECT group_concat(v.format, '|') FROM versions v WHERE v.item_id = i.id AND v.format IS NOT NULL), \
     EXISTS (SELECT 1 FROM versions v WHERE v.item_id = i.id AND v.kind = 'physical'), \
     EXISTS (SELECT 1 FROM versions v WHERE v.item_id = i.id AND v.kind = 'digital'), \
@@ -325,7 +364,8 @@ const CARD_COLUMNS: &str = concat!("i.id, i.title, \
     coalesce(json_extract(i.metadata, '$.coverShape'), CASE WHEN c.handler = 'image' THEN ", photo_shape!(), " END),     EXISTS (SELECT 1 FROM online_sources o WHERE o.item_id = i.id AND o.downloaded = 0), \
     (SELECT o.service FROM online_sources o WHERE o.item_id = i.id AND o.provider <> 'web' AND o.downloaded = 0), \
     json_extract(i.metadata, '$.discFormat'),     CASE WHEN c.handler = 'image' THEN ", photo_aspect!(), " END,     json_extract(i.metadata, '$.kind'), \
-    coalesce((SELECT pr.completed FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0), 0)");
+    coalesce((SELECT pr.completed FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0), 0), \
+    json_extract(i.metadata, '$.coverView')");
 
 fn card(row: &Row<'_>) -> rusqlite::Result<ItemCard> {
     let formats: Option<String> = row.get(9)?;
@@ -355,6 +395,7 @@ fn card(row: &Row<'_>) -> rusqlite::Result<ItemCard> {
         aspect: row.get(18)?,
         kind: row.get(19)?,
         completed: row.get::<_, i64>(20)? != 0,
+        cover_view: CoverView::from_json(row.get(21)?),
     })
 }
 
@@ -428,6 +469,14 @@ impl QueryParts {
             Some("finished") => conditions.push("EXISTS (SELECT 1 FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0 AND pr.completed = 1)".into()),
             _ => {}
         }
+        // Books' kinds (D-183); an item with none is a book.
+        match params.kind.as_deref() {
+            Some("book") => conditions.push("coalesce(json_extract(i.metadata, '$.kind'), 'book') = 'book'".into()),
+            Some(kind @ ("comic" | "manga" | "series")) => conditions.push(format!("json_extract(i.metadata, '$.kind') = '{kind}'")),
+            // Movies & Series (D-184): whatever isn't a series is a movie.
+            Some("movie") => conditions.push("coalesce(json_extract(i.metadata, '$.kind'), '') <> 'series'".into()),
+            _ => {}
+        }
         // Digital: files in the library; Online: imported from a link and played online (D-029).
         match params.ownership.as_deref() {
             Some("digital") => conditions.push("EXISTS (SELECT 1 FROM versions v WHERE v.item_id = i.id AND v.kind = 'digital')".into()),
@@ -465,6 +514,13 @@ impl QueryParts {
             Some("durationDesc") => format!("{DURATION_SORT} IS NULL, {DURATION_SORT} DESC, i.sort_title, i.id"),
             _ => "i.sort_title, i.id".to_string(),
         };
+        // Music and Videos under All: what plays online comes after what's on this computer, in the
+        // same order, below a line (D-183); a hand-arranged order and a search keep theirs.
+        let online_last = matches!(params.ownership.as_deref(), None | Some("") | Some("all"))
+            && matches!(params.category.as_deref(), Some("music") | Some("videos"))
+            && search.is_none()
+            && params.sort.as_deref() != Some("custom");
+        let order = if online_last { format!("EXISTS (SELECT 1 FROM online_sources o WHERE o.item_id = i.id AND o.downloaded = 0), {order}") } else { order };
         Self { joins, filter, args, counted, order }
     }
 }
@@ -659,7 +715,7 @@ fn blurb_facts(handler: &str, metadata: &Value, parts: i64, parts_kind: Option<&
 pub fn blurbs(conn: &Connection, ids: &[i64]) -> AppResult<Vec<Blurb>> {
     let mut out = Vec::with_capacity(ids.len());
     let mut item = conn.prepare(
-        "SELECT i.description, i.metadata, c.handler, \
+        "SELECT i.description, i.metadata, CASE WHEN json_extract(i.metadata, '$.kind') IN ('comic', 'manga') THEN 'comic' ELSE c.handler END, \
            (SELECT count(*) FROM parts p WHERE p.item_id = i.id), \
            (SELECT p.kind FROM parts p WHERE p.item_id = i.id LIMIT 1) \
          FROM items i JOIN categories c ON c.id = i.category_id WHERE i.id = ?1",
@@ -724,6 +780,8 @@ pub struct TileCover {
     pub category: Option<String>,
     pub cover_shape: Option<String>,
     pub aspect: Option<f64>,
+    /// A GIF's item, so its picture moves on the tile too (D-183).
+    pub gif: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -753,15 +811,16 @@ const TILE_POOL: i64 = 15;
 
 fn tile_covers(conn: &Connection) -> AppResult<HashMap<String, Vec<TileCover>>> {
     let cover = |row: &Row<'_>| -> rusqlite::Result<(String, TileCover)> {
-        Ok((row.get(0)?, TileCover { key: row.get(1)?, color: row.get(2)?, handler: row.get(3)?, category: row.get(0)?, cover_shape: row.get(5)?, aspect: row.get(6)? }))
+        Ok((row.get(0)?, TileCover { key: row.get(1)?, color: row.get(2)?, handler: row.get(3)?, category: row.get(0)?, cover_shape: row.get(5)?, aspect: row.get(6)?, gif: row.get(7)? }))
     };
     let mut tiles: HashMap<String, Vec<TileCover>> = HashMap::new();
     // The categories in the order of their newest cover, for Everything's mix.
     let mut order: Vec<String> = Vec::new();
     let mut stmt = conn.prepare(
         concat!(
-            "SELECT c.key, r.cover_key, r.cover_color, c.handler, r.n, r.shape, r.aspect FROM \
-               (SELECT i.category_id, i.cover_key, i.cover_color, i.added_at, i.id, json_extract(i.metadata, '$.coverShape') AS shape, ",
+            "SELECT c.key, r.cover_key, r.cover_color, c.handler, r.n, r.shape, r.aspect, r.gif FROM \
+               (SELECT i.category_id, i.cover_key, i.cover_color, i.added_at, i.id, json_extract(i.metadata, '$.coverShape') AS shape, \
+                CASE WHEN EXISTS (SELECT 1 FROM versions v WHERE v.item_id = i.id AND lower(v.format) = 'gif') THEN i.id END AS gif, ",
             photo_aspect!(),
             " AS aspect, row_number() OVER (PARTITION BY i.category_id ORDER BY i.added_at DESC, i.id DESC) AS n \
                 FROM items i WHERE i.cover_key IS NOT NULL) r \
@@ -794,7 +853,8 @@ fn tile_covers(conn: &Connection) -> AppResult<HashMap<String, Vec<TileCover>>> 
         .prepare(concat!(
             "SELECT c.key, i.cover_key, i.cover_color, c.handler, 1, json_extract(i.metadata, '$.coverShape'), ",
             photo_aspect!(),
-            " FROM items i JOIN categories c ON c.id = i.category_id \
+            ", CASE WHEN EXISTS (SELECT 1 FROM versions v WHERE v.item_id = i.id AND lower(v.format) = 'gif') THEN i.id END \
+             FROM items i JOIN categories c ON c.id = i.category_id \
              WHERE i.is_favorite = 1 AND i.cover_key IS NOT NULL ORDER BY i.updated_at DESC, i.id DESC LIMIT ?1"
         ))?
         .query_map([TILE_POOL], cover)?
@@ -1065,7 +1125,7 @@ pub async fn item_get(state: State<'_, AppState>, id: i64) -> AppResult<ItemDeta
 fn item_detail(conn: &Connection, library: &Library, id: i64) -> AppResult<ItemDetail> {
     let (collection, mut detail) = conn
         .query_row(
-            "SELECT i.id, c.key, c.name, c.handler, i.title, i.subtitle, i.year, i.description, i.cover_key, \
+            "SELECT i.id, c.key, c.name, CASE WHEN json_extract(i.metadata, '$.kind') IN ('comic', 'manga') THEN 'comic' ELSE c.handler END, i.title, i.subtitle, i.year, i.description, i.cover_key, \
              i.cover_color, i.is_favorite, i.metadata, i.added_at, i.updated_at, \
              (SELECT pr.fraction FROM progress pr WHERE pr.item_id = i.id AND pr.part_id = 0), i.collection_id, i.rating, i.note \
              FROM items i JOIN categories c ON c.id = i.category_id WHERE i.id = ?1",
@@ -1270,6 +1330,24 @@ pub async fn item_set_favorite(state: State<'_, AppState>, id: i64, favorite: bo
     .await
 }
 
+/// Frames an item's cover in its box (D-184), or leaves it as it comes (`None`).
+#[tauri::command]
+pub async fn item_set_cover_view(state: State<'_, AppState>, id: i64, view: Option<CoverView>) -> AppResult<()> {
+    with_library(&state, move |library| library.db.with(|conn| set_cover_view(conn, id, view)))
+        .await
+}
+
+pub(crate) fn set_cover_view(conn: &Connection, id: i64, view: Option<CoverView>) -> AppResult<()> {
+    match view.and_then(CoverView::tidy) {
+        Some(view) => conn.execute(
+            "UPDATE items SET metadata = json_set(coalesce(metadata, '{}'), '$.coverView', json(?2)), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
+            params![id, serde_json::to_string(&view).unwrap_or_default()],
+        )?,
+        None => conn.execute("UPDATE items SET metadata = json_remove(coalesce(metadata, '{}'), '$.coverView') WHERE id = ?1", params![id])?,
+    };
+    Ok(())
+}
+
 /// The user's rating (1-5 stars, or none) and note for an item (D-049).
 #[tauri::command]
 pub async fn item_set_review(state: State<'_, AppState>, id: i64, rating: Option<i64>, note: Option<String>) -> AppResult<()> {
@@ -1471,6 +1549,59 @@ mod tests {
         assert_eq!(items, [3, 2, 1]);
         let kept: i64 = conn.query_row("SELECT count(*) FROM custom_order_collections WHERE view = 'books'", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 2);
+    }
+
+    /// D-183: books, comics and manga share Books; each reads as its kind says and the view filters by kind.
+    #[test]
+    fn books_comics_and_manga_share_one_category() {
+        let conn = crate::db::memory();
+        let books: i64 = conn.query_row("SELECT id FROM categories WHERE key = 'books'", [], |r| r.get(0)).unwrap();
+        for (title, kind) in [("Novel", "book"), ("Hero #1", "comic"), ("Tide Vol. 1", "manga"), ("Old Book", "")] {
+            let meta = if kind.is_empty() { "{}".to_string() } else { format!("{{\"kind\":\"{kind}\"}}") };
+            conn.execute("INSERT INTO items (category_id, title, sort_title, metadata) VALUES (?1, ?2, ?2, ?3)", params![books, title, meta]).unwrap();
+        }
+        let shown = |kind: Option<&str>| -> Vec<(String, String)> {
+            let params = QueryParams { category: Some("books".into()), kind: kind.map(str::to_string), limit: 50, ..Default::default() };
+            query(&conn, &params).unwrap().items.into_iter().map(|c| (c.title, c.handler)).collect()
+        };
+        assert_eq!(shown(None).len(), 4);
+        assert_eq!(shown(Some("manga")), [("Tide Vol. 1".to_string(), "comic".to_string())]);
+        assert_eq!(shown(Some("comic")), [("Hero #1".to_string(), "comic".to_string())]);
+        let mut plain = shown(Some("book"));
+        plain.sort();
+        assert_eq!(plain, [("Novel".to_string(), "book".to_string()), ("Old Book".to_string(), "book".to_string())], "no kind is a book");
+    }
+
+    #[test]
+    fn a_cover_keeps_its_framing_and_drops_a_plain_one() {
+        let conn = crate::db::memory();
+        let books: i64 = conn.query_row("SELECT id FROM categories WHERE key = 'books'", [], |r| r.get(0)).unwrap();
+        conn.execute("INSERT INTO items (category_id, title, sort_title, cover_key) VALUES (?1, 'Framed', 'framed', 'abc')", params![books]).unwrap();
+        let id = conn.last_insert_rowid();
+        let view = |zoom: f64, x: f64| Some(CoverView { zoom, x, y: 30.0, key: "abc".into() });
+        set_cover_view(&conn, id, view(9.0, 120.0)).unwrap();
+        let card = cards_by_ids(&conn, &[id]).unwrap().remove(0);
+        assert_eq!(card.cover_view, Some(CoverView { zoom: 4.0, x: 100.0, y: 30.0, key: "abc".into() }), "kept within bounds");
+        set_cover_view(&conn, id, Some(CoverView { zoom: 1.0, x: 50.0, y: 50.0, key: "abc".into() })).unwrap();
+        assert_eq!(cards_by_ids(&conn, &[id]).unwrap()[0].cover_view, None, "as it comes is no framing");
+    }
+
+    #[test]
+    fn movies_and_series_filter_by_kind() {
+        let conn = crate::db::memory();
+        let films: i64 = conn.query_row("SELECT id FROM categories WHERE key = 'video'", [], |r| r.get(0)).unwrap();
+        for (title, meta) in [("A Film", "{}"), ("Show", "{\"kind\":\"series\"}"), ("Other Film", "{\"kind\":\"movie\"}")] {
+            conn.execute("INSERT INTO items (category_id, title, sort_title, metadata) VALUES (?1, ?2, ?2, ?3)", params![films, title, meta]).unwrap();
+        }
+        let shown = |kind: Option<&str>| -> Vec<String> {
+            let params = QueryParams { category: Some("video".into()), kind: kind.map(str::to_string), limit: 50, ..Default::default() };
+            let mut titles: Vec<String> = query(&conn, &params).unwrap().items.into_iter().map(|c| c.title).collect();
+            titles.sort();
+            titles
+        };
+        assert_eq!(shown(None).len(), 3);
+        assert_eq!(shown(Some("series")), ["Show"]);
+        assert_eq!(shown(Some("movie")), ["A Film", "Other Film"], "no kind is a movie");
     }
 
     #[test]

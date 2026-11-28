@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { flushSync } from "react-dom";
 import { motionAllowed } from "../reader/chrome";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Popover } from "radix-ui";
-import { Check, ChevronLeft, Cloud, Dices, HardDrive, Layers, ChevronRight, GalleryHorizontalEnd, GripVertical, Heart, LayoutGrid, LayoutList, LibraryBig, List, ListChecks, Paintbrush, Play, Plus, Search, Shuffle } from "lucide-react";
+import { BookOpen, BookOpenText, Clapperboard, PanelsTopLeft, Tv, Check, ChevronLeft, Cloud, Dices, HardDrive, Layers, ChevronRight, GalleryHorizontalEnd, GripVertical, Heart, LayoutGrid, LayoutList, LibraryBig, List, ListChecks, Paintbrush, Play, Plus, Search, Shuffle } from "lucide-react";
 import { api, type Blurb, type ItemCard, type Ownership, type QueryParams, type SortKey } from "../../lib/api";
 import { itemPath, photoContext } from "../../lib/routes";
 import { GridDragProvider, moved } from "../../lib/gridDrag";
@@ -137,6 +137,20 @@ interface ViewProps {
   /** The view's usual cover shape (an item may have its own). */
   shape: CoverShape | "book";
   params: Omit<QueryParams, "offset" | "limit">;
+  /** Where the online items start, below a line (Music and Videos under All, D-183). */
+  onlineFrom?: number | null;
+}
+
+/** The height of the line above the online items. */
+const ONLINE_HEAD = 46;
+
+function OnlineDivider({ top, label }: { top: number; label: string }) {
+  return (
+    <div className="online-divider" style={{ transform: `translateY(${top}px)` }} role="heading" aria-level={2}>
+      <Cloud size={16} strokeWidth={2.4} aria-hidden />
+      <span>{label}</span>
+    </div>
+  );
 }
 
 /** Marks a cover with its item, so a layout change can move it from its old place to its new one. */
@@ -204,7 +218,7 @@ function useAspects(params: ViewProps["params"], slots: number[], total: number,
  * at one height, each as wide as its shape needs (the view's kinds and shapes come from the core,
  * so every row is known before its cards load).
  */
-function GridView({ cache, total, lead, slots, shape, params }: ViewProps) {
+function GridView({ cache, total, lead, slots, shape, params, onlineFrom }: ViewProps) {
   const { preferences } = usePreferences();
   const scroll = useRef<HTMLDivElement>(null);
   const width = useWidth(scroll);
@@ -219,7 +233,7 @@ function GridView({ cache, total, lead, slots, shape, params }: ViewProps) {
     let used = 0;
     natural.forEach((w, i) => {
       const need = used === 0 ? w : used + GAP + w;
-      if (used > 0 && need > Math.max(width, w)) {
+      if (used > 0 && (i === onlineFrom || need > Math.max(width, w))) {
         rows.push(i);
         rowWidths.push(used);
         used = w;
@@ -255,10 +269,11 @@ function GridView({ cache, total, lead, slots, shape, params }: ViewProps) {
     // Every row centered on its own, so rows of different widths (mixed shapes, the last row)
     // don't leave one edge further out than another (D-043).
     const offsets = rowWidths.map((w) => Math.max(0, Math.floor((width - w) / 2)));
-    return { widths, starts: rows, offsets, heights };
-  }, [aspects, onlyPhotos, total, width, artHeight]);
+    const headRow = onlineFrom != null && onlineFrom > 0 && onlineFrom < total ? rows.indexOf(onlineFrom) : -1;
+    return { widths, starts: rows, offsets, heights, headRow };
+  }, [aspects, onlyPhotos, total, width, artHeight, onlineFrom]);
   const rowCount = Math.max(0, layout.starts.length - 1);
-  const rowHeight = (index: number) => (layout.heights[index] ?? artHeight) + 44 + GAP + 10;
+  const rowHeight = (index: number) => (layout.heights[index] ?? artHeight) + 44 + GAP + 10 + (index === layout.headRow ? ONLINE_HEAD : 0);
   // Light mode draws fewer rows ahead of the scroll.
   const virtualizer = useVirtualizer({ count: rowCount, getScrollElement: () => scroll.current, estimateSize: rowHeight, overscan: preferences.lightMode ? 1 : 3 });
   useEffect(() => virtualizer.measure(), [virtualizer, layout, artHeight]);
@@ -276,8 +291,11 @@ function GridView({ cache, total, lead, slots, shape, params }: ViewProps) {
           rows.map((row) => {
             const from = layout.starts[row.index];
             const to = layout.starts[row.index + 1];
+            const head = row.index === layout.headRow;
             return (
-              <div key={row.key} className="grid-row flow" style={{ transform: `translateY(${row.start}px)`, left: layout.offsets[row.index] ?? 0, columnGap: GAP, ["--row" as string]: row.index }}>
+              <Fragment key={row.key}>
+              {head && <OnlineDivider top={row.start} label={params.category === "music" ? "Online music" : "Online videos"} />}
+              <div className="grid-row flow" style={{ transform: `translateY(${row.start + (head ? ONLINE_HEAD : 0)}px)`, left: layout.offsets[row.index] ?? 0, columnGap: GAP, ["--row" as string]: row.index }}>
                 {Array.from({ length: to - from }, (_, k) => {
                   const index = from + k;
                   const item = cache.get(index);
@@ -291,6 +309,7 @@ function GridView({ cache, total, lead, slots, shape, params }: ViewProps) {
                   );
                 })}
               </div>
+              </Fragment>
             );
           })}
       </div>
@@ -298,9 +317,11 @@ function GridView({ cache, total, lead, slots, shape, params }: ViewProps) {
   );
 }
 
-function ListView({ cache, total }: ViewProps) {
+function ListView({ cache, total, params, onlineFrom }: ViewProps) {
   const scroll = useRef<HTMLDivElement>(null);
-  const virtualizer = useVirtualizer({ count: total, getScrollElement: () => scroll.current, estimateSize: () => 58, overscan: 10 });
+  const head = onlineFrom != null && onlineFrom > 0 && onlineFrom < total ? onlineFrom : -1;
+  const virtualizer = useVirtualizer({ count: total, getScrollElement: () => scroll.current, estimateSize: (i) => 58 + (i === head ? ONLINE_HEAD : 0), overscan: 10 });
+  useEffect(() => virtualizer.measure(), [virtualizer, head]);
   const rows = virtualizer.getVirtualItems();
   useEnsureRows(cache, total, 1, rows);
   return (
@@ -317,9 +338,16 @@ function ListView({ cache, total }: ViewProps) {
         <div className="view-canvas" style={{ height: virtualizer.getTotalSize() }}>
           {rows.map((row) => {
             const item = cache.get(row.index);
-            if (!item) return <div key={row.key} className="list-row" style={{ top: row.start, height: 54 }} />;
-            if (item.collection) return <CollectionRowItem key={`c${item.id}`} item={item} top={row.start} index={row.index} />;
-            return <ListRow key={row.key} item={item} index={row.index} top={row.start} />;
+            const top = row.start + (row.index === head ? ONLINE_HEAD : 0);
+            const line = row.index === head && <OnlineDivider top={row.start} label={params.category === "music" ? "Online music" : "Online videos"} />;
+            if (!item) return <Fragment key={row.key}>{line}<div className="list-row" style={{ top, height: 54 }} /></Fragment>;
+            if (item.collection) return <CollectionRowItem key={`c${item.id}`} item={item} top={top} index={row.index} />;
+            return (
+              <Fragment key={row.key}>
+                {line}
+                <ListRow item={item} index={row.index} top={top} />
+              </Fragment>
+            );
           })}
         </div>
       </div>
@@ -572,12 +600,13 @@ function DetailedRow({ item, index, top, height, blurb }: { item: ItemCard; inde
 }
 
 /** Rows with big artwork, the description and facts (the brief's "Detailed view"). */
-function DetailedView({ cache, total }: ViewProps) {
+function DetailedView({ cache, total, params, onlineFrom }: ViewProps) {
   const { preferences } = usePreferences();
   const scroll = useRef<HTMLDivElement>(null);
   const rowHeight = Math.round(preferences.cardSize * 1.05) + 26;
-  const virtualizer = useVirtualizer({ count: total, getScrollElement: () => scroll.current, estimateSize: () => rowHeight + 14, overscan: 4 });
-  useEffect(() => virtualizer.measure(), [virtualizer, rowHeight]);
+  const head = onlineFrom != null && onlineFrom > 0 && onlineFrom < total ? onlineFrom : -1;
+  const virtualizer = useVirtualizer({ count: total, getScrollElement: () => scroll.current, estimateSize: (i) => rowHeight + 14 + (i === head ? ONLINE_HEAD : 0), overscan: 4 });
+  useEffect(() => virtualizer.measure(), [virtualizer, rowHeight, head]);
   const rows = virtualizer.getVirtualItems();
   useEnsureRows(cache, total, 1, rows);
   const blurbs = useBlurbs(rows.map((row) => cache.get(row.index)?.id).filter((id): id is number => id != null && id > 0));
@@ -586,9 +615,16 @@ function DetailedView({ cache, total }: ViewProps) {
       <div className="view-canvas" style={{ height: virtualizer.getTotalSize() }}>
         {rows.map((row) => {
           const item = cache.get(row.index);
-          if (!item) return <div key={row.key} className="detail-row skeleton" style={{ top: row.start, height: rowHeight }} />;
-          if (item.collection) return <CollectionDetailRow key={`c${item.id}`} item={item} top={row.start} height={rowHeight} index={row.index} />;
-          return <DetailedRow key={row.key} item={item} index={row.index} top={row.start} height={rowHeight} blurb={blurbs.get(item.id)} />;
+          const top = row.start + (row.index === head ? ONLINE_HEAD : 0);
+          const line = row.index === head && <OnlineDivider top={row.start} label={params.category === "music" ? "Online music" : "Online videos"} />;
+          if (!item) return <Fragment key={row.key}>{line}<div className="detail-row skeleton" style={{ top, height: rowHeight }} /></Fragment>;
+          if (item.collection) return <CollectionDetailRow key={`c${item.id}`} item={item} top={top} height={rowHeight} index={row.index} />;
+          return (
+            <Fragment key={row.key}>
+              {line}
+              <DetailedRow item={item} index={row.index} top={top} height={rowHeight} blurb={blurbs.get(item.id)} />
+            </Fragment>
+          );
         })}
       </div>
     </div>
@@ -835,6 +871,9 @@ const DURATION_SORTS: { value: SortKey; label: string }[] = [
 ];
 
 /** Play and Shuffle for a music view's tracks, in the view's order. */
+/** The last count shown, so a new category's tools don't flicker while its own arrives (D-183). */
+let lastToolTotal: number | null = null;
+
 function PlayAll({ params }: { params: Omit<QueryParams, "offset" | "limit"> }) {
   const playAndShow = usePlayAndShow();
   const [error, setError] = useState<string | null>(null);
@@ -926,6 +965,19 @@ function SelectToggle({ base, collections, itemsShown }: { base: Omit<QueryParam
   );
 }
 
+/** The kinds a category's filter row offers (D-183, D-184), each with its symbol as the ownership filter has. */
+const BOOK_KINDS: [string, string, typeof Layers][] = [
+  ["", "All", Layers],
+  ["book", "Books", BookOpen],
+  ["comic", "Comics", PanelsTopLeft],
+  ["manga", "Manga", BookOpenText],
+];
+const FILM_KINDS: [string, string, typeof Layers][] = [
+  ["", "All", Layers],
+  ["movie", "Movies", Clapperboard],
+  ["series", "Series", Tv],
+];
+
 /** A browsable, virtualized view of library items with layout, sort and ownership filters. */
 export function LibraryView({
   viewKey,
@@ -977,7 +1029,8 @@ export function LibraryView({
   // The title slides in when it changes, not when the same title is redrawn (Music's tabs, D-045).
   const titleArriving = useArrival(`title:${title}`);
   // The filter and the layout buttons slide to their place in a new category instead of jumping (D-096).
-  const ownershipRef = useGlide<HTMLDivElement>("library-ownership");
+  const ownershipRef = useGlide<HTMLDivElement>("library-filter");
+  const kindRef = useGlide<HTMLDivElement>("library-filter");
   const layoutRef = useGlide<HTMLDivElement>("library-layout");
   // "Find in this view" (D-041, like Arcade's search): narrows the view by words; the search page
   // has its own.
@@ -1030,7 +1083,13 @@ export function LibraryView({
     if (!orderKey) setSearchSort(next);
     else if (next) update((current) => ({ sorts: { ...current.sorts, [orderKey]: next } }));
   };
-  const params = { ...base, ...(finding && !base.search ? { search: finding } : {}), sort: sort || null, ownership: ownership || null, custom: sort === "custom" ? orderKey : null };
+  // Books: every kind, or books, comics or manga only (D-183).
+  // Books' and Movies & Series' kinds (D-183, D-184).
+  const kinds = mode === "collections" ? null : base.category === "books" ? BOOK_KINDS : base.category === "video" ? FILM_KINDS : null;
+  const kindFilter = !kinds ? "" : base.category === "books" ? preferences.booksKind : preferences.filmsKind;
+  const setKind = (value: string) =>
+    base.category === "books" ? update({ booksKind: value as typeof preferences.booksKind }) : update({ filmsKind: value as typeof preferences.filmsKind });
+  const params = { ...base, ...(finding && !base.search ? { search: finding } : {}), sort: sort || null, ownership: ownership || null, custom: sort === "custom" ? orderKey : null, kind: kindFilter || null };
   // The image viewer steps through what this view shows (D-033).
   photoContext.params = params;
   const { cache, total: itemTotal, error } = usePagedItems(params);
@@ -1051,12 +1110,24 @@ export function LibraryView({
   const source = useMemo(() => new LedSource(leadCards, places, onlyCollections ? null : cache), [leadCards, places, onlyCollections, cache]);
   const waiting = itemTotal == null || (onlyCollections && !level.data);
   const total = waiting ? null : leadCards.length + (onlyCollections ? 0 : itemTotal);
+  // Music and Videos under All: the online items come last, below a line (D-183).
+  const onlineLast = withOnline && filter === "" && sort !== "custom" && !base.search && !onlyCollections;
+  const onlineCount = useQuery({
+    queryKey: ["online-count", params],
+    queryFn: () => api.query({ ...params, ownership: "online", offset: 0, limit: 1 }).then((r) => r.total),
+    enabled: onlineLast,
+  });
+  const onlineFrom = onlineLast && itemTotal != null && onlineCount.data ? itemTotal - onlineCount.data : null;
+  // The tools beside the categories (Surprise me, Select, Play all) stay while the next category's
+  // count arrives, instead of vanishing and coming back (D-183).
+  if (total != null) lastToolTotal = total;
+  const toolTotal = total ?? lastToolTotal;
   const lead = leadCards.length;
   const selection = useSelectionState(source);
   // Entrance animations play for a moment after the view, filter or sort changes, not while scrolling.
   // A layout change has its own transition (each cover flies to its new place), so the covers don't
   // also pop in then (D-096).
-  const stageKey = `${viewKey}:${filter}:${sort}:${finding}`;
+  const stageKey = `${viewKey}:${filter}:${kindFilter}:${sort}:${finding}`;
   const [entering, setEntering] = useState(true);
   useEffect(() => {
     setEntering(true);
@@ -1127,8 +1198,8 @@ export function LibraryView({
                   <CardSizeSlider value={preferences.cardSize} onChange={(cardSize) => update({ cardSize })} />
                 </label>
               )}
-              {total != null && total > 0 && !onlyCollections && <SurpriseButton base={params} />}
-              {total != null && total > 0 && <SelectToggle base={params} collections={leadCards.map((c) => c.id)} itemsShown={!onlyCollections} />}
+              {toolTotal != null && toolTotal > 0 && !onlyCollections && <SurpriseButton base={params} />}
+              {toolTotal != null && toolTotal > 0 && <SelectToggle base={params} collections={leadCards.map((c) => c.id)} itemsShown={!onlyCollections} />}
               <label className="arcade-sort">
                 <span>Sort</span>
                 <select value={sort} onChange={(event) => setSort(event.target.value as SortKey | "")}>
@@ -1161,7 +1232,7 @@ export function LibraryView({
               </div>
             </div>
             <div className="header-actions">
-              {handler === "audio" && total != null && total > 0 && <PlayAll params={params} />}
+              {handler === "audio" && toolTotal != null && toolTotal > 0 && <PlayAll params={params} />}
               {actions}
               <AddMenu align="end" category={base.category ?? null}>
                 <button type="button" className="btn btn-primary">
@@ -1173,6 +1244,15 @@ export function LibraryView({
           {prelude}
           <div className="toolbar arcade-toolbar">
             {tabs}
+            {kinds && (
+              <div ref={kindRef} className="segmented" role="group" aria-label="Kind">
+                {kinds.map(([value, label, Icon]) => (
+                  <button key={value} type="button" aria-pressed={kindFilter === value} onClick={() => setKind(value)}>
+                    <Icon size={15} aria-hidden /> {label}
+                  </button>
+                ))}
+              </div>
+            )}
             {filters.length > 0 && (
             <div ref={ownershipRef} className="segmented" role="group" aria-label="Ownership">
               {filters.map((option) => (
@@ -1235,15 +1315,15 @@ export function LibraryView({
         {total === 0 ? (
           <div style={{ padding: "8px 40px" }}>{empty}</div>
         ) : total != null && layout === "list" ? (
-          <ListView cache={source} total={total} lead={lead} slots={source.slots} square={!!square} shape={shape} params={params} />
+          <ListView cache={source} total={total} lead={lead} slots={source.slots} square={!!square} shape={shape} params={params} onlineFrom={onlineFrom} />
         ) : total != null && layout === "shelf" ? (
-          <ShelfView cache={source} total={total} lead={lead} slots={source.slots} square={!!square} shape={shape} params={params} />
+          <ShelfView cache={source} total={total} lead={lead} slots={source.slots} square={!!square} shape={shape} params={params} onlineFrom={onlineFrom} />
         ) : total != null && layout === "detailed" ? (
-          <DetailedView cache={source} total={total} lead={lead} slots={source.slots} square={!!square} shape={shape} params={params} />
+          <DetailedView cache={source} total={total} lead={lead} slots={source.slots} square={!!square} shape={shape} params={params} onlineFrom={onlineFrom} />
         ) : total != null && layout === "carousel" ? (
-          <CarouselView cache={source} total={total} lead={lead} slots={source.slots} square={!!square} shape={shape} params={params} />
+          <CarouselView cache={source} total={total} lead={lead} slots={source.slots} square={!!square} shape={shape} params={params} onlineFrom={onlineFrom} />
         ) : total != null ? (
-          <GridView cache={source} total={total} lead={lead} slots={source.slots} square={!!square} shape={shape} params={params} />
+          <GridView cache={source} total={total} lead={lead} slots={source.slots} square={!!square} shape={shape} params={params} onlineFrom={onlineFrom} />
         ) : null}
         </div>
         {arranging && orderKey && (

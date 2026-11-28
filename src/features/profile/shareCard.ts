@@ -1,4 +1,4 @@
-import { artworkUrl, type Profile, type ProfileView } from "../../lib/api";
+import { artworkUrl, type Profile, type ProfileExtras, type ProfileView } from "../../lib/api";
 import { gameAspect } from "../arcade/shared";
 import { hours, initials, sinceLabel, type ProfileSummary } from "./data";
 
@@ -10,7 +10,8 @@ import { hours, initials, sinceLabel, type ProfileSummary } from "./data";
  */
 
 const W = 1600;
-const H = 900;
+/** Taller since D-183, for the five songs listened to most. */
+const H = 1080;
 const FONT = '"Nunito Variable", "Nunito", "Segoe UI", sans-serif';
 
 function load(src: string): Promise<HTMLImageElement | null> {
@@ -112,7 +113,8 @@ function logo(ctx: CanvasRenderingContext2D, x: number, y: number, size: number,
   ctx.restore();
 }
 
-export async function drawShareCard(profile: Profile, summary: ProfileSummary): Promise<Blob> {
+export async function drawShareCard(profile: Profile, summary: ProfileSummary, extras: ProfileExtras | null = null): Promise<Blob> {
+  const tracks = extras?.topTracks.slice(0, 5) ?? [];
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
@@ -125,6 +127,7 @@ export async function drawShareCard(profile: Profile, summary: ProfileSummary): 
     profile.avatar ? load(profile.avatar) : Promise.resolve(null),
     ...summary.topGames.slice(0, 5).map((g) => (g.coverKey ? load(artworkUrl(g.coverKey, "cover")) : Promise.resolve(null))),
   ]);
+  const trackCovers = await Promise.all(tracks.map((t) => (t.coverKey ? load(artworkUrl(t.coverKey, "thumb")) : Promise.resolve(null))));
 
   // The night behind it all, lit by the accent.
   const back = ctx.createLinearGradient(0, 0, W, H);
@@ -226,7 +229,11 @@ export async function drawShareCard(profile: Profile, summary: ProfileSummary): 
   ctx.font = `700 28px ${FONT}`;
   ctx.fillStyle = "rgba(235,242,250,0.82)";
   if (profile.motto) ctx.fillText(fit(ctx, profile.motto, W - tx - 90), tx, 396);
-  const facts = [sinceLabel(summary.since) && `Collecting since ${sinceLabel(summary.since)}`, summary.bestStreak > 1 && `Best streak ${summary.bestStreak} days`].filter(Boolean) as string[];
+  const facts = [
+    extras && `Level ${extras.level.level}`,
+    sinceLabel(summary.since) && `Collecting since ${sinceLabel(summary.since)}`,
+    summary.bestStreak > 1 && `Best streak ${summary.bestStreak} days`,
+  ].filter(Boolean) as string[];
   ctx.font = `800 22px ${FONT}`;
   let fx = tx;
   for (const fact of facts) {
@@ -331,6 +338,43 @@ export async function drawShareCard(profile: Profile, summary: ProfileSummary): 
     ctx.textAlign = "right";
     ctx.fillText(hours(seconds), bx + bw, y + 22);
     ctx.textAlign = "left";
+  });
+
+  // The songs listened to most (D-183).
+  const songY = 880;
+  ctx.fillStyle = "rgba(200,212,226,0.85)";
+  ctx.font = `800 20px ${FONT}`;
+  ctx.fillText("MOST LISTENED", 90, songY - 14);
+  if (tracks.length === 0) {
+    ctx.fillStyle = "rgba(235,242,250,0.6)";
+    ctx.font = `700 22px ${FONT}`;
+    ctx.fillText("No music played yet", 90, songY + 40);
+  }
+  const songW = (W - 180 - 4 * 20) / 5;
+  tracks.forEach((track, i) => {
+    const x = 90 + i * (songW + 20);
+    ctx.fillStyle = "rgba(255,255,255,0.07)";
+    roundRect(ctx, x, songY, songW, 84, 18);
+    ctx.fill();
+    const art = trackCovers[i];
+    ctx.save();
+    roundRect(ctx, x + 12, songY + 12, 60, 60, 10);
+    ctx.clip();
+    if (art) cover(ctx, art, x + 12, songY + 12, 60, 60);
+    else {
+      ctx.fillStyle = withAlpha(accent, 0.5);
+      ctx.fillRect(x + 12, songY + 12, 60, 60);
+    }
+    ctx.restore();
+    ctx.fillStyle = accent;
+    ctx.font = `900 18px ${FONT}`;
+    ctx.fillText(String(i + 1), x + songW - 26, songY + 30);
+    ctx.fillStyle = "#fff";
+    ctx.font = `800 20px ${FONT}`;
+    ctx.fillText(fit(ctx, track.title, songW - 120), x + 86, songY + 38);
+    ctx.fillStyle = "rgba(200,212,226,0.85)";
+    ctx.font = `700 17px ${FONT}`;
+    ctx.fillText(fit(ctx, track.artist ?? `${track.plays} plays`, songW - 100), x + 86, songY + 64);
   });
 
   // Signed.

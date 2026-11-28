@@ -493,6 +493,28 @@ body:has(.import-panel) .online-queue {
   backdrop-filter: blur(6px);
   pointer-events: none;
 }
+.film-tag[data-kind="comic"] {
+  background: color-mix(in srgb, #e8762d 86%, transparent);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.film-tag[data-kind="manga"] {
+  background: color-mix(in srgb, #d6334b 86%, transparent);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+/* A note and the format beside it, in one pill like a video's (D-184). */
+.film-tag[data-kind="music"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: color-mix(in srgb, #1db8a4 85%, transparent);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+/* On a round CD the tags and badges stay where a square cover has them (D-184), drawn over the
+   disc's edge and never cut. */
+[data-shape="disc"] > .card-case {
+  display: none;
+}
 .film-tag[data-kind="gif"] {
   background: color-mix(in srgb, #e5487f 85%, transparent);
   border-color: rgba(255, 255, 255, 0.3);
@@ -1020,6 +1042,10 @@ body:has(.import-panel) .online-queue {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+.arcade-tile-text .arcade-tile-sub {
+  display: block;
+  min-width: 0;
 }
 
 /* ---------------------------------------------------------------- D-044 */

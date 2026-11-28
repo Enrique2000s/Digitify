@@ -1,3 +1,4 @@
+import { Marquee } from "../../components/Marquee";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
@@ -168,7 +169,7 @@ function WeekDialog({ week: w, open, onOpenChange }: { week: WeekReview; open: b
                 <ol>
                   {l.list.map((entry) => (
                     <li key={entry.key}>
-                      <span>{entry.name}</span>
+                      <Marquee className="year-list-name" text={entry.name} />
                       <b>{l.value(entry.count)}</b>
                     </li>
                   ))}

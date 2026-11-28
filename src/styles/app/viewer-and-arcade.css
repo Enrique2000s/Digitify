@@ -260,6 +260,39 @@
   flex-wrap: wrap;
   margin: 6px 0 20px;
 }
+/* Arcade is laid out as Library is (D-184): its title, views and tools stay where they are in a
+   frame of their own, at Library's heights, and only the games under them scroll; no bar behind them,
+   so the page's own background shows through and nothing (a focus ring, a highlight) is cut. */
+.arcade-view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.arcade-chrome {
+  flex: none;
+  padding: 16px 40px 0;
+}
+.arcade-chrome > .arcade-toolbar {
+  margin: 0 0 6px;
+}
+.arcade-view > .arcade-page {
+  padding-top: 10px;
+}
+.arcade-head.arriving,
+.arcade-chrome > .arcade-toolbar.arriving {
+  animation: view-in 300ms var(--ease) both;
+}
+/* Selecting: the check at the cover's top left, as in Library, the console's badge making room. */
+.arcade-view.selecting .arcade-tile-art .arcade-badge {
+  left: 42px;
+}
+.arcade-tile-art .card-check {
+  top: 8px;
+  left: 8px;
+  z-index: 6;
+}
 .arcade-search {
   display: flex;
   align-items: center;
@@ -294,6 +327,9 @@
   color: var(--muted);
 }
 .arcade-sort select {
+  /* One width whatever the options, so it doesn't change size between categories (D-183). */
+  width: 230px;
+  text-overflow: ellipsis;
   height: 38px;
   padding: 0 12px;
   border: 1px solid var(--line);
@@ -901,10 +937,12 @@
 .arcade-grid.selecting .arcade-tile-art {
   cursor: pointer;
 }
+/* The check at the cover's top left while selecting, as in Library (D-184). */
 .arcade-tile .card-check {
   position: absolute;
-  right: 8px;
-  bottom: 8px;
+  top: 8px;
+  left: 8px;
+  z-index: 6;
 }
 .arcade-tile.checked .arcade-tile-art {
   box-shadow: 0 0 0 3px var(--accent), 0 10px 22px rgba(0, 0, 0, 0.28);
@@ -945,11 +983,6 @@
 }
 .arcade-folders li .icon-btn + .icon-btn {
   margin-left: 0;
-}
-
-.arcade-tile .card-check {
-  top: auto;
-  left: auto;
 }
 
 /* Arcade, D-037: centered grid, size, PC stores. */
@@ -1181,6 +1214,38 @@
 .arcade-emulator-line > .btn,
 .arcade-emulator-line > :last-child {
   margin-left: auto;
+  flex: none;
+}
+/* Launchers (D-183): a name with what was found under it, the line keeping its size. */
+.arcade-emulator-line > .launcher-name {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: 0;
+  line-height: 1.3;
+  text-align: left;
+}
+.launcher-name .marquee {
+  max-width: 100%;
+}
+.launcher-name .marquee {
+  font-size: 12px;
+}
+.launcher-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.launcher-option > span {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+.launcher-option > :last-child {
   flex: none;
 }
 .arcade-emulator-consoles {
@@ -1554,4 +1619,88 @@
   max-width: none;
   overflow: visible;
   animation: marquee var(--duration, 6s) linear infinite;
+}
+
+/* Add games from this computer (D-183): a list like Steam's, each program's icon, name and file. */
+.program-picker-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.program-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: min(56vh, 520px);
+  overflow-y: auto;
+  padding: 2px;
+}
+.program-picker-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 8px;
+}
+.program-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.program-row:hover:not(:disabled) {
+  background: var(--hover, color-mix(in srgb, var(--text) 6%, transparent));
+}
+.program-row.on {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.program-row:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.program-check {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--line-strong, var(--line));
+  border-radius: 6px;
+  color: #fff;
+}
+.program-check.on {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.program-icon {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  color: var(--muted);
+}
+.program-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.program-text strong,
+.program-text span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.program-text span {
+  font-size: 12px;
 }

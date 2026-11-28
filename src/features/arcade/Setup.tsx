@@ -43,10 +43,11 @@ export function Setup({ status, onChanged, onAddProgram }: { status: ArcadeStatu
   const storesFound = status.stores.filter((s) => s.found).length;
   const available = status.emulators.filter((e) => e.available);
   const emulatorsFound = available.filter((e) => e.found).length;
+  const consolesFound = new Set((games.data ?? []).filter((g) => !g.missing && g.platform !== "pc").map((g) => g.platform)).size;
   const tabs: [SetupTab, string, string | null][] = [
     ["launchers", "Launchers", `${storesFound}`],
+    ["consoles", "Consoles", `${consolesFound}`],
     ["emulators", "Emulators", `${emulatorsFound} of ${available.length}`],
-    ["consoles", "Consoles", null],
     ["folders", "Folders & covers", null],
   ];
   return (
@@ -68,28 +69,51 @@ export function Setup({ status, onChanged, onAddProgram }: { status: ArcadeStatu
   );
 }
 
+/**
+ * Launchers (D-183), laid out as Emulators and Consoles are: each one's logo and name with what was
+ * found under it (sliding when it doesn't fit, so every box keeps its size), and for a launcher with
+ * options of its own (Steam) an arrow that opens them under its row.
+ */
 function LaunchersTab({ status, games, onRun, onAddProgram }: { status: ArcadeStatus; games: ArcadeGame[] | undefined; onRun: Run; onAddProgram: () => void }) {
   const byHand = (games ?? []).filter((g) => g.platform === "pc" && !g.store && !g.missing).length;
+  const [open, setOpen] = useState<string | null>(null);
   return (
     <div className="arcade-setup-pane">
       <p className="muted">Each store's installed games, following what you install or remove; each starts through its store.</p>
-      <ul className="arcade-rows">
-        {status.stores.map((store) => (
-          <li key={store.key} className={store.found ? "found" : "absent"}>
-            {store.found ? <CheckCircle2 size={16} className="ok" /> : <CircleAlert size={16} className="warn" />}
-            <LogoMark name={store.key} className="setup-logo" />
-            <strong>{store.name}</strong>
-            <span className="muted">{store.found ? `${store.games} installed ${store.games === 1 ? "game" : "games"}` : "not found on this computer"}</span>
-            {store.key === "steam" && store.found && <SteamHoursButton onRun={onRun} />}
-          </li>
-        ))}
-        <li className="found">
-          <AppWindow size={16} className="ok" />
-          <strong>Added by you</strong>
-          <span className="muted">{byHand === 1 ? "1 program" : `${byHand} programs`}</span>
-          <button type="button" className="btn btn-sm" onClick={onAddProgram}>
-            Add a game…
-          </button>
+      <ul className="arcade-rows emulator-rows launcher-rows">
+        {status.stores.map((store) => {
+          const options = store.key === "steam" && store.found;
+          const isOpen = !!options && open === store.key;
+          return (
+            <li key={store.key} className={`arcade-emulator-row${store.found ? " found" : " absent"}${isOpen ? " open" : ""}`}>
+              <div className="arcade-emulator-line">
+                {store.found ? <CheckCircle2 size={16} className="ok" /> : <CircleAlert size={16} className="warn" />}
+                <LogoMark name={store.key} className="setup-logo" />
+                <span className="launcher-name">
+                  <strong>{store.name}</strong>
+                  <Marquee className="muted" text={store.found ? `${store.games} installed ${store.games === 1 ? "game" : "games"}` : "not found on this computer"} />
+                </span>
+                {options && (
+                  <button type="button" className="btn btn-sm" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : store.key)}>
+                    Options <ChevronDown size={14} className="arcade-chevron" />
+                  </button>
+                )}
+              </div>
+              {isOpen && <SteamOptions onRun={onRun} />}
+            </li>
+          );
+        })}
+        <li className="arcade-emulator-row found">
+          <div className="arcade-emulator-line">
+            <AppWindow size={16} className="ok" />
+            <span className="launcher-name">
+              <strong>Added by you</strong>
+              <Marquee className="muted" text={byHand === 1 ? "1 program" : `${byHand} programs`} />
+            </span>
+            <button type="button" className="btn btn-sm" onClick={onAddProgram}>
+              Add a game…
+            </button>
+          </div>
         </li>
       </ul>
       {status.hidden > 0 && (
@@ -100,6 +124,34 @@ function LaunchersTab({ status, games, onRun, onAddProgram }: { status: ArcadeSt
           </button>
         </p>
       )}
+    </div>
+  );
+}
+
+/** Steam's options (D-183): its hours kept up to date by themselves (on by default), or brought in by hand. */
+function SteamOptions({ onRun }: { onRun: Run }) {
+  const { preferences, update } = usePreferences();
+  const auto = preferences.arcade.steamHoursAuto;
+  return (
+    <div className="arcade-emulator-details">
+      <div className="launcher-option">
+        <span>
+          <strong>Keep Steam's hours up to date</strong>
+          <span className="muted">
+            {auto
+              ? "Digitify brings in the time Steam records for your games by itself, when it opens and every few minutes, so each game's total matches Steam's."
+              : "Off: Steam's time comes in only when you bring it in."}
+          </span>
+        </span>
+        <Switch checked={auto} label="Keep Steam's hours up to date" onChange={(steamHoursAuto) => update((c) => ({ arcade: { ...c.arcade, steamHoursAuto } }))} />
+      </div>
+      <div className="launcher-option">
+        <span>
+          <strong>Steam's hours now</strong>
+          <span className="muted">See what Steam has recorded and bring it in.</span>
+        </span>
+        <SteamHoursButton onRun={onRun} />
+      </div>
     </div>
   );
 }
@@ -418,12 +470,13 @@ function EmulatorRow({ emulator, open, onToggle, onRun }: { emulator: ArcadeEmul
         <div className="arcade-emulator-details">
           <div className="arcade-emulator-program">
             <span className="arcade-emulator-path" title={emulator.found}>{emulator.found}</span>
-            <button type="button" className="btn btn-sm" onClick={() => void locate()}>Change…</button>
+            {/* Find it automatically first, then Change… and Don't use (D-184). */}
             {emulator.picked && (
               <button type="button" className="icon-btn" aria-label="Find it automatically" title="Find it automatically" onClick={() => void onRun(() => api.arcadeSetEmulator(emulator.key, null))}>
                 <RotateCcw size={15} />
               </button>
             )}
+            <button type="button" className="btn btn-sm" onClick={() => void locate()}>Change…</button>
             {/* D-117: one found that isn't wanted is set aside; its games stay, opening in another emulator if there is one. */}
             <button
               type="button"

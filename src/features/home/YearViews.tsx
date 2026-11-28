@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Marquee } from "../../components/Marquee";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { BackButton } from "../../components/BackButton";
@@ -12,7 +13,7 @@ const longDay = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(
 const iso = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
 /** The activity calendar (D-067): every day of a year as a square, darker the more time it had. */
-export function ActivityCalendar({ year, onYear }: { year: number; onYear: (year: number) => void }) {
+export function ActivityCalendar({ year, onYear, extra }: { year: number; onYear: (year: number) => void; extra?: ReactNode }) {
   const thisYear = new Date().getFullYear();
   const days = useQuery({ queryKey: ["activity-calendar", year], queryFn: () => api.activityCalendar(year), staleTime: 60_000 });
   const [hover, setHover] = useState<{ day: string; seconds: number; x: number; y: number } | null>(null);
@@ -53,6 +54,7 @@ export function ActivityCalendar({ year, onYear }: { year: number; onYear: (year
           <button type="button" className="icon-btn" aria-label="Next year" disabled={year >= thisYear} onClick={() => onYear(year + 1)}>
             <ChevronRight size={16} />
           </button>
+          {extra}
         </span>
       </figcaption>
       <div className="calendar-scroll">
@@ -381,7 +383,7 @@ export function YearReviewBody({ year }: { year: number }) {
                   <ol>
                     {l.list.map((entry) => (
                       <li key={entry.key}>
-                        <span>{entry.name}</span>
+                        <Marquee className="year-list-name" text={entry.name} />
                         <b>{l.value(entry.count)}</b>
                       </li>
                     ))}

@@ -71,6 +71,8 @@ export interface ItemCard {
   kind?: string | null;
   /** Finished: watched, read, or marked so (D-178). */
   completed?: boolean;
+  /** How its cover is framed, when adjusted (D-184). */
+  coverView?: CoverView | null;
   /** Set when this stands for a collection among a view's items (D-030); its id is then negative. */
   collection?: { id: number; covers: TileCover[]; itemCount: number; childCount: number };
 }
@@ -288,6 +290,38 @@ export interface YearReview {
   topArtists: NamedCount[];
 }
 
+/** The profile's level (D-183): XP from time, finishing, achievements and ratings. */
+export interface ProfileLevel {
+  level: number;
+  xp: number;
+  into: number;
+  step: number;
+  time: number;
+  finished: number;
+  achievements: number;
+  ratings: number;
+}
+export interface RatedEntry {
+  kind: "item" | "game";
+  id: number;
+  title: string;
+  rating: number;
+  coverKey: string | null;
+  place: string;
+}
+export interface TopTrack {
+  id: number;
+  title: string;
+  artist: string | null;
+  coverKey: string | null;
+  plays: number;
+}
+export interface ProfileExtras {
+  level: ProfileLevel;
+  ratings: RatedEntry[];
+  topTracks: TopTrack[];
+}
+
 /** An achievement (D-066); `new` when this check just reached it. */
 export interface Achievement {
   key: string;
@@ -307,6 +341,8 @@ export interface Blurb {
 }
 
 export interface QueryParams {
+  /** Books' kinds (D-183): `book`, `comic` or `manga`. */
+  kind?: string | null;
   category?: string | null;
   /** A collection and everything inside it. */
   collection?: number | null;
@@ -368,6 +404,10 @@ export interface TileCover {
   category?: string | null;
   coverShape?: CoverShape | null;
   aspect?: number | null;
+  /** A GIF's item, so it moves on the tile (D-183). */
+  gif?: number | null;
+  /** A game's box shape (width ÷ height), kept on Arcade's tile (D-183). */
+  box?: number | null;
 }
 
 export interface Dashboard {
@@ -813,6 +853,8 @@ export const api = {
   yearReview: (year: number) => invoke<YearReview>("year_review", { year }),
   weekReview: () => invoke<WeekReview>("week_review"),
   achievementsList: () => invoke<Achievement[]>("achievements_list"),
+  /** The profile's level, everything rated and the songs played most (D-183). */
+  profileExtras: () => invoke<ProfileExtras>("profile_extras"),
   resumeGet: () => invoke<Resume | null>("resume_get"),
   appQuit: () => invoke<void>("app_quit"),
   collections: (category: string, parent: number | null) => invoke<CollectionLevel>("collections_list", { category, parent }),
@@ -848,6 +890,7 @@ export const api = {
   arcadeScan: (downloadCovers: boolean) => invoke<ArcadeScanReport>("arcade_scan", { downloadCovers }),
   arcadeGames: () => invoke<ArcadeGame[]>("arcade_games"),
   arcadeSetFavorite: (id: number, favorite: boolean) => invoke<void>("arcade_set_favorite", { id, favorite }),
+  arcadeSetCoverView: (id: number, view: CoverView | null) => invoke<void>("arcade_set_cover_view", { id, view }),
   arcadeSetCover: (id: number, path: string) => invoke<void>("arcade_set_cover", { id, path }),
   arcadeSetExtraTime: (id: number, seconds: number) => invoke<void>("arcade_set_extra_time", { id, seconds }),
   arcadeSetReview: (id: number, rating: number | null, note: string | null) => invoke<void>("arcade_set_review", { id, rating, note }),
@@ -887,6 +930,8 @@ export const api = {
   /** A picture of the user's (`path`) or a library cover (`artwork`) as the profile's picture or banner. */
   profileSetImage: (kind: "avatar" | "banner", source: { path?: string; artwork?: string }) => invoke<void>("profile_set_image", { kind, path: source.path ?? null, artwork: source.artwork ?? null }),
   profileClearImage: (kind: "avatar" | "banner") => invoke<void>("profile_clear_image", { kind }),
+  /** A picture of one's own kept in the artwork store (D-183); its key, for artworkUrl. */
+  artworkImport: (path: string) => invoke<string>("artwork_import", { path }),
   profileSetView: (kind: "avatar" | "banner", view: ProfileView) => invoke<void>("profile_set_view", { kind, view }),
   profileSetFrame: (shape: Profile["shape"], ring: Profile["ring"]) => invoke<void>("profile_set_frame", { shape, ring }),
   /** The share card's PNG, sent as it is (not as JSON), saved where the user chose. */
@@ -909,6 +954,8 @@ export const api = {
   arcadeChooseCover: (id: number, index: number) => invoke<void>("arcade_choose_cover", { id, index }),
   /** Adds a PC game by its program (D-107); returns its id. */
   arcadeAddProgram: (path: string, downloadCovers: boolean) => invoke<number>("arcade_add_program", { path, downloadCovers }),
+  /** The programs on this computer to pick games from (D-183). */
+  arcadePrograms: () => invoke<ProgramEntry[]>("arcade_programs"),
   /** An emulator's game folders set in Arcade (D-035); null goes back to its own. */
   arcadeEmulatorFolders: (emulator: ArcadeEmulator, folders: { path: string; recursive: boolean }[] | null) => invoke<void>("arcade_emulator_folders", { emulator, folders }),
   arcadeSetFavoriteMany: (ids: number[], favorite: boolean) => invoke<void>("arcade_set_favorite_many", { ids, favorite }),
@@ -929,7 +976,7 @@ export const api = {
   ebookProgressSave: (id: number, cfi: string, fraction: number, finished: boolean) =>
     invoke<void>("ebook_progress_save", { id, cfi, fraction, finished }),
   imagePreviews: (paths: string[]) => invoke<(string | null)[]>("image_previews", { paths }),
-  bookFromImages: (book: { title: string; category: string; paths: string[]; mode: ImportMode }) => invoke<number>("book_from_images", { book }),
+  bookFromImages: (book: { title: string; category: string; kind?: string; paths: string[]; mode: ImportMode }) => invoke<number>("book_from_images", { book }),
   pagesArrange: (version: number, files: number[], trashRemoved: boolean) => invoke<void>("pages_arrange", { version, files, trashRemoved }),
   chaptersGet: (id: number) => invoke<Chapter[]>("chapters_get", { id }),
   chaptersSet: (id: number, chapters: Chapter[]) => invoke<void>("chapters_set", { id, chapters }),
@@ -944,10 +991,15 @@ export const api = {
   item: (id: number) => invoke<ItemDetail>("item_get", { id }),
   itemUpdate: (id: number, edit: ItemEdit) => invoke<void>("item_update", { id, edit }),
   itemSetFavorite: (id: number, favorite: boolean) => invoke<void>("item_set_favorite", { id, favorite }),
+  itemSetCoverView: (id: number, view: CoverView | null) => invoke<void>("item_set_cover_view", { id, view }),
   itemSetCover: (id: number, path: string) => invoke<void>("item_set_cover", { id, path }),
   itemsSetCover: (ids: number[], path: string) => invoke<void>("items_set_cover", { ids, path }),
   itemRemove: (ids: number[], trashManagedCopies: boolean) =>
-    invoke<RemoveReport>("item_remove", { ids, trashManagedCopies }),
+    invoke<RemoveReport>("item_remove", { ids, trashManagedCopies }).then((report) => {
+      // What was removed leaves the music queue too (D-183).
+      window.dispatchEvent(new CustomEvent("digitify:items-removed", { detail: ids }));
+      return report;
+    }),
   fileReveal: (id: number) => invoke<void>("file_reveal", { id }),
 
   importStart: (paths: string[], mode: ImportMode, category: string | null) =>
@@ -1139,6 +1191,19 @@ export interface ArcadeGame {
   completedAt: string | null;
   /** Your own keywords for it (D-160). */
   keywords: string[];
+  /** How its cover is framed in its box, when adjusted (D-184). */
+  coverView?: CoverView | null;
+}
+
+/**
+ * How a cover is framed in its box (D-184), as a profile picture is: zoomed around a middle, for the
+ * cover it was made for (`key`; another cover starts as it comes).
+ */
+export interface CoverView {
+  zoom: number;
+  x: number;
+  y: number;
+  key: string;
 }
 
 /** The personal profile (D-149): kept on this computer; the pictures come as data URLs. */
@@ -1197,6 +1262,13 @@ export interface ArcadeScanReport {
 /** A photo's own file (D-033), served by the core's private `digitify` scheme. */
 export function pictureUrl(itemId: number): string {
   return `${MEDIA}/picture/${itemId}`;
+}
+
+/** A program found on this computer that could be added as a game (D-183). */
+export interface ProgramEntry {
+  name: string;
+  path: string;
+  icon: string | null;
 }
 
 /** A newer version of Digitify on GitHub, with this computer's file (D-181). */

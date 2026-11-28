@@ -2,7 +2,7 @@ import { memo } from "react";
 import { Marquee } from "./Marquee";
 import { Link } from "@tanstack/react-router";
 import { itemPath } from "../lib/routes";
-import { Check, Cloud, Star } from "lucide-react";
+import { Check, Cloud, FileWarning, Star } from "lucide-react";
 import type { ItemCard } from "../lib/api";
 import { useSelectable } from "../lib/selection";
 import { Cover } from "./common";
@@ -43,6 +43,52 @@ export function ProgressMark({ item, className = "card-progress" }: { item: { pr
   );
 }
 
+/**
+ * A file that can't be found (D-184): over the middle of its cover, whatever the cover's shape,
+ * the cover a little dimmed behind it, instead of a chip in a corner.
+ */
+export function MissingMark() {
+  return (
+    <span className="missing-mark" title="The file can't be found at its saved location">
+      <span>
+        <FileWarning size={15} strokeWidth={2.6} aria-hidden /> Missing file
+      </span>
+    </span>
+  );
+}
+
+/**
+ * What a cover shows on it besides the picture (D-184): its service, its kind (Movie, Comic…), its
+ * format, and its badges (missing, online, favorite) and how far along it is. The Spotlight shows
+ * the same as the cards.
+ */
+export function CoverMarks({ item }: { item: ItemCard }) {
+  return (
+    <>
+      <SourceTag service={item.source} />
+      <FilmTag item={item} />
+      <FormatTag item={item} />
+      {(item.isFavorite || item.online) && (
+        <div className="card-badges">
+          
+          {item.online && (
+            <span className="online-badge" title="Online: plays in its service's player and needs a connection" aria-label="Online">
+              <Cloud size={13} strokeWidth={2.6} />
+            </span>
+          )}
+          {item.isFavorite && (
+            <span className="fav" aria-label="Favorite">
+              <Star size={14} fill="currentColor" strokeWidth={0} />
+            </span>
+          )}
+        </div>
+      )}
+      <ProgressMark item={item} />
+      {item.missing && <MissingMark />}
+    </>
+  );
+}
+
 /** A cover card. In a library view (`index` given) it also takes part in multi-select. */
 export const MediaCard = memo(function MediaCard({ item, width, index, transitionId }: { item: ItemCard; width?: number; index?: number; transitionId?: number }) {
   const band = caseBand(item);
@@ -58,9 +104,9 @@ export const MediaCard = memo(function MediaCard({ item, width, index, transitio
         <FilmTag item={item} />
         <FormatTag item={item} />
         {band && <div className={`card-case ${band}`}>{band === "bluray" ? "BLU-RAY" : "DVD"}</div>}
-        {(item.isFavorite || item.missing || item.online) && (
+        {(item.isFavorite || item.online) && (
           <div className="card-badges" style={band ? { top: 28 } : undefined}>
-            {item.missing && <span className="chip warning">Missing</span>}
+            
             {item.online && (
               <span className="online-badge" title="Online: plays in its service's player and needs a connection" aria-label="Online">
                 <Cloud size={13} strokeWidth={2.6} />
@@ -74,6 +120,7 @@ export const MediaCard = memo(function MediaCard({ item, width, index, transitio
           </div>
         )}
         <ProgressMark item={item} />
+        {item.missing && <MissingMark />}
         {selecting && (
           <span className={`card-check${checked ? " on" : ""}`} aria-hidden>
             {checked && <Check size={16} strokeWidth={3.2} />}

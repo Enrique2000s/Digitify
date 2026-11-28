@@ -1,6 +1,6 @@
 [package]
 name = "digitify"
-version = "0.10.2"
+version = "0.11.0"
 description = "Digitify: a home for all your media (Library) and a universal launcher for your games (Arcade)"
 authors = ["Digitify contributors"]
 license = "MIT"
@@ -67,6 +67,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_Security_Cryptography",
     "Win32_UI_Shell",
     "Win32_System_Registry",
+    "Win32_System_StationsAndDesktops",
 ] }
 
 # Linux (D-031): drive ioctls, the X11 video host inside the GTK window, and the desktop keyring.

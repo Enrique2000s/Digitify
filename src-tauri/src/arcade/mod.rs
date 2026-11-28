@@ -18,6 +18,7 @@ mod games;
 mod icons;
 mod launchers;
 mod minecraft;
+mod programs;
 pub mod play;
 #[cfg(windows)]
 mod registry;
@@ -278,6 +279,13 @@ fn user_folders(library: &Library) -> AppResult<Vec<(i64, PathBuf, bool)>> {
             .collect::<Result<_, _>>()?;
         Ok(rows)
     })
+}
+
+/// The programs on this computer that could be added as games (D-183), for the list to pick from.
+#[tauri::command]
+pub async fn arcade_programs(app: AppHandle) -> AppResult<Vec<programs::ProgramEntry>> {
+    let cache = crate::config::config_dir(&app)?.join("cache").join("program-icons");
+    crate::library::blocking(move || Ok(programs::list(&cache))).await
 }
 
 #[tauri::command]
@@ -689,6 +697,8 @@ pub struct GameCard {
     pub completed_at: Option<String>,
     /// The player's own keywords for it (D-160).
     pub keywords: Vec<String>,
+    /// How its cover is framed in its box, when adjusted (D-184).
+    pub cover_view: Option<crate::library::CoverView>,
 }
 
 #[tauri::command]
@@ -698,7 +708,7 @@ pub async fn arcade_games(state: State<'_, AppState>) -> AppResult<Vec<GameCard>
             let rows = conn
                 .prepare(
                     "SELECT id, title, platform, game_id, path, size, cover_key, cover_color, is_favorite, play_seconds + extra_seconds, play_count, \
-                     last_played_at, added_at, missing, position, store, extra_seconds, rating, note, system IS NOT NULL, emulator, completed_at, keywords FROM arcade_games WHERE hidden = 0 ORDER BY sort_title, id",
+                     last_played_at, added_at, missing, position, store, extra_seconds, rating, note, system IS NOT NULL, emulator, completed_at, keywords, cover_view FROM arcade_games WHERE hidden = 0 ORDER BY sort_title, id",
                 )?
                 .query_map([], |row| {
                     Ok(GameCard {
@@ -725,6 +735,7 @@ pub async fn arcade_games(state: State<'_, AppState>) -> AppResult<Vec<GameCard>
                         emulator: row.get(20)?,
                         completed_at: row.get(21)?,
                         keywords: row.get::<_, Option<String>>(22)?.and_then(|k| serde_json::from_str(&k).ok()).unwrap_or_default(),
+                        cover_view: crate::library::CoverView::from_json(row.get(23)?),
                     })
                 })?
                 .collect::<Result<_, _>>()?;
@@ -739,6 +750,19 @@ pub async fn arcade_set_favorite(state: State<'_, AppState>, id: i64, favorite: 
     with_library(&state, move |library| {
         library.db.with(|conn| {
             conn.execute("UPDATE arcade_games SET is_favorite = ?2 WHERE id = ?1", params![id, favorite])?;
+            Ok(())
+        })
+    })
+    .await
+}
+
+/// Frames a game's cover in its box (D-184), or leaves it as it comes (`None`).
+#[tauri::command]
+pub async fn arcade_set_cover_view(state: State<'_, AppState>, id: i64, view: Option<crate::library::CoverView>) -> AppResult<()> {
+    with_library(&state, move |library| {
+        library.db.with(|conn| {
+            let text = view.and_then(crate::library::CoverView::tidy).map(|v| serde_json::to_string(&v).unwrap_or_default());
+            conn.execute("UPDATE arcade_games SET cover_view = ?2 WHERE id = ?1", params![id, text])?;
             Ok(())
         })
     })

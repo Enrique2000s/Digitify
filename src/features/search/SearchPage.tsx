@@ -138,7 +138,7 @@ export function SearchPage() {
               {found.length === 0 ? (
                 <p className="muted">No game in Arcade matches “{q}”.</p>
               ) : (
-                <div className="arcade-grid" style={{ ["--card" as string]: `${preferences.cardSize}px` }}>
+                <div className="arcade-grid" style={{ ["--card" as string]: `${preferences.arcadeCardSize}px` }}>
                   {found.map((game, index) => (
                     <GameTile
                       key={game.id}

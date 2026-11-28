@@ -24,9 +24,10 @@ export function BookBuilderDialog({ category: chosen, onClose }: { category: str
   // One builder per category (D-145): what it makes goes into the category it was opened from.
   const open = chosen != null;
   const onOpenChange = (next: boolean) => !next && onClose();
-  const category = chosen ?? "books";
+  // "books:comic" or "books:manga": Books' comics and manga are made here too (D-183).
+  const [category, chosenKind] = (chosen ?? "books").split(":") as [string, string | undefined];
   const target = categories.data?.find((c) => c.key === category);
-  const kind = category === "comics" ? "comic" : category === "manga" ? "manga" : "book";
+  const kind = chosenKind === "comic" || chosenKind === "manga" ? chosenKind : "book";
   const [pages, setPages] = useState<ArrangedPage[]>([]);
   const [title, setTitle] = useState("");
   const [mode, setMode] = useState<ImportMode>("reference");
@@ -62,7 +63,7 @@ export function BookBuilderDialog({ category: chosen, onClose }: { category: str
     setBusy(true);
     setError(null);
     try {
-      const id = await api.bookFromImages({ title, category, paths: pages.map((page) => page.key), mode });
+      const id = await api.bookFromImages({ title, category, kind, paths: pages.map((page) => page.key), mode });
       libraryChanged(queryClient);
       onOpenChange(false);
       void navigate({ to: "/item/$id", params: { id: String(id) } });

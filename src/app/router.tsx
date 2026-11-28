@@ -106,7 +106,7 @@ const routeTree = rootRoute.addChildren([
     path: "/bp",
     // Big Picture's screens: home, a library category or Favorites, an item, search.
     validateSearch: (search: Record<string, unknown>): BigPictureSearch => {
-      const screen = ["home", "library", "item", "search", "online", "arcade", "music", "game", "achievements", "year", "profile"].includes(String(search.screen)) ? (search.screen as BigPictureSearch["screen"]) : undefined;
+      const screen = ["home", "library", "item", "search", "online", "arcade", "music", "game", "achievements", "year", "profile", "controller"].includes(String(search.screen)) ? (search.screen as BigPictureSearch["screen"]) : undefined;
       const id = Number(search.id);
       return {
         ...(screen ? { screen } : {}),

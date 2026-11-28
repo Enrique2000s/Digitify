@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { artworkUrl, type TileCover } from "../lib/api";
+import { artworkUrl, pictureUrl, type TileCover } from "../lib/api";
 import { useCoverShape } from "../lib/preferences";
 import { motionAllowed } from "../features/reader/chrome";
 
@@ -11,10 +11,12 @@ const LEAVE = 600;
 const windowOf = (pool: TileCover[], start: number) => (pool.length <= 3 ? pool : [0, 1, 2].map((i) => pool[(start + i) % pool.length]));
 
 /**
- * A Home tile's covers, moving on through its pool (D-177): every few seconds the three shown float
- * up and fade as the next three rise into place, the tiles taking turns (`turn`) rather than all
- * changing at once. Each visit starts somewhere else in the pool; without animations (performance
- * mode, reduced motion) that's the only change, so nothing moves while you look.
+ * A Home Shortcut's covers, moving on through its pool (D-177): every few seconds the three shown
+ * float up and fade as the next three rise into place. All the cards change at the same moment
+ * (D-184), on the clock, so Home and Big Picture change together too; `turn` only sets a card a few
+ * hundredths of a second after the one before it, so the row changes as one wave from left to right.
+ * Each visit starts somewhere else in the pool; without animations (performance mode, reduced
+ * motion) that's the only change, so nothing moves while you look.
  */
 export function RotatingCollage({ covers: given, turn = 0 }: { covers: TileCover[]; turn?: number }) {
   // Each picture once (an album's songs share theirs), so a new set always looks new.
@@ -36,10 +38,15 @@ export function RotatingCollage({ covers: given, turn = 0 }: { covers: TileCover
         window.clearTimeout(clear);
         clear = window.setTimeout(() => setLeaving(null), LEAVE + 200);
       }
-      timer = window.setTimeout(next, ROTATE_EVERY);
+      schedule();
     };
-    // The tiles take turns: the first changes after a few seconds, each next one a little later.
-    timer = window.setTimeout(next, ROTATE_EVERY / 2 + turn * 1100);
+    // On the clock: every card changes at the same moment, each a touch after the one on its left.
+    const schedule = () => {
+      timer = window.setTimeout(() => {
+        next();
+      }, ROTATE_EVERY - (Date.now() % ROTATE_EVERY) + turn * 70);
+    };
+    schedule();
     return () => {
       window.clearTimeout(timer);
       window.clearTimeout(clear);
@@ -75,7 +82,8 @@ export function Collage({ covers }: { covers: TileCover[] }) {
   const tilts = [[0], [-6, 6], [-9, 0, 9]][n - 1] ?? [];
   const sides = [[0], [-1, 1], [-1, 0, 1]][n - 1] ?? [];
   return shown.map((cover, i) => {
-    const { aspect } = shapeOf({ handler: cover.handler, category: cover.category ?? null, coverShape: cover.coverShape ?? null, aspect: cover.aspect ?? null });
+    // A game keeps its own box's shape (D-183); the rest the shape they have in their category.
+    const aspect = cover.box ?? shapeOf({ handler: cover.handler, category: cover.category ?? null, coverShape: cover.coverShape ?? null, aspect: cover.aspect ?? null }).aspect;
     const front = sides[i] === 0;
     // Each kind of shape one height, so they sit together; the one in front a step larger.
     const height = (aspect > 1.2 ? 56 : aspect > 0.9 ? 68 : 80) * (front && n > 1 ? 1.06 : 1);
@@ -93,7 +101,7 @@ export function Collage({ covers }: { covers: TileCover[] }) {
     } as CSSProperties;
     return (
       <div key={`${cover.key}-${i}`} className="tile-cover" style={style}>
-        <img src={artworkUrl(cover.key)} alt="" loading="lazy" decoding="async" draggable={false} />
+        <img src={cover.gif ? pictureUrl(cover.gif) : artworkUrl(cover.key)} alt="" loading="lazy" decoding="async" draggable={false} />
       </div>
     );
   });

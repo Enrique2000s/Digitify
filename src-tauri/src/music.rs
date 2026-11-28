@@ -524,6 +524,9 @@ pub async fn music_play(app: AppHandle, state: State<'_, MusicState>, tracks: Ve
     }
     let commands = session(&app, &state, volume).await?;
     let index = wanted.and_then(|id| entries.iter().position(|e| e.track.id == id)).unwrap_or(0);
+    // Paused while the queue is put together, so the first track doesn't sound for a moment before
+    // the chosen one starts (D-183).
+    player::send(&commands, json!({ "command": ["set_property", "pause", true] }));
     for (position, entry) in entries.iter().enumerate() {
         let mode = if position == 0 { "replace" } else { "append" };
         player::send(&commands, json!({ "command": ["loadfile", entry.path, mode] }));

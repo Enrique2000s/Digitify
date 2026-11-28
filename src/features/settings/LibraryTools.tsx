@@ -267,14 +267,18 @@ export function WatchedFolders() {
   const folders = useQuery({ queryKey: ["watched"], queryFn: api.watchedList });
   const categories = useCategories();
   const [message, setMessage] = useState<string | null>(null);
+  // The category first, then the folder (D-183): its files are imported right away, so they must
+  // go where they belong from the start.
+  const [choosing, setChoosing] = useState<string | null>(null);
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["watched"] });
-  const add = async () => {
+  const add = async (category: string) => {
     const path = await open({ directory: true, multiple: false, title: "Choose a folder to watch" });
     if (typeof path !== "string") return;
-    const first = categories.data?.find((c) => !c.isHidden)?.key ?? "videos";
     try {
-      await api.watchedAdd(path, first);
-      setMessage("Watching it. Pick the category its new files go to.");
+      await api.watchedAdd(path, category);
+      const name = categories.data?.find((c) => c.key === category)?.name ?? category;
+      setMessage(`Watching it: what it holds that fits ${name} is being imported, and new files will be too.`);
+      setChoosing(null);
       refresh();
     } catch (reason) {
       setMessage(errorText(reason));
@@ -294,13 +298,31 @@ export function WatchedFolders() {
       <div className="setting">
         <div className="setting-text">
           <strong>Watched folders</strong>
-          <p>New files in these folders are imported by themselves into the category you choose, left where they are. Digitify looks every two minutes, and waits for a file that's still being written.</p>
+          <p>New files in these folders are imported by themselves into the category you choose (first the category, then the folder), left where they are. Digitify looks every two minutes, and waits for a file that's still being written. Changing a folder's category, or Look now, tries again what was left out.</p>
           {message && <p style={{ color: "var(--accent-text)" }}>{message}</p>}
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button type="button" className="btn" onClick={() => void add()}>
-            <Eye size={16} /> Watch a folder…
-          </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {choosing == null ? (
+            <button type="button" className="btn" onClick={() => setChoosing(categories.data?.find((c) => !c.isHidden)?.key ?? "videos")}>
+              <Eye size={16} /> Watch a folder…
+            </button>
+          ) : (
+            <>
+              <select className="select" aria-label="Category for the new watched folder" value={choosing} onChange={(e) => setChoosing(e.target.value)}>
+                {categories.data?.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    Into {c.name}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="btn btn-primary" onClick={() => void add(choosing)}>
+                <Eye size={16} /> Choose the folder…
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={() => setChoosing(null)}>
+                Cancel
+              </button>
+            </>
+          )}
           {list.length > 0 && (
             <button type="button" className="btn btn-ghost" onClick={() => void look()}>
               Look now

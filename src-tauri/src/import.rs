@@ -92,6 +92,11 @@ pub fn import_start(app: AppHandle, state: State<'_, AppState>, request: ImportR
 
 /// Starts an import job (the Import dialog, watched folders D-060); returns its id.
 pub fn start(app: AppHandle, library: Arc<Library>, request: ImportRequest) -> AppResult<u64> {
+    // Comics and Manga were categories once; they're kinds in Books now (D-183).
+    let mut request = request;
+    if matches!(request.category.as_deref(), Some("comics") | Some("manga")) {
+        request.category = Some("books".into());
+    }
     let state = app.state::<AppState>();
     let job_id = state.imports.next_id.fetch_add(1, Ordering::Relaxed) + 1;
     let cancel = Arc::new(AtomicBool::new(false));
@@ -618,14 +623,15 @@ fn describe_single(kind: Kind, path: &Path, files: Vec<FileDraft>) -> Draft {
             d
         }
         Kind::ComicArchive => {
-            let mut d = draft("comics", name_title, name_year, ext.clone(), files);
+            let mut d = draft("books", name_title, name_year, ext.clone(), files);
+            d.metadata.insert("kind".into(), json!("comic"));
             {
                 if let Some(archive) = formats::read_comic(path) {
                     d.artwork = archive.cover;
                     d.metadata.insert("pageCount".into(), json!(archive.pages));
                     if let Some(info) = archive.info {
                         if info.manga {
-                            d.category = "manga";
+                            d.metadata.insert("kind".into(), json!("manga"));
                             d.metadata.insert("readingDirection".into(), json!("rtl"));
                         }
                         if let Some(series) = &info.series {
@@ -1082,6 +1088,9 @@ pub struct ImageBook {
     pub title: String,
     /// A category key.
     pub category: String,
+    /// `book`, `comic` or `manga` (D-183: they share Books).
+    #[serde(default)]
+    pub kind: Option<String>,
     /// The pages, in reading order.
     pub paths: Vec<String>,
     pub mode: ImportMode,
@@ -1107,8 +1116,14 @@ fn build_book(library: &Library, book: ImageBook) -> AppResult<i64> {
     if let Some(other) = paths.iter().find(|path| kind_of(path) != Some(Kind::Image)) {
         return Err(AppError::msg(format!("{} isn't an image Digitify can show.", other.display())));
     }
+    // Comics and Manga are kinds in Books now (D-183).
+    let (category, kind) = match book.category.as_str() {
+        "comics" => ("books".to_string(), Some("comic".to_string())),
+        "manga" => ("books".to_string(), Some("manga".to_string())),
+        other => (other.to_string(), book.kind.clone()),
+    };
     let (category_id, category_name): (i64, String) = library.db.with(|conn| {
-        conn.query_row("SELECT id, name FROM categories WHERE key = ?1", [&book.category], |row| Ok((row.get(0)?, row.get(1)?)))
+        conn.query_row("SELECT id, name FROM categories WHERE key = ?1", [&category], |row| Ok((row.get(0)?, row.get(1)?)))
             .optional()?
             .ok_or_else(|| AppError::msg("That category no longer exists."))
     })?;
@@ -1122,6 +1137,12 @@ fn build_book(library: &Library, book: ImageBook) -> AppResult<i64> {
     d.artwork = std::fs::read(&paths[0]).ok();
     d.copy_folder = Some(title);
     d.metadata.insert("pageCount".into(), json!(paths.len()));
+    if let Some(kind) = kind.filter(|k| ["book", "comic", "manga"].contains(&k.as_str())) {
+        if kind == "manga" {
+            d.metadata.insert("readingDirection".into(), json!("rtl"));
+        }
+        d.metadata.insert("kind".into(), json!(kind));
+    }
     let stored = store_files(library, &d, book.mode, &category_name)?;
     let art = store_artwork(library, &d);
     let result = library.db.with(|conn| insert(conn, &d, &stored, category_id, art.as_ref()));

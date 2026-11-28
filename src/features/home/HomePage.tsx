@@ -1,3 +1,6 @@
+import { DropdownMenu } from "radix-ui";
+import { open as openFile } from "@tauri-apps/plugin-dialog";
+import { DEFAULT_VIEW, PictureAdjuster, viewStyle } from "../profile/Picture";
 import { useState, type ComponentPropsWithoutRef, type CSSProperties, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -23,20 +26,36 @@ import {
   VolumeOff,
   Joystick,
   Award,
+  ImagePlus,
+  Move,
+  Gamepad2,
+  Disc3,
+  LayoutGrid,
+  ListVideo,
+  Heart,
+  Star,
+  Clapperboard,
+  BookOpen,
+  CirclePlus,
+  History,
+  ChartColumn,
+  ChevronDown,
+  Trash2,
 } from "lucide-react";
-import { type Category, type ArcadeGame, type ItemCard, type TileCover, pictureUrl } from "../../lib/api";
+import { api, artworkUrl, errorText, type Category, type ArcadeGame, type ItemCard, type TileCover, pictureUrl } from "../../lib/api";
 import { plural } from "../../lib/format";
 import { useImporter } from "../../lib/importer";
 import { arrayMove, useReorder } from "../../lib/reorder";
-import { HOME_SECTIONS, useCoverShape, usePreferences, type HomeSection } from "../../lib/preferences";
+import { HOME_SECTIONS, homeSectionHidden, shortcutColor, useCoverShape, usePreferences, type HomeSection } from "../../lib/preferences";
 import { useAmbient } from "../../lib/ambient/AmbientProvider";
 import { useDashboard } from "../../lib/queries";
 import { AddMenu } from "../../components/AddMenu";
 import { photoContext } from "../../lib/routes";
 import { addProgramGame } from "../arcade/shared";
-import { RotatingCollage } from "../../components/Collage";
-import { CategoryIcon, Cover } from "../../components/common";
+import { Collage, RotatingCollage } from "../../components/Collage";
+import { CategoryIcon, Cover, Dialog } from "../../components/common";
 import { MediaCard } from "../../components/MediaCard";
+import { RowScroller } from "../../components/RowScroller";
 import { useLaunch } from "../arcade/shared";
 import { useAutoBackupStatus, useRelink } from "../settings/LibraryTools";
 import { Featured } from "./Featured";
@@ -47,8 +66,8 @@ import { FeaturedGame, GameCard, GameRow, useHomeGames } from "./GameSections";
 /** Each section's name and what it shows, Library or Arcade (D-042). */
 export const SECTION_TITLES: Record<HomeSection, [string, string | null]> = {
   discs: ["Discs", null],
-  tiles: ["Library sections", null],
-  featured: ["Featured today", "Library"],
+  tiles: ["Home Shortcuts", null],
+  featured: ["Spotlight", null],
   featuredGame: ["Game of the day", "Arcade"],
   upNext: ["Up next", "Library & Arcade"],
   because: ["Because you liked…", "Library"],
@@ -83,7 +102,7 @@ function greeting(): string {
 }
 
 // Pastel "screens" for the built-in sections; other categories cycle through the first five.
-const SCREENS: Record<string, number> = { books: 0, comics: 1, manga: 2, video: 3, music: 4, videos: 5, favorites: 6, all: 7, arcade: 2 };
+export const SCREENS: Record<string, number> = { books: 0, comics: 1, manga: 2, video: 3, music: 4, videos: 5, favorites: 6, all: 7, arcade: 2 };
 
 interface TileProps extends ComponentPropsWithoutRef<"button"> {
   label: string;
@@ -94,14 +113,29 @@ interface TileProps extends ComponentPropsWithoutRef<"button"> {
   add?: boolean;
 }
 
-function TileBody({ label, screen, covers, icon, count, add, turn }: Omit<TileProps, keyof ComponentPropsWithoutRef<"button">> & { turn?: number }) {
+/**
+ * A Home Shortcut's face (D-184): its covers fanned over its colour, or over a picture of one's own
+ * (set in Customize Home), and under them its icon, name and count. Big Picture draws the same.
+ */
+export function TileBody({ label, screen, covers, icon, count, add, turn, tile }: Omit<TileProps, keyof ComponentPropsWithoutRef<"button">> & { turn?: number; tile?: string }) {
+  const { preferences } = usePreferences();
+  const background = tile ? preferences.tileBackgrounds[tile] : undefined;
+  // Each shortcut on its section's color (D-184): Pictures light blue, Music green, Videos orange,
+  // Movies & Series red, Books royal blue, Arcade violet, or the colors chosen per section.
+  const color = tile ? shortcutColor(tile, preferences.sectionColors) : undefined;
   return (
     <>
-      <div className={`tile-screen screen-${screen}`}>
-        {/* The covers move on through the category's newest ones (D-177). */}
-        {covers.length > 0 ? <RotatingCollage covers={covers} turn={turn} /> : <div className="tile-icon">{icon}</div>}
+      <div className={`tile-screen screen-${screen}${background ? " with-background" : ""}${color ? " tinted" : ""}`} style={color ? ({ "--tile-tint": color } as CSSProperties) : undefined}>
+        {/* The picture of one's own behind (D-184), the covers moving on through the newest ones in
+            front (D-177). */}
+        {background && <img className="tile-background" src={artworkUrl(background.key, "cover")} alt="" style={viewStyle(background.view)} draggable={false} />}
+        {covers.length > 0 ? <RotatingCollage covers={covers} turn={turn} /> : !background && <div className="tile-icon">{icon}</div>}
+        <span className="tile-shine" aria-hidden />
       </div>
       <div className="tile-label">
+        <span className="tile-badge" aria-hidden>
+          {icon}
+        </span>
         <strong>{label}</strong>
         {count != null && !add && <span className="count">{count.toLocaleString()}</span>}
         <ChevronRight size={18} strokeWidth={2.8} aria-hidden style={count != null && !add ? undefined : { marginLeft: "auto" }} />
@@ -110,43 +144,178 @@ function TileBody({ label, screen, covers, icon, count, add, turn }: Omit<TilePr
   );
 }
 
-function SectionTile({ scope, label, screen, covers, icon, count, turn }: { scope: string; label: string; screen: number; covers: TileCover[]; icon: ReactNode; count?: number; turn?: number }) {
+/** One Home Shortcut: where it goes, and what its face shows. */
+interface Shortcut {
+  tile: string;
+  label: string;
+  screen: number;
+  covers: TileCover[];
+  icon: ReactNode;
+  count: number;
+  turn: number;
+}
+
+/** Home's shortcuts in their order (D-074, D-184): Everything when turned on, the categories, Arcade. */
+function useShortcuts(categories: Category[], covers: Record<string, TileCover[]>, total: number, games: { count: number; covers: TileCover[] }): Shortcut[] {
+  const { preferences } = usePreferences();
+  const visible = categories.filter((category) => !category.isHidden);
+  return [
+    ...(preferences.showEverything ? [{ tile: "all", label: "Everything", screen: SCREENS.all, covers: covers.all ?? [], icon: <LibraryBig size={36} strokeWidth={2.2} aria-hidden />, count: total, turn: 0 }] : []),
+    ...visible.map((category, index) => ({
+      tile: category.key,
+      label: category.name,
+      screen: SCREENS[category.key] ?? index % 5,
+      covers: covers[category.key] ?? [],
+      icon: <CategoryIcon icon={category.icon} size={36} strokeWidth={2.2} />,
+      count: category.itemCount,
+      turn: index + 1,
+    })),
+    { tile: "arcade", label: "Arcade", screen: SCREENS.arcade, covers: games.covers, icon: <Joystick size={36} strokeWidth={2.2} aria-hidden />, count: games.count, turn: visible.length + 1 },
+  ];
+}
+
+/**
+ * The shortcuts' backgrounds in Customize Home (D-184): each shortcut as it looks, with a picture
+ * of one's own to put behind its covers, adjusted in a frame of the card's own shape (the covers
+ * drawn over it as they'll be), or taken away again.
+ */
+function ShortcutBackgrounds({ shortcuts }: { shortcuts: Shortcut[] }) {
+  const { preferences, update } = usePreferences();
+  const [adjusting, setAdjusting] = useState<Shortcut | null>(null);
+  const [view, setView] = useState(DEFAULT_VIEW);
+  const [error, setError] = useState<string | null>(null);
+  const save = (tile: string, next: { key: string; view: typeof view } | null) =>
+    update((c) => {
+      const all = { ...c.tileBackgrounds };
+      if (next) all[tile] = next;
+      else delete all[tile];
+      return { tileBackgrounds: all };
+    });
+  const choose = async (shortcut: Shortcut) => {
+    setError(null);
+    const path = await openFile({ multiple: false, title: `A picture behind ${shortcut.label}'s covers`, filters: [{ name: "Pictures", extensions: ["jpg", "jpeg", "png", "webp", "gif", "bmp"] }] });
+    if (typeof path !== "string") return;
+    try {
+      const key = await api.artworkImport(path);
+      save(shortcut.tile, { key, view: DEFAULT_VIEW });
+      setView(DEFAULT_VIEW);
+      setAdjusting(shortcut);
+    } catch (reason) {
+      setError(errorText(reason));
+    }
+  };
+  const editing = adjusting ? preferences.tileBackgrounds[adjusting.tile] : undefined;
   return (
-    <Link to="/library/$scope" params={{ scope }} className="tile" data-blip>
-      <TileBody label={label} screen={screen} covers={covers} icon={icon} count={count} turn={turn} />
-    </Link>
+    <div className="home-edit-backgrounds">
+      <p className="home-edit-hint">A picture of your own behind a shortcut's covers; the covers keep moving on in front of it.</p>
+      {error && <p className="dialog-error">{error}</p>}
+      <div className="home-edit-shortcuts">
+        {shortcuts.map((shortcut) => {
+          const background = preferences.tileBackgrounds[shortcut.tile];
+          return (
+            <div key={shortcut.tile} className="home-edit-shortcut">
+              <div className="tile shortcut-preview">
+                <TileBody label={shortcut.label} screen={shortcut.screen} covers={shortcut.covers} icon={shortcut.icon} count={shortcut.count} turn={shortcut.turn} tile={shortcut.tile} />
+              </div>
+              <div className="home-edit-shortcut-actions">
+                <button type="button" className="btn btn-sm" onClick={() => void choose(shortcut)}>
+                  <ImagePlus size={14} /> {background ? "Change" : "Background…"}
+                </button>
+                {background && (
+                  <>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label={`Adjust ${shortcut.label}'s background`}
+                      title="Adjust"
+                      onClick={() => {
+                        setView(background.view);
+                        setAdjusting(shortcut);
+                      }}
+                    >
+                      <Move size={15} />
+                    </button>
+                    <button type="button" className="icon-btn" aria-label={`Remove ${shortcut.label}'s background`} title="Remove" onClick={() => save(shortcut.tile, null)}>
+                      <Trash2 size={15} />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {adjusting && editing && (
+        <Dialog
+          open
+          wide
+          onOpenChange={(o) => !o && setAdjusting(null)}
+          title={`${adjusting.label}'s background`}
+          footer={
+            <>
+              <button type="button" className="btn btn-ghost" onClick={() => setView(DEFAULT_VIEW)}>
+                <RotateCcw size={15} /> Reset
+              </button>
+              <button type="button" className="btn" onClick={() => setAdjusting(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  save(adjusting.tile, { key: editing.key, view });
+                  setAdjusting(null);
+                }}
+              >
+                Save
+              </button>
+            </>
+          }
+        >
+          {/* The card's own shape, with its covers over the picture as on Home (D-184). */}
+          <PictureAdjuster
+            picture={artworkUrl(editing.key, "cover")}
+            view={view}
+            onChange={setView}
+            kind="tile"
+            overlay={
+              <div className={`tile-screen-overlay screen-${adjusting.screen}`}>
+                <Collage covers={adjusting.covers.slice(0, 3)} />
+              </div>
+            }
+          />
+        </Dialog>
+      )}
+    </div>
   );
 }
 
-/** Columns for the compact tiles (D-041): one row up to six, else two balanced rows (at most six wide). */
-function tileColumns(count: number): number {
-  if (count <= 6) return Math.max(count, 1);
-  return Math.min(6, Math.ceil(count / 2));
+/**
+ * Home Shortcuts' columns (D-184): all in one row up to seven, so they take about the top half of
+ * the screen and what's below shows too; more make two even rows.
+ */
+export function shortcutColumns(count: number): number {
+  if (count <= 7) return Math.max(count, 1);
+  return Math.ceil(count / 2);
 }
 
-function Tiles({ categories, covers, total, games }: { categories: Category[]; covers: Record<string, TileCover[]>; total: number; games: { count: number; covers: TileCover[] } }) {
-  const visible = categories.filter((category) => !category.isHidden);
-  const { preferences } = usePreferences();
-  const columns = tileColumns(visible.length + (preferences.showEverything ? 2 : 1));
+function Tiles({ shortcuts }: { shortcuts: Shortcut[] }) {
+  const columns = shortcutColumns(shortcuts.length);
   return (
     // Rows that come out shorter than the others stay centered under them (D-086).
-    <section className="tiles" aria-label="Library sections" style={{ "--cols": columns } as React.CSSProperties}>
-      {preferences.showEverything && <SectionTile scope="all" label="Everything" screen={SCREENS.all} covers={covers.all ?? []} icon={<LibraryBig size={36} strokeWidth={2.2} aria-hidden />} count={total} />}
-      {visible.map((category, index) => (
-        <SectionTile
-          key={category.key}
-          scope={category.key}
-          label={category.name}
-          screen={SCREENS[category.key] ?? index % 5}
-          covers={covers[category.key] ?? []}
-          icon={<CategoryIcon icon={category.icon} size={36} strokeWidth={2.2} />}
-          count={category.itemCount}
-          turn={index + 1}
-        />
+    <section className="tiles shortcuts" aria-label="Home Shortcuts" style={{ "--cols": columns } as React.CSSProperties}>
+      {shortcuts.map((shortcut) => (
+        <Link
+          key={shortcut.tile}
+          to={shortcut.tile === "arcade" ? "/arcade" : "/library/$scope"}
+          params={shortcut.tile === "arcade" ? undefined : { scope: shortcut.tile }}
+          activeOptions={{ includeSearch: false }}
+          className="tile"
+          data-blip
+        >
+          <TileBody label={shortcut.label} screen={shortcut.screen} covers={shortcut.covers} icon={shortcut.icon} count={shortcut.count} turn={shortcut.turn} tile={shortcut.tile} />
+        </Link>
       ))}
-      <Link to="/arcade" className="tile" data-blip>
-        <TileBody label="Arcade" screen={SCREENS.arcade} covers={games.covers} icon={<Joystick size={36} strokeWidth={2.2} aria-hidden />} count={games.count} turn={visible.length + 1} />
-      </Link>
     </section>
   );
 }
@@ -185,12 +354,12 @@ function Row({ title, items, more }: { title: ReactNode; items: ItemCard[]; more
           </Link>
         )}
       </div>
-      <div className="row-scroller">
+      <RowScroller>
         {items.map((item) => (
           // Every cover in a row has the same height; horizontal ones are wider.
           <MediaCard key={item.id} item={item} width={Math.round(ROW_ART_HEIGHT * shapeOf(item).aspect)} />
         ))}
-      </div>
+      </RowScroller>
     </section>
   );
 }
@@ -230,7 +399,7 @@ function UpNext({ watching, reading, next, games, running }: { watching: ItemCar
           <SectionTitle section="upNext" />
         </h2>
       </div>
-      <div className="row-scroller home-games">
+      <RowScroller className="home-games">
         {entries.map((entry) =>
           entry.kind === "item" ? (
             <MediaCard key={`i${entry.item.id}`} item={entry.item} width={Math.round(ROW_ART_HEIGHT * shapeOf(entry.item).aspect * 0.88)} />
@@ -238,12 +407,34 @@ function UpNext({ watching, reading, next, games, running }: { watching: ItemCar
             <GameCard key={`g${entry.game.id}`} game={entry.game} running={running === entry.game.id} onPlay={() => void launch(entry.game)} />
           ),
         )}
-      </div>
+      </RowScroller>
     </section>
   );
 }
 
-/** In "Customize Home", each section is a row to drag (or move with the arrows) and to hide or show. */
+/** Each section's symbol in Customize Home (D-184). */
+const SECTION_ICONS: Record<HomeSection, typeof Award> = {
+  discs: Disc3,
+  tiles: LayoutGrid,
+  featured: Award,
+  featuredGame: Gamepad2,
+  upNext: ListVideo,
+  because: Heart,
+  favorites: Star,
+  favoriteGames: Star,
+  continueWatching: Clapperboard,
+  continuePlaying: Gamepad2,
+  continueReading: BookOpen,
+  recentlyAdded: CirclePlus,
+  recentlyOpened: History,
+  stats: ChartColumn,
+};
+
+/**
+ * In "Customize Home" (D-184), each section is a card to drag (or move with the arrows) and to hide
+ * or show, with its symbol and where it comes from; the Spotlight has a switch for each half, and
+ * Home Shortcuts opens the shortcuts' backgrounds.
+ */
 function EditBar({
   section,
   index,
@@ -252,6 +443,7 @@ function EditBar({
   empty,
   handle,
   style,
+  shortcuts,
 }: {
   section: HomeSection;
   index: number;
@@ -260,30 +452,89 @@ function EditBar({
   empty: boolean;
   handle: ReturnType<ReturnType<typeof useReorder>["handle"]>;
   style?: CSSProperties;
+  shortcuts: Shortcut[];
 }) {
   const { preferences, update } = usePreferences();
+  const [open, setOpen] = useState(false);
   const move = (by: number) => update({ home: { ...preferences.home, order: arrayMove(preferences.home.order, index, index + by) } });
-  const toggle = () =>
-    update({
-      home: { ...preferences.home, hidden: hidden ? preferences.home.hidden.filter((s) => s !== section) : [...preferences.home.hidden, section] },
-    });
+  const toggleOne = (which: HomeSection) => {
+    const off = preferences.home.hidden.includes(which);
+    update({ home: { ...preferences.home, hidden: off ? preferences.home.hidden.filter((s) => s !== which) : [...preferences.home.hidden, which] } });
+  };
+  const [name, from] = SECTION_TITLES[section];
+  const Icon = SECTION_ICONS[section];
+  const backgrounds = Object.keys(preferences.tileBackgrounds).length;
   return (
-    <li className={`home-edit-bar${hidden ? " is-hidden" : ""}`} data-reorder style={style}>
-      <span {...handle} aria-label={`Drag “${SECTION_NAMES[section]}”`}>
-        <GripVertical size={18} />
-      </span>
-      <strong>{SECTION_NAMES[section]}</strong>
-      {hidden ? <span className="home-edit-note">Hidden</span> : empty && <span className="home-edit-note">Nothing to show right now</span>}
-      <span className="spacer" />
-      <button type="button" className="icon-btn" aria-label={`Move “${SECTION_NAMES[section]}” up`} disabled={index === 0} onClick={() => move(-1)}>
-        <ArrowUp size={16} />
-      </button>
-      <button type="button" className="icon-btn" aria-label={`Move “${SECTION_NAMES[section]}” down`} disabled={index === count - 1} onClick={() => move(1)}>
-        <ArrowDown size={16} />
-      </button>
-      <button type="button" className="btn btn-sm" aria-pressed={!hidden} onClick={toggle}>
-        {hidden ? <EyeOff size={15} /> : <Eye size={15} />} {hidden ? "Show" : "Shown"}
-      </button>
+    <li className={`home-edit-bar${hidden ? " is-hidden" : ""}${open ? " is-open" : ""}`} data-reorder style={style}>
+      <div className="home-edit-row">
+        <span {...handle} aria-label={`Drag “${SECTION_NAMES[section]}”`}>
+          <GripVertical size={18} />
+        </span>
+        <span className="home-edit-icon" aria-hidden>
+          <Icon size={18} strokeWidth={2.4} />
+        </span>
+        <span className="home-edit-name">
+          <strong>{name}</strong>
+          {from && <span className="home-edit-from">{from}</span>}
+        </span>
+        {hidden ? <span className="home-edit-note">Hidden</span> : empty && <span className="home-edit-note">Nothing to show right now</span>}
+        <span className="spacer" />
+        {section === "tiles" && (
+          <button type="button" className="btn btn-sm" aria-expanded={open} onClick={() => setOpen(!open)}>
+            <ImagePlus size={15} /> Backgrounds{backgrounds > 0 ? ` (${backgrounds})` : ""}
+            <ChevronDown size={15} className="home-edit-chevron" />
+          </button>
+        )}
+        <span className="home-edit-moves">
+          <button type="button" className="icon-btn" aria-label={`Move “${SECTION_NAMES[section]}” up`} disabled={index === 0} onClick={() => move(-1)}>
+            <ArrowUp size={16} />
+          </button>
+          <button type="button" className="icon-btn" aria-label={`Move “${SECTION_NAMES[section]}” down`} disabled={index === count - 1} onClick={() => move(1)}>
+            <ArrowDown size={16} />
+          </button>
+        </span>
+        {section === "featured" ? (
+          // The Spotlight (D-184): Featured today and Game of the day, each on or off by itself.
+          // One button the size of the others' Shown, its two halves in a menu, so the arrows keep their place.
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button type="button" className="btn btn-sm home-edit-show home-edit-halves" aria-pressed={!hidden} aria-label="What the Spotlight shows">
+                {hidden ? <EyeOff size={15} /> : <Eye size={15} />}{" "}
+                {hidden ? "Hidden" : preferences.home.hidden.includes("featured") || preferences.home.hidden.includes("featuredGame") ? "1 of 2" : "Shown"}
+                <ChevronDown size={14} />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content className="menu" align="end" sideOffset={6}>
+                {(
+                  [
+                    ["featured", "Featured today", Award],
+                    ["featuredGame", "Game of the day", Gamepad2],
+                  ] as const
+                ).map(([which, label, HalfIcon]) => (
+                  <DropdownMenu.CheckboxItem
+                    key={which}
+                    className="menu-item home-edit-half"
+                    checked={!preferences.home.hidden.includes(which)}
+                    onSelect={(event) => event.preventDefault()}
+                    onCheckedChange={() => toggleOne(which)}
+                  >
+                    <HalfIcon size={16} /> {label}
+                    <DropdownMenu.ItemIndicator className="home-edit-check">
+                      <Check size={15} />
+                    </DropdownMenu.ItemIndicator>
+                  </DropdownMenu.CheckboxItem>
+                ))}
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+        ) : (
+          <button type="button" className="btn btn-sm home-edit-show" aria-pressed={!hidden} onClick={() => toggleOne(section)}>
+            {hidden ? <EyeOff size={15} /> : <Eye size={15} />} {hidden ? "Hidden" : "Shown"}
+          </button>
+        )}
+      </div>
+      {section === "tiles" && open && <ShortcutBackgrounds shortcuts={shortcuts} />}
     </li>
   );
 }
@@ -300,6 +551,7 @@ export function HomePage() {
   const autoBackup = useAutoBackupStatus();
   const reorder = useReorder((from, to) => update((current) => ({ home: { ...current.home, order: arrayMove(current.home.order, from, to) } })));
   const data = dashboard.data;
+  const shortcuts = useShortcuts(data?.categories ?? [], data?.tileCovers ?? {}, data?.totals.items ?? 0, games);
   // Items opened from Home step through no list (D-138): only a library view sets one.
   photoContext.params = null;
   if (!data) return <div className="page" />;
@@ -308,10 +560,11 @@ export function HomePage() {
 
   // Each section's content, or null when it has nothing to show.
   const content: Record<HomeSection, ReactNode> = {
-    tiles: <Tiles categories={data.categories} covers={data.tileCovers} total={data.totals.items} games={games} />,
+    tiles: <Tiles shortcuts={shortcuts} />,
     continuePlaying: games.recent.length > 0 && <GameRow title={<SectionTitle section="continuePlaying" />} games={games.recent} running={games.running} starting={games.starting} />,
     favoriteGames: games.favorites.length > 0 && <GameRow title={<SectionTitle section="favoriteGames" />} games={games.favorites} running={games.running} starting={games.starting} />,
-    featuredGame: games.featured && <FeaturedGame game={games.featured} running={games.running === games.featured.id} />,
+    // Game of the day lives in the Spotlight (D-184).
+    featuredGame: null,
     because: data.because && (
       <Row
         title={
@@ -324,11 +577,18 @@ export function HomePage() {
       />
     ),
     upNext: <UpNext watching={data.continueWatching} reading={data.continueItems} next={data.nextVolumes} games={games.recent} running={games.running} />,
-    featured: data.featured && (
-      <section className="section" aria-label="Featured today">
-        <Featured item={data.featured} />
-      </section>
-    ),
+    // The Spotlight (D-184): Featured today and Game of the day, side by side when both are on.
+    featured: (() => {
+      const item = !preferences.home.hidden.includes("featured") ? data.featured : null;
+      const game = !preferences.home.hidden.includes("featuredGame") ? games.featured : null;
+      if (!item && !game) return null;
+      return (
+        <section className={`section home-spotlight${item && game ? " both" : ""}`} aria-label="Spotlight">
+          {item && <Featured item={item} />}
+          {game && <FeaturedGame game={game} running={games.running === game.id} />}
+        </section>
+      );
+    })(),
     continueWatching: data.continueWatching.length > 0 && (
       <section className="section">
         <div className="section-head">
@@ -506,8 +766,13 @@ export function HomePage() {
 
       {editing && (
         <div className="notice home-edit-notice">
-          <LayoutDashboard size={18} aria-hidden style={{ flexShrink: 0, marginTop: 1 }} />
-          <span>Arrange Home: drag sections into the order you like, and hide the ones you don't need. Changes are saved as you go.</span>
+          <span className="home-edit-notice-icon" aria-hidden>
+            <LayoutDashboard size={20} />
+          </span>
+          <span className="home-edit-notice-text">
+            <strong>Customize Home</strong>
+            <span>Drag sections into the order you like, hide the ones you don't need, and give the shortcuts pictures of your own. Changes are saved as you go.</span>
+          </span>
           <span className="spacer" />
           <button type="button" className="btn btn-sm" onClick={() => update({ home: { order: [...HOME_SECTIONS], hidden: [] } })}>
             <RotateCcw size={14} /> Reset
@@ -526,16 +791,17 @@ export function HomePage() {
               section={section}
               index={index}
               count={order.length}
-              hidden={preferences.home.hidden.includes(section)}
+              hidden={homeSectionHidden(preferences.home, section)}
               empty={!content[section]}
               handle={reorder.handle(index)}
               style={reorder.style(index)}
+              shortcuts={shortcuts}
             />
           ))}
         </ol>
       ) : (
         order
-          .filter((section) => !preferences.home.hidden.includes(section) && content[section])
+          .filter((section) => !homeSectionHidden(preferences.home, section) && content[section])
           .map((section, index) => (
             <div key={section} className="home-section" style={{ ["--i" as string]: index }}>
               {content[section]}
