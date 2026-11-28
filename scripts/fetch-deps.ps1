@@ -7,7 +7,7 @@
   scanned for DVD/Blu-ray decryption code, which Digitify must never ship (decision D-007).
 
     mpv 0.41.0 (official build)  -> src-tauri\binaries\  bundled with the app as a helper program
-    FFmpeg 9.0.2 (LGPL build)    -> tools\ffmpeg\         development tools (test media, probing)
+    FFmpeg 9.1 (LGPL build)      -> tools\ffmpeg\         development tools (test media, probing)
     PDFium chromium/7881         -> src-tauri\binaries\  bundled with the app; renders PDF pages (D-013)
     yt-dlp 2026.10.26            -> tools\yt-dlp\        bundled with the app; downloads from links (D-133)
     Deno 2.9.8                   -> tools\yt-dlp\        bundled with the app; the JavaScript yt-dlp needs for YouTube
@@ -42,11 +42,14 @@ $deps = @(
         }
     },
     @{
-        Name       = 'FFmpeg 9.0.2 (BtbN LGPL shared build)'
-        Url        = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-30-13-01/ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-shared-9.0.zip'
-        Sha256     = '8aeb11be252902a772ff04ac89b705f7a7b24815f0a21da2ab100b192a5c16e4'
-        # When the pinned build is gone: the newest 9.0 build, checked against BtbN's own list.
-        FallbackUrl       = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-lgpl-shared-9.0.zip'
+        Name       = 'FFmpeg 9.1 (BtbN LGPL shared build)'
+        Url        = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-11-28-13-45/ffmpeg-n9.1-6-gb2efecda3d-win64-lgpl-shared-9.1.zip'
+        Sha256     = '6f49b60e721ad45d90c850c38319a57b1ba3559472074bf95278a35b18ed688a'
+        # BtbN removes its dated builds after a few weeks, and old branches too (9.0 went in
+        # November 2026). When the pinned build is gone: the newest 9.x build its own list names,
+        # checked against the hash that list gives.
+        FallbackBase      = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/'
+        FallbackPattern   = '^ffmpeg-n9\.(\d+)-latest-win64-lgpl-shared-9\.\d+\.zip$'
         FallbackChecksums = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/checksums.sha256'
         Marker     = 'tools\ffmpeg\ffmpeg.exe'
         LicenseDir = 'tools\ffmpeg'
@@ -129,19 +132,25 @@ foreach ($dep in $deps) {
         try {
             Invoke-WebRequest -Uri $dep.Url -OutFile $archive -UseBasicParsing
         } catch {
-            if (-not $dep.FallbackUrl) { throw }
-            # The pinned build was removed: the newest build of the same branch, with the hash its
-            # publisher lists for it.
-            Write-Host "    the pinned build is no longer there ($($_.Exception.Message)); using the newest build of the same branch"
-            $archive = Join-Path $cache (Split-Path $dep.FallbackUrl -Leaf)
+            if (-not $dep.FallbackPattern) { throw }
+            # The pinned build was removed: the newest build its publisher lists that fits the
+            # pattern, with the hash the list gives for it.
+            Write-Host "    the pinned build is no longer there ($($_.Exception.Message)); using the newest listed build"
             $list = (Invoke-WebRequest -Uri $dep.FallbackChecksums -UseBasicParsing).Content
             if ($list -is [byte[]]) { $list = [Text.Encoding]::UTF8.GetString($list) }
-            $name = Split-Path $dep.FallbackUrl -Leaf
-            $line = ($list -split "`n") | Where-Object { $_ -match ("\s\*?" + [regex]::Escape($name) + "\s*$") } | Select-Object -First 1
-            if (-not $line) { throw "BtbN's checksum list doesn't name $name" }
-            $expected = ($line -split '\s+')[0].ToLowerInvariant()
+            $found = foreach ($line in ($list -split "`n")) {
+                $parts = $line.Trim() -split '\s+\*?'
+                if ($parts.Count -ge 2 -and $parts[1] -match $dep.FallbackPattern) {
+                    [pscustomobject]@{ Hash = $parts[0].ToLowerInvariant(); Name = $parts[1]; Minor = [int]$Matches[1] }
+                }
+            }
+            $pick = $found | Sort-Object Minor -Descending | Select-Object -First 1
+            if (-not $pick) { throw "BtbN's checksum list names no build like $($dep.FallbackPattern)" }
+            Write-Host "    $($pick.Name)"
+            $archive = Join-Path $cache $pick.Name
+            $expected = $pick.Hash
             if (-not (Test-Path $archive) -or (Get-FileHash $archive -Algorithm SHA256).Hash -ne $expected) {
-                Invoke-WebRequest -Uri $dep.FallbackUrl -OutFile $archive -UseBasicParsing
+                Invoke-WebRequest -Uri ($dep.FallbackBase + $pick.Name) -OutFile $archive -UseBasicParsing
             }
         }
     }

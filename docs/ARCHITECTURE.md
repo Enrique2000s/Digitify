@@ -189,7 +189,7 @@ The built-in manual (D-149) is written in `docs/manual/manual.html` and built by
 | Engine | Pinned build | Notes |
 |---|---|---|
 | mpv | 0.41.0, official x86_64 MSVC release (`mpv.exe` + `vulkan-1.dll`, ~56 MB) | Plays every file format we need. It contains no CSS/AACS decryption code and no `dvd://`, `bd://` or `cdda://` modules. |
-| FFmpeg | 9.0.2, BtbN LGPL shared build | Development tool for now (test media). Probing and thumbnails come in Phase 1. |
+| FFmpeg | 9.1, BtbN LGPL shared build | Development tool for now (test media). Probing and thumbnails come in Phase 1. |
 
 Because the bundled mpv has no disc modules, unprotected discs go through Digitify's own disc layer (D-022, approved):
 - Rust reads the disc structure (DVD IFO files, Blu-ray MPLS playlists, the CD table of contents and CD-Text).

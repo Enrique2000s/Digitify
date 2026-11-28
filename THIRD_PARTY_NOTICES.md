@@ -16,11 +16,11 @@ Digitify ships the following third-party software. Licenses for Digitify's own c
 - **Files:** `vulkan-1.dll`, shipped with mpv
 - **License:** Apache License 2.0 · <https://github.com/KhronosGroup/Vulkan-Loader>
 
-### FFmpeg 9.0.2
+### FFmpeg 9.1
 - **Used for:** media probing, artwork frames and, later, encoding and remuxing.
 - **Files:** `ffmpeg\` (`ffmpeg.exe`, `ffprobe.exe` and DLLs)
 - **License:** GNU Lesser General Public License v2.1 or later (LGPL build). The full license text is in `ffmpeg\LICENSE.txt`.
-- **Build:** BtbN FFmpeg-Builds `ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-shared-9.0`. Build scripts: <https://github.com/BtbN/FFmpeg-Builds>. Source: <https://git.ffmpeg.org/ffmpeg.git> (branch `release/9.0`).
+- **Build:** BtbN FFmpeg-Builds `ffmpeg-n9.1-6-gb2efecda3d-win64-lgpl-shared-9.1` (or, once BtbN removes that build, the newest 9.x build it lists). Build scripts: <https://github.com/BtbN/FFmpeg-Builds>. Source: <https://git.ffmpeg.org/ffmpeg.git> (branch `release/9.1`).
 
 ### PDFium (chromium/7881)
 - **Used for:** showing PDF pages, and reading PDF titles, authors and covers.
